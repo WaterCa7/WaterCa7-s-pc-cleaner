@@ -157,12 +157,17 @@ internal static class SettingsLogic
             return ExclusionAddResult.AlreadyCovered;
         }
 
-        settings.CleanerExclusions.Add(path);
-        message = Directory.Exists(path) || File.Exists(path)
+        // Copy-on-write: other modules may be enumerating the shared list on a background thread right now.
+        settings.CleanerExclusions = new List<string>(settings.CleanerExclusions) { path };
+        // Network paths are not probed: an unreachable server would freeze the UI for the SMB timeout.
+        message = IsNetworkPath(path) || Directory.Exists(path) || File.Exists(path)
             ? $"Добавлено исключение: {path}"
             : $"Добавлено исключение: {path} (такой папки пока нет — правило сработает, когда она появится)";
         return ExclusionAddResult.Added;
     }
+
+    /// <summary>"\\server\share\..." (UNC) — checking such a path may block for a long time.</summary>
+    public static bool IsNetworkPath(string? path) => path is not null && path.StartsWith(@"\\", StringComparison.Ordinal);
 
     /// <summary>Removes the given items (case-insensitive). Returns how many were removed.</summary>
     public static int RemoveItems(List<string> list, IEnumerable<string> items)
@@ -171,6 +176,17 @@ internal static class SettingsLogic
         foreach (var item in items.ToList())
             removed += list.RemoveAll(x => string.Equals(x, item, StringComparison.OrdinalIgnoreCase));
         return removed;
+    }
+
+    /// <summary>
+    /// Copy-on-write removal for lists shared with other modules: returns a new list without the items
+    /// (the original instance is never modified, so a concurrent enumeration elsewhere cannot fail).
+    /// </summary>
+    public static List<string> Without(List<string> list, IEnumerable<string> items, out int removed)
+    {
+        var copy = new List<string>(list);
+        removed = RemoveItems(copy, items);
+        return copy;
     }
 
     /// <summary>
@@ -205,22 +221,26 @@ internal static class SettingsLogic
         settings.TrustedItems ??= new List<string>();
         settings.CleanerDisabledCategories ??= new List<string>();
         settings.ModuleData ??= new Dictionary<string, Dictionary<string, string>>();
-        fixes += Dedupe(settings.CleanerExclusions);
-        fixes += Dedupe(settings.TrustedItems);
-        return fixes;
+
+        // Repaired lists are new instances (copy-on-write): other modules may be enumerating the old ones.
+        var exclusionFixes = Dedupe(settings.CleanerExclusions, out var exclusions);
+        if (exclusionFixes > 0)
+            settings.CleanerExclusions = exclusions;
+        var trustedFixes = Dedupe(settings.TrustedItems, out var trusted);
+        if (trustedFixes > 0)
+            settings.TrustedItems = trusted;
+        return fixes + exclusionFixes + trustedFixes;
     }
 
-    private static int Dedupe(List<string> list)
+    private static int Dedupe(List<string> list, out List<string> cleaned)
     {
         var before = list.Count;
-        var cleaned = list.Where(s => !string.IsNullOrWhiteSpace(s))
+        cleaned = list.Where(s => !string.IsNullOrWhiteSpace(s))
             .Select(s => s.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (cleaned.Count == before && cleaned.SequenceEqual(list))
             return 0;
-        list.Clear();
-        list.AddRange(cleaned);
         return Math.Max(1, before - cleaned.Count);
     }
 }

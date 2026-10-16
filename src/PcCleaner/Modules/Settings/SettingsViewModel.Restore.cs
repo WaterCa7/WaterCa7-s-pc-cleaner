@@ -75,7 +75,7 @@ public sealed partial class SettingsViewModel
 
     public string AdminStatusText => Admin.IsElevated
         ? "Да — доступны все функции"
-        : "Нет — ограниченный режим (системные папки, службы и HKLM только для чтения)";
+        : "Нет — ограниченный режим: системные папки, службы и общие разделы реестра доступны только для чтения";
 
     public string DataDir => AppPaths.DataDir;
 
@@ -154,14 +154,33 @@ public sealed partial class SettingsViewModel
             return;
 
         var ok = false;
+        var cancelled = false;
         await RunBusyAsync("Создание точки восстановления… Это может занять пару минут", async ct =>
         {
-            ok = await RestorePoint.TryCreateAsync("Создана вручную в настройках", ct, force: true);
+            try
+            {
+                ok = await RestorePoint.TryCreateAsync("Создана вручную в настройках", ct, force: true);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+                throw;
+            }
         });
 
         LastRestoreResult = ok
             ? $"Точка восстановления создана {Format.DateTime(DateTime.Now)}."
-            : "Windows не создала точку восстановления. Подробности — во вкладке «Журнал».";
+            : cancelled
+                ? "Создание точки восстановления прервано."
+                : "Windows не создала точку восстановления. Подробности — во вкладке «Журнал».";
+        if (cancelled)
+        {
+            Dialogs.Info("Точка восстановления",
+                "Создание точки восстановления прервано. Если Windows успела её создать, она появится в списке справа " +
+                "и в мастере «Восстановление системы».");
+            _ = SafeRun(() => LoadRestoreInfoAsync(CancellationToken.None));
+            return;
+        }
         try
         {
             await LoadRestoreInfoAsync(CancellationToken.None);

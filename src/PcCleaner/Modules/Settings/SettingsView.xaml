@@ -45,6 +45,23 @@
             <Setter Property="MaxWidth" Value="520" />
         </Style>
 
+        <!-- LinkButton whose text wraps instead of being clipped in narrow columns -->
+        <Style x:Key="WrapLinkButton" TargetType="Button" BasedOn="{StaticResource LinkButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="T" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                   TextWrapping="Wrap" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="T" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="InfoLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
             <Setter Property="Margin" Value="0,0,16,10" />
             <Setter Property="TextWrapping" Value="NoWrap" />
@@ -602,7 +619,7 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" Width="84" />
+                                <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" Width="100" />
                             </DataGrid.Columns>
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
@@ -823,7 +840,7 @@
                                 <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="3" Text="Администратор" />
                                 <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,10">
                                     <TextBlock Style="{StaticResource InfoValue}" Margin="0" Text="{Binding AdminStatusText}" />
-                                    <Button Style="{StaticResource LinkButton}" Content="Перезапустить с правами администратора" Margin="0,4,0,0"
+                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить с правами администратора" Margin="0,4,0,0"
                                             HorizontalAlignment="Left" FontSize="12.5" Command="{Binding RestartAsAdminCommand}"
                                             Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
                                 </StackPanel>

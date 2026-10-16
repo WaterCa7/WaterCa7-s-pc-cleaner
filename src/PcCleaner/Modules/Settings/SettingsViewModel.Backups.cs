@@ -84,25 +84,40 @@ public sealed partial class SettingsViewModel
     {
         if (backup is null || !backup.CanRestore)
             return;
-        if (!PathGuard.IsInside(backup.FullPath, AppPaths.BackupsDir) || !File.Exists(backup.FullPath))
+        if (!PathGuard.IsDirectChild(backup.FullPath, AppPaths.BackupsDir) || !File.Exists(backup.FullPath))
         {
             Dialogs.Info("Восстановление", "Файл резервной копии не найден. Обновите список.");
             await LoadBackupsAsync(CancellationToken.None);
             return;
         }
 
-        var key = backup.KeyPath ?? backup.Title;
-        if (backup.NeedsAdmin && !Admin.RequireElevation("Восстановить системный раздел реестра"))
+        // Decide from the file itself (not from the list, which may fall back to the file name) what the import will
+        // write: the current state of exactly that key is exported first, so the restore can be undone.
+        var reg = await Task.Run(() => BackupCatalog.InspectRegFile(backup.FullPath));
+        if (RestoreRefusal(reg) is { } refusal)
+        {
+            Log.Warn($"Восстановление из {backup.FileName} отменено: {refusal}");
+            Dialogs.Info("Восстановление из резервной копии", refusal + "\n\nРеестр не изменён.");
+            return;
+        }
+
+        var key = reg.RootKey!;
+        var title = BackupCatalog.FriendlyKeyName(key);
+        var needsAdmin = BackupCatalog.NeedsAdmin(key);
+        if (needsAdmin && !Admin.RequireElevation("Восстановить системный раздел реестра"))
             return;
 
+        var exists = await Task.Run(() => KeyExists(key));
         var message =
             $"Восстановить раздел реестра из резервной копии от {backup.TimeText}?\n\n" +
-            $"{backup.Title}\n{key}\n\n" +
+            $"{title}\n{key}\n\n" +
             (backup.HasDescription ? $"Копия сделана перед действием: {backup.Description}\n\n" : "") +
             "Что произойдёт:\n" +
             "• значения, сохранённые в копии, будут заново записаны в реестр (то, что было изменено или удалено, вернётся);\n" +
             "• значения, появившиеся позже, останутся как есть;\n" +
-            "• перед этим текущее состояние раздела тоже сохранится в новую резервную копию — так восстановление можно отменить.";
+            (exists
+                ? "• перед этим текущее состояние раздела сохранится в новую резервную копию — так восстановление можно отменить."
+                : "• сейчас этого раздела в реестре нет — он будет создан заново из копии.");
         if (!Dialogs.Confirm("Восстановление из резервной копии", message))
             return;
 
@@ -110,9 +125,9 @@ public sealed partial class SettingsViewModel
         await RunBusyAsync("Восстановление раздела реестра…", async ct =>
         {
             // Back up the current state first (if the key exists at all — after a deletion it usually doesn't).
-            if (backup.KeyPath is { } keyPath && !keyPath.StartsWith('…') && KeyExists(keyPath))
+            if (exists)
             {
-                var current = await RegistryBackup.ExportAsync(keyPath, $"Перед восстановлением из копии {backup.FileName}", ct);
+                var current = await RegistryBackup.ExportAsync(key, $"Перед восстановлением из копии {backup.FileName}", ct);
                 if (current is null)
                 {
                     resultMessage = "Не удалось сохранить текущее состояние раздела, поэтому восстановление отменено — " +
@@ -126,19 +141,35 @@ public sealed partial class SettingsViewModel
             {
                 // RegistryBackup.ImportAsync has already logged the action with the file name; add the readable key.
                 Log.Info($"Раздел реестра восстановлен из резервной копии от {backup.TimeText}: {key}");
-                resultMessage = $"Готово: раздел «{backup.Title}» восстановлен из копии от {backup.TimeText}.\n\n" +
+                resultMessage = $"Готово: раздел «{title}» восстановлен из копии от {backup.TimeText}.\n\n" +
                                 "Некоторые изменения вступят в силу после перезапуска программ или перезагрузки компьютера.";
             }
             else
             {
                 resultMessage = "Windows не смогла импортировать резервную копию. Подробности — во вкладке «Журнал»." +
-                                (backup.NeedsAdmin && !Admin.IsElevated ? "\n\nДля системных разделов нужны права администратора." : "");
+                                (needsAdmin && !Admin.IsElevated ? "\n\nДля системных разделов нужны права администратора." : "");
             }
         });
 
         await LoadBackupsAsync(CancellationToken.None);
         if (resultMessage is not null)
             Dialogs.Info("Восстановление из резервной копии", resultMessage);
+    }
+
+    /// <summary>
+    /// Why a .reg file must not be imported from this page (null = it is a plain export of one key and can be restored).
+    /// </summary>
+    internal static string? RestoreRefusal(RegFileInfo reg)
+    {
+        if (reg.RootKey is null)
+            return "Не удалось прочитать раздел реестра из файла копии — возможно, файл повреждён.";
+        if (!reg.SingleRoot)
+            return "Файл копии затрагивает сразу несколько разных разделов реестра — похоже, его изменили вручную. " +
+                   "Программа восстанавливает только собственные копии одного раздела.";
+        if (reg.DeletesKeys)
+            return "Файл копии удаляет разделы реестра — похоже, его изменили вручную. " +
+                   "Программа восстанавливает только собственные копии.";
+        return null;
     }
 
     /// <summary>
@@ -177,10 +208,19 @@ public sealed partial class SettingsViewModel
         if (backup is null || !backup.CanDelete)
             return;
 
+        var users = BackupCatalog.ModulesReferencing(Settings, backup.FullPath)
+            .Select(BackupCatalog.ModuleDisplayName)
+            .Distinct()
+            .ToList();
         var message =
             $"Удалить резервную копию от {backup.TimeText}?\n\n{backup.Title}\n{backup.KeyPath}\n\n" +
             "Будет удалён только файл копии в папке программы — реестр Windows не изменится. " +
-            "Но после удаления вернуть этот раздел к сохранённому состоянию будет нельзя.";
+            "Но после удаления вернуть этот раздел к сохранённому состоянию будет нельзя." +
+            (users.Count > 0
+                ? $"\n\nВнимание: эта копия нужна {(users.Count == 1 ? "разделу" : "разделам")} " +
+                  $"{string.Join(", ", users.Select(u => $"«{u}»"))}, " +
+                  "чтобы отменить сделанные там изменения. После удаления копии отменить их будет нельзя."
+                : "");
         if (!Dialogs.Confirm("Удаление резервной копии", message))
             return;
 

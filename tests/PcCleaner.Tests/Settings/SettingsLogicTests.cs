@@ -124,6 +124,21 @@ public class SettingsLogicTests
     }
 
     [Fact]
+    public void TryAddExclusion_DoesNotProbeNetworkPaths()
+    {
+        // Probing an unreachable server would block the UI thread for the SMB timeout.
+        var settings = new AppSettings();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Assert.Equal(ExclusionAddResult.Added,
+            SettingsLogic.TryAddExclusion(settings, @"\\pcc-no-such-server.invalid\share\folder", out var normalized, out var message));
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2), $"took {sw.Elapsed}");
+        Assert.Equal(@"\\pcc-no-such-server.invalid\share\folder", normalized);
+        Assert.DoesNotContain("пока нет", message);
+        Assert.True(SettingsLogic.IsNetworkPath(normalized));
+        Assert.False(SettingsLogic.IsNetworkPath(@"C:\Temp"));
+    }
+
+    [Fact]
     public void RemoveItems_IsCaseInsensitive()
     {
         var list = new List<string> { @"C:\A", @"C:\B", @"C:\C" };
@@ -169,6 +184,37 @@ public class SettingsLogicTests
         Assert.Equal(new[] { @"C:\A", @"C:\B" }, settings.CleanerExclusions);
         Assert.NotNull(settings.TrustedItems);
         Assert.Equal(0, SettingsLogic.Sanitize(settings));
+    }
+
+    [Fact]
+    public void ListEdits_NeverModifyTheSharedListInstance()
+    {
+        // Other modules (e.g. a cleaning scan on a background thread) may be enumerating these lists right now:
+        // edits must replace the list instead of changing it in place.
+        var settings = new AppSettings
+        {
+            CleanerExclusions = new() { @"C:\A", @"c:\a", " " },
+            TrustedItems = new() { "a.exe", "A.EXE" },
+        };
+        var exclusions = settings.CleanerExclusions;
+        var trusted = settings.TrustedItems;
+
+        SettingsLogic.Sanitize(settings);
+        Assert.Equal(new[] { @"C:\A", @"c:\a", " " }, exclusions);
+        Assert.Equal(new[] { "a.exe", "A.EXE" }, trusted);
+        Assert.Equal(new[] { @"C:\A" }, settings.CleanerExclusions);
+        Assert.Equal(new[] { "a.exe" }, settings.TrustedItems);
+
+        var sanitized = settings.CleanerExclusions;
+        Assert.Equal(ExclusionAddResult.Added, SettingsLogic.TryAddExclusion(settings, @"D:\B", out _, out _));
+        Assert.Equal(new[] { @"C:\A" }, sanitized);
+        Assert.Equal(new[] { @"C:\A", @"D:\B" }, settings.CleanerExclusions);
+
+        var source = settings.CleanerExclusions;
+        var rest = SettingsLogic.Without(source, new[] { @"c:\a" }, out var removed);
+        Assert.Equal(1, removed);
+        Assert.Equal(new[] { @"D:\B" }, rest);
+        Assert.Equal(new[] { @"C:\A", @"D:\B" }, source);
     }
 
     [Fact]

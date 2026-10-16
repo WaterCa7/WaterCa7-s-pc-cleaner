@@ -134,6 +134,72 @@ public class BackupCatalogTests
     }
 
     [Fact]
+    public void InspectRegFile_AcceptsOnlyPlainExportOfOneKey()
+    {
+        var dir = TestEnvironment.NewTempDir("backups");
+        try
+        {
+            const string header = "Windows Registry Editor Version 5.00\r\n\r\n";
+
+            // A normal reg.exe export: one key plus its subkeys (UTF-16 LE with BOM).
+            var plain = Path.Combine(dir, "plain.reg");
+            File.WriteAllText(plain, header +
+                "[HKEY_CURRENT_USER\\Software\\My App]\r\n\"A\"=\"1\"\r\n\r\n" +
+                "[HKEY_CURRENT_USER\\Software\\My App\\Sub]\r\n\"B\"=dword:00000001\r\n", Encoding.Unicode);
+            var info = BackupCatalog.InspectRegFile(plain);
+            Assert.Equal(@"HKCU\Software\My App", info.RootKey);
+            Assert.True(info.SingleRoot);
+            Assert.False(info.DeletesKeys);
+            Assert.Null(SettingsViewModel.RestoreRefusal(info));
+
+            // Hand-edited: a second, unrelated key (e.g. a Run entry) would be written without a backup.
+            var twoRoots = Path.Combine(dir, "two.reg");
+            File.WriteAllText(twoRoots, header +
+                "[HKEY_CURRENT_USER\\Software\\My App]\r\n\"A\"=\"1\"\r\n\r\n" +
+                "[HKEY_CURRENT_USER\\Software\\My AppX]\r\n\"B\"=\"2\"\r\n" +
+                "[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run]\r\n\"Evil\"=\"x.exe\"\r\n",
+                Encoding.Unicode);
+            info = BackupCatalog.InspectRegFile(twoRoots);
+            Assert.False(info.SingleRoot);
+            Assert.NotNull(SettingsViewModel.RestoreRefusal(info));
+
+            // Key deletions never appear in RegistryBackup exports.
+            var deletes = Path.Combine(dir, "deletes.reg");
+            File.WriteAllText(deletes, header + "[-HKEY_CURRENT_USER\\Software\\My App]\r\n", Encoding.Unicode);
+            info = BackupCatalog.InspectRegFile(deletes);
+            Assert.True(info.DeletesKeys);
+            Assert.NotNull(SettingsViewModel.RestoreRefusal(info));
+
+            // Unreadable content: the key is unknown, so nothing may be imported (no backup of the current state possible).
+            var garbage = Path.Combine(dir, "20240131-101500-123_Windows_CurrentVersion_Run.reg");
+            File.WriteAllText(garbage, "not a registry file");
+            info = BackupCatalog.InspectRegFile(garbage);
+            Assert.Null(info.RootKey);
+            Assert.NotNull(SettingsViewModel.RestoreRefusal(info));
+
+            Assert.Null(BackupCatalog.InspectRegFile(Path.Combine(dir, "missing.reg")).RootKey);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ModulesReferencing_FindsUndoDataThatNeedsTheBackup()
+    {
+        var settings = new AppSettings();
+        settings.ModuleData["Startup"] = new() { ["Disabled.Updater"] = @"C:\x\Backups\20240131-101500-123_HKCU_Run.reg" };
+        settings.ModuleData["Optimizer"] = new() { ["PowerPlan.Previous"] = "guid" };
+
+        var users = BackupCatalog.ModulesReferencing(settings, @"C:\x\Backups\20240131-101500-123_HKCU_Run.reg");
+
+        Assert.Equal(new[] { "Startup" }, users);
+        Assert.Equal("Автозагрузка", BackupCatalog.ModuleDisplayName(users[0]));
+        Assert.Empty(BackupCatalog.ModulesReferencing(settings, @"C:\x\Backups\other.reg"));
+    }
+
+    [Fact]
     public void ListIn_MissingFolder_IsEmpty()
         => Assert.Empty(BackupCatalog.ListIn(Path.Combine(TestEnvironment.DataDir, "no-such-folder-" + Guid.NewGuid())));
 
@@ -214,6 +280,46 @@ public class BackupDeletionGuardTests
         finally
         {
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsDirectChild_RefusesSubfoldersAndTheFolderItself()
+    {
+        var backups = TestEnvironment.NewTempDir("guard");
+        try
+        {
+            Assert.True(PathGuard.IsDirectChild(Path.Combine(backups, "a.reg"), backups));
+            Assert.True(PathGuard.IsDirectChild(Path.Combine(backups, "a.reg"), backups + "\\"));
+            Assert.False(PathGuard.IsDirectChild(Path.Combine(backups, "sub", "a.reg"), backups));
+            Assert.False(PathGuard.IsDirectChild(Path.Combine(backups, "sub", "..", "..", "a.reg"), backups));
+            Assert.False(PathGuard.IsDirectChild(backups, backups));
+            Assert.False(PathGuard.IsDirectChild(backups + "Evil\\a.reg", backups));
+            Assert.False(PathGuard.IsDirectChild(null, backups));
+        }
+        finally
+        {
+            Directory.Delete(backups, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DeleteBackup_RefusesFilesInSubfolders()
+    {
+        // A subfolder of the backups folder could be a junction to anywhere; the app never stores backups there.
+        var backups = TestEnvironment.NewTempDir("guard");
+        var nested = Path.Combine(backups, "linked", "20240101-000000-000_HKCU_Software_X.reg");
+        Directory.CreateDirectory(Path.GetDirectoryName(nested)!);
+        File.WriteAllText(nested, "Windows Registry Editor Version 5.00");
+        try
+        {
+            var (ok, _) = BackupCatalog.DeleteBackup(nested, backups);
+            Assert.False(ok);
+            Assert.True(File.Exists(nested));
+        }
+        finally
+        {
+            Directory.Delete(backups, recursive: true);
         }
     }
 

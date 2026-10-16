@@ -59,7 +59,8 @@ internal static class QuarantineActions
     public static List<QuarantineRow> LoadRows()
     {
         var rows = new List<QuarantineRow>();
-        foreach (var item in Quarantine.List())
+        // A hand-edited or damaged index.json may contain "null" entries.
+        foreach (var item in Quarantine.List().Where(i => i is not null))
         {
             long size = 0;
             var exists = false;
@@ -104,11 +105,18 @@ internal static class QuarantineActions
     /// </summary>
     public static QuarantineRestoreResult Restore(QuarantineItem item, bool renameIfExists)
     {
-        if (!PathGuard.IsInside(item.StoredPath, AppPaths.QuarantineDir))
+        if (!IsOwnStoredFile(item))
         {
             Log.Warn($"Карантин: запись указывает на файл вне папки карантина ({item.StoredPath}) — пропущено");
             return new(QuarantineRestoreStatus.Failed, null,
                 "Запись карантина повреждена: файл находится вне папки карантина.");
+        }
+        if (string.IsNullOrWhiteSpace(item.OriginalPath) || !Path.IsPathFullyQualified(item.OriginalPath)
+                                                         || Path.GetFileName(item.OriginalPath).Length == 0)
+        {
+            Log.Warn($"Карантин: в записи нет полного исходного пути ({item.OriginalPath}) — пропущено");
+            return new(QuarantineRestoreStatus.Failed, null,
+                "Запись карантина повреждена: не указан полный исходный путь файла.");
         }
         if (!File.Exists(item.StoredPath))
             return new(QuarantineRestoreStatus.MissingStoredFile, null,
@@ -152,7 +160,7 @@ internal static class QuarantineActions
     /// <summary>Permanently deletes a quarantined file (caller has confirmed).</summary>
     public static (bool Ok, string Message) Delete(QuarantineItem item)
     {
-        if (!PathGuard.IsInside(item.StoredPath, AppPaths.QuarantineDir))
+        if (!IsOwnStoredFile(item))
         {
             Log.Warn($"Карантин: запись указывает на файл вне папки карантина ({item.StoredPath}) — удаление отменено");
             return (false, $"{item.FileName}: запись повреждена, файл вне папки карантина — удаление отменено.");
@@ -168,4 +176,13 @@ internal static class QuarantineActions
             return (false, $"{item.FileName}: не удалось удалить ({ex.Message}).");
         }
     }
+
+    /// <summary>
+    /// Quarantine.Add stores files directly in the quarantine folder; an index entry pointing anywhere else
+    /// (outside, or into a subfolder that could be a junction) must never be moved or deleted.
+    /// The index file itself is not a quarantined file either.
+    /// </summary>
+    internal static bool IsOwnStoredFile(QuarantineItem item)
+        => PathGuard.IsDirectChild(item.StoredPath, AppPaths.QuarantineDir)
+           && !string.Equals(Path.GetFileName(item.StoredPath), "index.json", StringComparison.OrdinalIgnoreCase);
 }

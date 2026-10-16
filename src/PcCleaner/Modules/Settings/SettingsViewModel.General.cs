@@ -180,7 +180,10 @@ public sealed partial class SettingsViewModel
 
     private void BrowseExclusion()
     {
-        var initial = Exclusions.LastOrDefault() ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var last = Exclusions.LastOrDefault();
+        var initial = last is not null && !SettingsLogic.IsNetworkPath(last)
+            ? last
+            : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var path = FolderPicker.Pick("Папка, которую очистка не должна трогать", initial);
         if (path is null)
             return;
@@ -192,9 +195,10 @@ public sealed partial class SettingsViewModel
     {
         if (items.Count == 0)
             return;
-        var removed = SettingsLogic.RemoveItems(Settings.CleanerExclusions, items);
+        var remaining = SettingsLogic.Without(Settings.CleanerExclusions, items, out var removed);
         if (removed == 0)
             return;
+        Settings.CleanerExclusions = remaining;
         SaveSettings($"Настройки: удалено исключений очистки — {removed}: {string.Join("; ", items)}");
         Exclusions = new ObservableCollection<string>(Settings.CleanerExclusions);
         ExclusionMessage = removed == 1 ? "Исключение удалено." : $"Удалено исключений: {removed}.";
@@ -205,9 +209,10 @@ public sealed partial class SettingsViewModel
     {
         if (items.Count == 0)
             return;
-        var removed = SettingsLogic.RemoveItems(Settings.TrustedItems, items);
+        var remaining = SettingsLogic.Without(Settings.TrustedItems, items, out var removed);
         if (removed == 0)
             return;
+        Settings.TrustedItems = remaining;
         SaveSettings($"Настройки: убрано из доверенных — {string.Join("; ", items)}");
         TrustedItems = new ObservableCollection<string>(Settings.TrustedItems);
     }

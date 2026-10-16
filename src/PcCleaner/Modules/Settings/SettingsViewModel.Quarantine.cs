@@ -27,7 +27,7 @@ public sealed partial class SettingsViewModel
 
     public string QuarantineDir => AppPaths.QuarantineDir;
 
-    public RelayCommand RestoreQuarantineCommand { get; private set; } = null!;
+    public AsyncRelayCommand RestoreQuarantineCommand { get; private set; } = null!;
     public RelayCommand DeleteQuarantineCommand { get; private set; } = null!;
     public RelayCommand ShowQuarantineOriginCommand { get; private set; } = null!;
     public RelayCommand SearchQuarantineWebCommand { get; private set; } = null!;
@@ -36,7 +36,7 @@ public sealed partial class SettingsViewModel
 
     private void InitQuarantineCommands()
     {
-        RestoreQuarantineCommand = new RelayCommand(p => RestoreQuarantine(ItemsFrom<QuarantineRow>(p)),
+        RestoreQuarantineCommand = new AsyncRelayCommand(p => RestoreQuarantineAsync(ItemsFrom<QuarantineRow>(p)),
             p => !IsBusy && ItemsFrom<QuarantineRow>(p).Count > 0);
         DeleteQuarantineCommand = new RelayCommand(p => DeleteQuarantine(ItemsFrom<QuarantineRow>(p)),
             p => !IsBusy && ItemsFrom<QuarantineRow>(p).Count > 0);
@@ -68,7 +68,7 @@ public sealed partial class SettingsViewModel
             : $"{Format.Count(rows.Count, "файл", "файла", "файлов")} · {Format.Bytes(rows.Sum(r => r.SizeBytes))}";
     }
 
-    private void RestoreQuarantine(List<QuarantineRow> rows)
+    private async Task RestoreQuarantineAsync(List<QuarantineRow> rows)
     {
         if (rows.Count == 0)
             return;
@@ -84,44 +84,63 @@ public sealed partial class SettingsViewModel
 
         var results = new List<string>();
         var restored = 0;
-        foreach (var row in rows)
+        var processed = 0;
+        // Moving a file back to another drive copies its data, so the moves run off the UI thread;
+        // the follow-up questions are asked between them (continuations return to the UI thread).
+        await RunBusyAsync("Восстановление из карантина…", async ct =>
         {
-            var result = QuarantineActions.Restore(row.Item, renameIfExists: false);
-            if (result.Status == QuarantineRestoreStatus.Conflict)
+            foreach (var row in rows)
             {
-                var alternative = QuarantineActions.AlternativePath(row.OriginalPath);
-                var ask =
-                    $"По пути\n{row.OriginalPath}\nуже есть другой файл.\n\n" +
-                    $"Восстановить файл из карантина рядом, под именем «{System.IO.Path.GetFileName(alternative)}»? " +
-                    "Существующий файл не будет изменён.";
-                result = Dialogs.Confirm("Файл уже существует", ask)
-                    ? QuarantineActions.Restore(row.Item, renameIfExists: true)
-                    : result with { Message = $"{row.FileName}: пропущен — по исходному пути уже есть файл." };
-            }
-            else if (result.Status == QuarantineRestoreStatus.MissingStoredFile)
-            {
-                if (Dialogs.Confirm("Файл не найден",
-                        $"Файл «{row.FileName}» отсутствует в папке карантина — возможно, его удалили вручную или антивирусом.\n\n" +
-                        "Убрать эту запись из списка карантина?"))
+                ct.ThrowIfCancellationRequested();
+                ReportProgress(processed * 100.0 / rows.Count, $"Восстановление: {row.FileName}");
+                var item = row.Item;
+                var result = await Task.Run(() => QuarantineActions.Restore(item, renameIfExists: false));
+                if (result.Status == QuarantineRestoreStatus.Conflict)
                 {
-                    QuarantineActions.Delete(row.Item);
-                    result = result with { Message = $"{row.FileName}: файла уже не было, запись убрана из списка." };
+                    var alternative = QuarantineActions.AlternativePath(row.OriginalPath);
+                    var ask =
+                        $"По пути\n{row.OriginalPath}\nуже есть другой файл.\n\n" +
+                        $"Восстановить файл из карантина рядом, под именем «{System.IO.Path.GetFileName(alternative)}»? " +
+                        "Существующий файл не будет изменён.";
+                    result = Dialogs.Confirm("Файл уже существует", ask)
+                        ? await Task.Run(() => QuarantineActions.Restore(item, renameIfExists: true))
+                        : result with { Message = $"{row.FileName}: пропущен — по исходному пути уже есть файл." };
                 }
-                else
+                else if (result.Status == QuarantineRestoreStatus.MissingStoredFile)
                 {
-                    result = result with { Message = $"{row.FileName}: файл в карантине не найден." };
+                    if (Dialogs.Confirm("Файл не найден",
+                            $"Файл «{row.FileName}» отсутствует в папке карантина — возможно, его удалили вручную или антивирусом.\n\n" +
+                            "Убрать эту запись из списка карантина?"))
+                    {
+                        var (removed, removeText) = QuarantineActions.Delete(item);
+                        result = result with
+                        {
+                            Message = removed ? $"{row.FileName}: файла уже не было, запись убрана из списка." : removeText,
+                        };
+                    }
+                    else
+                    {
+                        result = result with { Message = $"{row.FileName}: файл в карантине не найден." };
+                    }
                 }
+
+                processed++;
+                if (result.Success)
+                    restored++;
+                results.Add(result.Success || result.Message.StartsWith(row.FileName, StringComparison.Ordinal)
+                    ? result.Message
+                    : $"{row.FileName}: {result.Message}");
             }
+        });
 
-            if (result.Success)
-                restored++;
-            results.Add(result.Success ? result.Message : result.Message.StartsWith(row.FileName) ? result.Message : $"{row.FileName}: {result.Message}");
-        }
-
-        _ = SafeRun(() => LoadQuarantineAsync(CancellationToken.None));
+        await SafeRun(() => LoadQuarantineAsync(CancellationToken.None));
+        if (results.Count == 0)
+            return; // cancelled before anything was done
         var header = restored == rows.Count
             ? (restored == 1 ? "Файл восстановлен." : $"Восстановлено файлов: {restored}.")
             : $"Восстановлено: {restored} из {rows.Count}.";
+        if (processed < rows.Count)
+            header += " Остальные файлы не обработаны — операция была отменена.";
         Dialogs.Info("Восстановление из карантина", header + "\n\n" + BulletList(results, 10));
     }
 

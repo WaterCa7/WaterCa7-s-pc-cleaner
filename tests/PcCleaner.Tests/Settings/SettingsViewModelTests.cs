@@ -92,6 +92,7 @@ public class SettingsViewModelTests
     public void RemoveTrusted_SavesSelection()
     {
         _settings.TrustedItems.AddRange(new[] { "a.exe", "b.exe" });
+        var shared = _settings.TrustedItems;
         var vm = Create();
         vm.LoadGeneral();
 
@@ -100,6 +101,8 @@ public class SettingsViewModelTests
         Assert.Equal(new[] { "b.exe" }, _settings.TrustedItems);
         Assert.Equal(new[] { "b.exe" }, vm.TrustedItems);
         Assert.Equal(1, _saves);
+        // The list other modules may be reading was replaced, not modified in place.
+        Assert.Equal(new[] { "a.exe", "b.exe" }, shared);
     }
 
     [Fact]

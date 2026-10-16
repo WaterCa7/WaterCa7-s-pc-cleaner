@@ -86,6 +86,12 @@ public sealed class BackupEntry
     }
 }
 
+/// <summary>
+/// What importing a .reg file would touch: the first key, whether every other key lies under it,
+/// and whether it deletes keys ("[-KEY]").
+/// </summary>
+internal sealed record RegFileInfo(string? RootKey, bool SingleRoot, bool DeletesKeys);
+
 /// <summary>Lists, describes and deletes files in %LOCALAPPDATA%\WaterCa7sPcCleaner\Backups.</summary>
 internal static class BackupCatalog
 {
@@ -242,6 +248,86 @@ internal static class BackupCatalog
     }
 
     /// <summary>
+    /// Reads every "[KEY]" / "[-KEY]" header of a .reg file to find out what an import would touch.
+    /// RegistryBackup exports always hold one key with its subkeys; anything else means the file was edited by hand.
+    /// </summary>
+    public static RegFileInfo InspectRegFile(string path)
+    {
+        string? root = null;
+        var singleRoot = true;
+        var deletesKeys = false;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            while (reader.ReadLine() is { } raw)
+            {
+                var line = raw.Trim().Trim('\0');
+                if (line.Length < 3 || line[0] != '[' || line[^1] != ']')
+                    continue;
+                var key = line[1..^1].Trim();
+                if (key.StartsWith('-'))
+                {
+                    deletesKeys = true;
+                    key = key[1..].Trim();
+                }
+                if (key.Length == 0)
+                    continue;
+                key = ShortHive(key);
+                if (root is null)
+                    root = key;
+                else if (!SettingsLogic.IsSameOrUnder(key, root))
+                    singleRoot = false;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"Не удалось прочитать резервную копию {Path.GetFileName(path)}: {ex.Message}");
+            return new RegFileInfo(null, false, false);
+        }
+        return new RegFileInfo(root, root is not null && singleRoot, deletesKeys);
+    }
+
+    /// <summary>
+    /// Modules (ModuleData keys) whose saved undo data mentions this backup file — deleting it would break their "undo".
+    /// </summary>
+    public static List<string> ModulesReferencing(AppSettings settings, string backupPath)
+    {
+        var name = Path.GetFileName(backupPath);
+        if (string.IsNullOrEmpty(name))
+            return new List<string>();
+        try
+        {
+            return (settings.ModuleData ?? new Dictionary<string, Dictionary<string, string>>())
+                .ToList()
+                .Where(m => m.Value is not null && m.Value.Values.ToList()
+                    .Any(v => v is not null && v.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                .Select(m => m.Key)
+                .ToList();
+        }
+        catch (InvalidOperationException)
+        {
+            // Another module is changing its data right now; the warning is best-effort.
+            return new List<string>();
+        }
+    }
+
+    /// <summary>Sidebar name of a module key ("Optimizer" → "Ускорение").</summary>
+    public static string ModuleDisplayName(string key) => key switch
+    {
+        "Dashboard" => "Главная",
+        "Cleaner" => "Очистка",
+        "Processes" => "Процессы",
+        "Startup" => "Автозагрузка",
+        "Programs" => "Программы",
+        "Disk" => "Диски",
+        "Optimizer" => "Ускорение",
+        "Security" => "Безопасность",
+        "Settings" => "Настройки",
+        _ => key,
+    };
+
+    /// <summary>
     /// Restores a readable key from RegistryBackup's file name:
     /// "20240131-101500-123_HKCU_Software_Microsoft_Windows_CurrentVersion_Run.reg" → "HKCU\Software\Microsoft\Windows\CurrentVersion\Run".
     /// Spaces and underscores in key names cannot be told apart, so the .reg content is preferred when available.
@@ -355,7 +441,8 @@ internal static class BackupCatalog
     public static (bool Ok, string Message) DeleteBackup(string regFile, string backupsDir)
     {
         var name = Path.GetFileName(regFile);
-        if (!PathGuard.IsInside(regFile, backupsDir))
+        // Backups live directly in the folder; anything in a subfolder (possibly behind a junction) is refused.
+        if (!PathGuard.IsDirectChild(regFile, backupsDir))
         {
             Log.Warn($"Удаление отменено: {regFile} находится вне папки резервных копий");
             return (false, "Файл находится вне папки резервных копий — удаление отменено.");
@@ -365,7 +452,7 @@ internal static class BackupCatalog
 
         var files = new List<string> { Path.GetFullPath(regFile) };
         var side = Path.GetFullPath(regFile) + ".txt";
-        if (File.Exists(side) && PathGuard.IsInside(side, backupsDir))
+        if (File.Exists(side) && PathGuard.IsDirectChild(side, backupsDir))
             files.Add(side);
 
         try

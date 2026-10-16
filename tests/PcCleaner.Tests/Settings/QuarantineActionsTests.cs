@@ -131,6 +131,79 @@ public class QuarantineActionsTests
     }
 
     [Fact]
+    public void ForgedRecordPointingIntoSubfolderOrIndex_IsNeverMovedOrDeleted()
+    {
+        // A subfolder inside the quarantine folder could be a junction to anywhere; Quarantine.Add never stores files there.
+        Directory.CreateDirectory(AppPaths.QuarantineDir);
+        var sub = Path.Combine(AppPaths.QuarantineDir, "linked-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(sub);
+        var victim = Path.Combine(sub, "victim.quarantine");
+        File.WriteAllText(victim, "must survive");
+        var dir = TestEnvironment.NewTempDir("quarantine");
+        try
+        {
+            var nested = new QuarantineItem(Guid.NewGuid().ToString("N"), Path.Combine(dir, "x.exe"), victim, DateTime.Now, "forged");
+            Assert.Equal(QuarantineRestoreStatus.Failed, QuarantineActions.Restore(nested, renameIfExists: true).Status);
+            Assert.False(QuarantineActions.Delete(nested).Ok);
+            Assert.True(File.Exists(victim));
+            Assert.False(File.Exists(nested.OriginalPath));
+
+            var index = new QuarantineItem(Guid.NewGuid().ToString("N"), Path.Combine(dir, "y.exe"),
+                Path.Combine(AppPaths.QuarantineDir, "index.json"), DateTime.Now, "forged");
+            Assert.False(QuarantineActions.IsOwnStoredFile(index));
+            Assert.False(QuarantineActions.Delete(index).Ok);
+        }
+        finally
+        {
+            Directory.Delete(sub, recursive: true);
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_WithRelativeOriginalPath_IsRefusedAndKeepsFile()
+    {
+        var dir = TestEnvironment.NewTempDir("quarantine");
+        var original = Path.Combine(dir, "tool.exe");
+        File.WriteAllText(original, "content");
+        var item = Quarantine.Add(original, "Тест");
+        try
+        {
+            // Without the check the file would land relative to the current directory (".\restored-…\tool.exe").
+            var relativeDir = "restored-" + Guid.NewGuid().ToString("N")[..8];
+            var damaged = item with { OriginalPath = Path.Combine(relativeDir, "tool.exe") };
+            var result = QuarantineActions.Restore(damaged, renameIfExists: true);
+            Assert.Equal(QuarantineRestoreStatus.Failed, result.Status);
+            Assert.True(File.Exists(item.StoredPath));
+            Assert.False(Directory.Exists(Path.Combine(Environment.CurrentDirectory, relativeDir)));
+        }
+        finally
+        {
+            Cleanup(item, dir);
+        }
+    }
+
+    [Fact]
+    public void LoadRows_IgnoresNullEntriesInDamagedIndex()
+    {
+        var index = Path.Combine(AppPaths.QuarantineDir, "index.json");
+        Directory.CreateDirectory(AppPaths.QuarantineDir);
+        var before = File.Exists(index) ? File.ReadAllText(index) : null;
+        try
+        {
+            File.WriteAllText(index, "[null]");
+            Assert.Empty(QuarantineActions.LoadRows());
+        }
+        finally
+        {
+            if (before is null)
+                File.Delete(index);
+            else
+                File.WriteAllText(index, before);
+        }
+    }
+
+    [Fact]
     public void LoadRows_DescribesItems()
     {
         var dir = TestEnvironment.NewTempDir("quarantine");

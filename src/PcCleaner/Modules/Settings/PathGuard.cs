@@ -27,4 +27,27 @@ internal static class PathGuard
             return false;
         }
     }
+
+    /// <summary>
+    /// True only if <paramref name="path"/> is a file directly in <paramref name="folder"/> (not in a subfolder).
+    /// The app stores backups and quarantined files only at the top level, so anything deeper — for example behind a
+    /// junction planted in the folder — is refused.
+    /// </summary>
+    public static bool IsDirectChild(string? path, string? folder)
+    {
+        if (!IsInside(path, folder))
+            return false;
+        try
+        {
+            var full = Path.GetFullPath(path!).TrimEnd('\\');
+            var parent = Path.GetDirectoryName(full);
+            return parent is not null
+                   && string.Equals(parent.TrimEnd('\\'), Path.GetFullPath(folder!).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException
+                                       or System.Security.SecurityException)
+        {
+            return false;
+        }
+    }
 }
