@@ -57,9 +57,10 @@ public sealed class ModuleScanRow : ObservableObject
         IssueCount = result.Issues.Count;
         Error = result.Error;
         State = result.State;
+        var problems = result.Issues.Count(HealthScoring.IsProblem);
         StatusText = result.State switch
         {
-            ModuleScanState.Done => "готово: " + HealthScoring.ProblemsText(result.Issues.Count),
+            ModuleScanState.Done => "готово: " + HealthScoring.FindingsText(problems, result.Issues.Count - problems),
             ModuleScanState.Failed => "ошибка проверки",
             ModuleScanState.TimedOut => "превышено время ожидания",
             ModuleScanState.Cancelled => "отменено",
@@ -140,7 +141,10 @@ public sealed class IssueItem : ObservableObject
 
     /// <summary>The fix failed because administrator rights are required (show "Перезапустить от имени администратора").</summary>
     public bool NeedsAdmin => FixFailed && !Admin.IsElevated
-                              && (Issue.FixResult ?? "").Contains("администратор", StringComparison.OrdinalIgnoreCase);
+                              && (AccessDenied || HealthScoring.LooksLikeAdminRequired(Issue.FixResult));
+
+    /// <summary>The last fix attempt threw UnauthorizedAccessException/SecurityException.</summary>
+    internal bool AccessDenied { get; set; }
 
     internal void RaiseNeedsAdmin() => OnPropertyChanged(nameof(NeedsAdmin));
 

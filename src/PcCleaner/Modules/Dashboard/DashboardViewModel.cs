@@ -79,7 +79,9 @@ public sealed class DashboardViewModel : PageViewModel
         ScanCommand = new AsyncRelayCommand(ScanAsync, () => !IsBusy);
         FixSafeCommand = new AsyncRelayCommand(FixSafeAsync, () => !IsBusy && SafeFixCount > 0);
         NavigateCommand = new RelayCommand(p => Navigate(p as string));
-        RequestAdminCommand = new RelayCommand(() => Admin.RequireElevation("полная проверка компьютера"), () => !Admin.IsElevated);
+        // Restarting closes the app: never offer it while a scan or a batch of fixes is running.
+        RequestAdminCommand = new RelayCommand(() => Admin.RequireElevation("полная проверка компьютера"),
+            () => !Admin.IsElevated && !IsBusy);
 
         QuickLinks = new[]
         {
@@ -170,7 +172,7 @@ public sealed class DashboardViewModel : PageViewModel
                     ? "Собираем сведения о компьютере…"
                     : $"Проверено разделов: {_completedModules} из {_moduleRows.Count}. Пока идёт проверка, ничего не меняется.";
             }
-            return HealthScoring.VerdictDescription(Score, RemainingIssueCount);
+            return HealthScoring.VerdictDescription(Score, _summary?.ProblemCount ?? 0, FixedCount > 0);
         }
     }
 
@@ -178,8 +180,8 @@ public sealed class DashboardViewModel : PageViewModel
         ? "Проверка ещё не проводилась"
         : "Последняя проверка: " + HealthScoring.RelativeTime(_summary.Time, Now());
 
-    /// <summary>Last scan is older than a week — nudge the user.</summary>
-    public bool IsScanOld => _summary is not null && Now() - _summary.Time > TimeSpan.FromDays(7);
+    /// <summary>Last scan is older than a week — nudge the user (not while a new scan is running).</summary>
+    public bool IsScanOld => !IsScanning && _summary is not null && Now() - _summary.Time > TimeSpan.FromDays(7);
 
     public long ReclaimableBytes => _summary?.ReclaimableBytes ?? 0;
 
@@ -191,9 +193,19 @@ public sealed class DashboardViewModel : PageViewModel
 
     public bool HasIssueCount => _summary is not null && !IsScanning;
 
-    public string IssueCountText => RemainingIssueCount == 0
-        ? "Проблем не найдено"
-        : "Найдено: " + HealthScoring.ProblemsText(RemainingIssueCount);
+    public string IssueCountText
+    {
+        get
+        {
+            var problems = _summary?.ProblemCount ?? 0;
+            var tips = _summary?.TipCount ?? 0;
+            if (problems == 0 && tips == 0)
+                return FixedCount > 0 ? "Все проблемы исправлены" : "Проблем не найдено";
+            if (problems == 0)
+                return "Проблем нет · " + Format.Count(tips, "совет", "совета", "советов");
+            return "Найдено: " + HealthScoring.FindingsText(problems, tips);
+        }
+    }
 
     public string ScanButtonText => _summary is null ? "Проверить компьютер" : "Проверить снова";
 
@@ -223,8 +235,10 @@ public sealed class DashboardViewModel : PageViewModel
             sb.Append($"Прошлая проверка ({HealthScoring.RelativeTime(_summary.Time, Now())}): ");
             sb.Append(_summary.IssueCount == 0
                 ? "проблем не найдено."
-                : $"найдено {HealthScoring.ProblemsText(_summary.IssueCount)}"
+                : $"найдено {HealthScoring.FindingsText(_summary.ProblemCount, _summary.TipCount)}"
                   + (_summary.ImportantCount > 0 ? $", из них важных — {_summary.ImportantCount}." : "."));
+            if (_summary.FailedModules > 0)
+                sb.Append(" Часть разделов тогда проверить не удалось.");
             sb.Append(" Список проблем не сохраняется между запусками — проверьте компьютер снова, чтобы увидеть подробности и исправить их.");
             return sb.ToString();
         }
@@ -257,7 +271,8 @@ public sealed class DashboardViewModel : PageViewModel
             if (_issues.Count == 0)
                 return IsCancelled ? "Проверка остановлена до завершения"
                     : _moduleRows.All(r => r.State == ModuleScanState.Done) ? "Все разделы проверены" : "Проверка завершена";
-            var text = $"Найдено {HealthScoring.ProblemsText(_issues.Count)}";
+            var problems = _issues.Count(HealthScoring.IsProblem);
+            var text = $"Найдено {HealthScoring.FindingsText(problems, _issues.Count - problems)}";
             if (FixedCount > 0)
                 text += $", исправлено {FixedCount}";
             var fixable = _issues.Count(i => i.CanFix);
@@ -319,7 +334,9 @@ public sealed class DashboardViewModel : PageViewModel
         private set => Set(ref _cpuText, value);
     }
 
-    public string CpuDetail => _info is null ? "Загрузка всех ядер" : Format.Count(_info.LogicalProcessors, "поток", "потока", "потоков");
+    public string CpuDetail => _info is null
+        ? "Загрузка всех ядер"
+        : Format.Count(_info.LogicalProcessors, "логический процессор", "логических процессора", "логических процессоров");
 
     public double MemoryPercent
     {
@@ -641,45 +658,82 @@ public sealed class DashboardViewModel : PageViewModel
             return result;
         }
 
-        var results = await Task.WhenAll(contributors.Select((c, i) => RunRowAsync(c, rows[i])));
-        var cancelled = ct.IsCancellationRequested;
-        var issues = results.Where(r => r.State == ModuleScanState.Done).SelectMany(r => r.Issues).ToList();
-        int? score = null;
-
-        Ui.Invoke(() =>
+        try
         {
-            _issues = issues;
-            BuildGroups();
+            var results = await Task.WhenAll(contributors.Select((c, i) => RunRowAsync(c, rows[i])));
+            var cancelled = ct.IsCancellationRequested;
+            var issues = results.Where(r => r.State == ModuleScanState.Done).SelectMany(r => r.Issues).ToList();
+            int? score = null;
 
-            var failed = results.Where(r => r.State is ModuleScanState.Failed or ModuleScanState.TimedOut)
-                .Select(r => r.ModuleName).ToList();
+            Ui.Invoke(() =>
+            {
+                _issues = issues;
+                BuildGroups();
+
+                var failed = results.Where(r => r.State is ModuleScanState.Failed or ModuleScanState.TimedOut)
+                    .Select(r => r.ModuleName).ToList();
+                if (cancelled)
+                {
+                    ScanWarning = "Проверка остановлена. Показаны только проблемы из уже проверенных разделов, оценка не обновлена.";
+                    State = DashboardScanState.Cancelled;
+                }
+                else
+                {
+                    score = HealthScoring.ComputeScore(issues);
+                    _summary = MakeSummary(score.Value, Now(), failed.Count);
+                    _summaryFromThisSession = true;
+                    _lastScanPersisted = persist;
+                    if (persist)
+                        SaveSummary();
+                    if (failed.Count > 0)
+                        ScanWarning = $"Не удалось проверить: {string.Join(", ", failed)}. Оценка может быть неточной — откройте эти разделы, чтобы посмотреть подробности.";
+                    State = DashboardScanState.Completed;
+                }
+                RaiseHero();
+                RaiseResults();
+            });
+
             if (cancelled)
             {
-                ScanWarning = "Проверка остановлена. Показаны только проблемы из уже проверенных разделов, оценка не обновлена.";
-                State = DashboardScanState.Cancelled;
+                Log.Info("Главная: проверка остановлена пользователем");
             }
             else
             {
-                score = HealthScoring.ComputeScore(issues);
-                _summary = MakeSummary(score.Value, Now(), failed.Count);
-                _summaryFromThisSession = true;
-                _lastScanPersisted = persist;
-                if (persist)
-                    SaveSummary();
-                if (failed.Count > 0)
-                    ScanWarning = $"Не удалось проверить: {string.Join(", ", failed)}. Оценка может быть неточной — откройте эти разделы, чтобы посмотреть подробности.";
-                State = DashboardScanState.Completed;
+                var problems = issues.Count(HealthScoring.IsProblem);
+                Log.Info($"Главная: проверка завершена — оценка {score}, " +
+                         (issues.Count == 0 ? "проблем не найдено" : "найдено " + HealthScoring.FindingsText(problems, issues.Count - problems)));
             }
-            RaiseHero();
-            RaiseResults();
-        });
+            return new ScanOutcome(cancelled, score, results);
+        }
+        catch
+        {
+            // Never leave the page stuck in "Идёт проверка…" with spinning rows when something unexpected breaks
+            // (e.g. malformed module data). RunBusyAsync reports the exception itself.
+            RecoverFromBrokenScan(rows);
+            throw;
+        }
+    }
 
-        if (cancelled)
-            Log.Info("Главная: проверка остановлена пользователем");
-        else
-            Log.Info($"Главная: проверка завершена — оценка {score}, " +
-                     (issues.Count == 0 ? "проблем не найдено" : "найдено " + HealthScoring.ProblemsText(issues.Count)));
-        return new ScanOutcome(cancelled, score, results);
+    private void RecoverFromBrokenScan(IReadOnlyList<ModuleScanRow> rows)
+    {
+        try
+        {
+            Ui.Invoke(() =>
+            {
+                foreach (var row in rows.Where(r => r.State is ModuleScanState.Waiting or ModuleScanState.Running))
+                    row.SetResult(new ModuleScanResult(row.ModuleName, ModuleScanState.Cancelled, Array.Empty<HealthIssue>(), null, TimeSpan.Zero));
+                if (State != DashboardScanState.Scanning)
+                    return;
+                ScanWarning = "Проверка прервалась из-за внутренней ошибки, оценка не обновлена. Попробуйте проверить компьютер ещё раз.";
+                State = DashboardScanState.Cancelled;
+                RaiseHero();
+                RaiseResults();
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Главная: не удалось восстановить состояние после ошибки проверки: {ex.Message}");
+        }
     }
 
     private static string SafeName(IHealthContributor c)
@@ -699,6 +753,7 @@ public sealed class DashboardViewModel : PageViewModel
         Score = score,
         Time = time,
         IssueCount = _issues.Count(i => !i.IsFixed),
+        TipCount = _issues.Count(i => !i.IsFixed && !HealthScoring.IsProblem(i)),
         ImportantCount = _issues.Count(i => !i.IsFixed && i.Severity >= IssueSeverity.High),
         FixableCount = _issues.Count(i => i.CanFix),
         ReclaimableBytes = HealthScoring.TotalReclaimable(_issues),
@@ -723,9 +778,14 @@ public sealed class DashboardViewModel : PageViewModel
             .Select(g => new IssueGroup(g.Severity, g.Issues.Select(CreateItem)))
             .ToList();
         Groups = new ObservableCollection<IssueGroup>(groups);
-        SeverityChips = new ObservableCollection<SeverityChip>(
-            groups.Select(g => new SeverityChip(g.Severity, g.Title, g.AllItems.Count)));
+        BuildChips();
     }
+
+    /// <summary>Severity counters of the remaining (not fixed) issues.</summary>
+    private void BuildChips()
+        => SeverityChips = new ObservableCollection<SeverityChip>(_groups
+            .Where(g => g.RemainingCount > 0)
+            .Select(g => new SeverityChip(g.Severity, g.Title, g.RemainingCount)));
 
     private IssueItem CreateItem(HealthIssue issue)
     {
@@ -733,8 +793,11 @@ public sealed class DashboardViewModel : PageViewModel
         item.FixCommand = new AsyncRelayCommand(() => FixIssueAsync(item), () => !IsBusy && !item.IsFixing && item.Issue.CanFix);
         item.OpenPageCommand = new RelayCommand(() => Navigate(issue.TargetPageKey), () => item.HasTargetPage);
         item.CopyCommand = new RelayCommand(() => CopyIssue(issue));
-        item.SearchCommand = new RelayCommand(() => FileTools.SearchWeb(issue.Title));
-        item.RequestAdminCommand = RequestAdminCommand;
+        item.SearchCommand = new RelayCommand(() => FileTools.SearchWeb(issue.Title ?? ""));
+        // The UAC prompt must name what actually needs the rights (this fix), not the whole check.
+        item.RequestAdminCommand = new RelayCommand(
+            () => Admin.RequireElevation($"исправление «{issue.Title}»"),
+            () => !Admin.IsElevated && !IsBusy);
         return item;
     }
 
@@ -749,17 +812,7 @@ public sealed class DashboardViewModel : PageViewModel
         if (IsBusy || item.IsFixing || !issue.CanFix)
             return;
 
-        var message = new StringBuilder();
-        message.AppendLine($"Будет выполнено: {issue.Title}");
-        if (!string.IsNullOrWhiteSpace(issue.Details))
-            message.AppendLine().AppendLine(issue.Details.Trim());
-        if (item.GainText is { } gain)
-            message.AppendLine().AppendLine($"Результат: {gain}");
-        message.AppendLine()
-            .AppendLine($"Исправление выполнит раздел «{issue.Module}». Всё, что будет сделано, запишется в журнал " +
-                        "(«Настройки» → журнал действий).")
-            .AppendLine().Append("Исправить сейчас?");
-        if (!Dialogs.Confirm("Исправить проблему", message.ToString()))
+        if (!Dialogs.Confirm("Исправить проблему", FixConfirmText(item)))
         {
             Log.Info($"Главная: исправление «{issue.Title}» отменено пользователем");
             return;
@@ -776,6 +829,39 @@ public sealed class DashboardViewModel : PageViewModel
             : $"Не исправлено: {issue.Title}. {issue.FixResult}";
     }
 
+    /// <summary>Confirmation text of a single fix: the problem, its explanation, the expected result and who does it.</summary>
+    internal static string FixConfirmText(IssueItem item)
+    {
+        var issue = item.Issue;
+        var message = new StringBuilder();
+        message.AppendLine($"Проблема: {issue.Title}");
+        if (!string.IsNullOrWhiteSpace(issue.Details))
+            message.AppendLine().AppendLine(ShortenForDialog(issue.Details));
+        if (item.GainText is { } gain)
+            message.AppendLine().AppendLine($"Что изменится: {gain}");
+        message.AppendLine()
+            .AppendLine($"Исправление выполнит раздел «{issue.Module}» — только то, что описано выше. " +
+                        "Всё сделанное запишется в журнал («Настройки» → журнал действий).")
+            .AppendLine().Append("Исправить сейчас?");
+        return message.ToString();
+    }
+
+    /// <summary>
+    /// Keeps a message box on the screen: very long module texts are cut (the full text stays visible on the issue row).
+    /// </summary>
+    internal static string ShortenForDialog(string text, int maxChars = 1200, int maxLines = 20)
+    {
+        var lines = text.Trim().Replace("\r\n", "\n").Split('\n');
+        var cut = lines.Length > maxLines;
+        var result = string.Join(Environment.NewLine, lines.Take(maxLines)).TrimEnd();
+        if (result.Length > maxChars)
+        {
+            result = result[..maxChars].TrimEnd();
+            cut = true;
+        }
+        return cut ? result + "…" + Environment.NewLine + "(полное описание — в строке проблемы на главной странице)" : result;
+    }
+
     /// <summary>Runs one fix. Returns true if it succeeded. Rethrows only cancellation.</summary>
     internal async Task<bool> FixOneCoreAsync(IssueItem item, CancellationToken ct)
     {
@@ -786,6 +872,7 @@ public sealed class DashboardViewModel : PageViewModel
 
         item.IsFixing = true;
         item.FixFailed = false;
+        item.AccessDenied = false;
         try
         {
             // Task.Run: a module's fix must never block the UI thread.
@@ -812,7 +899,9 @@ public sealed class DashboardViewModel : PageViewModel
         catch (Exception ex)
         {
             issue.FixResult = "Не удалось исправить: " + ex.Message;
+            item.AccessDenied = ex is UnauthorizedAccessException or SecurityException;
             item.FixFailed = true;
+            item.RaiseNeedsAdmin();
             if (ex is UnauthorizedAccessException or SecurityException or Win32Exception or IOException)
                 Log.Warn($"Главная: не удалось исправить «{issue.Title}» ({issue.Module}): {ex.Message}");
             else
@@ -837,23 +926,7 @@ public sealed class DashboardViewModel : PageViewModel
         if (items.Count == 0)
             return null;
 
-        var message = new StringBuilder();
-        message.AppendLine(items.Count == 1
-            ? "Будет выполнено безопасное исправление:"
-            : $"Будут выполнены безопасные исправления ({items.Count}):");
-        message.AppendLine();
-        const int maxListed = 15;
-        foreach (var item in items.Take(maxListed))
-            message.AppendLine($"• {item.Issue.Title}" + (item.GainText is { } g ? $" — {g}" : "") + $" ({item.Issue.Module})");
-        if (items.Count > maxListed)
-            message.AppendLine($"…и ещё {items.Count - maxListed}");
-        message.AppendLine()
-            .AppendLine("Это низкорисковые действия: например, удаление временных файлов и кэша или включение " +
-                        "рекомендованных параметров Windows.")
-            .AppendLine("Перед изменениями программа попробует создать точку восстановления Windows (если это включено " +
-                        "в настройках и есть права администратора). Всё сделанное запишется в журнал.")
-            .AppendLine().Append("Продолжить?");
-        if (!Dialogs.Confirm("Исправить безопасное", message.ToString()))
+        if (!Dialogs.Confirm("Исправить безопасное", FixSafeConfirmText(items)))
         {
             Log.Info("Главная: безопасные исправления отменены пользователем");
             return null;
@@ -862,38 +935,36 @@ public sealed class DashboardViewModel : PageViewModel
         FixBatchResult? batch = null;
         await RunBusyAsync("Исправляем безопасные проблемы…", async ct =>
         {
-            ReportProgress(-1, "Создаём точку восстановления…");
-            await CreateRestorePointAsync("Безопасные исправления с главной страницы", ct);
-
             int ok = 0, failed = 0;
             long freed = 0;
             var cancelled = false;
-            for (var i = 0; i < items.Count; i++)
+            try
             {
-                if (ct.IsCancellationRequested)
+                ReportProgress(-1, "Создаём точку восстановления…");
+                await CreateRestorePointAsync("Безопасные исправления с главной страницы", ct);
+
+                for (var i = 0; i < items.Count; i++)
                 {
-                    cancelled = true;
-                    break;
-                }
-                var item = items[i];
-                ReportProgress(100.0 * i / items.Count, $"Исправляем ({i + 1} из {items.Count}): {item.Issue.Title}");
-                try
-                {
+                    ct.ThrowIfCancellationRequested();
+                    var item = items[i];
+                    ReportProgress(100.0 * i / items.Count, $"Исправляем ({i + 1} из {items.Count}): {item.Issue.Title}");
                     if (await FixOneCoreAsync(item, ct))
                     {
                         ok++;
-                        freed += Math.Max(0, item.Issue.ReclaimableBytes);
+                        freed = freed > long.MaxValue - Math.Max(0, item.Issue.ReclaimableBytes)
+                            ? long.MaxValue
+                            : freed + Math.Max(0, item.Issue.ReclaimableBytes);
                     }
                     else
                     {
                         failed++;
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                    cancelled = true;
-                    break;
-                }
+            }
+            catch (OperationCanceledException)
+            {
+                // "Отмена" during the restore point or between/inside fixes: report what was done so far.
+                cancelled = true;
             }
             ReportProgress(100);
             batch = new FixBatchResult(items.Count, ok, failed, cancelled, freed);
@@ -905,13 +976,46 @@ public sealed class DashboardViewModel : PageViewModel
             var text = BatchSummaryText(batch);
             ActionSummary = text;
             Log.Info("Главная: " + text);
-            Dialogs.Info("Исправление завершено", text);
+            Dialogs.Info(batch.Cancelled ? "Исправление остановлено" : "Исправление завершено", text);
         }
         return batch;
     }
 
+    /// <summary>
+    /// The ONE confirmation of "Исправить безопасное". Every item is named: up to 20 one per line (with gain and module),
+    /// longer lists compactly per module so the message box still fits on the screen.
+    /// </summary>
+    internal static string FixSafeConfirmText(IReadOnlyList<IssueItem> items)
+    {
+        const int maxDetailedLines = 20;
+        var message = new StringBuilder();
+        message.AppendLine(items.Count == 1
+            ? "Будет исправлена безопасная проблема:"
+            : $"Будут исправлены безопасные проблемы ({items.Count}):");
+        message.AppendLine();
+        if (items.Count <= maxDetailedLines)
+        {
+            foreach (var item in items)
+                message.AppendLine($"• {item.Issue.Title}" + (item.GainText is { } g ? $" — {g}" : "") + $" ({item.Issue.Module})");
+        }
+        else
+        {
+            foreach (var module in items.GroupBy(i => i.Issue.Module ?? ""))
+                message.AppendLine($"• {module.Key} ({module.Count()}): " + string.Join("; ", module.Select(i => i.Issue.Title)));
+        }
+        message.AppendLine()
+            .AppendLine("Это низкорисковые действия: например, удаление временных файлов и кэша или включение " +
+                        "рекомендованных параметров Windows.")
+            .AppendLine("Перед изменениями программа попробует создать точку восстановления Windows (если это включено " +
+                        "в настройках и есть права администратора). Всё сделанное запишется в журнал.")
+            .AppendLine().Append("Продолжить?");
+        return message.ToString();
+    }
+
     internal static string BatchSummaryText(FixBatchResult r)
     {
+        if (r.Cancelled && r.Fixed == 0 && r.Failed == 0)
+            return "Исправление отменено — ничего не изменено.";
         var sb = new StringBuilder();
         sb.Append(r.Fixed == r.Total
             ? $"Исправлено {HealthScoring.ProblemsText(r.Fixed)}."
@@ -938,6 +1042,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         foreach (var g in _groups)
             g.Refresh();
+        BuildChips();
         RaiseHero();
         RaiseResults();
     }

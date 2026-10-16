@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Dashboard;
@@ -49,13 +50,18 @@ public static class HealthScoring
         _ => "Плохо",
     };
 
-    /// <summary>One friendly sentence under the verdict.</summary>
-    public static string VerdictDescription(int? score, int issueCount)
+    /// <summary>
+    /// One friendly sentence under the verdict. <paramref name="problemCount"/> = remaining issues that lower the score
+    /// (tips are not problems); <paramref name="fixedSome"/> = something was fixed since the scan.
+    /// </summary>
+    public static string VerdictDescription(int? score, int problemCount, bool fixedSome = false)
     {
         if (score is null)
             return "Запустите проверку — она займёт около минуты и ничего не изменит без вашего согласия.";
-        if (issueCount == 0)
-            return "Проблем не найдено. Компьютер в отличной форме!";
+        if (problemCount == 0)
+            return fixedSome
+                ? "Все найденные проблемы исправлены. Нажмите «Проверить снова», чтобы обновить оценку."
+                : "Проблем не найдено. Компьютер в отличной форме!";
         return score switch
         {
             >= 90 => "Серьёзных проблем нет, остались только мелочи и советы.",
@@ -114,9 +120,24 @@ public static class HealthScoring
         return result;
     }
 
-    /// <summary>Total bytes that can be freed by the issues that are not fixed yet.</summary>
+    /// <summary>
+    /// Total bytes that can be freed by the issues that are not fixed yet. Saturates instead of throwing
+    /// (LINQ Sum is checked) so a module reporting absurd sizes cannot break the scan.
+    /// </summary>
     public static long TotalReclaimable(IEnumerable<HealthIssue> issues)
-        => issues.Where(i => !i.IsFixed).Sum(i => Math.Max(0, i.ReclaimableBytes));
+    {
+        long total = 0;
+        foreach (var issue in issues)
+        {
+            if (issue.IsFixed || issue.ReclaimableBytes <= 0)
+                continue;
+            total = issue.ReclaimableBytes > long.MaxValue - total ? long.MaxValue : total + issue.ReclaimableBytes;
+        }
+        return total;
+    }
+
+    /// <summary>Issues that lower the score (everything except <see cref="IssueSeverity.Info"/> tips).</summary>
+    public static bool IsProblem(HealthIssue issue) => issue.Severity > IssueSeverity.Info;
 
     private static IssueSeverity Normalize(IssueSeverity s)
         => Enum.IsDefined(s) ? s : s > IssueSeverity.Critical ? IssueSeverity.Critical : IssueSeverity.Info;
@@ -148,6 +169,19 @@ public static class HealthScoring
     public static string ProblemsText(int count)
         => count == 0 ? "проблем нет" : Format.Count(count, "проблема", "проблемы", "проблем");
 
+    /// <summary>"2 проблемы и 3 совета", "1 совет", "проблем нет" (tips are not called problems).</summary>
+    public static string FindingsText(int problems, int tips)
+    {
+        if (problems <= 0 && tips <= 0)
+            return "проблем нет";
+        var parts = new List<string>(2);
+        if (problems > 0)
+            parts.Add(Format.Count(problems, "проблема", "проблемы", "проблем"));
+        if (tips > 0)
+            parts.Add(Format.Count(tips, "совет", "совета", "советов"));
+        return string.Join(" и ", parts);
+    }
+
     /// <summary>
     /// FixAsync has no success flag: modules return a message. Some messages mean "nothing was changed"
     /// (e.g. admin rights are required) — such a result must not mark the issue as fixed.
@@ -156,15 +190,29 @@ public static class HealthScoring
     {
         if (string.IsNullOrWhiteSpace(message))
             return false;
-        var m = message.ToLowerInvariant();
-        return m.Contains("нужны права администратора")
-               || m.Contains("требуются права администратора")
-               || m.Contains("необходимы права администратора")
-               || m.Contains("нужны права админ")
+        var m = message.Trim().ToLowerInvariant();
+        return LooksLikeAdminRequired(m)
                || m.StartsWith("не удалось")
                || m.StartsWith("ошибка")
+               || m.StartsWith("отменено")
                || m.Contains("ничего не изменено")
                || m.Contains("ничего не было изменено")
-               || m.Contains("отменено");
+               || m.Contains("ничего не изменилось")
+               || m.Contains("ничего не сделано")
+               || m.Contains("ничего не удалено")
+               // Only the cancellation phrases: a bare "отменено" also appears in successful tweak messages
+               // ("Автообновление драйверов отменено") which must still count as fixed.
+               || m.Contains("исправление отменено")
+               || m.Contains("действие отменено")
+               || m.Contains("операция отменена");
     }
+
+    /// <summary>The fix result says administrator rights are required ("Нужны права администратора", "Недостаточно прав"...).</summary>
+    public static bool LooksLikeAdminRequired(string? message)
+        => !string.IsNullOrWhiteSpace(message) && AdminRequired.IsMatch(message);
+
+    // \b keeps "нет правил" / "недостаточно правильно" from matching.
+    private static readonly Regex AdminRequired = new(
+        @"прав(а|ами)?\s+админ|от\s+имени\s+админ|недостаточно\s+прав\b|\bнет\s+прав\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 }

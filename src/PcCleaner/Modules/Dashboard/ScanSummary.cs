@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Dashboard;
@@ -16,7 +17,15 @@ public sealed record ScanSummary
 
     public DateTime Time { get; init; }
 
+    /// <summary>All remaining findings, tips included.</summary>
     public int IssueCount { get; init; }
+
+    /// <summary>Remaining Info-level findings ("советы") — they do not lower the score and are not called problems.</summary>
+    public int TipCount { get; init; }
+
+    /// <summary>Remaining findings that lower the score.</summary>
+    [JsonIgnore]
+    public int ProblemCount => Math.Max(0, IssueCount - TipCount);
 
     /// <summary>Critical + High issues.</summary>
     public int ImportantCount { get; init; }
