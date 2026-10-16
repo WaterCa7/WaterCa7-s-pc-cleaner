@@ -602,19 +602,84 @@ internal static class OwnProcesses
     public const string HelperLabel = "служебный процесс WaterCa7s PC Cleaner";
 
     /// <summary>
-    /// The cleaner and every process it started, directly or through another helper (powershell.exe → conhost.exe).
-    /// A child counts only if it started after its parent, so a stale parent PID reused by Windows never drags in
-    /// unrelated programs. If the cleaner itself is not in the list, its direct children are the roots.
+    /// Console tools the cleaner runs in the background for its checks and fixes (ProcessRunner, RegistryBackup,
+    /// RestorePoint, Defender scans...), plus the console host Windows attaches to them.
+    /// </summary>
+    private static readonly HashSet<string> HelperTools = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "powershell.exe", "pwsh.exe", "cmd.exe", "conhost.exe", "reg.exe", "netsh.exe", "ipconfig.exe", "sc.exe",
+        "fsutil.exe", "vssadmin.exe", "powercfg.exe", "dism.exe", "defrag.exe", "MpCmdRun.exe", "tpmtool.exe", "schtasks.exe",
+        "wevtutil.exe", "w32tm.exe", "bcdedit.exe", "whoami.exe", "systeminfo.exe", "driverquery.exe", "wmic.exe", "ping.exe",
+        "tracert.exe", "pathping.exe", "nslookup.exe", "netstat.exe", "getmac.exe", "arp.exe", "route.exe", "net.exe",
+        "net1.exe", "chkdsk.exe", "manage-bde.exe", "winsat.exe", "tasklist.exe", "chcp.com",
+    };
+
+    /// <summary>Where those tools live: Windows itself, and Microsoft Defender's folders (MpCmdRun.exe).</summary>
+    private static readonly string[] HelperFolders =
+    {
+        Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Windows Defender"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), @"Microsoft\Windows Defender"),
+    };
+
+    /// <summary>
+    /// A Windows console tool of the kind the cleaner runs for its checks. Everything else it may start is the user's
+    /// own business and is judged like any other program: the browser opened by "VirusTotal", Explorer, Notepad, and
+    /// above all a program's uninstaller (and whatever that uninstaller starts) from the "Программы" page.
+    /// A copy of a tool outside the Windows folders is not a helper either. Unknown path (the helper already exited or
+    /// Windows denied access) falls back to the name: the process was started by the cleaner itself.
+    /// </summary>
+    internal static bool IsHelperTool(string name, string? path)
+    {
+        var fileName = PathUtil.FileNameOrNull(path) ?? name;
+        if (!HelperTools.Contains(fileName))
+            return false;
+        return path is null || HelperFolders.Any(f => f.Length > 0 && Suspicion.IsUnder(path, f));
+    }
+
+    /// <summary>
+    /// The cleaner and the console tools it started for its checks, directly or through another such tool
+    /// (powershell.exe → conhost.exe). The chain stops at anything that is not a helper tool, so a program launched
+    /// from the cleaner (an uninstaller, a browser) and its children stay under scrutiny. A child counts only if it
+    /// started after its parent, so a stale parent PID reused by Windows never drags in unrelated programs. If the
+    /// cleaner itself is not in the list, its direct helper children are the roots.
     /// </summary>
     public static HashSet<T> Find<T>(IReadOnlyCollection<T> all, int selfPid, Func<T, int> pid, Func<T, int> parentPid,
-        Func<T, long> createTime) where T : notnull
+        Func<T, long> createTime, Func<T, string> name, Func<T, string?> path) where T : notnull
     {
-        var roots = all.Where(p => pid(p) == selfPid).ToList();
-        if (roots.Count == 0)
-            roots = all.Where(p => parentPid(p) == selfPid).ToList();
-        return roots.Count == 0
-            ? new HashSet<T>()
-            : new HashSet<T>(ProcessTree.Collect(all, roots, pid, parentPid, createTime));
+        var own = new HashSet<T>();
+        var queue = new Queue<T>();
+        foreach (var self in all.Where(p => pid(p) == selfPid))
+        {
+            if (own.Add(self))
+                queue.Enqueue(self);
+        }
+        if (own.Count == 0)
+        {
+            foreach (var child in all.Where(p => parentPid(p) == selfPid && pid(p) != selfPid && IsHelperTool(name(p), path(p))))
+            {
+                if (own.Add(child))
+                    queue.Enqueue(child);
+            }
+        }
+        if (own.Count == 0)
+            return own;
+
+        var byParent = all.GroupBy(parentPid).ToDictionary(g => g.Key, g => g.ToList());
+        while (queue.Count > 0)
+        {
+            var parent = queue.Dequeue();
+            if (!byParent.TryGetValue(pid(parent), out var children))
+                continue;
+            foreach (var child in children)
+            {
+                if (pid(child) == pid(parent) || createTime(child) < createTime(parent) || !IsHelperTool(name(child), path(child)))
+                    continue;
+                if (own.Add(child))
+                    queue.Enqueue(child);
+            }
+        }
+        return own;
     }
 
     public static ProcessOwnRole RoleOf<T>(T item, int selfPid, Func<T, int> pid, HashSet<T> own) where T : notnull

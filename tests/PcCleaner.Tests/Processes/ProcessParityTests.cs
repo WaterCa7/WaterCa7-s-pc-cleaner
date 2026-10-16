@@ -89,10 +89,63 @@ public class OwnProcessTests
     [Fact]
     public void Find_UsesDirectChildrenWhenTheCleanerIsNotListed()
     {
-        var all = new List<(int Pid, int Parent, long Created)> { (901, Self, 10), (902, 901, 11), (903, 1, 12) };
-        var own = OwnProcesses.Find(all, Self, p => p.Pid, p => p.Parent, p => p.Created);
+        var conhost = Path.Combine(Environment.SystemDirectory, "conhost.exe");
+        var all = new List<(int Pid, int Parent, long Created, string Name, string? Path)>
+        {
+            (901, Self, 10, "powershell.exe", PowerShellPath), (902, 901, 11, "conhost.exe", conhost), (903, 1, 12, "conhost.exe", conhost),
+        };
+        var own = Find(all, Self);
         Assert.Equal(new[] { 901, 902 }, own.Select(p => p.Pid).OrderBy(p => p));
-        Assert.Empty(OwnProcesses.Find(all, 12345, p => p.Pid, p => p.Parent, p => p.Created));
+        Assert.Empty(Find(all, 12345));
+    }
+
+    private static HashSet<(int Pid, int Parent, long Created, string Name, string? Path)> Find(
+        List<(int Pid, int Parent, long Created, string Name, string? Path)> all, int self)
+        => OwnProcesses.Find(all, self, p => p.Pid, p => p.Parent, p => p.Created, p => p.Name, p => p.Path);
+
+    [Fact]
+    public void ProgramsTheCleanerOpensForTheUser_AreStillJudged()
+    {
+        // Only the console tools of its checks are ours. A browser opened by "VirusTotal", an uninstaller started from
+        // "Программы" (and the copy of itself it runs from Temp), Explorer or Notepad are the user's programs.
+        var temp = Path.GetTempPath();
+        var all = new List<(int Pid, int Parent, long Created, string Name, string? Path)>
+        {
+            (Self, 1, 5, "WaterCa7sPcCleaner.exe", SelfPath),
+            (901, Self, 10, "powershell.exe", PowerShellPath),
+            (902, 901, 11, "conhost.exe", Path.Combine(Environment.SystemDirectory, "conhost.exe")),
+            (910, Self, 12, "chrome.exe", ChromePath),
+            (911, 910, 13, "chrome.exe", ChromePath),
+            (920, Self, 14, "uninstall.exe", @"C:\Program Files\Toolbar\uninstall.exe"),
+            (921, 920, 15, "Au_.exe", Path.Combine(temp, @"~nsu.tmp\Au_.exe")),
+            (922, 921, 16, "cmd.exe", Path.Combine(Environment.SystemDirectory, "cmd.exe")), // a tool, but not started by us
+            (930, Self, 17, "explorer.exe", Path.Combine(WindowsDir, "explorer.exe")),
+            (931, Self, 18, "notepad.exe", Path.Combine(Environment.SystemDirectory, "notepad.exe")),
+            // a tool name is not enough: the file must be the real one from the Windows folders
+            (940, Self, 19, "reg.exe", Path.Combine(temp, "reg.exe")),
+            // Defender's command-line scanner lives outside C:\Windows
+            (950, Self, 20, "MpCmdRun.exe", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                @"Microsoft\Windows Defender\Platform\4.18.1\MpCmdRun.exe")),
+            // the helper has already exited / no access: started by us under a tool's name
+            (960, Self, 21, "netsh.exe", null),
+        };
+        var own = Find(all, Self).Select(p => p.Pid).OrderBy(p => p);
+        Assert.Equal(new[] { Self, 901, 902, 950, 960 }, own);
+    }
+
+    [Fact]
+    public void Dashboard_StillReportsAnUninstallerStartedFromTheCleaner()
+    {
+        var uninstaller = Path.Combine(Path.GetTempPath(), @"~nsu.tmp\Au_.exe");
+        var items = new[]
+        {
+            IssueItems.Item(Self, "WaterCa7sPcCleaner.exe", SelfPath, parent: 1),
+            IssueItems.Item(920, "Au_.exe", uninstaller, suspicion: new SuspicionResult(50, new[] { "x" }), parent: Self),
+            IssueItems.Item(930, "chrome.exe", ChromePath, memory: 6L << 30, parent: Self, description: "Google Chrome"),
+        };
+        var issues = ProcessIssues.Build(items, IssueItems.Ram16, Self);
+        Assert.Contains(issues, i => i.Title == "Подозрительный процесс: Au_.exe");
+        Assert.Contains(issues, i => i.Title.StartsWith("Google Chrome занимает", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -102,11 +155,18 @@ public class OwnProcessTests
         source.Add(Self, "WaterCa7sPcCleaner.exe", SelfPath, parent: 1);
         source.Add(901, "powershell.exe", PowerShellPath, parent: Self);
         source.Add(902, "powershell.exe", PowerShellPath, parent: 4000);
+        // An uninstaller started from "Программы" is a child of the cleaner too, but it is not one of our helpers.
+        source.Add(903, "evil-uninstall.exe", Path.Combine(Path.GetTempPath(), "evil-uninstall.exe"), parent: Self);
         details.Processes.Add(new WmiProcessRow(901, Self, HiddenLaunch, PowerShellPath, null));
         details.Processes.Add(new WmiProcessRow(902, 4000, HiddenLaunch, PowerShellPath, null));
         var vm = new ProcessesViewModel(service) { BaselineDelay = TimeSpan.Zero };
         await vm.RefreshAsync();
         await vm.WaitForBackgroundAsync(CancellationToken.None);
+
+        var uninstaller = vm.Rows.Single(r => r.Pid == 903);
+        Assert.Equal(ProcessOwnRole.None, uninstaller.OwnRole);
+        Assert.True(uninstaller.IsSuspicious);
+        Assert.Null(uninstaller.OwnNote);
 
         // The cleaner itself: unsigned and in Temp here, which would be suspicious for anything else.
         var self = vm.Rows.Single(r => r.Pid == Self);
@@ -129,7 +189,7 @@ public class OwnProcessTests
         var other = vm.Rows.Single(r => r.Pid == 902);
         Assert.Equal(ProcessOwnRole.None, other.OwnRole);
         Assert.True(other.IsSuspicious);
-        Assert.Equal(1, vm.SuspiciousCount);
+        Assert.Equal(2, vm.SuspiciousCount); // the other PowerShell and the uninstaller
 
         var powershell = vm.Groups.Single(g => g.ExeName == "powershell.exe");
         Assert.Equal(ProcessOwnRole.None, powershell.OwnRole);

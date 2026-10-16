@@ -700,7 +700,8 @@ public sealed class ProcessesViewModel : PageViewModel
 
         // The cleaner and the helpers it starts for its checks (powershell.exe, reg.exe, netsh.exe...) are never judged.
         var selfPid = _service.SelfPid;
-        var own = OwnProcesses.Find(_rows.Values, selfPid, r => r.Pid, r => r.ParentPid, r => r.CreateTime);
+        var own = OwnProcesses.Find(_rows.Values, selfPid, r => r.Pid, r => r.ParentPid, r => r.CreateTime, r => r.Info.Name,
+            r => r.Info.Path);
 
         foreach (var row in _rows.Values)
         {

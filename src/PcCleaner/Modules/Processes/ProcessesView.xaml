@@ -631,7 +631,19 @@
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.TrustCommand, ElementName=Root}"
                                             ToolTip="{Binding TrustToolTip}" IsEnabled="{Binding CanTrust}">
                                         <DockPanel>
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" Margin="0,0,6,0" />
+                                            <!-- "Не доверять" gets its own icon: in the icon-only row it must not look like "Доверять" -->
+                                            <TextBlock FontSize="13" Margin="0,0,6,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                        <Setter Property="Text" Value="&#xE8FB;" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsTrusted}" Value="True">
+                                                                <Setter Property="Text" Value="&#xE738;" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                             <TextBlock Text="{Binding TrustButtonText}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>

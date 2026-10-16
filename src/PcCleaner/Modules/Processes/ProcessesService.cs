@@ -545,7 +545,7 @@ internal static class ProcessIssues
 
         // The cleaner and the helpers it starts for its own checks (powershell.exe, reg.exe...) are not the user's problem.
         var own = OwnProcesses.Find(items, selfPid, e => e.Sample.Pid, e => ProcessesService.ParentOf(e.Sample),
-            e => e.Sample.Raw.CreateTime);
+            e => e.Sample.Raw.CreateTime, e => e.Sample.Info.Name, e => e.Sample.Info.Path);
         var programs = items.GroupBy(e => keys[e]).ToList();
 
         // 1. Suspicious programs (one issue per executable, not per instance).
@@ -679,7 +679,8 @@ internal static class ProcessIssues
               "• Включите в настройках браузера экономию памяти (раздел «Производительность»): неактивные вкладки будут " +
               "«засыпать» и отдавать память.\n" +
               "• Отключите расширения, которыми не пользуетесь."
-            : "Так работают программы на основе браузера (мессенджеры, лаунчеры игр): каждое окно и вкладка — отдельный процесс.\n" +
+            : "Многие программы (например, мессенджеры и лаунчеры игр на основе браузера) запускают отдельный процесс " +
+              "для каждого окна, вкладки или задачи.\n" +
               "• Закройте лишние окна и вкладки этой программы.\n" +
               "• Если она давно запущена — перезапустите её.";
         return new HealthIssue
