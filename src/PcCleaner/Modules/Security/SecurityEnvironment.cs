@@ -60,6 +60,24 @@ public sealed class SecurityEnvironment
     /// <summary>HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall (Group Policy, read only).</summary>
     public required RegLocation FirewallPolicy { get; init; }
 
+    /// <summary>LanmanServer\Parameters (value SMB1: 0 = the SMBv1 server is switched off).</summary>
+    public required RegLocation LanmanServerParameters { get; init; }
+
+    /// <summary>Services\srv — the SMBv1 server driver (missing = not installed).</summary>
+    public required RegLocation Smb1ServerDriver { get; init; }
+
+    /// <summary>Services\mrxsmb10 — the SMBv1 client driver (missing = not installed, Start 4 = disabled).</summary>
+    public required RegLocation Smb1ClientDriver { get; init; }
+
+    /// <summary>Control\SecureBoot\State (UEFISecureBootEnabled).</summary>
+    public required RegLocation SecureBootState { get; init; }
+
+    /// <summary>Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity (Enabled = memory integrity turned on).</summary>
+    public required RegLocation HvciScenario { get; init; }
+
+    /// <summary>SOFTWARE\Microsoft\Windows NT\CurrentVersion (EditionID).</summary>
+    public required RegLocation WindowsVersion { get; init; }
+
     public required IReadOnlyList<BrowserRoot> BrowserRoots { get; init; }
     public required string WindowsDir { get; init; }
 
@@ -83,6 +101,13 @@ public sealed class SecurityEnvironment
             TerminalServer = new(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Terminal Server"),
             DefenderPolicy = new(RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows Defender"),
             FirewallPolicy = new(RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\WindowsFirewall"),
+            LanmanServerParameters = new(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"),
+            Smb1ServerDriver = new(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\srv"),
+            Smb1ClientDriver = new(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\mrxsmb10"),
+            SecureBootState = new(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\SecureBoot\State"),
+            HvciScenario = new(RegistryHive.LocalMachine,
+                @"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity"),
+            WindowsVersion = new(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion"),
             BrowserRoots = BrowserExtensionScanner.DefaultRoots(),
             WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             IsRealSystem = true,
@@ -110,6 +135,12 @@ public sealed class SecurityEnvironment
             TerminalServer = Sub("TerminalServer"),
             DefenderPolicy = Sub("DefenderPolicy"),
             FirewallPolicy = Sub("FirewallPolicy"),
+            LanmanServerParameters = Sub("LanmanServer"),
+            Smb1ServerDriver = Sub("Srv"),
+            Smb1ClientDriver = Sub("Mrxsmb10"),
+            SecureBootState = Sub("SecureBoot"),
+            HvciScenario = Sub("Hvci"),
+            WindowsVersion = Sub("WindowsVersion"),
             BrowserRoots = new[]
             {
                 new BrowserRoot("Chrome", Path.Combine(tempDir, "Chrome", "User Data"), BrowserKind.Chromium),

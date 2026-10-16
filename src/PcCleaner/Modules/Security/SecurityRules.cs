@@ -10,7 +10,7 @@ namespace PcCleaner.Modules.Security;
 /// <summary>
 /// Pure evaluation logic of the security checks (no system access), so it can be unit-tested.
 /// </summary>
-public static class SecurityRules
+public static partial class SecurityRules
 {
     public const int SignatureMaxAgeDays = 3;
     public const int UpdatesMaxAgeDays = 60;
@@ -136,16 +136,28 @@ public static class SecurityRules
         var third = products.Where(p => !p.IsMicrosoft && p.Enabled).ToList();
         var inactiveThird = InactiveThirdPartyText(products);
         var activeThreats = threats.Where(t => t.IsActive).ToList();
+        var active = ActiveAntivirusNames(products, d);
 
         if (third.Count > 0)
         {
-            var names = string.Join(", ", third.Select(p => p.Name).Distinct());
+            var names = string.Join(", ", third.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase));
             var outdated = third.Where(p => !p.UpToDate).ToList();
             status = outdated.Count == 0 ? SecurityStatus.Ok : SecurityStatus.Warning;
             state = outdated.Count == 0 ? $"Защищает {names}" : $"{outdated[0].Name}: базы устарели";
-            lines.Add(d is null || !d.RealTimeEnabled
-                ? "Microsoft Defender работает в пассивном режиме — так и должно быть, когда установлен другой антивирус."
-                : "Microsoft Defender тоже включён.");
+            if (active.Count >= 2)
+            {
+                status = SecurityStatus.Warning;
+                if (outdated.Count == 0)
+                    state = "Работают сразу несколько антивирусов";
+                lines.Add($"Одновременно включены: {string.Join(", ", active)}. Антивирусы мешают друг другу и замедляют " +
+                          "компьютер — оставьте один, а лишние удалите в разделе «Программы».");
+            }
+            else
+            {
+                lines.Add(d is null || !d.RealTimeEnabled
+                    ? "Microsoft Defender работает в пассивном режиме — так и должно быть, когда установлен другой антивирус."
+                    : "Microsoft Defender тоже включён.");
+            }
         }
         else if (d is null)
         {

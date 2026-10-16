@@ -50,6 +50,14 @@ public sealed class SecurityCheckCard
     /// <summary>Number of grid columns the card spans (the antivirus card is wide).</summary>
     public int ColumnSpan { get; init; } = 1;
 
+    /// <summary>A card that is fine: the details text is shown only in a tooltip.</summary>
+    public bool IsCompact { get; init; }
+
+    public bool ShowDetails => !IsCompact && !string.IsNullOrWhiteSpace(Details);
+
+    /// <summary>Tooltip of the state line: the details of a compact card.</summary>
+    public string? StateToolTip => IsCompact && !string.IsNullOrWhiteSpace(Details) ? Details : null;
+
     public string StatusText => Status.ToRussian();
 }
 
@@ -176,36 +184,63 @@ public sealed class ResponsiveGrid : Panel
     /// <summary>Places children into rows: returns (row, column, span) per visible child.</summary>
     private List<(UIElement Child, int Row, int Col, int Span)> Place(int cols)
     {
-        var placed = new List<(UIElement Child, int Row, int Col, int Span)>();
+        var children = InternalChildren.Cast<UIElement>().Where(c => c.Visibility != Visibility.Collapsed).ToList();
+        return Pack(children.Select(GetColumnSpan).ToList(), cols)
+            .Select(p => (children[p.Index], p.Row, p.Col, p.Span))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Packs items with the given column spans into rows without holes: when a wide item does not fit into the rest
+    /// of a row, the next items that fit are moved up into it; if nothing fits, the row's last item is stretched.
+    /// Returns (index of the item, row, column, span) in placement order.
+    /// </summary>
+    internal static List<(int Index, int Row, int Col, int Span)> Pack(IReadOnlyList<int> spans, int cols)
+    {
+        cols = Math.Max(1, cols);
+        var result = new List<(int Index, int Row, int Col, int Span)>();
+        var placed = new bool[spans.Count];
         int row = 0, col = 0;
-        foreach (UIElement child in InternalChildren)
+
+        int SpanOf(int i) => Math.Clamp(spans[i], 1, cols);
+
+        void EndRow()
         {
-            if (child.Visibility == Visibility.Collapsed)
-                continue;
-            var span = Math.Clamp(GetColumnSpan(child), 1, cols);
-            if (col + span > cols)
+            if (col > 0 && col < cols)
             {
-                row++;
-                col = 0;
+                var last = result[^1];
+                result[^1] = (last.Index, last.Row, last.Col, last.Span + (cols - col));
             }
-            placed.Add((child, row, col, span));
-            col += span;
-            if (col >= cols)
-            {
-                row++;
-                col = 0;
-            }
+            row++;
+            col = 0;
         }
 
-        // An incomplete last row would leave a hole: let its last card take the remaining columns.
-        if (placed.Count > 0)
+        for (var i = 0; i < spans.Count; i++)
         {
-            var last = placed[^1];
-            var used = last.Col + last.Span;
-            if (used < cols)
-                placed[^1] = (last.Child, last.Row, last.Col, last.Span + (cols - used));
+            if (placed[i])
+                continue;
+            var span = SpanOf(i);
+            if (col + span > cols)
+            {
+                for (var j = i + 1; j < spans.Count && col < cols; j++)
+                {
+                    if (placed[j] || col + SpanOf(j) > cols)
+                        continue;
+                    result.Add((j, row, col, SpanOf(j)));
+                    placed[j] = true;
+                    col += SpanOf(j);
+                }
+                EndRow();
+            }
+            result.Add((i, row, col, span));
+            placed[i] = true;
+            col += span;
+            if (col >= cols)
+                EndRow();
         }
-        return placed;
+        if (col > 0)
+            EndRow();
+        return result;
     }
 
     protected override Size MeasureOverride(Size availableSize)

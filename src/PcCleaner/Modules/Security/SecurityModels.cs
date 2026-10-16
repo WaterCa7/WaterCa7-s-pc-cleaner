@@ -55,11 +55,25 @@ public static class SecurityCheckIds
     public const string SmartScreen = "smartscreen";
     public const string Rdp = "rdp";
     public const string Extensions = "extensions";
+    public const string Smb1 = "smb1";
+    public const string SecureBoot = "secureboot";
+    public const string Tpm = "tpm";
+    public const string BitLocker = "bitlocker";
+    public const string MemoryIntegrity = "memoryintegrity";
 
+    /// <summary>All checks in order of importance (cards with the same status are shown in this order).</summary>
     public static readonly string[] All =
     {
-        Antivirus, Firewall, Uac, Hosts, Winlogon, Ifeo, Proxy, Dns, Updates, SmartScreen, Rdp, Extensions,
+        Antivirus, Firewall, Winlogon, Ifeo, Uac, Hosts, Smb1, Updates, Proxy, SmartScreen, Rdp, Extensions, Dns,
+        SecureBoot, MemoryIntegrity, Tpm, BitLocker,
     };
+
+    /// <summary>Position in <see cref="All"/> (unknown ids go last).</summary>
+    public static int Importance(string id)
+    {
+        var i = Array.IndexOf(All, id);
+        return i < 0 ? int.MaxValue : i;
+    }
 
     public static string Title(string id) => id switch
     {
@@ -75,6 +89,11 @@ public static class SecurityCheckIds
         SmartScreen => "SmartScreen",
         Rdp => "Удалённый рабочий стол",
         Extensions => "Расширения браузеров",
+        Smb1 => "Протокол SMBv1",
+        SecureBoot => "Secure Boot",
+        Tpm => "Модуль TPM",
+        BitLocker => "Шифрование диска",
+        MemoryIntegrity => "Изоляция ядра",
         _ => id,
     };
 
@@ -92,6 +111,11 @@ public static class SecurityCheckIds
         SmartScreen => "",
         Rdp => "",
         Extensions => "",
+        Smb1 => "",
+        SecureBoot => "",
+        Tpm => "",
+        BitLocker => "",
+        MemoryIntegrity => "",
         _ => "",
     };
 
@@ -110,6 +134,11 @@ public static class SecurityCheckIds
         SmartScreen => "SmartScreen предупреждает перед запуском скачанных программ с плохой репутацией.",
         Rdp => "Удалённый рабочий стол (RDP) позволяет управлять компьютером по сети. Злоумышленники подбирают к нему пароли.",
         Extensions => "Расширения видят все открытые страницы. Рекламные расширения подменяют поиск и показывают лишнюю рекламу.",
+        Smb1 => "SMBv1 — устаревшая версия протокола общего доступа к файлам и принтерам по сети. Через её уязвимости в 2017 году распространялись вирусы WannaCry и NotPetya.",
+        SecureBoot => "Secure Boot (безопасная загрузка) — функция UEFI, которая разрешает запускать только подписанные загрузчики. Она не даёт буткитам стартовать раньше Windows.",
+        Tpm => "TPM — чип или функция процессора (fTPM у AMD, PTT у Intel), которая хранит ключи шифрования. Нужен для Windows 11, BitLocker и Windows Hello.",
+        BitLocker => "BitLocker и «Шифрование устройства» шифруют системный диск: без пароля или ключа восстановления данные не прочитать, даже если вынуть диск.",
+        MemoryIntegrity => "«Целостность памяти» (HVCI) — часть изоляции ядра. С помощью виртуализации она проверяет драйверы и не даёт вредоносному коду внедриться в ядро Windows.",
         _ => "",
     };
 }
@@ -263,12 +292,26 @@ public sealed class SecurityReport
     public IReadOnlyList<BrowserExtension> Extensions { get; init; } = Array.Empty<BrowserExtension>();
     public int BrowsersFound { get; init; }
     public bool MpCmdRunAvailable { get; init; }
+    public Smb1State Smb1 { get; init; } = Smb1State.Unknown;
+    public SecureBootState SecureBoot { get; init; } = new(false, null, null);
+    public TpmState Tpm { get; init; } = TpmState.Unknown;
+    public BitLockerState BitLocker { get; init; } = BitLockerState.Unknown;
+    public DeviceGuardState DeviceGuard { get; init; } = DeviceGuardState.Unknown;
     public IReadOnlyList<SecurityCheckResult> Checks { get; init; } = Array.Empty<SecurityCheckResult>();
 
     public SecurityCheckResult? Check(string id) => Checks.FirstOrDefault(c => c.Id == id);
 
     /// <summary>True if an enabled non-Microsoft antivirus protects the PC.</summary>
     public bool HasThirdPartyAntivirus => Antiviruses.Any(a => !a.IsMicrosoft && a.Enabled);
+
+    /// <summary>Antiviruses that protect in real time at the same time (2+ means they get in each other's way).</summary>
+    public IReadOnlyList<string> ActiveAntivirusNames => SecurityRules.ActiveAntivirusNames(Antiviruses, Defender);
+
+    /// <summary>Detections that Defender neither neutralized nor the user allowed.</summary>
+    public IReadOnlyList<ThreatDetection> ActiveThreats => Threats.Where(t => t.IsActive).ToList();
+
+    /// <summary>"Обезвредить угрозы" makes sense: Defender works and has active detections.</summary>
+    public bool CanRemoveThreats => SecurityRules.CanRemoveThreats(Defender, Threats);
 
     /// <summary>
     /// True if every Windows Firewall profile that is off is forced off by Group Policy, so

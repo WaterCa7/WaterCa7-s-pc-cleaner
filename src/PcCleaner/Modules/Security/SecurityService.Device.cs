@@ -1,0 +1,358 @@
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using PcCleaner.Core;
+
+namespace PcCleaner.Modules.Security;
+
+/// <summary>Device checks (SMBv1, Secure Boot, TPM, drive encryption, memory integrity) and their actions.</summary>
+public sealed partial class SecurityService
+{
+    private const string TpmNamespace = @"root\cimv2\Security\MicrosoftTpm";
+    private const string BitLockerNamespace = @"root\cimv2\Security\MicrosoftVolumeEncryption";
+    private const string DeviceGuardNamespace = @"root\Microsoft\Windows\DeviceGuard";
+    private const string TestEnvironmentMessage = "Недоступно в тестовом окружении — ничего не изменено.";
+
+    // =====================================================================
+    // Read-only checks
+    // =====================================================================
+
+    /// <summary>SMBv1: the Windows feature list (works without admin), PowerShell as admin, the registry as a last resort.</summary>
+    internal Smb1State ReadSmb1(CancellationToken ct)
+    {
+        var registry = ReadSmb1Registry();
+        if (!Env.IsRealSystem)
+            return Smb1State.Unknown with { Registry = registry };
+
+        var features = new Dictionary<string, FeatureState>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in Wmi.Query("SELECT Name, InstallState FROM Win32_OptionalFeature WHERE Name LIKE 'SMB1Protocol%'",
+                     Wmi.Cimv2, WmiTimeout))
+        {
+            if (row.Str("Name") is { } name)
+                features[name] = SecurityRules.MapInstallState(row.Long("InstallState"));
+        }
+
+        if (!features.ContainsKey("SMB1Protocol") && Admin.IsElevated)
+        {
+            var r = ProcessRunner.PowerShellAsync(
+                    "Get-WindowsOptionalFeature -Online -FeatureName 'SMB1Protocol*' -ErrorAction Stop | " +
+                    "ForEach-Object { $_.FeatureName + '=' + $_.State }", TimeSpan.FromSeconds(40), ct)
+                .GetAwaiter().GetResult();
+            if (r.Success)
+                features = SecurityRules.ParseFeatureList(r.StdOut);
+            else
+                Log.Warn($"Безопасность: Get-WindowsOptionalFeature SMB1Protocol: {FirstLine(r.StdErr)}");
+        }
+
+        FeatureState F(string name) => features.TryGetValue(name, out var s) ? s : FeatureState.Unknown;
+        return new Smb1State(F("SMB1Protocol"), F("SMB1Protocol-Client"), F("SMB1Protocol-Server"), registry);
+    }
+
+    private Smb1Registry ReadSmb1Registry()
+    {
+        var smb1 = SecurityEnvironment.ReadValue(Env.LanmanServerParameters, "SMB1");
+        var server = SecurityEnvironment.ReadValue(Env.Smb1ServerDriver, "Start");
+        var client = SecurityEnvironment.ReadValue(Env.Smb1ClientDriver, "Start");
+        return new Smb1Registry(smb1.Readable && server.Readable && client.Readable,
+            SecurityEnvironment.AsInt(smb1.Value), SecurityEnvironment.AsInt(server.Value), SecurityEnvironment.AsInt(client.Value));
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFirmwareType(out int firmwareType);
+
+    internal SecureBootState ReadSecureBoot()
+    {
+        var value = SecurityEnvironment.ReadValue(Env.SecureBootState, "UEFISecureBootEnabled");
+        bool? uefi = null;
+        if (Env.IsRealSystem)
+        {
+            try
+            {
+                // FirmwareTypeBios = 1, FirmwareTypeUefi = 2.
+                if (GetFirmwareType(out var type) && type is 1 or 2)
+                    uefi = type == 2;
+            }
+            catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException)
+            {
+                uefi = null;
+            }
+        }
+        return new SecureBootState(value.Readable, SecurityEnvironment.AsInt(value.Value), uefi);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TpmDeviceInfo
+    {
+        public uint StructVersion;
+        public uint TpmVersion;
+        public uint InterfaceType;
+        public uint ImpRevision;
+    }
+
+    [DllImport("tbs.dll")]
+    private static extern uint Tbsi_GetDeviceInfo(uint size, out TpmDeviceInfo info);
+
+    /// <summary>
+    /// TPM: Win32_Tpm (administrator only, the most detailed), then the TPM Base Services API (works for every user),
+    /// then "tpmtool getdeviceinformation".
+    /// </summary>
+    internal TpmState ReadTpm(CancellationToken ct)
+    {
+        if (!Env.IsRealSystem)
+            return TpmState.Unknown;
+
+        if (Admin.IsElevated)
+        {
+            var row = Wmi.Query("SELECT IsEnabled_InitialValue, IsActivated_InitialValue, SpecVersion FROM Win32_Tpm",
+                TpmNamespace, WmiTimeout).FirstOrDefault();
+            if (row is not null)
+            {
+                return new TpmState(true, row.Bool("IsEnabled_InitialValue"), row.Bool("IsActivated_InitialValue"),
+                    SecurityRules.NormalizeTpmVersion(row.Str("SpecVersion")));
+            }
+        }
+
+        try
+        {
+            var result = Tbsi_GetDeviceInfo((uint)Marshal.SizeOf<TpmDeviceInfo>(), out var info);
+            var fromTbs = SecurityRules.TpmFromTbs(result, info.TpmVersion);
+            if (fromTbs.Present is not null)
+                return fromTbs;
+            Log.Info($"Безопасность: служба TPM ответила кодом 0x{result:X8}, пробуем tpmtool");
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            Log.Info($"Безопасность: TPM Base Services недоступны ({ex.Message}), пробуем tpmtool");
+        }
+
+        // Note: without a console window tpmtool prints only the values, without the labels — then nothing is parsed
+        // and the card honestly says "Нет данных".
+        var tool = Path.Combine(Environment.SystemDirectory, "tpmtool.exe");
+        if (!File.Exists(tool))
+            return TpmState.Unknown;
+        // Classic console tools print in the OEM code page, newer builds sometimes in UTF-8: try both.
+        foreach (var encoding in new Encoding?[] { null, new UTF8Encoding(false) })
+        {
+            var r = ProcessRunner.RunAsync(tool, "getdeviceinformation", TimeSpan.FromSeconds(20), ct, encoding)
+                .GetAwaiter().GetResult();
+            var parsed = SecurityRules.ParseTpmTool(r.StdOut);
+            if (parsed.Present is not null)
+                return parsed;
+            if (r.TimedOut || string.IsNullOrWhiteSpace(r.StdOut))
+            {
+                Log.Warn($"Безопасность: tpmtool не ответил (код {r.ExitCode}): {FirstLine(r.StdErr)}");
+                break;
+            }
+        }
+        return TpmState.Unknown;
+    }
+
+    /// <summary>System drive encryption: Win32_EncryptableVolume as admin, otherwise the Explorer drive property.</summary>
+    internal BitLockerState ReadBitLocker(CancellationToken ct)
+    {
+        if (!Env.IsRealSystem)
+            return BitLockerState.Unknown;
+        var drive = (Path.GetPathRoot(Env.WindowsDir) ?? @"C:\").TrimEnd('\\');
+        if (drive.Length != 2 || drive[1] != ':')
+            drive = "C:";
+
+        var encryption = DriveEncryption.Unknown;
+        if (Admin.IsElevated)
+        {
+            var row = Wmi.Query($"SELECT ProtectionStatus, ConversionStatus FROM Win32_EncryptableVolume WHERE DriveLetter = '{drive}'",
+                BitLockerNamespace, WmiTimeout).FirstOrDefault();
+            if (row is not null)
+                encryption = SecurityRules.MapWmiBitLocker(row.Long("ProtectionStatus"), row.Long("ConversionStatus"));
+        }
+        if (encryption == DriveEncryption.Unknown)
+            encryption = ReadShellBitLocker(drive, ct);
+
+        var batteries = Wmi.Query("SELECT Name FROM Win32_Battery", Wmi.Cimv2, WmiTimeout).Count;
+        var chassis = new List<int>();
+        foreach (var row in Wmi.Query("SELECT ChassisTypes FROM Win32_SystemEnclosure", Wmi.Cimv2, WmiTimeout))
+        {
+            if (row.TryGetValue("ChassisTypes", out var v) && v is Array arr)
+            {
+                foreach (var item in arr)
+                {
+                    if (item is not null && int.TryParse(Convert.ToString(item, System.Globalization.CultureInfo.InvariantCulture), out var n))
+                        chassis.Add(n);
+                }
+            }
+        }
+        var edition = SecurityEnvironment.ReadValue(Env.WindowsVersion, "EditionID").Value?.ToString();
+        return new BitLockerState(drive, encryption, SecurityRules.IsLaptop(batteries, chassis), SecurityRules.IsHomeEdition(edition));
+    }
+
+    /// <summary>
+    /// Reads Explorer's "System.Volume.BitLockerProtection" (the lock on the drive icon) — works without admin rights.
+    /// Shell COM objects need an STA thread; if that fails, the same property is read through PowerShell.
+    /// </summary>
+    private static DriveEncryption ReadShellBitLocker(string drive, CancellationToken ct)
+    {
+        const string property = "System.Volume.BitLockerProtection";
+        object? value = null;
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            object? shell = null;
+            try
+            {
+                var type = Type.GetTypeFromProgID("Shell.Application");
+                if (type is null)
+                    throw new COMException("Shell.Application недоступен");
+                shell = Activator.CreateInstance(type);
+                dynamic folder = ((dynamic)shell!).NameSpace(drive);
+                value = folder is null ? null : folder.Self.ExtendedProperty(property);
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+            finally
+            {
+                if (shell is not null && Marshal.IsComObject(shell))
+                    Marshal.FinalReleaseComObject(shell);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "BitLocker shell property",
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        if (thread.Join(TimeSpan.FromSeconds(8)) && error is null)
+            return SecurityRules.MapShellBitLocker(value);
+
+        Log.Info($"Безопасность: свойство шифрования диска недоступно напрямую ({error?.Message ?? "нет ответа"}), читаем через PowerShell");
+        var r = ProcessRunner.PowerShellAsync(
+                $"$v = (New-Object -ComObject Shell.Application).NameSpace('{drive}').Self.ExtendedProperty('{property}')\r\n" +
+                "'VALUE:' + $v", TimeSpan.FromSeconds(30), ct)
+            .GetAwaiter().GetResult();
+        var line = r.StdOut.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("VALUE:", StringComparison.Ordinal));
+        if (line is null)
+        {
+            Log.Warn($"Безопасность: не удалось узнать состояние шифрования диска: {FirstLine(r.StdErr)}");
+            return DriveEncryption.Unknown;
+        }
+        var text = line["VALUE:".Length..].Trim();
+        return SecurityRules.MapShellBitLocker(text.Length == 0 ? null : text);
+    }
+
+    internal DeviceGuardState ReadDeviceGuard()
+    {
+        var registry = SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(Env.HvciScenario, "Enabled").Value);
+        if (!Env.IsRealSystem)
+            return DeviceGuardState.Unknown with { HvciRegistryEnabled = registry };
+        var row = Wmi.Query(
+            "SELECT VirtualizationBasedSecurityStatus, SecurityServicesRunning, SecurityServicesConfigured FROM Win32_DeviceGuard",
+            DeviceGuardNamespace, WmiTimeout).FirstOrDefault();
+        if (row is null)
+            return DeviceGuardState.Unknown with { HvciRegistryEnabled = registry };
+        return new DeviceGuardState(true, (int?)row.Long("VirtualizationBasedSecurityStatus"),
+            IntArray(row, "SecurityServicesRunning"), IntArray(row, "SecurityServicesConfigured"), registry);
+    }
+
+    private static IReadOnlyList<int> IntArray(Dictionary<string, object?> row, string key)
+    {
+        if (!row.TryGetValue(key, out var v) || v is not Array arr)
+            return Array.Empty<int>();
+        var list = new List<int>();
+        foreach (var item in arr)
+        {
+            if (item is not null && int.TryParse(Convert.ToString(item, System.Globalization.CultureInfo.InvariantCulture), out var n))
+                list.Add(n);
+        }
+        return list;
+    }
+
+    /// <summary>Active (not neutralized, not allowed) Defender detections right now.</summary>
+    private int CountActiveThreats()
+        => Wmi.Query("SELECT ThreatStatusID FROM MSFT_MpThreatDetection", Wmi.Defender, WmiTimeout)
+            .Count(row => row.Long("ThreatStatusID") is { } id &&
+                          !SecurityRules.IsThreatResolved((int)id) && !SecurityRules.IsThreatAllowed((int)id));
+
+    // =====================================================================
+    // Actions (the caller confirms first)
+    // =====================================================================
+
+    /// <summary>
+    /// Turns off the Windows feature "SMB 1.0/CIFS File Sharing Support" (Disable-WindowsOptionalFeature -NoRestart)
+    /// after a restore point. Needs administrator rights; a reboot finishes the change.
+    /// </summary>
+    public async Task<SecurityActionResult> DisableSmb1Async(CancellationToken ct)
+    {
+        if (!Env.IsRealSystem)
+            return SecurityActionResult.Fail(TestEnvironmentMessage);
+        if (!Admin.IsElevated)
+            return SecurityActionResult.Fail(NeedAdminMessage);
+
+        var restorePoint = await RestorePoint.CreateAsync("Отключение SMBv1", ct);
+        var r = await ProcessRunner.PowerShellAsync(
+            "$r = Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart -ErrorAction Stop\r\n" +
+            "'RESTART:' + $r.RestartNeeded", TimeSpan.FromMinutes(15), ct);
+        var restartLine = r.StdOut.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("RESTART:", StringComparison.Ordinal));
+        if (!r.Success || restartLine is null)
+        {
+            var reason = r.TimedOut ? "Windows не ответила вовремя" : FirstLine(r.StdErr + "\n" + r.StdOut);
+            Log.Warn($"Не удалось отключить SMBv1: {reason}");
+            return SecurityActionResult.Fail(
+                $"Не удалось отключить SMBv1: {reason}.\n\nОтключите его вручную: «Включение или отключение компонентов Windows» → " +
+                "снимите флажок «Поддержка общего доступа к файлам SMB 1.0/CIFS».");
+        }
+        var restart = !restartLine.EndsWith("False", StringComparison.OrdinalIgnoreCase);
+        Log.Action("Отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» (SMB1Protocol)" +
+                   (restart ? ", нужна перезагрузка" : "") + ". " + SecurityRules.RestorePointText(restorePoint));
+        return SecurityActionResult.Ok(
+            (restart
+                ? "SMBv1 отключён. Перезагрузите компьютер, чтобы изменение вступило в силу."
+                : "SMBv1 отключён.") +
+            "\n\n" + SecurityRules.RestorePointText(restorePoint) +
+            "\n\nЕсли перестанет открываться старое сетевое хранилище (NAS), включить SMBv1 обратно можно в «Включение или " +
+            "отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».");
+    }
+
+    /// <summary>
+    /// Asks Microsoft Defender to apply its default action (usually quarantine) to every active detection
+    /// (Remove-MpThreat). Needs administrator rights. Quarantined files can be restored in "Журнал защиты".
+    /// </summary>
+    public async Task<SecurityActionResult> RemoveActiveThreatsAsync(CancellationToken ct)
+    {
+        if (!Env.IsRealSystem)
+            return SecurityActionResult.Fail(TestEnvironmentMessage);
+        if (!Admin.IsElevated)
+            return SecurityActionResult.Fail(NeedAdminMessage);
+
+        var before = await Task.Run(CountActiveThreats, ct);
+        if (before == 0)
+            return SecurityActionResult.Ok("Необезвреженных угроз уже нет — делать ничего не нужно.");
+        Log.Action($"Запущено обезвреживание угроз Microsoft Defender (Remove-MpThreat), активных угроз: {before}");
+        var r = await ProcessRunner.PowerShellAsync("Remove-MpThreat -ErrorAction Stop\r\n'OK'", TimeSpan.FromMinutes(10), ct);
+        // Defender finishes the remediation in its service: give it a moment before counting again.
+        var after = before;
+        for (var attempt = 0; attempt < 3 && after > 0; attempt++)
+        {
+            await Task.Delay(1500, ct);
+            after = await Task.Run(CountActiveThreats, ct);
+        }
+        var removed = Math.Max(0, before - after);
+        if (after == 0)
+        {
+            Log.Action($"Microsoft Defender обезвредил угрозы: {before}");
+            return SecurityActionResult.Ok(
+                $"Угрозы обезврежены: {before}. Microsoft Defender поместил их в карантин или удалил.\n\n" +
+                "Если какой-то файл нужен и вы уверены в нём, восстановите его в «Безопасность Windows» → «Журнал защиты».");
+        }
+        Log.Warn($"Remove-MpThreat: осталось активных угроз {after} из {before}. {FirstLine(r.StdErr)}");
+        if (removed > 0)
+        {
+            Log.Action($"Microsoft Defender обезвредил угрозы: {removed} из {before}");
+            return SecurityActionResult.Ok(
+                $"Обезврежено угроз: {removed} из {before}. С остальными Defender не справился сам — откройте «Журнал защиты» " +
+                "и выберите действие вручную, а затем запустите полную проверку.");
+        }
+        return SecurityActionResult.Fail(
+            "Не удалось обезвредить угрозы" + (string.IsNullOrWhiteSpace(r.StdErr) ? "" : $": {FirstLine(r.StdErr)}") +
+            ". Откройте «Журнал защиты» и выберите действие вручную — или запустите полную проверку.");
+    }
+}
