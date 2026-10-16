@@ -87,3 +87,6 @@ WaterCa7sPcCleaner.exe --screenshots <папка> [--page Cleaner,Startup] [--no
 ```
 Окно открывается за пределами экрана, все диалоги отклоняются, для каждой страницы выполняется
 `PreviewScanAsync` (только чтение), сохраняется `NN-Key.png` и `log.txt`. Код выхода 1 — если в журнале были ошибки.
+
+- `SystemStats.CpuUsagePercent()`, `SystemStats.Memory()`, `SystemStats.Uptime` � ����� ������� ��� WMI.
+
