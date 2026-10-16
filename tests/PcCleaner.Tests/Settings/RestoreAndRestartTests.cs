@@ -82,6 +82,14 @@ public class RestoreAndRestartTests
     }
 
     [Fact]
+    public void ToolRunningCheck_CountsOnlyProcessesWithAWindow()
+    {
+        // "Окно уже открыто" must mean a window the user can switch to; the windowless test host does not count.
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        Assert.False(SystemToolLauncher.IsProcessRunning(self.ProcessName));
+    }
+
+    [Fact]
     public async Task ProtectionButton_OpensOneWindowOnADoubleClick()
     {
         var launches = 0;

@@ -59,7 +59,7 @@ internal sealed class SystemToolLauncher
         }
     }
 
-    private static bool IsProcessRunning(string name)
+    internal static bool IsProcessRunning(string name)
     {
         Process[] processes;
         try
@@ -70,8 +70,20 @@ internal sealed class SystemToolLauncher
         {
             return false;
         }
+        // Only an instance with a visible window counts (that is what the user would switch to).
+        var anyWindow = false;
         foreach (var p in processes)
+        {
+            try
+            {
+                anyWindow |= p.MainWindowHandle != IntPtr.Zero;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+            {
+                // exited meanwhile
+            }
             p.Dispose();
-        return processes.Length > 0;
+        }
+        return anyWindow;
     }
 }

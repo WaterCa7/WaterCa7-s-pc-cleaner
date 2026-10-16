@@ -12,22 +12,36 @@ internal static class SystemTools
 {
     public static string Exe(string name) => Path.Combine(Environment.SystemDirectory, name);
 
-    /// <summary>Starts a GUI tool (Disk Cleanup, System Protection...). Never throws.</summary>
-    public static bool Launch(string exe, string arguments = "")
+    /// <summary>
+    /// Starts a GUI tool (Disk Cleanup, System Protection...). Never throws. A cancelled UAC prompt (the user said "No")
+    /// is <see cref="ToolLaunchResult.Cancelled"/>, not a failure.
+    /// </summary>
+    public static ToolLaunchResult Launch(string exe, string arguments = "")
     {
         try
         {
             Process.Start(new ProcessStartInfo(exe, arguments) { UseShellExecute = true })?.Dispose();
-            return true;
+            return ToolLaunchResult.Started;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            Log.Info($"{Path.GetFileName(exe)}: запуск отменён пользователем");
+            return ToolLaunchResult.Cancelled;
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
             Log.Warn($"Не удалось запустить {Path.GetFileName(exe)}: {ex.Message}");
-            return false;
+            return ToolLaunchResult.Failed;
         }
     }
 
-    /// <summary>True if a process with this name (without ".exe") is running. Read-only, never throws.</summary>
+    private const int ErrorCancelled = 1223;
+
+    /// <summary>
+    /// True if a window of a process with this name (without ".exe") is open. Windows itself runs "cleanmgr /autoclean"
+    /// hidden (the SilentCleanup maintenance task): such a windowless instance must not make the button say
+    /// "уже открыто". Read-only, never throws.
+    /// </summary>
     public static bool IsRunning(string processName)
     {
         Process[] processes;
@@ -39,9 +53,26 @@ internal static class SystemTools
         {
             return false;
         }
+        var anyWindow = false;
         foreach (var p in processes)
+        {
+            anyWindow |= HasWindow(p);
             p.Dispose();
-        return processes.Length > 0;
+        }
+        return anyWindow;
+    }
+
+    /// <summary>Whether the process shows a visible top-level window (false if it already exited).</summary>
+    internal static bool HasWindow(Process process)
+    {
+        try
+        {
+            return process.MainWindowHandle != IntPtr.Zero;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -401,17 +432,27 @@ internal static class SafeRecycler
 
     /// <summary>
     /// Turns the result of SHFileOperation into a reason. <paramref name="probe"/> is asked only when the shell code says
-    /// nothing specific: it opens the file for deletion (without deleting anything) and returns the Win32 error, 0 if it opened.
+    /// nothing specific or the operation was aborted: it opens the file for deletion (without deleting anything) and returns
+    /// the Win32 error, 0 if it opened. Measured on Windows 11: a busy file gives 32, a protected one 0x78 (DE_ACCESSDENIEDSRC).
     /// </summary>
     internal static RecycleOutcome Classify(int rc, bool aborted, bool stillExists, Func<int> probe)
     {
         if (rc == 0 && !aborted && !stillExists)
             return RecycleOutcome.Ok;
-        // With FOF_NOCONFIRMATION and FOF_NOERRORUI the only question Windows can ask is "delete permanently?".
-        if (aborted || rc is ErrorCancelled or DeOpCancelled)
-            return new RecycleOutcome(RecycleFailure.DeclinedPermanentDelete, rc);
         if (!stillExists)
             return new RecycleOutcome(RecycleFailure.Missing, rc);
+        // With FOF_NOCONFIRMATION and FOF_NOERRORUI the only question Windows can ask is "delete permanently?". But with
+        // FOF_NOERRORUI Windows may also abort silently on an error (DE_OPCANCELLED covers both), so a file that cannot be
+        // opened for deletion is reported as busy / protected rather than as a refused prompt.
+        if (aborted || rc is ErrorCancelled or DeOpCancelled)
+        {
+            return probe() switch
+            {
+                ErrorSharingViolation or ErrorLockViolation => new RecycleOutcome(RecycleFailure.InUse, rc),
+                ErrorAccessDenied => new RecycleOutcome(RecycleFailure.AccessDenied, rc),
+                _ => new RecycleOutcome(RecycleFailure.DeclinedPermanentDelete, rc),
+            };
+        }
         switch (rc)
         {
             case ErrorSharingViolation or ErrorLockViolation:

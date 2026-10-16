@@ -1234,6 +1234,9 @@ public sealed class DiskViewModel : PageViewModel
             case ToolLaunchResult.AlreadyOpen:
                 Dialogs.Info("Окно уже открыто", $"Окно {displayName} уже открыто — переключитесь на него через панель задач.");
                 break;
+            case ToolLaunchResult.Cancelled:
+                // The user answered "No" in the UAC prompt: nothing to report (already logged).
+                break;
             default:
                 Dialogs.Error("Не удалось открыть", $"Не удалось открыть окно {displayName}. Подробности — в журнале (раздел «Настройки»).");
                 break;

@@ -76,6 +76,15 @@ public class CleanerPolishTests
         Assert.Equal(DiskCleanupLaunch.Failed, failingService.LaunchDiskCleanup());
     }
 
+    [Fact]
+    public void DiskCleanupRunningCheck_IgnoresAWindowlessProcess()
+    {
+        // Windows' SilentCleanup task runs "cleanmgr /autoclean" hidden: that is not an open wizard the user could switch
+        // to. The test host has no window either (read-only check, nothing is started).
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        Assert.False(CleanerEnvironment.IsProcessRunning(self.ProcessName));
+    }
+
     // ---------- skipped files: busy vs no access ----------
 
     private static string Plain(string s) => s.Replace(' ', ' ').Replace(' ', ' ');

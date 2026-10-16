@@ -24,9 +24,12 @@ internal sealed class DiskEnvironment
     public Func<DateTime> Now { get; init; } = () => DateTime.Now;
 
     /// <summary>Starts a Windows GUI tool (exe, arguments). Tests use a fake: nothing real is ever launched.</summary>
-    public Func<string, string, bool> LaunchTool { get; init; } = SystemTools.Launch;
+    public Func<string, string, ToolLaunchResult> LaunchTool { get; init; } = SystemTools.Launch;
 
-    /// <summary>True while a process with this name (no ".exe") is running, e.g. an already open "Очистка диска".</summary>
+    /// <summary>
+    /// True while a window of this tool (process name without ".exe") is open, e.g. an already open "Очистка диска".
+    /// A windowless instance (Windows' own hidden "cleanmgr /autoclean" maintenance task) does not count.
+    /// </summary>
     public Func<string, bool> IsToolRunning { get; init; } = SystemTools.IsRunning;
     public long BigVideoThreshold { get; init; } = 1L << 30;
 
@@ -79,6 +82,8 @@ internal enum ToolLaunchResult
 {
     Started,
     AlreadyOpen,
+    /// <summary>The user cancelled the tool's UAC prompt («Защита системы» needs admin rights): not an error.</summary>
+    Cancelled,
     Failed,
 }
 
@@ -124,7 +129,7 @@ public sealed class DiskService : IHealthContributor
             Log.Info($"{Path.GetFileName(exe)} уже открыт — второе окно не запускается");
             return ToolLaunchResult.AlreadyOpen;
         }
-        return _env.LaunchTool(exe, arguments) ? ToolLaunchResult.Started : ToolLaunchResult.Failed;
+        return _env.LaunchTool(exe, arguments);
     }
 
     public string? DownloadsDir => _env.DownloadsDir;

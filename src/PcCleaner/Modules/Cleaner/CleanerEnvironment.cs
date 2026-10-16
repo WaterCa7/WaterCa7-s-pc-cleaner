@@ -31,7 +31,10 @@ public sealed class CleanerEnvironment
     /// </summary>
     public Func<string, bool> StartDiskCleanup { get; init; } = StartDiskCleanupProcess;
 
-    /// <summary>True while a "Очистка диска" window is open (a second one must not be started).</summary>
+    /// <summary>
+    /// True while a "Очистка диска" window is open (a second one must not be started). A hidden cleanmgr started by
+    /// Windows' own maintenance does not count.
+    /// </summary>
     public Func<bool> IsDiskCleanupRunning { get; init; } = () => IsProcessRunning("cleanmgr");
 
     public string SystemDrive => Path.GetPathRoot(WindowsDir) ?? @"C:\";
@@ -96,7 +99,7 @@ public sealed class CleanerEnvironment
         }
     }
 
-    private static bool IsProcessRunning(string name)
+    internal static bool IsProcessRunning(string name)
     {
         Process[] processes;
         try
@@ -107,9 +110,22 @@ public sealed class CleanerEnvironment
         {
             return false;
         }
+        // Only an instance with a window counts: Windows runs "cleanmgr /autoclean" hidden (the SilentCleanup task),
+        // and then the button must still open the wizard instead of saying it is already open.
+        var anyWindow = false;
         foreach (var p in processes)
+        {
+            try
+            {
+                anyWindow |= p.MainWindowHandle != IntPtr.Zero;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                // exited meanwhile
+            }
             p.Dispose();
-        return processes.Length > 0;
+        }
+        return anyWindow;
     }
 
     public static IReadOnlySet<string> GetRunningProcessNames()

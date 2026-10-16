@@ -153,9 +153,16 @@ public class DiskServiceTests
         int NotAsked() => throw new InvalidOperationException("the probe is not needed here");
 
         Assert.True(SafeRecycler.Classify(0, aborted: false, stillExists: false, NotAsked).Success);
-        // The user answered "No" to Windows' "delete permanently?" (the file is too big for the Recycle Bin).
-        Assert.Equal(RecycleFailure.DeclinedPermanentDelete, SafeRecycler.Classify(0, aborted: true, stillExists: true, NotAsked).Failure);
-        Assert.Equal(RecycleFailure.DeclinedPermanentDelete, SafeRecycler.Classify(1223, false, true, NotAsked).Failure);
+        // The user answered "No" to Windows' "delete permanently?" (the file is too big for the Recycle Bin): the file
+        // itself could be deleted (probe = 0).
+        Assert.Equal(RecycleFailure.DeclinedPermanentDelete, SafeRecycler.Classify(0, aborted: true, stillExists: true, () => 0).Failure);
+        Assert.Equal(RecycleFailure.DeclinedPermanentDelete, SafeRecycler.Classify(1223, false, true, () => 0).Failure);
+        Assert.Equal(RecycleFailure.DeclinedPermanentDelete, SafeRecycler.Classify(0x75, false, true, () => 0).Failure);
+        // With FOF_NOERRORUI Windows may abort silently on an error too: a busy or protected file is not a refused prompt.
+        Assert.Equal(RecycleFailure.InUse, SafeRecycler.Classify(0x75, aborted: true, stillExists: true, () => 32).Failure);
+        Assert.Equal(RecycleFailure.AccessDenied, SafeRecycler.Classify(0, aborted: true, stillExists: true, () => 5).Failure);
+        // Aborted, but the file is gone anyway: "already deleted", not "you refused".
+        Assert.Equal(RecycleFailure.Missing, SafeRecycler.Classify(0x75, aborted: true, stillExists: false, NotAsked).Failure);
         Assert.Equal(RecycleFailure.InUse, SafeRecycler.Classify(32, false, true, NotAsked).Failure);
         Assert.Equal(RecycleFailure.AccessDenied, SafeRecycler.Classify(0x78, false, true, NotAsked).Failure);
         Assert.Equal(RecycleFailure.AccessDenied, SafeRecycler.Classify(5, false, true, NotAsked).Failure);
