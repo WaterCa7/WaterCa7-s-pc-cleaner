@@ -60,16 +60,20 @@ public static class Quarantine
         }
     }
 
-    public static void Restore(QuarantineItem item)
+    public static void Restore(QuarantineItem item) => Restore(item, item.OriginalPath);
+
+    /// <summary>Restores the file to <paramref name="targetPath"/> (e.g. a new name when the original path is taken).</summary>
+    public static void Restore(QuarantineItem item, string targetPath)
     {
         lock (Lock)
         {
-            if (File.Exists(item.OriginalPath))
-                throw new IOException($"По исходному пути уже есть файл: {item.OriginalPath}");
-            Directory.CreateDirectory(Path.GetDirectoryName(item.OriginalPath)!);
-            File.Move(item.StoredPath, item.OriginalPath);
+            var target = Path.GetFullPath(targetPath);
+            if (File.Exists(target))
+                throw new IOException($"По этому пути уже есть файл: {target}");
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Move(item.StoredPath, target);
             SaveIndex(List().Where(i => i.Id != item.Id).ToList());
-            Log.Action($"Файл восстановлен из карантина: {item.OriginalPath}");
+            Log.Action($"Файл восстановлен из карантина: {target}");
         }
     }
 

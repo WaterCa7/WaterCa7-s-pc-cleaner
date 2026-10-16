@@ -95,18 +95,59 @@ public static class ProcessRunner
 
     /// <summary>
     /// Runs a PowerShell script (Windows PowerShell 5.1) and returns UTF-8 decoded output.
-    /// The script is passed via -EncodedCommand, so no quoting problems.
+    /// The script is written to a temporary .ps1 in the app's data folder and run with -File: an "-EncodedCommand"
+    /// launch looks exactly like malware to antivirus software (and to our own Processes page).
+    /// Falls back to -EncodedCommand only if a group policy forbids running script files.
     /// </summary>
-    public static Task<ProcessResult> PowerShellAsync(string script, TimeSpan? timeout = null, CancellationToken ct = default)
+    public static async Task<ProcessResult> PowerShellAsync(string script, TimeSpan? timeout = null, CancellationToken ct = default)
     {
-        var full = "$ProgressPreference='SilentlyContinue';" +
-                   "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;" +
-                   "$OutputEncoding=[System.Text.Encoding]::UTF8;" + script;
-        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(full));
+        var full = "$ProgressPreference='SilentlyContinue'\r\n" +
+                   "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8\r\n" +
+                   "$OutputEncoding=[System.Text.Encoding]::UTF8\r\n" + script;
         var exe = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
-        return RunAsync(exe, $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}",
-            timeout, ct, new UTF8Encoding(false));
+        var utf8 = new UTF8Encoding(false);
+
+        string? file = null;
+        try
+        {
+            var dir = AppPaths.EnsureDir(Path.Combine(AppPaths.DataDir, "Scripts"));
+            file = Path.Combine(dir, $"ps-{Guid.NewGuid():N}.ps1");
+            // BOM so that Windows PowerShell 5.1 reads non-ASCII (Cyrillic) text correctly.
+            await File.WriteAllTextAsync(file, full, new UTF8Encoding(true), ct);
+            var result = await RunAsync(exe, $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{file}\"",
+                timeout, ct, utf8);
+            if (!IsScriptExecutionBlocked(result))
+                return result;
+            Log.Warn("Запуск .ps1 запрещён политикой — используется резервный способ запуска PowerShell");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"Не удалось создать временный скрипт PowerShell: {ex.Message}");
+        }
+        finally
+        {
+            if (file is not null)
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch
+                {
+                    // best effort
+                }
+            }
+        }
+
+        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(full));
+        return await RunAsync(exe, $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}",
+            timeout, ct, utf8);
     }
+
+    private static bool IsScriptExecutionBlocked(ProcessResult result)
+        => !result.Success &&
+           (result.StdErr.Contains("PSSecurityException", StringComparison.OrdinalIgnoreCase) ||
+            result.StdErr.Contains("about_Execution_Policies", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Opens a file/URL/folder with the shell (Explorer, default browser).</summary>
     public static void ShellOpen(string target)
