@@ -139,8 +139,11 @@ public static class RecommendationEngine
     /// Memory speed as the engine sees it. <see cref="Rated"/> is the slowest module's rating: the higher of the SPD speed
     /// Windows reports and the speed encoded in the part number (Windows often reports only the JEDEC speed, e.g. 2133
     /// for a DDR4-3200 kit with XMP off). <see cref="PartRated"/> is set only when every module's part number was decoded.
+    /// <see cref="JedecOnly"/>: every module is a standard JEDEC module without an XMP/EXPO profile (OEM Samsung, SK Hynix,
+    /// Micron, Kingston ValueRAM, basic Crucial), so a lower speed is a processor/board limit, not a profile left off.
     /// </summary>
-    public sealed record MemorySpeedInfo(int Rated, int Configured, string? Type, bool FromPartNumber, int? PartRated, string? PartNumber);
+    public sealed record MemorySpeedInfo(int Rated, int Configured, string? Type, bool FromPartNumber, int? PartRated, string? PartNumber,
+        bool JedecOnly = false);
 
     /// <summary>
     /// Rated (slowest module) and configured (MT/s) memory speed, or null when Windows does not report them.
@@ -173,7 +176,9 @@ public static class RecommendationEngine
         };
         if (configured < lowestReal && configured * 2 >= rated * 0.95 && configured * 2 <= rated * 1.05)
             configured *= 2;
-        return new MemorySpeedInfo(rated, configured, type, fromPart, partRated, slowest.Part is null ? null : slowest.Module.PartNumber);
+        var jedecOnly = mods.All(x => HardwareText.IsJedecOnlyPart(x.Module.PartNumber));
+        return new MemorySpeedInfo(rated, configured, type, fromPart, partRated, slowest.Part is null ? null : slowest.Module.PartNumber,
+            jedecOnly);
     }
 
     /// <summary>True when the memory runs noticeably (more than 10%) below its rated speed.</summary>
@@ -196,7 +201,8 @@ public static class RecommendationEngine
 
     /// <summary>The memory runs without XMP/EXPO although the modules are rated faster (desktop only, see the RamSpeed rule).</summary>
     public static bool IsXmpOff(HardwareSnapshot hw)
-        => !hw.IsLaptop && MemorySpeed(hw) is { } s && IsMemoryBelowRated(s.Rated, s.Configured) && IsJedecSpeed(s.Type, s.Configured);
+        => !hw.IsLaptop && MemorySpeed(hw) is { JedecOnly: false } s && IsMemoryBelowRated(s.Rated, s.Configured) &&
+           IsJedecSpeed(s.Type, s.Configured);
 
     /// <summary>
     /// One memory-speed item at most: "without XMP/EXPO" (JEDEC speed, modules rated faster — by SPD or part number),
@@ -224,6 +230,34 @@ public static class RecommendationEngine
                     Impact = RecommendationImpact.Low,
                     Severity = IssueSeverity.Info,
                     CurrentValue = current,
+                });
+                return;
+            }
+            if (speed.JedecOnly)
+            {
+                // Standard modules have no XMP/EXPO profile: "switch on XMP" would send the user hunting for a BIOS option
+                // that does nothing. The usual cause is the processor's memory limit (e.g. 2666 МГц for Core i5 10th gen).
+                list.Add(new Recommendation
+                {
+                    Id = "RamSpeed",
+                    Title = $"Память работает на {configured} МГц вместо {rated} МГц",
+                    Explanation = (speed.PartNumber is { } part ? $"Модули ({part})" : "Модули") +
+                                  $" рассчитаны на {rated} МГц, но это обычная память без " +
+                                  "профиля XMP/EXPO, поэтому включать в BIOS нечего. Скорее всего, частоту ограничивает процессор или " +
+                                  "материнская плата — например, Intel Core i3/i5 10-го поколения и платы на чипсетах H410/B460 " +
+                                  "поддерживают не больше 2666 МГц. Обычно менять ничего не нужно.",
+                    Category = RecommendationCategory.Hardware,
+                    Kind = RecommendationKind.Info,
+                    Impact = RecommendationImpact.Low,
+                    Severity = IssueSeverity.Info,
+                    CurrentValue = current,
+                    Steps = new[]
+                    {
+                        "Посмотрите в характеристиках процессора на сайте Intel или AMD, какую частоту памяти он поддерживает " +
+                        "(строка «Типы памяти» или Max Memory Speed). Если там столько же, сколько сейчас, всё в порядке.",
+                        "Если процессор поддерживает больше, откройте BIOS (Delete или F2 при включении) и проверьте, не задана ли " +
+                        $"частота памяти (DRAM Frequency) вручную. Выберите Auto или {rated} МГц и сохраните настройки клавишей F10.",
+                    },
                 });
                 return;
             }
@@ -268,8 +302,9 @@ public static class RecommendationEngine
         }
 
         // Windows often reports only the JEDEC base speed, so a module at 2133/2400 (DDR4) or 4800 (DDR5) may still have XMP off.
-        // When every part number was decoded, the real rating is known and there is nothing to check.
-        var baseSpeed = !hw.IsLaptop && speed.PartRated is null &&
+        // When every part number was decoded, the real rating is known and there is nothing to check; standard modules
+        // without an XMP/EXPO profile have nothing to switch on either.
+        var baseSpeed = !hw.IsLaptop && speed.PartRated is null && !speed.JedecOnly &&
                         ((type == "DDR4" && configured <= 2400) || (type == "DDR5" && configured <= 4800));
         if (baseSpeed)
         {
@@ -875,6 +910,9 @@ public static class RecommendationEngine
             {
                 "Это сложная и рискованная операция. Сначала сохраните важные файлы на другой диск или в облако, а лучше сделайте " +
                 "полную резервную копию системы.",
+                "Если диск зашифрован (BitLocker или «Шифрование устройства»), запишите ключ восстановления и приостановите " +
+                "защиту: Панель управления → «Шифрование диска BitLocker» → «Приостановить защиту». Иначе после переключения " +
+                "BIOS Windows потребует ключ восстановления.",
                 "Убедитесь, что материнская плата умеет загружаться в режиме UEFI: такой пункт есть в BIOS почти всех плат, " +
                 "выпущенных после 2012 года.",
                 "Запустите «Командную строку» от имени администратора и выполните mbr2gpt /validate /allowFullOS — эта команда " +
@@ -900,6 +938,9 @@ public static class RecommendationEngine
             case null:
                 return;
         }
+        // An old or low-end processor without VT-x / AMD-V: there is no BIOS option to switch on.
+        if (hw.VirtualizationUnsupported)
+            return;
         var name = hw.Cpu?.Name ?? "";
         var intel = name.Contains("Intel", StringComparison.OrdinalIgnoreCase);
         var amd = name.Contains("AMD", StringComparison.OrdinalIgnoreCase);

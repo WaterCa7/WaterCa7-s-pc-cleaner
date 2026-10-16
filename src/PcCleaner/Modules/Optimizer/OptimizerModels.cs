@@ -205,6 +205,15 @@ public sealed record HardwareSnapshot
     /// <summary>Win32_ComputerSystem.HypervisorPresent; null if unknown.</summary>
     public bool? HypervisorPresent { get; init; }
 
+    /// <summary>
+    /// Win32_Processor.VMMonitorModeExtensions: the processor has VT-x / AMD-V at all (true even when it is switched off
+    /// in the BIOS; reads false while a hypervisor runs). Null if unknown.
+    /// </summary>
+    public bool? VirtualizationSupported { get; init; }
+
+    /// <summary>The processor has no hardware virtualization: there is nothing to switch on in the BIOS.</summary>
+    public bool VirtualizationUnsupported => VirtualizationEnabled == false && VirtualizationSupported == false;
+
     /// <summary>Laptop battery capacities (null on desktops or when there is no battery).</summary>
     public BatteryInfo? Battery { get; init; }
 

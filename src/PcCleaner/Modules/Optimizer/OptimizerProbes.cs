@@ -31,7 +31,7 @@ internal static class HardwareProbe
         var enclosureTask = Q("SELECT ChassisTypes FROM Win32_SystemEnclosure");
         var monitorNamesTask = Q("SELECT InstanceName, UserFriendlyName FROM WmiMonitorID", Wmi.WmiRoot);
         // Separate queries: if an old provider lacks these properties, only this detail is lost, not the whole CPU/PC info.
-        var vtxTask = Q("SELECT VirtualizationFirmwareEnabled FROM Win32_Processor");
+        var vtxTask = Q("SELECT VirtualizationFirmwareEnabled, VMMonitorModeExtensions FROM Win32_Processor");
         var hypervisorTask = Q("SELECT HypervisorPresent FROM Win32_ComputerSystem");
         var diskTask = Task.Run(GetSystemDisk);
         var displaysTask = Task.Run(NativeProbes.GetDisplays);
@@ -159,6 +159,10 @@ internal static class HardwareProbe
                 ? vtx.All(v => v == true)
                 : null,
             HypervisorPresent = hypervisorTask.Result.FirstOrDefault()?.Bool("HypervisorPresent"),
+            VirtualizationSupported = vtxTask.Result.Select(r => r.Bool("VMMonitorModeExtensions")).ToList() is { Count: > 0 } vmx &&
+                                      vmx.All(v => v is not null)
+                ? vmx.All(v => v == true)
+                : null,
             Battery = batteryInfoTask.Result,
             CollectedAt = DateTime.Now,
         };
@@ -175,9 +179,9 @@ internal static class HardwareProbe
 
     /// <summary>
     /// Design and full-charge capacity from root\wmi (summed over all batteries). Some laptops give these classes only to
-    /// administrators — then the state says so and the card explains it.
+    /// administrators — then the state says so and the card explains it. Null without a battery; an unexpected failure
+    /// only loses the battery details, never the whole snapshot.
     /// </summary>
-    /// <summary>Null without a battery; an unexpected failure only loses the battery details, never the whole snapshot.</summary>
     private static BatteryInfo? ReadBatterySafe(List<Dictionary<string, object?>> win32Batteries)
     {
         if (win32Batteries.Count == 0)
@@ -197,10 +201,13 @@ internal static class HardwareProbe
     {
         var name = win32Batteries.Select(b => Clean(b.Str("Name"))).FirstOrDefault(n => n is not null);
         var timeout = TimeSpan.FromSeconds(8);
-        var (designRows, designState) = WmiSensorQuery.Query("SELECT DesignedCapacity FROM BatteryStaticData", Wmi.WmiRoot, timeout);
-        var (fullRows, fullState) = WmiSensorQuery.Query("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity", Wmi.WmiRoot, timeout);
-        var designed = designRows.Sum(r => Math.Max(0, r.Long("DesignedCapacity") ?? 0));
-        var full = fullRows.Sum(r => Math.Max(0, r.Long("FullChargedCapacity") ?? 0));
+        var (designRows, designState) = WmiSensorQuery.Query("SELECT InstanceName, DesignedCapacity FROM BatteryStaticData", Wmi.WmiRoot,
+            timeout);
+        var (fullRows, fullState) = WmiSensorQuery.Query("SELECT InstanceName, FullChargedCapacity FROM BatteryFullChargedCapacity",
+            Wmi.WmiRoot, timeout);
+        var (designed, full) = HardwareText.BatteryCapacities(
+            designRows.Select(r => (r.Str("InstanceName"), r.Long("DesignedCapacity") ?? 0)).ToList(),
+            fullRows.Select(r => (r.Str("InstanceName"), r.Long("FullChargedCapacity") ?? 0)).ToList());
         var state = designed > 0 && full > 0
             ? SensorState.Available
             : designState == SensorState.NeedsAdmin || fullState == SensorState.NeedsAdmin

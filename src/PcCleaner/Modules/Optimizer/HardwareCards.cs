@@ -222,10 +222,12 @@ public static class HardwareCardBuilder
 
         string? badge = null;
         var tone = Tone.Neutral;
-        if (has("RamSpeed") && RecommendationEngine.IsXmpOff(hw))
+        var ramSpeed = items.FirstOrDefault(r => r.Id == "RamSpeed");
+        if (ramSpeed is not null && RecommendationEngine.IsXmpOff(hw))
             (badge, tone) = ("Без XMP/EXPO", Tone.Warning);
-        else if (has("RamSpeed"))
-            (badge, tone) = ("Ниже паспортной частоты", Tone.Warning);
+        else if (ramSpeed is not null)
+            // Info advice (laptop, standard modules held back by the processor) says "nothing to change": no warning colour.
+            (badge, tone) = ("Ниже паспортной частоты", ramSpeed.Kind == RecommendationKind.Info ? Tone.Info : Tone.Warning);
         else if (has("RamSingle") || has("RamOneChannel"))
             (badge, tone) = ("Одноканальный режим", Tone.Warning);
         else if (has("RamAsymmetric"))
@@ -348,9 +350,10 @@ public static class HardwareCardBuilder
         _ => "режим загрузки не определён",
     };
 
-    internal static string VirtualizationText(bool? enabled) => enabled switch
+    internal static string VirtualizationText(bool? enabled, bool unsupported = false) => enabled switch
     {
         true => "виртуализация включена",
+        false when unsupported => "без виртуализации",
         false => "виртуализация выключена",
         _ => "виртуализация: нет данных",
     };
@@ -379,6 +382,8 @@ public static class HardwareCardBuilder
             true when hw.HypervisorPresent == true =>
                 "Виртуализация процессора включена: сейчас работает гипервизор Windows (Hyper-V, WSL 2 или похожие функции).",
             true => "Виртуализация процессора (VT-x / SVM) включена — работают WSL, Docker, эмуляторы Android и виртуальные машины.",
+            false when hw.VirtualizationUnsupported =>
+                "Процессор не поддерживает аппаратную виртуализацию (VT-x / AMD-V), поэтому включить её в BIOS нельзя.",
             false => "Виртуализация процессора (VT-x / SVM) выключена в BIOS. Она нужна только для WSL, Docker, эмуляторов Android " +
                      "и виртуальных машин.",
             _ => "Windows не сообщила, включена ли виртуализация процессора.",
@@ -388,7 +393,7 @@ public static class HardwareCardBuilder
             Icon = "\uEEA1",
             Caption = "Прошивка и платформа",
             Title = hw.BoardProduct ?? hw.BoardManufacturer ?? "Материнская плата",
-            Primary = $"{BootModeText(hw.BootMode)} · {VirtualizationText(hw.VirtualizationEnabled)}",
+            Primary = $"{BootModeText(hw.BootMode)} · {VirtualizationText(hw.VirtualizationEnabled, hw.VirtualizationUnsupported)}",
             Details = details,
             Badge = badge,
             BadgeTone = tone,

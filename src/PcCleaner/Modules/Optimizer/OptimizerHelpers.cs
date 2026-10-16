@@ -254,6 +254,29 @@ public static class HardwareText
     /// <summary>Rated speed from a part number, or null (see <see cref="DecodeMemoryPart"/>).</summary>
     public static int? RatedSpeedFromPartNumber(string? partNumber) => DecodeMemoryPart(partNumber)?.Speed;
 
+    /// <summary>
+    /// Standard JEDEC modules that have no XMP/EXPO profile at all: OEM Samsung (M3xx/M4xx), SK Hynix (HMA/HMCG),
+    /// Micron (MTA), Kingston ValueRAM / Server / Client Premier (KVR/KSM/KCP) and basic Crucial (CT). Such a module
+    /// running below its rating is held back by the processor or the board — there is no profile to switch on.
+    /// </summary>
+    private static readonly Regex[] JedecOnlyPatterns =
+    {
+        new(@"^M\d{3}[AR][A-Z0-9]+-C", PartOptions),
+        new(@"^HM(?:A|CG)[A-Z0-9]+-", PartOptions),
+        new(@"^MTA\d", PartOptions),
+        new(@"^(?:KVR|KSM|KCP)\d", PartOptions),
+        new(@"^CT(?:\d+K)?\d", PartOptions),
+    };
+
+    /// <summary>True for a standard module without an XMP/EXPO profile (see <see cref="JedecOnlyPatterns"/>).</summary>
+    public static bool IsJedecOnlyPart(string? partNumber)
+    {
+        if (string.IsNullOrWhiteSpace(partNumber))
+            return false;
+        var part = partNumber.Trim().Replace(" ", "", StringComparison.Ordinal);
+        return JedecOnlyPatterns.Any(p => p.IsMatch(part));
+    }
+
     /// <summary>Two-digit speed codes: 32 -> 3200, 26 -> 2666, 21 -> 2133, 48 -> 4800.</summary>
     private static int FromTwoDigits(int code) => code switch
     {
@@ -329,6 +352,35 @@ public static class HardwareText
             return null;
         var busy = total - idleDelta - Math.Max(0, ownBusy);
         return Math.Clamp(100.0 * busy / total, 0, 100);
+    }
+
+    /// <summary>
+    /// Design and full-charge capacity (mWh) summed over the batteries that report both, paired by WMI InstanceName — a
+    /// laptop with two batteries must never compare two design capacities with one full charge (that would look like heavy
+    /// wear). Without instance names the two lists are used only when they have the same length. (0, 0) = unknown.
+    /// </summary>
+    public static (long Designed, long Full) BatteryCapacities(IReadOnlyList<(string? Instance, long Designed)> designed,
+        IReadOnlyList<(string? Instance, long Full)> full)
+    {
+        if (designed.Count == 0 || full.Count == 0)
+            return (0, 0);
+        if (designed.All(d => !string.IsNullOrWhiteSpace(d.Instance)) && full.All(f => !string.IsNullOrWhiteSpace(f.Instance)))
+        {
+            long d = 0, f = 0;
+            foreach (var (instance, design) in designed)
+            {
+                var match = full.FirstOrDefault(x => string.Equals(x.Instance, instance, StringComparison.OrdinalIgnoreCase));
+                if (design > 0 && match.Full > 0)
+                {
+                    d += design;
+                    f += match.Full;
+                }
+            }
+            return (d, f);
+        }
+        if (designed.Count != full.Count || designed.Any(x => x.Designed <= 0) || full.Any(x => x.Full <= 0))
+            return (0, 0);
+        return (designed.Sum(x => x.Designed), full.Sum(x => x.Full));
     }
 
     /// <summary>"45,2 Вт·ч" from milliwatt-hours.</summary>
