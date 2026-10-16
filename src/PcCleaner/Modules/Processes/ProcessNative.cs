@@ -228,6 +228,40 @@ internal sealed class NativeProcessSource : IProcessSource
         out long kernelTime, out long userTime);
 }
 
+/// <summary>
+/// Read-only check whether the current user may move a file (NTFS grants DELETE access at open time if the file or its
+/// folder allows it). Used before quarantine so that a process is never terminated when its file then can't be moved
+/// (e.g. Program Files without administrator rights). Opens a handle and closes it — nothing is changed.
+/// </summary>
+internal static class FileMoveProbe
+{
+    private const uint Delete = 0x00010000;
+    private const uint ShareAll = 0x00000001 | 0x00000002 | 0x00000004;
+    private const uint OpenExisting = 3;
+    private const int ErrorAccessDenied = 5;
+
+    /// <summary>False only when Windows explicitly denies the right to move/delete the file.</summary>
+    public static bool CanMove(string path)
+    {
+        try
+        {
+            using var handle = CreateFile(path, Delete, ShareAll, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+            if (!handle.IsInvalid)
+                return true;
+            // Sharing violations, missing files etc. are reported by the move itself.
+            return Marshal.GetLastWin32Error() != ErrorAccessDenied;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException)
+        {
+            return true;
+        }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateFileW")]
+    private static extern SafeFileHandle CreateFile(string fileName, uint desiredAccess, uint shareMode, IntPtr securityAttributes,
+        uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+}
+
 /// <summary>Command lines, parent PIDs and hosted services via WMI. Never throws (Wmi.Query logs a warning instead).</summary>
 internal sealed class WmiDetailsProvider : IProcessDetailsProvider
 {

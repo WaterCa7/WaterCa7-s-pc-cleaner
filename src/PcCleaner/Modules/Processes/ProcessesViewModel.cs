@@ -318,15 +318,16 @@ public sealed class ProcessesViewModel : PageViewModel
 
     public bool IsEmpty => VisibleCount == 0;
 
+    // "Скрыть системные процессы Microsoft" never hides suspicious ones, so it does not matter here.
     public string EmptyTitle => !HasLoaded
         ? "Собираю список процессов…"
-        : SuspiciousOnly && string.IsNullOrWhiteSpace(SearchText) && !HideMicrosoft
+        : SuspiciousOnly && string.IsNullOrWhiteSpace(SearchText)
             ? "Подозрительных процессов нет"
             : "Ничего не найдено";
 
     public string EmptyText => !HasLoaded
         ? "Это займёт пару секунд."
-        : SuspiciousOnly && string.IsNullOrWhiteSpace(SearchText) && !HideMicrosoft
+        : SuspiciousOnly && string.IsNullOrWhiteSpace(SearchText)
             ? IsCheckingSignatures
                 ? "Проверка цифровых подписей ещё идёт — список может пополниться."
                 : "Ни один из запущенных процессов не вызывает подозрений. Это хорошо!"
@@ -1043,7 +1044,7 @@ public sealed class ProcessesViewModel : PageViewModel
         if (report.Failed.Count == 0)
         {
             if (report.Killed.Count == 0)
-                sb.Append("Процесс уже завершился сам.");
+                sb.Append(total > 1 ? "Эти процессы уже завершились сами." : "Процесс уже завершился сам.");
             else if (total == 1)
                 sb.Append($"Процесс «{item.ExeName}» завершён.");
             else
@@ -1124,6 +1125,8 @@ public sealed class ProcessesViewModel : PageViewModel
                 $"«{item.ExeName}» помещён в карантин. Завершено процессов: {outcome.Report.Done}.\n\n" +
                 "Если программа снова появится после перезагрузки, загляните в раздел «Автозагрузка» — " +
                 "там может остаться запись о её запуске.");
+        else if (outcome.NeedsElevation)
+            Admin.RequireElevation($"Помещение «{item.ExeName}» в карантин");
         else
             Dialogs.Error("Карантин", outcome.Message);
         await SafeRefreshAsync();
@@ -1133,6 +1136,12 @@ public sealed class ProcessesViewModel : PageViewModel
     {
         if (item?.Path is not { } path)
             return;
+        if (!item.CanTrust)
+        {
+            // Also guards programmatic calls that bypass CanExecute (e.g. a Microsoft-signed script host).
+            Dialogs.Info("Доверие недоступно", item.TrustToolTip);
+            return;
+        }
         if (!item.IsTrusted)
         {
             var ok = Dialogs.Confirm("Доверять программе?",

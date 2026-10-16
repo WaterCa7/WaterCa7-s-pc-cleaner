@@ -111,11 +111,25 @@ internal static class ProcessGuard
 
     private static readonly string WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
+    /// <summary>
+    /// Folders the real critical binaries live in directly. Deliberately not "anything under C:\Windows": C:\Windows\Temp,
+    /// System32\Tasks and a few others are writable by ordinary users, and a fake svchost.exe there must stay killable.
+    /// </summary>
+    private static readonly string[] SystemBinaryDirs =
+    {
+        Environment.SystemDirectory,
+        Environment.GetFolderPath(Environment.SpecialFolder.SystemX86),
+        Path.Combine(WindowsDir, "SysArm32"),
+    };
+
+    /// <summary>Admin-only locations of Microsoft Defender (MsMpEng, NisSrv, MsSense).</summary>
     private static readonly string[] SystemSoftwareRoots =
     {
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Microsoft"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), @"Microsoft\Windows Defender"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            @"Microsoft\Windows Defender Advanced Threat Protection"),
     };
 
     public static string BaseName(string name)
@@ -146,8 +160,24 @@ internal static class ProcessGuard
     }
 
     /// <summary>Unknown path (access denied) counts as system: we can't prove it is a fake.</summary>
-    private static bool IsSystemLocation(string? path)
-        => path is null || Suspicion.IsUnder(path, WindowsDir) || SystemSoftwareRoots.Any(r => Suspicion.IsUnder(path, r));
+    internal static bool IsSystemLocation(string? path)
+    {
+        if (path is null)
+            return true;
+        string? dir;
+        try
+        {
+            dir = Path.GetDirectoryName(path);
+        }
+        catch (ArgumentException)
+        {
+            return true; // unparsable: be conservative
+        }
+        if (dir is not null &&
+            SystemBinaryDirs.Any(d => d.Length > 0 && string.Equals(dir.TrimEnd('\\'), d.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return SystemSoftwareRoots.Any(r => r.Length > 0 && Suspicion.IsUnder(path, r));
+    }
 
     public static KillVerdict Worst(IEnumerable<KillVerdict> verdicts)
     {
@@ -315,15 +345,21 @@ internal sealed class ProcessFilter
     /// <summary>Flat list / a single item check.</summary>
     public bool Matches(ProcessItem item)
         => (!SuspiciousOnly || item.IsSuspicious) &&
-           (!HideMicrosoft || !item.IsMicrosoftSystem) &&
-           MatchesText(item.SearchText);
+           (!HideMicrosoft || !IsHiddenAsMicrosoft(item)) &&
+           (!HasSearch || MatchesText(item.SearchText)); // the search text is only built when there is a query
+
+    /// <summary>
+    /// Windows components are hidden only while nothing is wrong with them: PowerShell in C:\Windows running a hidden
+    /// encoded script is exactly what the user must still see.
+    /// </summary>
+    private static bool IsHiddenAsMicrosoft(ProcessItem item) => item.IsMicrosoftSystem && !item.IsSuspicious;
 
     /// <summary>Should an instance be listed under its (expanded) group?</summary>
     public bool ShowChild(ProcessGroup group, ProcessRow child)
     {
         if (SuspiciousOnly && !child.IsSuspicious)
             return false;
-        if (HideMicrosoft && child.IsMicrosoftSystem)
+        if (HideMicrosoft && IsHiddenAsMicrosoft(child))
             return false;
         return !HasSearch || MatchesText(child.SearchText) || MatchesText(group.OwnSearchText);
     }

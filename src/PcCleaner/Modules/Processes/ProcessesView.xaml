@@ -300,7 +300,7 @@
                 <CheckBox Content="Только подозрительные" IsChecked="{Binding SuspiciousOnly}" Margin="0,8,18,8"
                           ToolTip="Показать только процессы с оценкой «Подозрительно» или «Высокий риск»." />
                 <CheckBox Content="Скрыть системные процессы Microsoft" IsChecked="{Binding HideMicrosoft}" Margin="0,8,0,8"
-                          ToolTip="Скрывает компоненты Windows с подписью Microsoft (svchost, службы, драйверы). Программы вроде Edge или OneDrive остаются в списке." />
+                          ToolTip="Скрывает компоненты Windows с подписью Microsoft (svchost, службы, драйверы). Программы вроде Edge или OneDrive, а также всё подозрительное остаются в списке." />
             </WrapPanel>
 
             <Button Grid.Column="2" Style="{StaticResource GhostButton}" VerticalAlignment="Top" Width="34" Height="34" Padding="0"
@@ -556,17 +556,18 @@
                                 <UniformGrid Columns="2">
                                     <Button Style="{StaticResource ActionDangerButton}" Command="{Binding DataContext.KillCommand, ElementName=Root}"
                                             ToolTip="{Binding KillToolTip}">
-                                        <StackPanel Orientation="Horizontal">
+                                        <!-- DockPanel (not StackPanel) so the caption trims instead of being cut off on narrow windows -->
+                                        <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="12" Margin="0,0,7,0" />
-                                            <TextBlock Text="Завершить" />
-                                        </StackPanel>
+                                            <TextBlock Text="Завершить" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
                                     </Button>
                                     <Button Style="{StaticResource ActionDangerButton}" Command="{Binding DataContext.KillTreeCommand, ElementName=Root}"
                                             ToolTip="{Binding KillTreeToolTip}">
-                                        <StackPanel Orientation="Horizontal">
+                                        <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE81E;" FontSize="12" Margin="0,0,7,0" />
                                             <TextBlock Text="Завершить дерево" TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
+                                        </DockPanel>
                                     </Button>
                                 </UniformGrid>
                                 <UniformGrid x:Name="SecondaryActions" Columns="3">

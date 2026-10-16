@@ -180,6 +180,25 @@ public class ProcessIssuesTests
         Assert.Equal(IssueSeverity.Low, issue.Severity);
         Assert.Contains("miner.exe", issue.Title);
         Assert.Contains("70%", issue.Details);
+        Assert.Contains("можно завершить", issue.Details);
+    }
+
+    [Fact]
+    public void HighCpuProtectedSystemProcess_IsNotSuggestedForTermination()
+    {
+        // The page refuses to kill System / svchost, so the dashboard must not tell the user to do it.
+        var items = new[]
+        {
+            Item(4, "System", null, 60, 1),
+            Item(900, "svchost.exe", SvchostPath, 55, 1),
+        };
+        var issues = ProcessIssues.Build(items, HalfFree, selfPid: 1);
+        Assert.Equal(2, issues.Count);
+        Assert.All(issues, i =>
+        {
+            Assert.DoesNotContain("можно завершить", i.Details);
+            Assert.Contains("завершать его нельзя", i.Details);
+        });
     }
 }
 
@@ -359,6 +378,50 @@ public class ProcessKillTests
         {
             Cleanup(ping);
         }
+    }
+
+    [Fact]
+    public async Task Quarantine_WithoutRightsToMoveTheFile_DoesNotKillAnything()
+    {
+        // E.g. an unwanted program in Program Files while the cleaner runs without admin rights: killing it first and then
+        // failing to move the file would be a half-done action.
+        var dir = TestEnvironment.NewTempDir("quarantine-norights");
+        var exe = Path.Combine(dir, "unsigned-locked-tool.exe");
+        File.Copy(Path.Combine(Environment.SystemDirectory, "PING.EXE"), exe);
+        var ping = StartPing(exe);
+        try
+        {
+            var service = new ProcessesService(new NativeProcessSource(), new FakeDetails(),
+                _ => new SignatureInfo(SignatureStatus.Unsigned, null), canMoveFile: _ => false);
+            var target = new KillTarget(ping.Id, ping.StartTime.ToFileTime(), "unsigned-locked-tool.exe", exe);
+            var outcome = await service.QuarantineAsync(exe, new[] { target }, "тест", CancellationToken.None);
+
+            Assert.False(outcome.Success);
+            Assert.Equal(!Admin.IsElevated, outcome.NeedsElevation);
+            Assert.Empty(outcome.Report.Killed);
+            Assert.False(ping.HasExited);
+            Assert.True(File.Exists(exe));
+            Assert.Contains("Ничего не изменено", outcome.Message);
+        }
+        finally
+        {
+            Cleanup(ping);
+        }
+    }
+
+    [Fact]
+    public void MoveProbe_IsReadOnlyAndDetectsMissingRights()
+    {
+        var dir = TestEnvironment.NewTempDir("probe");
+        var own = Path.Combine(dir, "mine.exe");
+        File.WriteAllText(own, "x");
+        Assert.True(FileMoveProbe.CanMove(own));
+        Assert.True(File.Exists(own));
+
+        // System files belong to TrustedInstaller: nobody may move them (the probe only opens and closes a handle).
+        var systemFile = Path.Combine(Environment.SystemDirectory, "PING.EXE");
+        Assert.False(FileMoveProbe.CanMove(systemFile));
+        Assert.True(File.Exists(systemFile));
     }
 
     [Fact]

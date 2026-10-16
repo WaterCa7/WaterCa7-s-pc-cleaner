@@ -1,3 +1,4 @@
+using System.IO;
 using PcCleaner.Core;
 using PcCleaner.Modules.Processes;
 using Xunit;
@@ -55,6 +56,25 @@ public class ProcessFilterTests
         Assert.True(filter.Matches(Row(6, "svchost.exe", SvchostPath, signature: null)));
         // Unknown inaccessible processes are not assumed to be Microsoft.
         Assert.True(filter.Matches(Row(7, "mystery.exe", null)));
+    }
+
+    [Fact]
+    public void HideMicrosoft_NeverHidesSuspiciousWindowsComponents()
+    {
+        // PowerShell from C:\Windows running a hidden encoded script is a Windows component, but it must stay visible.
+        var path = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+        var hidden = new SuspicionResult(65, new[] { "Скрытый или закодированный запуск PowerShell" });
+        var bad = Row(8, "powershell.exe", path, MsSigned, hidden);
+        var calm = Row(9, "powershell.exe", path, MsSigned);
+        Assert.True(new ProcessFilter(null, false, hideMicrosoft: true).Matches(bad));
+        Assert.True(new ProcessFilter(null, suspiciousOnly: true, hideMicrosoft: true).Matches(bad));
+        Assert.False(new ProcessFilter(null, false, hideMicrosoft: true).Matches(calm));
+
+        var group = new ProcessGroup("path:" + path.ToLowerInvariant(), "powershell.exe");
+        group.SetInstances(new List<ProcessRow> { calm, bad });
+        var hideMs = new ProcessFilter(null, false, hideMicrosoft: true);
+        Assert.True(hideMs.ShowChild(group, bad));
+        Assert.False(hideMs.ShowChild(group, calm));
     }
 
     [Fact]
@@ -266,6 +286,63 @@ public class ProcessesViewModelTests
         Assert.Contains(source.Enumerate(), p => p.Pid == 300);
         Assert.False(AppServices.Settings.IsTrusted(EvilPath));
         Assert.True(evil.IsSuspicious);
+    }
+
+    [Fact]
+    public void MicrosoftSignedScriptHost_CannotBeTrusted()
+    {
+        // The warning is about how PowerShell was started, not about the file: trusting powershell.exe would hide
+        // every future hidden script in all modules.
+        var msSigned = new SignatureInfo(SignatureStatus.Valid, "Microsoft Windows");
+        var hidden = new SuspicionResult(65, new[] { "Скрытый или закодированный запуск PowerShell" });
+        var powershell = Row(50, "powershell.exe", Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"),
+            msSigned, hidden);
+        Assert.False(powershell.CanTrust);
+        Assert.Contains("Microsoft", powershell.TrustToolTip);
+
+        // An unsigned program with warnings can be trusted; an already trusted file can always be "un-trusted".
+        var unsigned = Row(51, "tool.exe", @"C:\Tools\tool.exe", new SignatureInfo(SignatureStatus.Unsigned, null),
+            new SuspicionResult(20, new[] { "Нет цифровой подписи" }));
+        Assert.True(unsigned.CanTrust);
+        powershell.IsTrusted = true;
+        Assert.True(powershell.CanTrust);
+    }
+
+    [Fact]
+    public async Task TrustChangedOnAnotherPage_IsPickedUpOnTheNextRefresh()
+    {
+        var (service, source, _, clock) = CreateService();
+        var path = Path.Combine(Path.GetTempPath(), "unsigned-external-" + Guid.NewGuid().ToString("N")[..6] + ".exe");
+        source.Add(500, Path.GetFileName(path), path);
+        var vm = new ProcessesViewModel(service) { BaselineDelay = TimeSpan.Zero };
+        await vm.RefreshAsync();
+        await vm.WaitForBackgroundAsync(CancellationToken.None);
+        Assert.Equal(1, vm.SuspiciousCount);
+
+        var settings = AppServices.Settings;
+        settings.TrustedItems = settings.TrustedItems.Append(path).ToList(); // e.g. "Доверять" on the Startup page
+        try
+        {
+            clock.Advance(TimeSpan.FromSeconds(2));
+            await vm.RefreshAsync();
+            var row = vm.Rows.Single(r => r.Pid == 500);
+            Assert.True(row.IsTrusted);
+            Assert.False(row.IsSuspicious);
+            Assert.Equal(0, vm.SuspiciousCount);
+        }
+        finally
+        {
+            settings.TrustedItems = settings.TrustedItems.Where(t => t != path).ToList();
+        }
+    }
+
+    [Fact]
+    public async Task GroupedSearch_FindsProgramsByCommandLine()
+    {
+        var (vm, _, _, _) = await LoadAsync();
+        Assert.True(vm.GroupByProgram);
+        vm.SearchText = "--no-startup-window"; // only in chrome's command line
+        Assert.Equal(new[] { "chrome.exe" }, vm.Items.Select(i => i.ExeName));
     }
 
     [Fact]

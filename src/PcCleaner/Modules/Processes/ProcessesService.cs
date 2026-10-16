@@ -7,7 +7,8 @@ using PcCleaner.Core;
 namespace PcCleaner.Modules.Processes;
 
 /// <summary>Result of "В карантин" for a running program.</summary>
-internal sealed record QuarantineOutcome(bool Success, string Message, KillReport Report);
+/// <param name="NeedsElevation">Nothing was done because moving the file needs administrator rights.</param>
+internal sealed record QuarantineOutcome(bool Success, string Message, KillReport Report, bool NeedsElevation = false);
 
 /// <summary>
 /// Everything about running processes: cheap snapshots for the live list, cached heavy details (path, version info,
@@ -21,6 +22,7 @@ public sealed class ProcessesService : IHealthContributor
     private readonly IProcessDetailsProvider _details;
     private readonly Func<string, SignatureInfo> _signatureProvider;
     private readonly Func<string, FileMeta?> _fileMetaProvider;
+    private readonly Func<string, bool> _canMoveFile;
     private readonly ConcurrentDictionary<ProcessKey, ProcessStaticInfo> _cache = new();
     private readonly ConcurrentDictionary<string, FileMeta?> _metaCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<Task<SignatureInfo>>> _signatures = new(StringComparer.OrdinalIgnoreCase);
@@ -38,12 +40,14 @@ public sealed class ProcessesService : IHealthContributor
         Func<string, SignatureInfo>? signatures = null,
         Func<string, FileMeta?>? fileMeta = null,
         Func<long>? clock = null,
-        int? logicalCpus = null)
+        int? logicalCpus = null,
+        Func<string, bool>? canMoveFile = null)
     {
         _source = source;
         _details = details;
         _signatureProvider = signatures ?? FileSignature.Get;
         _fileMetaProvider = fileMeta ?? ReadFileMeta;
+        _canMoveFile = canMoveFile ?? FileMoveProbe.CanMove;
         Clock = clock ?? Stopwatch.GetTimestamp;
         LogicalCpus = logicalCpus ?? Environment.ProcessorCount;
     }
@@ -408,6 +412,16 @@ public sealed class ProcessesService : IHealthContributor
         if (signature.IsMicrosoft)
             return new QuarantineOutcome(false, "Файл подписан Microsoft — он не будет помещён в карантин.", empty);
 
+        // Check the rights first: never terminate the program and then fail to move its file (e.g. in Program Files).
+        if (!await Task.Run(() => _canMoveFile(path), ct).ConfigureAwait(false))
+        {
+            Log.Warn($"Карантин: нет прав на перемещение {path}");
+            return Admin.IsElevated
+                ? new QuarantineOutcome(false, "Windows не разрешает перемещать этот файл. Ничего не изменено: процесс не завершён, файл на месте.", empty)
+                : new QuarantineOutcome(false, "Чтобы переместить этот файл, нужны права администратора. Ничего не изменено: процесс не завершён, файл на месте.",
+                    empty, NeedsElevation: true);
+        }
+
         var report = await Task.Run(() => Kill(running), ct).ConfigureAwait(false);
         if (report.Failed.Count > 0)
         {
@@ -563,13 +577,19 @@ internal static class ProcessIssues
             if (cpu <= HighCpuPercent)
                 continue;
             var name = DisplayName(program);
+            // System, Defender, svchost... can't be terminated from the Processes page: don't suggest it.
+            var isProtected = program.Any(e =>
+                ProcessGuard.Check(e.Sample.Pid, e.Sample.Info.FileName, e.Sample.Info.Path, selfPid).Verdict == KillVerdict.Blocked);
+            var advice = isProtected
+                ? "Это системный процесс Windows, завершать его нельзя. Обычно такая нагрузка спадает сама " +
+                  "(например, после проверки Защитником или установки обновлений); если она держится часами — перезагрузите компьютер."
+                : "Если сейчас не идёт игра, обработка видео или архивация — возможно, программа зависла " +
+                  "или без нужды работает в фоне. Её можно завершить в разделе «Процессы».";
             issues.Add(new HealthIssue
             {
                 Module = Module,
                 Title = $"Высокая нагрузка на процессор: {name}",
-                Details = $"За 2 секунды «{name}» занял {Format.Percent(cpu)} мощности процессора. " +
-                          "Если сейчас не идёт игра, обработка видео или архивация — возможно, программа зависла " +
-                          "или без нужды работает в фоне. Её можно завершить в разделе «Процессы».",
+                Details = $"За 2 секунды «{name}» занял {Format.Percent(cpu)} мощности процессора. " + advice,
                 Severity = IssueSeverity.Low,
                 TargetPageKey = PageKey,
             });

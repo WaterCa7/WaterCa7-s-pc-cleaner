@@ -132,6 +132,32 @@ public class ProcessGuardTests
         Assert.Equal(KillVerdict.Allowed, ProcessGuard.Check(6000, "svchost.exe", fake, selfPid: 1).Verdict);
     }
 
+    [Theory]
+    [InlineData(@"Temp\svchost.exe")]          // C:\Windows\Temp is writable by ordinary users
+    [InlineData(@"System32\Tasks\csrss.exe")]  // so is System32\Tasks
+    [InlineData(@"svchost.exe")]               // C:\Windows itself is not where svchost lives
+    public void FakeCriticalNameInsideTheWindowsFolder_CanBeKilled(string relative)
+    {
+        var fake = Path.Combine(Win, relative);
+        Assert.Equal(KillVerdict.Allowed, ProcessGuard.Check(6100, Path.GetFileName(fake), fake, selfPid: 1).Verdict);
+    }
+
+    [Fact]
+    public void GenuineLocations_StayProtected()
+    {
+        var sysWow = Environment.GetFolderPath(Environment.SpecialFolder.SystemX86);
+        if (sysWow.Length > 0)
+            Assert.Equal(KillVerdict.Blocked, ProcessGuard.Check(6200, "svchost.exe", Path.Combine(sysWow, "svchost.exe"), 1).Verdict);
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        Assert.Equal(KillVerdict.Blocked,
+            ProcessGuard.Check(6201, "MsSense.exe", Path.Combine(programFiles, @"Windows Defender Advanced Threat Protection\MsSense.exe"), 1)
+                .Verdict);
+        Assert.Equal(KillVerdict.Blocked,
+            ProcessGuard.Check(6202, "MsMpEng.exe", Path.Combine(programFiles, @"Windows Defender\MsMpEng.exe"), 1).Verdict);
+        // Case and a trailing separator in the system folder name do not matter.
+        Assert.True(ProcessGuard.IsSystemLocation(Path.Combine(Sys32.ToUpperInvariant(), "lsass.exe")));
+    }
+
     [Fact]
     public void Explorer_IsAllowedWithWarning()
     {

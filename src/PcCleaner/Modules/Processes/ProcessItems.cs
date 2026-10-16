@@ -184,6 +184,8 @@ public abstract class ProcessItem : ObservableObject
             OnPropertyChanged(nameof(SignatureText));
             OnPropertyChanged(nameof(SignatureKind));
             OnPropertyChanged(nameof(SignatureBadgeText));
+            OnPropertyChanged(nameof(CanTrust));
+            OnPropertyChanged(nameof(TrustToolTip));
             OnStatusChanged();
             OnTextChanged();
         }
@@ -384,8 +386,14 @@ public abstract class ProcessItem : ObservableObject
 
     public string TrustButtonText => IsTrusted ? "Не доверять" : "Доверять";
 
-    /// <summary>Trusting only makes sense for a file with warnings (or to undo an earlier "Доверять").</summary>
-    public bool CanTrust => Path is not null && (IsTrusted || Suspicion is { Score: > 0 });
+    /// <summary>
+    /// Trusting only makes sense for a file with warnings (or to undo an earlier "Доверять"). A Microsoft-signed file is
+    /// never flagged for itself — only for how it was started (PowerShell/cmd with a hidden script, a URL...). Trusting its
+    /// path would silence those checks for every future script it runs, in all modules, so it is not offered.
+    /// </summary>
+    public bool CanTrust => Path is not null && (IsTrusted || (Suspicion is { Score: > 0 } && !IsMicrosoftSigned));
+
+    private bool IsMicrosoftSigned => Signature?.IsMicrosoft == true;
 
     public string TrustToolTip => IsTrusted
         ? "Снова проверять эту программу и показывать предупреждения о ней."
@@ -393,7 +401,10 @@ public abstract class ProcessItem : ObservableObject
             ? "Больше не считать эту программу подозрительной (во всех разделах). Используйте только для программ, в которых уверены."
             : Path is null
                 ? "Нет доступа к файлу процесса."
-                : "К этой программе нет замечаний — отмечать её доверенной не нужно.";
+                : IsMicrosoftSigned && Suspicion is { Score: > 0 }
+                    ? "Это программа Microsoft: замечание относится к тому, с какими параметрами её запустили, а не к самому файлу. " +
+                      "Отметить её доверенной нельзя — иначе приложение перестанет замечать опасные скрипты, запущенные через неё."
+                    : "К этой программе нет замечаний — отмечать её доверенной не нужно.";
 
     public string? DefenderStatus
     {
@@ -578,7 +589,8 @@ public sealed class ProcessRow : ProcessItem
     /// <summary>Recomputes the suspicion only when its inputs changed (the analysis touches the disk).</summary>
     internal void Evaluate(Func<ProcessRow, SuspicionResult?> analyze, int trustVersion)
     {
-        var inputs = (Path, Signature, CommandLine, Description, Company, trustVersion, DetailsLoaded);
+        // IsTrusted is part of the inputs: other pages (Автозагрузка, Программы) can change the shared trusted list.
+        var inputs = (Path, Signature, CommandLine, Description, Company, trustVersion, DetailsLoaded, IsTrusted);
         if (Equals(_suspicionInputs, inputs))
             return;
         _suspicionInputs = inputs;
@@ -664,8 +676,10 @@ public sealed class ProcessGroup : ProcessItem
     internal override string BuildSearchText()
     {
         _ownSearchText = null;
+        // Command lines too, so "--type=renderer" or a script name finds the program in the (default) grouped view.
         return string.Join(" ", OwnSearchText, string.Join(" ", _instances.Select(r => r.Pid)),
-            string.Join(" ", _instances.SelectMany(r => r.Services).Distinct()));
+            string.Join(" ", _instances.SelectMany(r => r.Services).Distinct()),
+            string.Join(" ", _instances.Select(r => r.CommandLine).Where(c => !string.IsNullOrEmpty(c)).Distinct()));
     }
 
     /// <summary>Replaces the instance list (oldest first) and refreshes the totals.</summary>
