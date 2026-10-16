@@ -1,11 +1,32 @@
 name: CI
 on: [push, pull_request]
 jobs:
-  test:
+  windows-app:
+    name: Windows app (C# / WPF)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet build WaterCa7sPcCleaner.sln -c Release
+      - run: dotnet test WaterCa7sPcCleaner.sln -c Release --no-build
+      - name: Publish single-file exe
+        run: dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WaterCa7sPcCleaner-win-x64
+          path: publish/WaterCa7sPcCleaner.exe
+
+  python-cli:
+    name: Console version (Python)
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: cli-python
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,4 +39,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: report-${{ matrix.os }}
-          path: report.*
+          path: cli-python/report.*
