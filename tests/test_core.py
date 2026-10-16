@@ -24,7 +24,7 @@ def test_finding_rejects_bad_severity():
     ("svch0st.exe", "", "похоже на системный"),
     ("invoice.pdf.exe", "", "двойное расширение"),
     ("xmrig", "/usr/bin/xmrig", "майнер"),
-    ("helper", "/tmp/helper", "временной"),
+    ("helper", r"C:\Users\me\AppData\Local\Temp\helper.exe" if os.name == "nt" else "/tmp/helper", "временной"),
     ("a9f3k2l1qz8x7w", "", "случайное"),
 ])
 def test_suspicion_reasons_flags(name, exe, needle):
@@ -77,12 +77,15 @@ def test_clean_does_not_follow_symlinks(monkeypatch, tmp_path):
     outside = tmp_path.parent / f"{tmp_path.name}-outside"
     outside.mkdir()
     keep = outside / "keep.txt"
-    keep.write_text("важно")
+    keep.write_text("важно", encoding="utf-8")
     past = time.time() - 48 * 3600
     os.utime(keep, (past, past))
     junkdir = tmp_path / "junk"
     junkdir.mkdir()
-    (junkdir / "link").symlink_to(outside, target_is_directory=True)
+    try:
+        (junkdir / "link").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("нет прав на создание симлинков")
     monkeypatch.setattr(junk, "targets", lambda: [junk.Target("fake", "Тест", junkdir)])
     junk.clean(apply=True)
     assert keep.exists()
