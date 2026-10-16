@@ -1,13 +1,804 @@
-﻿<UserControl x:Class="PcCleaner.Modules.Processes.ProcessesView"
+<UserControl x:Class="PcCleaner.Modules.Processes.ProcessesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Processes"
+             x:Name="Root"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:ProcessesViewModel}"
-             d:DesignWidth="1000" d:DesignHeight="700">
-    <Border Style="{StaticResource Card}" VerticalAlignment="Top">
-        <TextBlock Style="{StaticResource Muted}" Text="Раздел в разработке" />
-    </Border>
+             d:DesignWidth="1020" d:DesignHeight="640">
+
+    <UserControl.Resources>
+        <Style x:Key="CardLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="CardNumber" TargetType="TextBlock" BasedOn="{StaticResource BigNumber}">
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="Margin" Value="0,1,0,0" />
+        </Style>
+        <Style x:Key="CardHint" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="CardIcon" TargetType="Border">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,12,0,3" />
+        </Style>
+        <Style x:Key="FieldValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="CellMuted" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+        </Style>
+
+        <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding" Value="6,6" />
+            <Setter Property="Margin" Value="3" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        </Style>
+        <Style x:Key="ActionDangerButton" TargetType="Button" BasedOn="{StaticResource DangerButton}">
+            <Setter Property="Padding" Value="6,7" />
+            <Setter Property="Margin" Value="3" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        </Style>
+
+        <Style x:Key="ChevronButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Width="18" Height="18">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface3Brush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- "Оценка" badge: colour follows the status -->
+        <DataTemplate x:Key="StatusBadge" DataType="{x:Type local:ProcessItem}">
+            <Border x:Name="B" Style="{StaticResource Badge}" ToolTip="{Binding StatusToolTip}"
+                    Visibility="{Binding StatusText, Converter={StaticResource HasValueToVis}}">
+                <TextBlock x:Name="T" Text="{Binding StatusText}" FontSize="11.5" Foreground="{StaticResource MutedBrush}" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.High}">
+                    <Setter TargetName="B" Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                    <Setter TargetName="T" Property="Foreground" Value="{StaticResource DangerBrush}" />
+                    <Setter TargetName="T" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Medium}">
+                    <Setter TargetName="B" Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                    <Setter TargetName="T" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                    <Setter TargetName="T" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Low}">
+                    <Setter TargetName="B" Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                    <Setter TargetName="T" Property="Foreground" Value="{StaticResource InfoBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Trusted}">
+                    <Setter TargetName="B" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                    <Setter TargetName="T" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Pending}">
+                    <Setter TargetName="B" Property="Background" Value="Transparent" />
+                    <Setter TargetName="B" Property="Padding" Value="0,2" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.NoAccess}">
+                    <Setter TargetName="B" Property="Background" Value="Transparent" />
+                    <Setter TargetName="B" Property="Padding" Value="0,2" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Context menu entry: icon + text -->
+        <Style x:Key="MenuIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ================= Summary cards ================= -->
+        <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition />
+            </Grid.ColumnDefinitions>
+
+            <!-- CPU -->
+            <Border Style="{StaticResource Card}" Padding="14,12"
+                    ToolTip="Общая загрузка процессора всеми программами. Если она долго держится выше 80–90%, компьютер начинает тормозить.">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardLabel}" Text="Процессор" />
+                        <TextBlock Style="{StaticResource CardNumber}" Text="{Binding CpuText}" />
+                        <ProgressBar Margin="0,8,0,0" Height="4" Maximum="100" Value="{Binding CpuPercent, Mode=OneWay}"
+                                     Foreground="{Binding CpuPercent, Converter={StaticResource PercentToBrush}}" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Style="{StaticResource CardIcon}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE950;" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Memory -->
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,12"
+                    ToolTip="Сколько оперативной памяти занято сейчас. Когда её не хватает, Windows использует медленный файл подкачки.">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardLabel}" Text="Память" />
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource CardNumber}" Text="{Binding MemoryText}" />
+                            <TextBlock Style="{StaticResource CardHint}" Text="{Binding MemoryDetails}" Margin="8,0,0,5"
+                                       VerticalAlignment="Bottom" />
+                        </DockPanel>
+                        <ProgressBar Margin="0,8,0,0" Height="4" Maximum="100" Value="{Binding MemoryPercent, Mode=OneWay}"
+                                     Foreground="{Binding MemoryPercent, Converter={StaticResource PercentToBrush}}" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Style="{StaticResource CardIcon}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE964;" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Process count -->
+            <Border Grid.Column="4" Style="{StaticResource Card}" Padding="14,12"
+                    ToolTip="Одна программа часто запускает несколько процессов: например, у браузера — по процессу на вкладку.">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardLabel}" Text="Процессы" />
+                        <TextBlock Style="{StaticResource CardNumber}" Text="{Binding ProcessCountText}" />
+                        <TextBlock Style="{StaticResource CardHint}" Text="{Binding ProgramCountText}" Margin="0,3,0,0" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Style="{StaticResource CardIcon}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE71D;" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Suspicious -->
+            <Border Grid.Column="6" Style="{StaticResource Card}" Padding="14,12"
+                    ToolTip="Процессы с признаками нежелательных программ: нет подписи, необычное расположение, маскировка под системные файлы.">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardLabel}" Text="Подозрительные" />
+                        <TextBlock Text="{Binding SuspiciousCountText}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource CardNumber}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasSuspicious}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <Grid Margin="0,3,0,0">
+                            <TextBlock Style="{StaticResource CardHint}" Text="{Binding SuspiciousHint}"
+                                       Visibility="{Binding HasSuspicious, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
+                            <Button Style="{StaticResource LinkButton}" Content="Показать в списке" FontSize="11.5" HorizontalAlignment="Left"
+                                    Command="{Binding ShowSuspiciousCommand}" ToolTip="Включить фильтр «Только подозрительные»"
+                                    Visibility="{Binding HasSuspicious, Converter={StaticResource BoolToVis}}" />
+                        </Grid>
+                    </StackPanel>
+                    <Border Grid.Column="1">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource CardIcon}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSuspicious}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE730;" HorizontalAlignment="Center">
+                            <TextBlock.Foreground>
+                                <Binding Path="HasSuspicious">
+                                    <Binding.Converter>
+                                        <local:BoolToBrushConverter TrueKey="WarningBrush" FalseKey="AccentBrush" />
+                                    </Binding.Converter>
+                                </Binding>
+                            </TextBlock.Foreground>
+                        </TextBlock>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ================= Toolbar ================= -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Width="228" Height="34" VerticalAlignment="Top">
+                <!-- The theme's TextBox template applies Padding twice (content host margin + ScrollViewer), hence half values. -->
+                <TextBox x:Name="SearchBox" Padding="15,3.5,14,0" Height="34"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                         ToolTip="Ищет по имени, описанию, издателю, пути к файлу, PID и названиям служб" />
+                <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                           Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                <TextBlock Text="Поиск: имя, путь, PID" Foreground="{StaticResource MutedBrush}" FontSize="12.5"
+                           Margin="31,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                <Button Style="{StaticResource ChevronButton}" HorizontalAlignment="Right" Margin="0,0,6,0" Click="OnClearSearch"
+                        ToolTip="Очистить поиск"
+                        Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}}">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="10" />
+                </Button>
+            </Grid>
+
+            <WrapPanel Grid.Column="1" Margin="16,0,4,0" VerticalAlignment="Top">
+                <CheckBox Content="Группировать по программам" IsChecked="{Binding GroupByProgram}" Margin="0,8,18,8"
+                          ToolTip="Объединяет все процессы одной программы (например, вкладки браузера) в одну строку. Стрелка слева раскрывает группу." />
+                <CheckBox Content="Только подозрительные" IsChecked="{Binding SuspiciousOnly}" Margin="0,8,18,8"
+                          ToolTip="Показать только процессы с оценкой «Подозрительно» или «Высокий риск»." />
+                <CheckBox Content="Скрыть системные процессы Microsoft" IsChecked="{Binding HideMicrosoft}" Margin="0,8,0,8"
+                          ToolTip="Скрывает компоненты Windows с подписью Microsoft (svchost, службы, драйверы). Программы вроде Edge или OneDrive остаются в списке." />
+            </WrapPanel>
+
+            <Button Grid.Column="2" Style="{StaticResource GhostButton}" VerticalAlignment="Top" Width="34" Height="34" Padding="0"
+                    Command="{Binding TogglePauseCommand}" ToolTip="{Binding PauseToolTip}">
+                <TextBlock Style="{StaticResource Icon}" Text="{Binding PauseGlyph}" FontSize="14" />
+            </Button>
+        </Grid>
+
+        <!-- ================= List + details ================= -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="360" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="0.5*" MinWidth="290" MaxWidth="430" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ===== Process list ===== -->
+            <Border Style="{StaticResource Card}" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <DataGrid x:Name="ProcessGrid" Margin="6,4,6,4" SizeChanged="OnGridSizeChanged"
+                              ItemsSource="{Binding Items}"
+                              SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                              SelectionMode="Single"
+                              CanUserSortColumns="True"
+                              CanUserReorderColumns="False"
+                              HorizontalScrollBarVisibility="Auto"
+                              Sorting="OnGridSorting"
+                              PreviewMouseRightButtonDown="OnGridPreviewMouseRightButtonDown"
+                              MouseDoubleClick="OnGridMouseDoubleClick"
+                              PreviewKeyDown="OnGridPreviewKeyDown"
+                              ContextMenuOpening="OnGridContextMenuOpening">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Command="{Binding KillCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE711;" Foreground="{StaticResource DangerBrush}" />
+                                            <TextBlock Text="Завершить" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding KillTreeCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE81E;" Foreground="{StaticResource DangerBrush}" />
+                                            <TextBlock Text="Завершить дерево процессов" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <Separator Style="{StaticResource {x:Type Separator}}" Margin="6,4" />
+                                <MenuItem Command="{Binding OpenLocationCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE838;" />
+                                            <TextBlock Text="Открыть расположение файла" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding CopyPathCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8C8;" />
+                                            <TextBlock Text="Копировать путь" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding SearchWebCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE774;" />
+                                            <TextBlock Text="Найти в интернете" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding VirusTotalCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8A7;" />
+                                            <TextBlock Text="Проверить на VirusTotal" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding DefenderCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xEA18;" />
+                                            <TextBlock Text="Проверить Защитником Windows" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <Separator Style="{StaticResource {x:Type Separator}}" Margin="6,4" />
+                                <MenuItem Command="{Binding QuarantineCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE72E;" />
+                                            <TextBlock Text="В карантин" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                                <MenuItem Command="{Binding TrustCommand}">
+                                    <MenuItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8FB;" />
+                                            <TextBlock Text="{Binding SelectedItem.TrustButtonText, FallbackValue=Доверять}" />
+                                        </StackPanel>
+                                    </MenuItem.Header>
+                                </MenuItem>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn SortMemberPath="Name" Width="*" MinWidth="140">
+                                <DataGridTemplateColumn.Header>
+                                    <TextBlock Text="Имя" />
+                                </DataGridTemplateColumn.Header>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate DataType="{x:Type local:ProcessItem}">
+                                        <Grid Background="Transparent">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="22" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border x:Name="Indent" Width="0" />
+                                            <Button x:Name="Chevron" Grid.Column="1" Style="{StaticResource ChevronButton}" Visibility="Hidden"
+                                                    HorizontalAlignment="Left"
+                                                    Command="{Binding DataContext.ToggleExpandCommand, ElementName=Root}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock x:Name="ChevronGlyph" Style="{StaticResource Icon}" Text="&#xE76C;" FontSize="10" />
+                                            </Button>
+                                            <TextBlock Grid.Column="2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                                <Run Text="{Binding PrimaryText, Mode=OneWay}" />
+                                                <Run Text="  " />
+                                                <Run Text="{Binding SecondaryText, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" FontSize="11.5" />
+                                            </TextBlock>
+                                            <Border x:Name="Count" Grid.Column="3" Style="{StaticResource Badge}" Margin="6,0,2,0"
+                                                    Visibility="Collapsed" ToolTip="{Binding CountToolTip}">
+                                                <TextBlock Text="{Binding CountText}" FontSize="11" Foreground="{StaticResource MutedBrush}" />
+                                            </Border>
+                                        </Grid>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding HasChildren}" Value="True">
+                                                <Setter TargetName="Chevron" Property="Visibility" Value="Visible" />
+                                                <Setter TargetName="Count" Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                <Setter TargetName="ChevronGlyph" Property="Text" Value="&#xE70D;" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsChild}" Value="True">
+                                                <Setter TargetName="Indent" Property="Width" Value="22" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTextColumn Binding="{Binding CpuText}" SortMemberPath="Cpu" Width="62"
+                                                ElementStyle="{StaticResource CellText}">
+                                <DataGridTextColumn.Header>
+                                    <TextBlock Text="ЦП" ToolTip="Доля всей мощности процессора за последние 2 секунды (как в Диспетчере задач)." />
+                                </DataGridTextColumn.Header>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn Binding="{Binding MemoryText}" SortMemberPath="Memory" Width="84"
+                                                ElementStyle="{StaticResource CellText}">
+                                <DataGridTextColumn.Header>
+                                    <TextBlock Text="Память"
+                                               ToolTip="Частный рабочий набор — оперативная память, которую занимает только этот процесс (как в Диспетчере задач)." />
+                                </DataGridTextColumn.Header>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn x:Name="PublisherColumn" Binding="{Binding PublisherText}" SortMemberPath="Publisher" Width="0.42*" MinWidth="80"
+                                                ElementStyle="{StaticResource CellMuted}">
+                                <DataGridTextColumn.Header>
+                                    <TextBlock Text="Издатель"
+                                               ToolTip="Кто выпустил программу. Если у файла есть действительная цифровая подпись, показан её владелец." />
+                                </DataGridTextColumn.Header>
+                            </DataGridTextColumn>
+
+                            <DataGridTemplateColumn SortMemberPath="Status" Width="122" CellTemplate="{StaticResource StatusBadge}">
+                                <DataGridTemplateColumn.Header>
+                                    <TextBlock Text="Оценка"
+                                               ToolTip="Проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор." />
+                                </DataGridTemplateColumn.Header>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Empty state -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24,40,24,24" MaxWidth="360"
+                                Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                        <Border Width="52" Height="52" CornerRadius="26" Background="{StaticResource Surface2Brush}">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="22" Foreground="{StaticResource MutedBrush}"
+                                       HorizontalAlignment="Center" />
+                        </Border>
+                        <TextBlock Style="{StaticResource H3}" Text="{Binding EmptyTitle}" HorizontalAlignment="Center" Margin="0,12,0,4"
+                                   TextAlignment="Center" TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{Binding EmptyText}" TextAlignment="Center" />
+                        <Button Content="Сбросить фильтры" HorizontalAlignment="Center" Margin="0,12,0,0" Padding="12,6"
+                                Command="{Binding ResetFiltersCommand}"
+                                Visibility="{Binding ShowResetFilters, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+
+                    <!-- Hint: what admin rights would reveal -->
+                    <Border Grid.Row="1" Margin="10,0,10,10" Padding="10,7" CornerRadius="6" Background="{StaticResource InfoSoftBrush}"
+                            Visibility="{Binding ShowAdminHint, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" FontSize="14" Foreground="{StaticResource InfoBrush}"
+                                       VerticalAlignment="Top" Margin="0,1,9,0" />
+                            <TextBlock Grid.Column="1" Text="{Binding AdminHintText}" FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextBrush}" />
+                            <Button Grid.Column="2" Style="{StaticResource LinkButton}" Content="Перезапустить" FontSize="12"
+                                    Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding RestartAsAdminCommand}"
+                                    ToolTip="Перезапустить WaterCa7s PC Cleaner от имени администратора" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ===== Details ===== -->
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0" SizeChanged="OnDetailsSizeChanged">
+                <Grid>
+                    <!-- Nothing selected -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="28"
+                                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                        <Border Width="56" Height="56" CornerRadius="28" Background="{StaticResource Surface2Brush}">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE9F5;" FontSize="24" Foreground="{StaticResource MutedBrush}"
+                                       HorizontalAlignment="Center" />
+                        </Border>
+                        <TextBlock Style="{StaticResource H3}" Text="Выберите процесс" HorizontalAlignment="Center" Margin="0,12,0,4" />
+                        <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
+                                   Text="Нажмите на строку в списке — здесь появится, что это за программа, кто её выпустил и безопасна ли она." />
+                    </StackPanel>
+
+                    <!-- Selected process / program -->
+                    <DockPanel DataContext="{Binding SelectedItem}"
+                               Visibility="{Binding DataContext.HasSelection, ElementName=Root, Converter={StaticResource BoolToVis}}">
+
+                        <!-- Actions (always visible) -->
+                        <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="9,8,9,9">
+                            <StackPanel>
+                                <UniformGrid Columns="2">
+                                    <Button Style="{StaticResource ActionDangerButton}" Command="{Binding DataContext.KillCommand, ElementName=Root}"
+                                            ToolTip="{Binding KillToolTip}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="12" Margin="0,0,7,0" />
+                                            <TextBlock Text="Завершить" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ActionDangerButton}" Command="{Binding DataContext.KillTreeCommand, ElementName=Root}"
+                                            ToolTip="{Binding KillTreeToolTip}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE81E;" FontSize="12" Margin="0,0,7,0" />
+                                            <TextBlock Text="Завершить дерево" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Button>
+                                </UniformGrid>
+                                <UniformGrid x:Name="SecondaryActions" Columns="3">
+                                    <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.OpenLocationCommand, ElementName=Root}"
+                                            ToolTip="Открыть расположение файла: папка с программой откроется в Проводнике, файл будет выделен">
+                                        <DockPanel>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" Margin="0,0,6,0" />
+                                            <TextBlock Text="Папка" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.SearchWebCommand, ElementName=Root}"
+                                            ToolTip="Найти в интернете, что это за программа (по имени файла и издателю)">
+                                        <DockPanel>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" Margin="0,0,6,0" />
+                                            <TextBlock Text="В сети" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.VirusTotalCommand, ElementName=Root}"
+                                            ToolTip="Проверить на VirusTotal: откроется отчёт по отпечатку файла (SHA-256). Сам файл никуда не отправляется.">
+                                        <DockPanel>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="13" Margin="0,0,6,0" />
+                                            <TextBlock Text="VirusTotal" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.DefenderCommand, ElementName=Root}"
+                                            ToolTip="Проверить Защитником Windows (Microsoft Defender). Если он найдёт угрозу, то обезвредит её сам.">
+                                        <DockPanel>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" Margin="0,0,6,0" />
+                                            <TextBlock Text="Защитник" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.QuarantineCommand, ElementName=Root}"
+                                            ToolTip="{Binding QuarantineToolTip}">
+                                        <DockPanel>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" FontSize="13" Margin="0,0,6,0" />
+                                            <TextBlock Text="Карантин" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.TrustCommand, ElementName=Root}"
+                                            ToolTip="{Binding TrustToolTip}" IsEnabled="{Binding CanTrust}">
+                                        <DockPanel>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" Margin="0,0,6,0" />
+                                            <TextBlock Text="{Binding TrustButtonText}" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Button>
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Margin="16,14,16,16">
+                                <!-- Header -->
+                                <TextBlock Style="{StaticResource H2}" Text="{Binding FriendlyName}" TextWrapping="Wrap" Margin="0" />
+                                <TextBlock Style="{StaticResource Muted}" Text="{Binding HeaderSubtitle}" Margin="0,2,0,0" />
+                                <WrapPanel Margin="0,8,0,0">
+                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource StatusBadge}" Margin="0,0,6,4"
+                                                    Focusable="False" />
+                                    <Border Style="{StaticResource Badge}" Margin="0,0,6,4"
+                                            Visibility="{Binding SignatureBadgeText, Converter={StaticResource HasValueToVis}}">
+                                        <TextBlock Text="{Binding SignatureBadgeText}" FontSize="11.5"
+                                                   Foreground="{Binding SignatureKind, Converter={StaticResource SeverityToBrush}}" />
+                                    </Border>
+                                    <Border Style="{StaticResource Badge}" Background="{StaticResource InfoSoftBrush}" Margin="0,0,6,4"
+                                            Visibility="{Binding IsProtected, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="Защищён" FontSize="11.5" Foreground="{StaticResource InfoBrush}" />
+                                    </Border>
+                                </WrapPanel>
+
+                                <!-- Suspicion reasons -->
+                                <Border Margin="0,10,0,0" Padding="11,9" CornerRadius="8"
+                                        Visibility="{Binding HasReasons, Converter={StaticResource BoolToVis}}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                                            <Setter Property="TextElement.Foreground" Value="{StaticResource WarningBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.High}">
+                                                    <Setter Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                                                    <Setter Property="TextElement.Foreground" Value="{StaticResource DangerBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Low}">
+                                                    <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                                                    <Setter Property="TextElement.Foreground" Value="{StaticResource InfoBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13" Margin="0,0,8,0" />
+                                            <TextBlock Text="Почему стоит обратить внимание" FontWeight="SemiBold" FontSize="12.5" />
+                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding Reasons}" Margin="0,6,0,0" Focusable="False">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,2">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="14" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="•" FontSize="12.5" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding}" Style="{StaticResource FieldValue}" FontSize="12" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,6,0,0"
+                                                   Text="Это подсказка, а не приговор. Если сомневаетесь — проверьте файл на VirusTotal или Защитником Windows." />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Protection / warning -->
+                                <Border Margin="0,10,0,0" Padding="11,9" CornerRadius="8"
+                                        Visibility="{Binding ProtectionText, Converter={StaticResource HasValueToVis}}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsProtected}" Value="True">
+                                                    <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" FontSize="13" VerticalAlignment="Top"
+                                                   Margin="0,2,9,0" Foreground="{StaticResource InfoBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding ProtectionText}" Style="{StaticResource FieldValue}" FontSize="12" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- All good -->
+                                <Border Margin="0,10,0,0" Padding="11,8" CornerRadius="8" Background="{StaticResource AccentSoftBrush}"
+                                        Visibility="{Binding IsVerifiedClean, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE930;" FontSize="13" Foreground="{StaticResource SuccessBrush}"
+                                                   Margin="0,0,8,0" />
+                                        <TextBlock Text="Ничего подозрительного не найдено" FontSize="12.5" Foreground="{StaticResource SuccessBrush}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Margin="0,10,0,0" Padding="11,8" CornerRadius="8" Background="{StaticResource AccentSoftBrush}"
+                                        Visibility="{Binding IsTrusted, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Style="{StaticResource FieldValue}" FontSize="12" Foreground="{StaticResource AccentBrush}"
+                                               Text="Вы отметили программу как доверенную — предупреждения о ней не показываются." />
+                                </Border>
+
+                                <!-- Numbers -->
+                                <Border Style="{StaticResource InnerCard}" Margin="0,10,0,0" Padding="12,9">
+                                    <UniformGrid Columns="3">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="ЦП" />
+                                            <TextBlock Text="{Binding CpuText}" FontSize="16" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="Память" />
+                                            <TextBlock Text="{Binding MemoryText}" FontSize="16" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="Процессов" />
+                                            <TextBlock Text="{Binding InstanceCountText}" FontSize="16" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                    </UniformGrid>
+                                </Border>
+
+                                <!-- Facts -->
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Расположение" />
+                                <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PathText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Издатель" />
+                                <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PublisherText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Цифровая подпись"
+                                           ToolTip="Подпись подтверждает, кто выпустил файл и что его никто не изменил." />
+                                <TextBlock Style="{StaticResource FieldValue}" Text="{Binding SignatureText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Описание" />
+                                <TextBlock Style="{StaticResource FieldValue}" Text="{Binding DescriptionText}" />
+
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Запущен" />
+                                <TextBlock Style="{StaticResource FieldValue}" Text="{Binding StartTimeText}" />
+
+                                <StackPanel Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Процессы программы" />
+                                    <TextBlock Style="{StaticResource FieldValue}" Text="{Binding InstancesText}" />
+                                    <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,3,0,0"
+                                               Text="Раскройте группу в списке (стрелка слева от имени), чтобы увидеть каждый процесс отдельно." />
+                                </StackPanel>
+
+                                <StackPanel Visibility="{Binding ShowInstanceDetails, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Родительский процесс"
+                                               ToolTip="Процесс, который запустил этот." />
+                                    <TextBlock Style="{StaticResource FieldValue}" Text="{Binding MainRow.ParentText}" />
+
+                                    <StackPanel Visibility="{Binding MainRow.HasServices, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Службы внутри процесса" />
+                                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding MainRow.ServicesText}" />
+                                    </StackPanel>
+
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Командная строка"
+                                               ToolTip="С какими параметрами запущена программа." />
+                                    <Border Style="{StaticResource InnerCard}" Padding="9,7">
+                                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding MainRow.CommandLineText}"
+                                                   FontFamily="Cascadia Mono, Consolas" FontSize="11.5" />
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Defender result -->
+                                <Border Style="{StaticResource InnerCard}" Margin="0,12,0,0" Padding="11,9"
+                                        Visibility="{Binding DefenderStatus, Converter={StaticResource HasValueToVis}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" VerticalAlignment="Top"
+                                                   Margin="0,2,9,0" Foreground="{StaticResource AccentBrush}" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Style="{StaticResource FieldValue}" FontSize="12" Text="{Binding DefenderStatus}" />
+                                            <ProgressBar Margin="0,7,0,0" Height="3" IsIndeterminate="True"
+                                                         Visibility="{Binding IsDefenderScanning, Converter={StaticResource BoolToVis}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
 </UserControl>
