@@ -355,7 +355,7 @@ public class StartupLogicTests
     {
         var path = @"C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26090.9-0\MsMpEng.exe";
         var raw = Suspicion.Analyze(path, Microsoft);
-        Assert.True(raw.Score >= 60); // core heuristic alone flags the name
+        Assert.Equal(SuspicionLevel.None, raw.Level); // core now exempts Microsoft-signed binaries
 
         Assert.Equal(SuspicionLevel.None, StartupService.WithoutGenuineMicrosoftNames(raw, Microsoft).Level);
 
