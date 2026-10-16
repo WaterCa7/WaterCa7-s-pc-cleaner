@@ -186,7 +186,9 @@ public static class NetworkRules
         @"gigabit|\bgbe\b|\d(\.\d)?\s*gbe|\b(1|2\.5|5|10)\s*g(b|bps|bit)?\b|2\.5g|10/100/1000|1000base",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly Regex FastEthernetOnlyPattern = new(@"fast ethernet|\b10/100\b(?!/1000)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    /// <summary>Cards that only support 100 Мбит/с ("Realtek USB FE Family Controller" = USB Fast Ethernet dongle).</summary>
+    private static readonly Regex FastEthernetOnlyPattern = new(@"fast ethernet|\b10/100\b(?!/1000)|\bfe family\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>The adapter's name says it supports 1 Gbit/s or more (Gigabit, GbE, 2.5G…).</summary>
     public static bool MentionsGigabit(string? description) => !string.IsNullOrEmpty(description) && GigabitPattern.IsMatch(description);
@@ -426,6 +428,20 @@ public static class NetworkRules
         [9150] = "сеть Tor — через неё вирусы прячут связь со своими серверами (Tor Browser тоже её использует)",
     };
 
+    /// <summary>
+    /// Torrent and other peer-to-peer clients connect to hundreds of peers that listen on random ports, so a peer on
+    /// 7777 or 5555 means nothing for them.
+    /// </summary>
+    private static readonly HashSet<string> PeerToPeerClients = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "qbittorrent.exe", "utorrent.exe", "utweb.exe", "bittorrent.exe", "bitcomet.exe", "transmission-qt.exe",
+        "transmission-daemon.exe", "deluge.exe", "deluged.exe", "tixati.exe", "biglybt.exe", "azureus.exe", "vuze.exe",
+        "frostwire.exe", "emule.exe", "aria2c.exe", "picotorrent.exe", "mediaget.exe", "zona.exe", "motrix.exe", "fdm.exe",
+        "tribler.exe", "webtorrent.exe",
+    };
+
+    public static bool IsPeerToPeerClient(ProcessIdentity process) => PeerToPeerClients.Contains(process.Name);
+
     public static bool IsRiskyPort(SocketProtocol protocol, int port)
         => (protocol == SocketProtocol.Tcp ? RiskyTcp : RiskyUdp).ContainsKey(port);
 
@@ -498,9 +514,11 @@ public static class NetworkRules
                 "Главное — не пробрасывайте их на роутере (проброс портов, DMZ) и не выключайте брандмауэр.");
         }
 
-        return (PortKind.App, service,
-            $"{owner.DisplayName} принимает подключения из локальной сети. Обычно это нормально: так работают синхронизация, " +
-            "игры, мессенджеры и передача файлов. Насторожиться стоит, если вы не знаете эту программу.");
+        return (PortKind.App, service, protocol == SocketProtocol.Udp
+            ? $"{owner.DisplayName} получает данные по UDP через этот порт. Обычно это нормально: так работают звонки, игры, " +
+              "трансляции, VPN и быстрые соединения браузеров (QUIC). Насторожиться стоит, если вы не знаете эту программу."
+            : $"{owner.DisplayName} принимает подключения из локальной сети. Обычно это нормально: так работают синхронизация, " +
+              "игры, мессенджеры и передача файлов. Насторожиться стоит, если вы не знаете эту программу.");
     }
 
     public static string PortKindText(PortKind kind, ProcessIdentity owner) => kind switch
@@ -555,6 +573,12 @@ public static class NetworkRules
     /// </summary>
     public static List<ConnectionRow> BuildConnections(SocketSnapshot snapshot, bool includeLoopback)
     {
+        // Connections accepted on a listening port were opened by the other side: their remote port is just the
+        // other computer's outgoing port (behind a provider NAT it can be any number), not a server it connects to.
+        var listening = snapshot.Entries
+            .Where(e => e.Protocol == SocketProtocol.Tcp && e.State == TcpState.Listen)
+            .Select(e => (e.Pid, e.LocalPort))
+            .ToHashSet();
         var rows = new List<ConnectionRow>();
         foreach (var e in snapshot.Entries)
         {
@@ -564,12 +588,14 @@ public static class NetworkRules
             var scope = NetAddress.Classify(e.RemoteAddress);
             if (scope == AddressScope.Loopback && !includeLoopback)
                 continue;
-            var suspicious = scope == AddressScope.Public && e.State is TcpState.Established or TcpState.SynSent
+            var owner = snapshot.Owner(e.Pid);
+            var outgoing = (e.State is TcpState.Established or TcpState.SynSent) && !listening.Contains((e.Pid, e.LocalPort));
+            var suspicious = scope == AddressScope.Public && outgoing && !IsPeerToPeerClient(owner)
                 ? SuspiciousRemotePortReason(e.RemotePort)
                 : null;
             rows.Add(new ConnectionRow
             {
-                Process = snapshot.Owner(e.Pid),
+                Process = owner,
                 RemoteAddress = e.RemoteAddress,
                 RemotePort = e.RemotePort,
                 LocalPort = e.LocalPort,

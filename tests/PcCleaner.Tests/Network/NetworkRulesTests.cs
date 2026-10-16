@@ -159,6 +159,8 @@ public class AdapterRulesTests
     [InlineData(AdapterKind.Ethernet, "Some Gigabit Adapter", 500_000_000, true)]
     [InlineData(AdapterKind.Ethernet, "ASIX AX88772 USB 2.0 to Fast Ethernet Adapter", 100_000_000, false)]
     [InlineData(AdapterKind.Ethernet, "Realtek USB 10/100 LAN", 100_000_000, false)]
+    [InlineData(AdapterKind.Ethernet, "Realtek USB FE Family Controller", 100_000_000, false)] // 100 Мбит/с is its maximum
+    [InlineData(AdapterKind.Ethernet, "Realtek USB GbE Family Controller", 100_000_000, true)]
     [InlineData(AdapterKind.Ethernet, "Intel(R) Ethernet Connection", -1, false)]
     [InlineData(AdapterKind.WiFi, "Intel(R) Wi-Fi 6 AX201", 100_000_000, false)]
     [InlineData(AdapterKind.Vpn, "TAP-Windows Adapter V9", 100_000_000, false)]

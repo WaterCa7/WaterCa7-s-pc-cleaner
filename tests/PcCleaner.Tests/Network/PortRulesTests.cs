@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.NetworkInformation;
 using PcCleaner.Modules.Network;
 using Xunit;
@@ -7,6 +8,8 @@ namespace PcCleaner.Tests.Network;
 
 public class PortRulesTests
 {
+    public PortRulesTests() => TestEnvironment.Init();
+
     [Theory]
     [InlineData(21)]
     [InlineData(23)]
@@ -63,6 +66,15 @@ public class PortRulesTests
         Assert.Contains("Spotify", service);
     }
 
+    [Fact]
+    public void UdpPortOfAProgram_IsNotDescribedAsAcceptingConnections()
+    {
+        var (kind, _, explanation) = NetworkRules.ClassifyPort(SocketProtocol.Udp, 51542, isNetwork: true, Chrome);
+        Assert.Equal(PortKind.App, kind);
+        Assert.Contains("UDP", explanation);
+        Assert.DoesNotContain("принимает подключения", explanation);
+    }
+
     [Theory]
     [InlineData(4444)]
     [InlineData(1337)]
@@ -101,6 +113,37 @@ public class PortRulesTests
         Assert.Equal(3, rows.Count);
         Assert.Single(rows, r => r.IsSuspicious);
         Assert.Equal("45.155.205.10", rows.Single(r => r.IsSuspicious).RemoteAddress.ToString());
+    }
+
+    [Fact]
+    public void BuildConnections_IncomingConnections_AreNotSuspicious()
+    {
+        // MySQL accepted a connection from a phone behind a provider NAT whose outgoing port happens to be 4444;
+        // the miner opened a connection to a server on 4444 itself.
+        var snapshot = Snapshot(
+            Listen("0.0.0.0", 3306, MySql.Pid),
+            new SocketEntry(SocketProtocol.Tcp, IPAddress.Parse("192.168.1.10"), 3306, IPAddress.Parse("85.140.10.20"), 4444,
+                TcpState.Established, MySql.Pid),
+            Connection("45.155.205.10", 4444, Miner.Pid, localPort: 3306)); // same local port, different program: outgoing
+
+        var rows = NetworkRules.BuildConnections(snapshot, includeLoopback: false);
+
+        Assert.False(rows.Single(r => r.Process.Pid == MySql.Pid).IsSuspicious);
+        Assert.True(rows.Single(r => r.Process.Pid == Miner.Pid).IsSuspicious);
+        Assert.DoesNotContain(NetworkRules.BuildFindings(new NetworkSnapshot { Sockets = snapshot }),
+            f => f.Kind == FindingKind.SuspiciousConnection && f.Issue.Title.StartsWith("mysqld.exe"));
+    }
+
+    [Fact]
+    public void BuildConnections_TorrentClientPeers_AreNotSuspicious()
+    {
+        var qbittorrent = new ProcessIdentity(7100, "qbittorrent.exe", @"C:\Program Files\qBittorrent\qbittorrent.exe", "qBittorrent", false);
+        var snapshot = new SocketSnapshot(
+            new[] { Connection("93.184.216.34", 7777, qbittorrent.Pid), Connection("93.184.216.35", 5555, qbittorrent.Pid) },
+            new Dictionary<int, ProcessIdentity> { [qbittorrent.Pid] = qbittorrent },
+            DateTime.Now);
+
+        Assert.All(NetworkRules.BuildConnections(snapshot, includeLoopback: false), r => Assert.False(r.IsSuspicious));
     }
 
     [Fact]

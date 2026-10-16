@@ -56,7 +56,11 @@ public sealed record AdapterInfo
 public readonly record struct TrafficCounters(long Received, long Sent);
 
 /// <summary>Traffic counters of all active adapters, taken at <see cref="TimestampTicks"/> (Stopwatch ticks).</summary>
-public sealed record TrafficSample(IReadOnlyDictionary<string, TrafficCounters> Counters, long TimestampTicks);
+public sealed record TrafficSample(IReadOnlyDictionary<string, TrafficCounters> Counters, long TimestampTicks)
+{
+    /// <summary>Every active adapter, including the few whose counters cannot be read.</summary>
+    public IReadOnlyCollection<string> AdapterIds { get; init; } = Counters.Keys.ToList();
+}
 
 /// <summary>A well-known server used to measure internet latency.</summary>
 public sealed record LatencyTarget(string Name, string Host, int Port = 443)

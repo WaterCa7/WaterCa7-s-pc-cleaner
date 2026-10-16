@@ -1,4 +1,6 @@
 ﻿using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Network;
@@ -106,15 +108,42 @@ public sealed class NetworkService : IHealthContributor
     public async Task<(bool Ok, string Message)> FlushDnsAsync(CancellationToken ct)
     {
         var ipconfig = Path.Combine(Environment.SystemDirectory, "ipconfig.exe");
-        var result = await ProcessRunner.RunAsync(ipconfig, "/flushdns", TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
-        if (result.Success)
+        var (ok, output, exitCode) = await RunToolAsync(ipconfig, "/flushdns", TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+        if (ok)
         {
             Log.Action("Сеть: очищен кэш DNS (ipconfig /flushdns)");
             return (true, "Кэш DNS очищен. Сайты, которые не открывались после смены адреса или DNS, должны заработать.");
         }
-        var reason = FirstLine(result.StdOut + "\n" + result.StdErr) ?? $"код {result.ExitCode}";
+        var reason = FailureReason(output) ?? $"код {exitCode}";
         Log.Warn($"Сеть: не удалось очистить кэш DNS: {reason}");
         return (false, $"Не удалось очистить кэш DNS: {reason}");
+    }
+
+    /// <summary>
+    /// Runs a console tool and decodes its output: ipconfig and netsh write UTF-8 or the OEM code page depending on the
+    /// console settings, so the raw bytes are kept (Latin-1) and decoded afterwards.
+    /// </summary>
+    private static async Task<(bool Ok, string Output, int ExitCode)> RunToolAsync(string exe, string args, TimeSpan timeout,
+        CancellationToken ct)
+    {
+        var result = await ProcessRunner.RunAsync(exe, args, timeout, ct, Encoding.Latin1).ConfigureAwait(false);
+        var output = NetworkProbes.DecodeConsoleOutput(Encoding.Latin1.GetBytes(result.StdOut + "\n" + result.StdErr));
+        return (result.Success, output, result.TimedOut ? -1 : result.ExitCode);
+    }
+
+    private static readonly Regex FailureLine = new(
+        @"fail|denied|error|could not|unable|cannot|ошиб|сбой|отказ|не удалось|не удается|не удаётся|невозможно",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// The line that explains a failure ("Resetting , failed. Access is denied."), not the tool's header or progress
+    /// lines; the last line if no line looks like an error.
+    /// </summary>
+    internal static string? FailureReason(string? output)
+    {
+        var lines = (output ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var failures = lines.Where(l => FailureLine.IsMatch(l)).Distinct().Take(2).ToList();
+        return failures.Count > 0 ? string.Join(" ", failures) : lines.LastOrDefault();
     }
 
     /// <summary>
@@ -136,25 +165,32 @@ public sealed class NetworkService : IHealthContributor
         foreach (var (args, title) in steps)
         {
             ct.ThrowIfCancellationRequested();
-            var result = await ProcessRunner.RunAsync(netsh, args, TimeSpan.FromMinutes(1), ct).ConfigureAwait(false);
-            if (result.Success)
+            var (ok, output, exitCode) = await RunToolAsync(netsh, args, TimeSpan.FromMinutes(1), ct).ConfigureAwait(false);
+            if (ok)
             {
                 Log.Action($"Сеть: {title}");
                 done.Add(title);
             }
             else
             {
-                var reason = FirstLine(result.StdOut + "\n" + result.StdErr) ?? $"код {result.ExitCode}";
+                var reason = FailureReason(output) ?? $"код {exitCode}";
                 Log.Warn($"Сеть: netsh {args} завершился с ошибкой: {reason}");
-                var prefix = done.Count > 0 ? "Выполнено: " + string.Join("; ", done) + ". " : "";
-                return (false, $"{prefix}Не удалось выполнить «netsh {args}»: {reason}");
+                var message = $"Команда «netsh {args}» завершилась с ошибкой: {reason.TrimEnd('.')}.";
+                if (done.Count > 0)
+                {
+                    // "netsh int ip reset" usually resets almost everything and fails on one protected setting; what was
+                    // reset (and the Winsock reset before it) only takes effect after a reboot.
+                    Log.Action($"Сеть: сброс сетевых настроек выполнен не полностью (netsh {args}: {reason})");
+                    message = "Выполнено: " + string.Join("; ", done) + ". " + message +
+                              " Перезагрузите компьютер — уже сброшенные параметры начнут действовать после перезагрузки. " +
+                              "Если интернет не заработает, воспользуйтесь «Параметры» → «Сеть и Интернет» → " +
+                              "«Дополнительные сетевые параметры» → «Сброс сети».";
+                }
+                return (false, message);
             }
         }
         return (true, "Сетевые настройки сброшены: " + string.Join("; ", done) +
                       ". Перезагрузите компьютер, чтобы изменения вступили в силу. Если вы пользовались статическим IP-адресом, " +
                       "своим DNS или VPN-программой, проверьте их настройки после перезагрузки.");
     }
-
-    private static string? FirstLine(string text)
-        => text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
 }

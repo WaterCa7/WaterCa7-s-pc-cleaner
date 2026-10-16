@@ -53,6 +53,7 @@ public sealed class NetworkViewModel : PageViewModel
     private bool _dnsPending;
     private bool _wifiPending;
     private bool _socketsPending;
+    private bool _stopped;
 
     private bool _hasData;
     private bool _checked;
@@ -482,13 +483,15 @@ public sealed class NetworkViewModel : PageViewModel
     }
 
     public string ConnectionsEmptyText => _sockets is null
-        ? (_socketsPending ? "Читаю таблицу соединений…" : "Не удалось прочитать таблицу соединений.")
+        ? (_socketsPending ? "Читаю таблицу соединений…" : _stopped ? StoppedSocketsText : "Не удалось прочитать таблицу соединений.")
         : !string.IsNullOrWhiteSpace(SearchText)
             ? $"Ничего не найдено по запросу «{SearchText.Trim()}»."
             : "Сейчас программы не обмениваются данными с другими компьютерами.";
 
+    private const string StoppedSocketsText = "Проверка остановлена — нажмите «Обновить», чтобы прочитать список.";
+
     public string PortsEmptyText => _sockets is null
-        ? (_socketsPending ? "Читаю таблицу портов…" : "Не удалось прочитать таблицу портов.")
+        ? (_socketsPending ? "Читаю таблицу портов…" : _stopped ? StoppedSocketsText : "Не удалось прочитать таблицу портов.")
         : !string.IsNullOrWhiteSpace(SearchText)
             ? $"Ничего не найдено по запросу «{SearchText.Trim()}»."
             : OnlyNetworkPorts
@@ -553,11 +556,24 @@ public sealed class NetworkViewModel : PageViewModel
 
     private Task RunFullCheckAsync() => RunBusyAsync("Проверяю сеть…", async ct =>
     {
+        try
+        {
+            await FullCheckAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // The user pressed "Отмена" in the busy strip: never leave the cards spinning on "проверяю…".
+            MarkStopped();
+            throw;
+        }
+    });
+
+    private async Task FullCheckAsync(CancellationToken ct)
+    {
         _checked = false;
         ReportProgress(3, "Читаю сетевые адаптеры…");
         var adapters = await _service.GetAdaptersAsync(ct);
         ApplyAdapters(adapters);
-        HasData = true;
         SetPending();
 
         var trafficStart = await Task.Run(_service.SampleTraffic, ct);
@@ -593,10 +609,87 @@ public sealed class NetworkViewModel : PageViewModel
         Log.Info(Findings.Count == 0
             ? "Сеть: проверка завершена, проблем не найдено"
             : $"Сеть: проверка завершена — {Format.Count(Findings.Count, "замечание", "замечания", "замечаний")}");
-    });
+    }
 
-    private void SetPending()
+    /// <summary>
+    /// After a cancelled check: parts that did not finish say "не проверено" instead of "проверяю…". If everything but the
+    /// upload sample was measured, the findings are still shown.
+    /// </summary>
+    internal void MarkStopped()
     {
+        if (!HasData)
+        {
+            StatusTitle = "Проверка остановлена";
+            StatusText = "Нажмите «Проверить снова», чтобы проверить сеть.";
+            StatusTone = NetTone.Neutral;
+            return;
+        }
+
+        var unfinished = _latencyPending || _dnsPending || _wifiPending || _socketsPending;
+        _stopped = unfinished;
+        if (_latencyPending)
+        {
+            _latencyPending = false;
+            OnPropertyChanged(nameof(IsLatencyRunning));
+            LatencyItems.Clear();
+            InternetValue = "—";
+            InternetHint = "не проверено";
+            InternetTone = NetTone.Neutral;
+            LatencyBadge = "не проверено";
+            LatencyTone = NetTone.Neutral;
+            LatencyNote = null;
+        }
+        if (_dnsPending)
+        {
+            _dnsPending = false;
+            DnsTimeText = "Время ответа: не проверено";
+            DnsBadge = "не проверено";
+            DnsTone = NetTone.Neutral;
+            DnsAdvice = null;
+        }
+        if (_wifiPending)
+        {
+            _wifiPending = false;
+            HasWifi = false;
+            HasWifiPercent = false;
+            WifiNote = null;
+            WifiFields = Array.Empty<AdapterField>();
+            WifiValue = "—";
+            WifiHint = "не проверено";
+            WifiTone = NetTone.Neutral;
+            WifiEmptyTitle = "Проверка остановлена";
+            WifiEmptyText = "Нажмите «Проверить снова», чтобы узнать уровень сигнала.";
+        }
+        if (_socketsPending)
+        {
+            _socketsPending = false;
+            if (_sockets is null)
+            {
+                SocketsValue = "—";
+                SocketsHint = "не проверено";
+                SocketsTone = NetTone.Neutral;
+            }
+            UpdateSocketCounts();
+        }
+
+        if (!unfinished)
+        {
+            // Only the upload sample was missing.
+            _checked = true;
+            BuildFindings();
+            LastCheckText = $"Проверено в {DateTime.Now:HH:mm}";
+            return;
+        }
+        StatusTitle = "Проверка остановлена";
+        StatusText = "Часть проверок не выполнена. Нажмите «Проверить снова», чтобы проверить сеть полностью.";
+        StatusTone = NetTone.Neutral;
+    }
+
+    /// <summary>Adapters are known: the cards appear and every other part shows "проверяю…".</summary>
+    internal void SetPending()
+    {
+        HasData = true;
+        _stopped = false;
         _latencyPending = _dnsPending = _wifiPending = _socketsPending = true;
         OnPropertyChanged(nameof(IsLatencyRunning));
         _latency = null;
@@ -747,7 +840,7 @@ public sealed class NetworkViewModel : PageViewModel
     private bool AdapterSetChanged(TrafficSample sample)
     {
         var current = Adapters.Select(a => a.Id).ToHashSet();
-        return !current.SetEquals(sample.Counters.Keys);
+        return !current.SetEquals(sample.AdapterIds);
     }
 
     // ================================================================ latency, DNS, Wi-Fi
@@ -864,7 +957,7 @@ public sealed class NetworkViewModel : PageViewModel
                               ?? connected.Name;
             var rate = connected.ReceiveMbps is null && connected.TransmitMbps is null
                 ? "—"
-                : $"{FormatMbps(connected.ReceiveMbps)} / {FormatMbps(connected.TransmitMbps)}";
+                : $"{FormatMbps(connected.ReceiveMbps)} / {FormatMbps(connected.TransmitMbps)} Мбит/с";
             WifiFields = new List<AdapterField>
             {
                 new("Диапазон", NetworkRules.BandText(connected.BandGhz),
@@ -1273,7 +1366,12 @@ public sealed class NetworkViewModel : PageViewModel
         }
         if (AppServices.Navigator is MainViewModel main &&
             main.Pages.OfType<PcCleaner.Modules.Processes.ProcessesViewModel>().FirstOrDefault() is { } processes)
+        {
+            // "Только подозрительные" or "Скрыть системные процессы Microsoft" would hide the program (svchost, System…).
+            processes.SuspiciousOnly = false;
+            processes.HideMicrosoft = false;
             processes.SearchText = process.Name;
+        }
         AppServices.Navigator?.NavigateTo("Processes");
     }
 

@@ -139,6 +139,7 @@ public static class NetworkProbes
     public static TrafficSample SampleTraffic()
     {
         var counters = new Dictionary<string, TrafficCounters>();
+        var ids = new List<string>();
         try
         {
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
@@ -147,6 +148,8 @@ public static class NetworkProbes
                 {
                     if (!IsRelevant(nic))
                         continue;
+                    // Listed even when its counters cannot be read, so the page does not take it for a new adapter.
+                    ids.Add(nic.Id);
                     var stats = nic.GetIPStatistics();
                     counters[nic.Id] = new TrafficCounters(stats.BytesReceived, stats.BytesSent);
                 }
@@ -160,7 +163,7 @@ public static class NetworkProbes
         {
             Log.Warn($"Сеть: не удалось прочитать счётчики трафика: {ex.Message}");
         }
-        return new TrafficSample(counters, Stopwatch.GetTimestamp());
+        return new TrafficSample(counters, Stopwatch.GetTimestamp()) { AdapterIds = ids };
     }
 
     /// <summary>Average upload of physical adapters between two samples, bytes/s.</summary>
@@ -336,10 +339,12 @@ public static class NetworkProbes
                         times.Add(null); // e.g. a proxy reports that the server is unreachable
                     }
                 }
-                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+                catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException)
                 {
+                    // Timeout of one request, or the overall budget ran out while reading the answer: the attempt failed,
+                    // the check itself must not fail.
                     times.Add(null);
-                    if (ex is TaskCanceledException && ct.IsCancellationRequested)
+                    if (ex is OperationCanceledException && ct.IsCancellationRequested)
                         break;
                 }
             }

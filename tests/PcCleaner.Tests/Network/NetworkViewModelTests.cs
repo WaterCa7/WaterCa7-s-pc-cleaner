@@ -142,6 +142,26 @@ public class NetworkViewModelTests
     }
 
     [Fact]
+    public void CancelledCheck_DoesNotLeaveCardsSpinning()
+    {
+        var vm = new NetworkViewModel(new NetworkService());
+        vm.SetPending();
+        Assert.True(vm.IsLatencyRunning);
+        Assert.Contains(vm.LatencyItems, i => i.IsPending);
+
+        vm.MarkStopped();
+
+        Assert.False(vm.IsLatencyRunning);
+        Assert.DoesNotContain(vm.LatencyItems, i => i.IsPending);
+        Assert.Equal("Проверка остановлена", vm.StatusTitle);
+        Assert.Equal("не проверено", vm.InternetHint);
+        Assert.Equal("не проверено", vm.LatencyBadge);
+        Assert.Equal("не проверено", vm.DnsBadge);
+        Assert.DoesNotContain("…", vm.InternetValue + vm.SocketsValue + vm.WifiValue);
+        Assert.Contains("остановлена", vm.ConnectionsEmptyText);
+    }
+
+    [Fact]
     public void Tools_AreDeclinedInSilentMode_AndChangeNothing()
     {
         var vm = new NetworkViewModel(new NetworkService());

@@ -94,9 +94,16 @@ public sealed class ProcessIdentities
         var stem = Path.GetFileNameWithoutExtension(exe);
         var known = SystemProcesses.TryGetValue(stem, out var friendly);
         var display = Describe(path) ?? (known ? friendly! : stem);
-        var isWindows = path is not null ? Suspicion.IsUnder(path, WindowsDir) : known;
+        var isWindows = path is not null ? IsWindowsPath(path) : known;
         return new ProcessIdentity(pid, exe, path, display, isWindows);
     }
+
+    /// <summary>
+    /// A program of Windows itself: inside the Windows folder, but not in C:\Windows\Temp (anyone can put a file there,
+    /// and a port opened by such a file must not be labelled "Windows").
+    /// </summary>
+    internal static bool IsWindowsPath(string path)
+        => Suspicion.IsUnder(path, WindowsDir) && Suspicion.DescribeRiskyLocation(path) is null;
 
     private static string? Describe(string? path)
     {
