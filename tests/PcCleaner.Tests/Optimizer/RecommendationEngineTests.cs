@@ -33,9 +33,9 @@ public class RecommendationEngineTests
         Assert.NotNull(rec);
         Assert.Equal(RecommendationKind.Manual, rec!.Kind);
         Assert.Equal(RecommendationImpact.High, rec.Impact);
-        Assert.Contains("2666", rec.Title);
-        Assert.Contains("3200", rec.Title);
-        Assert.Contains("XMP", rec.Title);
+        Assert.Equal("Память работает без XMP/EXPO", rec.Title); // 2666 is a JEDEC speed for DDR4
+        Assert.Contains("2666", rec.CurrentValue);
+        Assert.Contains("3200", rec.CurrentValue);
         Assert.NotEmpty(rec.Steps);
     }
 
@@ -87,7 +87,7 @@ public class RecommendationEngineTests
         var items = Evaluate(hw, GoodSettings());
         var rec = items.Find("RamSpeed");
         Assert.NotNull(rec);
-        Assert.Contains("2133", rec!.Title);
+        Assert.Equal("2133 МГц из 4400 МГц", rec!.CurrentValue);
         Assert.DoesNotContain(items, r => r.CurrentValue?.Contains("4266", StringComparison.Ordinal) == true);
     }
 
@@ -118,9 +118,14 @@ public class RecommendationEngineTests
     [Fact]
     public void Ddr4AtJedecBaseSpeed_SuggestsCheckingXmpAsInfo()
     {
+        // OEM part number that does not tell the rated speed: only a hint to check the module sticker.
         var hw = GoodDesktop() with
         {
-            RamModules = new[] { Stick(rated: 2133, configured: 2133, locator: "ChannelA-DIMM1"), Stick(rated: 2133, configured: 2133, locator: "ChannelB-DIMM1") },
+            RamModules = new[]
+            {
+                Stick(rated: 2133, configured: 2133, locator: "ChannelA-DIMM1", part: "99U5701-011.A00G"),
+                Stick(rated: 2133, configured: 2133, locator: "ChannelB-DIMM1", part: "99U5701-011.A00G"),
+            },
         };
         var items = Evaluate(hw, GoodSettings());
         Assert.Null(items.Find("RamSpeed"));

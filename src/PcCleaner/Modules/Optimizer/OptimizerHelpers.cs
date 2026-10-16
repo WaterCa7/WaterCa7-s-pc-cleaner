@@ -154,6 +154,237 @@ public static class HardwareText
     }
 
     public static string DaysText(TimeSpan span) => Format.Count((long)span.TotalDays, "день", "дня", "дней");
+
+    // ===================== Memory part numbers =====================
+
+    private const RegexOptions PartOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+
+    /// <summary>
+    /// Vendor part-number patterns that encode the rated speed. Group "s2" = two-digit speed code (32 = 3200, 26 = 2666),
+    /// "s3" = three-digit code (320 = 3200, 266 = 2666), "s4" = full MT/s. Group "g" = DDR generation (3/4/5) when encoded.
+    /// All patterns are anchored to a vendor prefix so an unrelated number is never mistaken for a speed.
+    /// </summary>
+    private static readonly Regex[] PartPatterns =
+    {
+        // Kingston HyperX / FURY / ValueRAM / server: HX432C16FB3/8, KF560C40BBK2-32, KCP426NS8/8, KVR26N19S8/8, KSM32ES8/8ME
+        new(@"^(?:HX|KF|KCP)(?<g>[345])(?<s2>\d{2})[A-Z]", PartOptions),
+        new(@"^(?:KVR|KSM)(?<s2>\d{2})[A-Z]", PartOptions),
+        // Kingston HyperX / FURY (older naming): KHX3200C16D4/16GX, KHX1600C9D3/8G, KF3600C17D4/8GX
+        new(@"^K(?:HX|F)(?<s4>\d{4})C\d+(?:D(?<g>[345]))?", PartOptions),
+        // Corsair: CMK16GX4M2B3200C16, CMK32GX5M2B5600C36, CMSX16GX4M2A2666C18
+        new(@"^CM[A-Z0-9]*?X(?<g>[345])M\d+[A-Z](?<s4>\d{4})C\d", PartOptions),
+        // G.Skill: F4-3600C16D-16GTZNC, F5-6000J3038F16GX2-TZ5RK
+        new(@"^F(?<g>[345])-(?<s4>\d{4})[A-Z]", PartOptions),
+        // Crucial DDR4: CT8G4DFS832A, CT16G4DFRA266, CP16G4DFRA32A, CT16G4SFRA32A, CT2K8G4DFS832A (kit of two)
+        new(@"^C[TP](?:\d+K)?\d+G(?<g>4)[A-Z]{3}[A-Z0-9](?<s2>\d{2})(?:A|\d)", PartOptions),
+        // Crucial DDR5: CT16G48C40U5, CP16G60C36U5B, CT8G48C40S5
+        new(@"^C[TP](?:\d+K)?\d+G(?<s2>\d{2})C\d{2}[US](?<g>5)", PartOptions),
+        // Crucial DDR3: CT102464BA160B
+        new(@"^CT\d{5,6}B[A-Z](?<s3>\d{3})", PartOptions),
+        // Crucial Ballistix: BL8G32C16U4B, BL2K8G36C16U4B, BLM2K8G44C19U4B, BLS8G4D240FSB, BLE8G4D30AEEA
+        new(@"^BL[A-Z]?\d*K?\d+G(?<s2>\d{2})C\d{2}[US](?<g>4)", PartOptions),
+        new(@"^BL[A-Z]?\d*K?\d+G(?<g>4)D(?<s2>\d{2})", PartOptions),
+        // Samsung OEM DDR4/DDR5: M378A1K43CB2-CTD, M471A1K43DB1-CWE, M323R2GA3BB0-CQKOD
+        new(@"^M\d{3}[AR][A-Z0-9]+-C(?<sam>PB|RC|TD|VF|WE|QK|WB)", PartOptions),
+        // SK Hynix OEM DDR4: HMA81GU6CJR8N-VK, HMA851U6DJR6N-XN
+        new(@"^HMA[A-Z0-9]+-(?<hyn>TF|UH|VK|WM|XN)", PartOptions),
+        // Micron OEM: MTA8ATF1G64AZ-3G2E1, MTA16ATF2G64HZ-2G6E1
+        new(@"^MTA[A-Z0-9]+-(?<mic>\dG\d)", PartOptions),
+        // Team Group: TF3D416G3200HC16FDC01, FF3D532G6000HC38ADC01
+        new(@"^(?:T|FF)[A-Z0-9]*?D(?<g>[345])\d+G(?<s4>\d{4})HC\d", PartOptions),
+        // ADATA / XPG: AX4U320038G16A-ST10, AD4U320038G22-SGN, AD4S320038G22 (SO-DIMM), AX5U6000C3016G
+        new(@"^A[DX](?<g>[45])[US](?<s4>\d{4})", PartOptions),
+        // Patriot: PVS416G320C6K, PVE2432G360C0K, PSD48G266681
+        new(@"^PV[A-Z0-9]*?(?<g>[345])\d{1,2}G(?<s3>\d{3})C\d", PartOptions),
+        new(@"^PSD(?<g>[345])\d+G(?<s4>\d{4})", PartOptions),
+    };
+
+    private static readonly Dictionary<string, int> SamsungSpeeds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["PB"] = 2133, ["RC"] = 2400, ["TD"] = 2666, ["VF"] = 2933, ["WE"] = 3200, ["QK"] = 4800, ["WB"] = 5600,
+    };
+
+    private static readonly Dictionary<string, int> HynixSpeeds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["TF"] = 2133, ["UH"] = 2400, ["VK"] = 2666, ["WM"] = 2933, ["XN"] = 3200,
+    };
+
+    private static readonly Dictionary<string, int> MicronSpeeds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["2G1"] = 2133, ["2G3"] = 2400, ["2G4"] = 2400, ["2G6"] = 2666, ["2G9"] = 2933, ["3G2"] = 3200, ["4G8"] = 4800, ["5G6"] = 5600,
+    };
+
+    /// <summary>
+    /// Rated speed (MT/s) and DDR generation encoded in a memory module part number, e.g. Kingston "HX432C16FB3/8" -> 3200 DDR4,
+    /// Corsair "CMK16GX4M2B3200C16" -> 3200, G.Skill "F5-6000J3038F16GX2" -> 6000 DDR5, Crucial "CT8G4DFS832A" -> 3200.
+    /// Null when the vendor scheme is unknown. Windows often reports only the slow JEDEC speed in Win32_PhysicalMemory.Speed,
+    /// so the part number is the reliable way to see that a kit is rated for XMP/EXPO speeds.
+    /// </summary>
+    public static (int Speed, string? Type)? DecodeMemoryPart(string? partNumber)
+    {
+        if (string.IsNullOrWhiteSpace(partNumber))
+            return null;
+        var part = partNumber.Trim().Replace(" ", "", StringComparison.Ordinal);
+        foreach (var pattern in PartPatterns)
+        {
+            var m = pattern.Match(part);
+            if (!m.Success)
+                continue;
+            int? speed = null;
+            if (m.Groups["s4"].Success)
+                speed = int.Parse(m.Groups["s4"].Value, CultureInfo.InvariantCulture);
+            else if (m.Groups["s3"].Success)
+                speed = FromThreeDigits(int.Parse(m.Groups["s3"].Value, CultureInfo.InvariantCulture));
+            else if (m.Groups["s2"].Success)
+                speed = FromTwoDigits(int.Parse(m.Groups["s2"].Value, CultureInfo.InvariantCulture));
+            else if (m.Groups["sam"].Success && SamsungSpeeds.TryGetValue(m.Groups["sam"].Value, out var sam))
+                speed = sam;
+            else if (m.Groups["hyn"].Success && HynixSpeeds.TryGetValue(m.Groups["hyn"].Value, out var hyn))
+                speed = hyn;
+            else if (m.Groups["mic"].Success && MicronSpeeds.TryGetValue(m.Groups["mic"].Value, out var mic))
+                speed = mic;
+            if (speed is not (>= 800 and <= 12000))
+                continue;
+            var type = m.Groups["g"].Success ? "DDR" + m.Groups["g"].Value : GuessDdrType(speed.Value);
+            return (speed.Value, type);
+        }
+        return null;
+    }
+
+    /// <summary>Rated speed from a part number, or null (see <see cref="DecodeMemoryPart"/>).</summary>
+    public static int? RatedSpeedFromPartNumber(string? partNumber) => DecodeMemoryPart(partNumber)?.Speed;
+
+    /// <summary>
+    /// Standard JEDEC modules that have no XMP/EXPO profile at all: OEM Samsung (M3xx/M4xx), SK Hynix (HMA/HMCG),
+    /// Micron (MTA), Kingston ValueRAM / Server / Client Premier (KVR/KSM/KCP) and basic Crucial (CT). Such a module
+    /// running below its rating is held back by the processor or the board — there is no profile to switch on.
+    /// </summary>
+    private static readonly Regex[] JedecOnlyPatterns =
+    {
+        new(@"^M\d{3}[AR][A-Z0-9]+-C", PartOptions),
+        new(@"^HM(?:A|CG)[A-Z0-9]+-", PartOptions),
+        new(@"^MTA\d", PartOptions),
+        new(@"^(?:KVR|KSM|KCP)\d", PartOptions),
+        new(@"^CT(?:\d+K)?\d", PartOptions),
+    };
+
+    /// <summary>True for a standard module without an XMP/EXPO profile (see <see cref="JedecOnlyPatterns"/>).</summary>
+    public static bool IsJedecOnlyPart(string? partNumber)
+    {
+        if (string.IsNullOrWhiteSpace(partNumber))
+            return false;
+        var part = partNumber.Trim().Replace(" ", "", StringComparison.Ordinal);
+        return JedecOnlyPatterns.Any(p => p.IsMatch(part));
+    }
+
+    /// <summary>Two-digit speed codes: 32 -> 3200, 26 -> 2666, 21 -> 2133, 48 -> 4800.</summary>
+    private static int FromTwoDigits(int code) => code switch
+    {
+        10 => 1066,
+        13 => 1333,
+        18 => 1866,
+        21 => 2133,
+        26 => 2666,
+        29 => 2933,
+        34 => 3466,
+        37 => 3733,
+        42 => 4266,
+        53 => 5333,
+        _ => code * 100,
+    };
+
+    /// <summary>Three-digit speed codes: 320 -> 3200, 266 -> 2666, 160 -> 1600.</summary>
+    private static int FromThreeDigits(int code) => code switch
+    {
+        106 => 1066,
+        133 => 1333,
+        186 => 1866,
+        213 => 2133,
+        266 => 2666,
+        293 => 2933,
+        346 => 3466,
+        373 => 3733,
+        426 => 4266,
+        _ => code * 10,
+    };
+
+    /// <summary>Only used when the part number does not name the generation; speeds of DDR3/4/5 barely overlap.</summary>
+    private static string? GuessDdrType(int speed) => speed switch
+    {
+        <= 2133 => null, // DDR3-2133 and DDR4-2133 both exist
+        < 4400 => "DDR4",
+        _ => "DDR5",
+    };
+
+    // ===================== Firmware / sensors =====================
+
+    /// <summary>GetFirmwareType / PEFirmwareType value: 1 = legacy BIOS, 2 = UEFI, anything else = unknown.</summary>
+    public static BootMode BootModeFrom(int? firmwareType) => firmwareType switch
+    {
+        1 => BootMode.LegacyBios,
+        2 => BootMode.Uefi,
+        _ => BootMode.Unknown,
+    };
+
+    /// <summary>
+    /// MSAcpi_ThermalZoneTemperature.CurrentTemperature (tenths of a kelvin) -> °C. Null for values no real sensor
+    /// reports (many boards return 0 or a placeholder): only 5..125 °C is accepted.
+    /// </summary>
+    public static double? KelvinTenthsToCelsius(long? tenthsOfKelvin)
+    {
+        if (tenthsOfKelvin is not > 0)
+            return null;
+        var celsius = Math.Round(tenthsOfKelvin.Value / 10.0 - 273.15, 1);
+        return celsius is >= 5 and <= 125 ? celsius : null;
+    }
+
+    /// <summary>"52 °C".</summary>
+    public static string Celsius(double value) => Math.Round(value).ToString("0", CultureInfo.InvariantCulture) + " °C";
+
+    /// <summary>
+    /// CPU load from GetSystemTimes deltas (100 ns units; kernel time includes idle), excluding <paramref name="ownBusy"/> —
+    /// the CPU time this app used meanwhile, so our own scanning never looks like a busy PC. 0..100, null if no time passed.
+    /// </summary>
+    public static double? CpuLoadPercent(ulong idleDelta, ulong kernelDelta, ulong userDelta, long ownBusy = 0)
+    {
+        var total = (double)kernelDelta + userDelta;
+        if (total <= 0)
+            return null;
+        var busy = total - idleDelta - Math.Max(0, ownBusy);
+        return Math.Clamp(100.0 * busy / total, 0, 100);
+    }
+
+    /// <summary>
+    /// Design and full-charge capacity (mWh) summed over the batteries that report both, paired by WMI InstanceName — a
+    /// laptop with two batteries must never compare two design capacities with one full charge (that would look like heavy
+    /// wear). Without instance names the two lists are used only when they have the same length. (0, 0) = unknown.
+    /// </summary>
+    public static (long Designed, long Full) BatteryCapacities(IReadOnlyList<(string? Instance, long Designed)> designed,
+        IReadOnlyList<(string? Instance, long Full)> full)
+    {
+        if (designed.Count == 0 || full.Count == 0)
+            return (0, 0);
+        if (designed.All(d => !string.IsNullOrWhiteSpace(d.Instance)) && full.All(f => !string.IsNullOrWhiteSpace(f.Instance)))
+        {
+            long d = 0, f = 0;
+            foreach (var (instance, design) in designed)
+            {
+                var match = full.FirstOrDefault(x => string.Equals(x.Instance, instance, StringComparison.OrdinalIgnoreCase));
+                if (design > 0 && match.Full > 0)
+                {
+                    d += design;
+                    f += match.Full;
+                }
+            }
+            return (d, f);
+        }
+        if (designed.Count != full.Count || designed.Any(x => x.Designed <= 0) || full.Any(x => x.Full <= 0))
+            return (0, 0);
+        return (designed.Sum(x => x.Designed), full.Sum(x => x.Full));
+    }
+
+    /// <summary>"45,2 Вт·ч" from milliwatt-hours.</summary>
+    public static string WattHours(long mwh) => (mwh / 1000.0).ToString(mwh >= 100_000 ? "0" : "0.#", Format.Ru) + " Вт·ч";
 }
 
 /// <summary>Classifies video adapters by name and PnP id.</summary>

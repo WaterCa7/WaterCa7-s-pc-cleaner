@@ -27,6 +27,15 @@ public sealed class HardwareCard
     /// <summary>Text for "Найти в интернете" (full device name).</summary>
     public string? SearchQuery { get; init; }
 
+    /// <summary>Optional action button at the bottom of the card, handled by the page (see <see cref="HardwareCardActions"/>).</summary>
+    public string? ActionId { get; init; }
+
+    public string? ActionText { get; init; }
+
+    public string? ActionToolTip { get; init; }
+
+    public bool HasAction => !string.IsNullOrEmpty(ActionId) && !string.IsNullOrEmpty(ActionText);
+
     public bool HasBadge => !string.IsNullOrEmpty(Badge);
     public bool HasPrimary => !string.IsNullOrEmpty(Primary);
     public bool HasToolTip => !string.IsNullOrWhiteSpace(ToolTipText);
@@ -48,6 +57,12 @@ public sealed class HardwareCard
             return sb.ToString().TrimEnd();
         }
     }
+}
+
+/// <summary>Ids of the card action buttons.</summary>
+public static class HardwareCardActions
+{
+    public const string BatteryReport = "BatteryReport";
 }
 
 /// <summary>Clipboard access that never throws (the clipboard can be locked by another app).</summary>
@@ -78,19 +93,35 @@ public static class HardwareCardBuilder
 
         var cards = new List<HardwareCard>
         {
-            Cpu(hw),
+            Cpu(hw, s),
             Gpu(hw, now),
             Memory(hw, items, Has),
             Disk(hw),
             Monitor(hw, HasPrefix("Refresh:")),
-            Board(hw, Has("BiosOld")),
+            Platform(hw, Has("BiosOld")),
             Windows(hw, s, Has("Uptime")),
             Power(hw, s),
         };
+        if (hw.IsLaptop && hw.HasBattery)
+            cards.Add(Battery(hw, s));
         return cards;
     }
 
-    private static HardwareCard Cpu(HardwareSnapshot hw)
+    /// <summary>Why the temperature is missing (shown in the CPU card tooltip).</summary>
+    internal static string TemperatureNote(SettingsSnapshot s) => s.TemperatureState switch
+    {
+        _ when s.TemperatureC is not null =>
+            "Температура — с датчика ACPI материнской платы (обычно это зона процессора). Точную температуру каждого ядра " +
+            "показывают программы HWiNFO или Core Temp.",
+        SensorState.NeedsAdmin =>
+            "Температура: нет данных — Windows сообщает показания датчика только программам, запущенным от имени администратора.",
+        SensorState.NotSupported =>
+            "Температура: нет данных — материнская плата не передаёт температуру в Windows. Её можно посмотреть в BIOS или " +
+            "в программах HWiNFO и Core Temp.",
+        _ => "Температура: нет данных — не удалось прочитать датчик температуры.",
+    };
+
+    private static HardwareCard Cpu(HardwareSnapshot hw, SettingsSnapshot s)
     {
         var cpu = hw.Cpu;
         if (cpu is null)
@@ -98,6 +129,15 @@ public static class HardwareCardBuilder
         var details = new List<string>();
         if (cpu.MaxClockMhz > 0)
             details.Add($"Базовая частота {HardwareText.Ghz(cpu.MaxClockMhz)}");
+        details.Add("Температура: " + (s.TemperatureC is { } t ? HardwareText.Celsius(t) : "нет данных"));
+
+        string? badge = null;
+        var tone = Tone.Neutral;
+        if (s.TemperatureC is { } hot && hot >= RecommendationEngine.HighTemperatureC)
+            (badge, tone) = ($"Перегрев: {HardwareText.Celsius(hot)}", Tone.Danger);
+        else if (s.CpuLoadPercent is { } load && load > RecommendationEngine.HighCpuLoadPercent)
+            (badge, tone) = ($"Загружен на {Format.Percent(Math.Round(load))}", Tone.Warning);
+
         return new HardwareCard
         {
             Icon = "\uE950",
@@ -107,7 +147,9 @@ public static class HardwareCardBuilder
                 ? $"{Format.Count(cpu.Cores, "ядро", "ядра", "ядер")} · {Format.Count(cpu.LogicalProcessors, "поток", "потока", "потоков")}"
                 : Format.Count(cpu.LogicalProcessors, "поток", "потока", "потоков"),
             Details = details,
-            ToolTipText = cpu.Name,
+            Badge = badge,
+            BadgeTone = tone,
+            ToolTipText = cpu.Name + "\n" + TemperatureNote(s),
             SearchQuery = HardwareText.CleanName(cpu.Name),
         };
     }
@@ -163,9 +205,11 @@ public static class HardwareCardBuilder
         var total = hw.TotalRamBytes;
         if (total <= 0)
             return Empty("\uEEA0", "Оперативная память");
-        var type = mods.Select(m => HardwareText.MemoryTypeName(m.MemoryType)).FirstOrDefault(t => t is not null);
         // Same numbers as the engine (incl. the half-clock correction), so the card never contradicts the advice.
         var speed = RecommendationEngine.MemorySpeed(hw);
+        var type = mods.Select(m => HardwareText.MemoryTypeName(m.MemoryType)).FirstOrDefault(t => t is not null)
+                   ?? speed?.Type
+                   ?? mods.Select(m => HardwareText.DecodeMemoryPart(m.PartNumber)?.Type).FirstOrDefault(t => t is not null);
         var configured = speed?.Configured ?? (mods.Count > 0 ? mods.Max(m => m.ConfiguredMhz) : 0);
         var rated = speed?.Rated ?? 0;
 
@@ -178,8 +222,12 @@ public static class HardwareCardBuilder
 
         string? badge = null;
         var tone = Tone.Neutral;
-        if (has("RamSpeed"))
-            (badge, tone) = ("Ниже паспортной частоты", Tone.Warning);
+        var ramSpeed = items.FirstOrDefault(r => r.Id == "RamSpeed");
+        if (ramSpeed is not null && RecommendationEngine.IsXmpOff(hw))
+            (badge, tone) = ("Без XMP/EXPO", Tone.Warning);
+        else if (ramSpeed is not null)
+            // Info advice (laptop, standard modules held back by the processor) says "nothing to change": no warning colour.
+            (badge, tone) = ("Ниже паспортной частоты", ramSpeed.Kind == RecommendationKind.Info ? Tone.Info : Tone.Warning);
         else if (has("RamSingle") || has("RamOneChannel"))
             (badge, tone) = ("Одноканальный режим", Tone.Warning);
         else if (has("RamAsymmetric"))
@@ -207,7 +255,10 @@ public static class HardwareCardBuilder
                 : string.Join("\n", mods.Select(m =>
                     $"{m.DeviceLocator ?? m.BankLabel ?? "Слот"}: {HardwareText.Gb(m.CapacityBytes)}, " +
                     $"{(m.ConfiguredMhz > 0 ? m.ConfiguredMhz : 0)} / {(m.RatedMhz > 0 ? m.RatedMhz : 0)} МГц (сейчас / паспорт)" +
-                    (string.IsNullOrWhiteSpace(m.PartNumber) ? "" : $", {m.Manufacturer} {m.PartNumber}"))),
+                    (string.IsNullOrWhiteSpace(m.PartNumber) ? "" : $", {m.Manufacturer} {m.PartNumber}") +
+                    (HardwareText.RatedSpeedFromPartNumber(m.PartNumber) is { } part && part != m.RatedMhz
+                        ? $" — по маркировке {part} МГц"
+                        : ""))),
         };
     }
 
@@ -292,25 +343,127 @@ public static class HardwareCardBuilder
         };
     }
 
-    private static HardwareCard Board(HardwareSnapshot hw, bool biosOld)
+    internal static string BootModeText(BootMode mode) => mode switch
     {
-        if (hw.BoardProduct is null && hw.BoardManufacturer is null && hw.BiosVersion is null)
-            return Empty("\uEEA1", "Материнская плата");
+        BootMode.Uefi => "UEFI",
+        BootMode.LegacyBios => "Legacy BIOS",
+        _ => "режим загрузки не определён",
+    };
+
+    internal static string VirtualizationText(bool? enabled, bool unsupported = false) => enabled switch
+    {
+        true => "виртуализация включена",
+        false when unsupported => "без виртуализации",
+        false => "виртуализация выключена",
+        _ => "виртуализация: нет данных",
+    };
+
+    /// <summary>"Прошивка и платформа": the board, BIOS version/date, boot mode and hardware virtualization.</summary>
+    private static HardwareCard Platform(HardwareSnapshot hw, bool biosOld)
+    {
         var details = new List<string>();
         if (hw.BiosVersion is not null || hw.BiosDate is not null)
             details.Add($"BIOS {hw.BiosVersion ?? "—"} от {Format.Date(hw.BiosDate)}");
+        if (hw.BoardProduct is not null && hw.BoardManufacturer is not null)
+            details.Add(hw.BoardManufacturer);
         var name = string.Join(" ", new[] { hw.BoardManufacturer, hw.BoardProduct }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+        string? badge = null;
+        var tone = Tone.Neutral;
+        if (hw.BootMode == BootMode.LegacyBios)
+            (badge, tone) = ("Legacy BIOS", Tone.Warning);
+        else if (biosOld && hw.BiosDate is { } date)
+            (badge, tone) = ($"BIOS {date.Year} года", Tone.Neutral);
+        else if (hw.BootMode == BootMode.Uefi)
+            (badge, tone) = ("Загрузка UEFI", Tone.Good);
+
+        var virtualization = hw.VirtualizationEnabled switch
+        {
+            true when hw.HypervisorPresent == true =>
+                "Виртуализация процессора включена: сейчас работает гипервизор Windows (Hyper-V, WSL 2 или похожие функции).",
+            true => "Виртуализация процессора (VT-x / SVM) включена — работают WSL, Docker, эмуляторы Android и виртуальные машины.",
+            false when hw.VirtualizationUnsupported =>
+                "Процессор не поддерживает аппаратную виртуализацию (VT-x / AMD-V), поэтому включить её в BIOS нельзя.",
+            false => "Виртуализация процессора (VT-x / SVM) выключена в BIOS. Она нужна только для WSL, Docker, эмуляторов Android " +
+                     "и виртуальных машин.",
+            _ => "Windows не сообщила, включена ли виртуализация процессора.",
+        };
         return new HardwareCard
         {
             Icon = "\uEEA1",
-            Caption = "Материнская плата",
-            Title = hw.BoardProduct ?? hw.BoardManufacturer ?? "—",
-            Primary = hw.BoardProduct is null ? null : hw.BoardManufacturer,
+            Caption = "Прошивка и платформа",
+            Title = hw.BoardProduct ?? hw.BoardManufacturer ?? "Материнская плата",
+            Primary = $"{BootModeText(hw.BootMode)} · {VirtualizationText(hw.VirtualizationEnabled, hw.VirtualizationUnsupported)}",
             Details = details,
-            Badge = biosOld && hw.BiosDate is { } date ? $"BIOS {date.Year} года" : null,
-            BadgeTone = Tone.Neutral,
+            Badge = badge,
+            BadgeTone = tone,
             SearchQuery = name.Length > 0 ? name : null,
-            ToolTipText = "BIOS (UEFI) — встроенная программа материнской платы. В нём включаются XMP/EXPO для памяти и порядок загрузки дисков.",
+            ToolTipText = "BIOS (UEFI) — встроенная программа материнской платы. В нём включаются XMP/EXPO для памяти, " +
+                          "виртуализация и порядок загрузки дисков.\n" +
+                          (hw.BootMode switch
+                          {
+                              BootMode.Uefi => "Режим загрузки UEFI — современный: быстрый старт, Secure Boot, поддержка Windows 11.",
+                              BootMode.LegacyBios => "Режим загрузки Legacy BIOS (CSM) — устаревший: загрузка медленнее, нет Secure Boot, " +
+                                                     "Windows 11 официально не поддерживается.",
+                              _ => "Windows не сообщила режим загрузки.",
+                          }) + "\n" + virtualization,
+        };
+    }
+
+    internal static string BatteryStateText(BatteryChargeState state) => state switch
+    {
+        BatteryChargeState.Charging => "Заряжается",
+        BatteryChargeState.Discharging => "Работает от батареи",
+        BatteryChargeState.Full => "Заряжена, ноутбук от сети",
+        BatteryChargeState.PluggedIn => "От сети, не заряжается",
+        _ => "Состояние неизвестно",
+    };
+
+    /// <summary>Laptop battery: charge, state, wear (capacity) and the "Отчёт о батарее" action.</summary>
+    private static HardwareCard Battery(HardwareSnapshot hw, SettingsSnapshot s)
+    {
+        var battery = hw.Battery;
+        var wear = battery?.WearPercent;
+        var details = new List<string>();
+        if (wear is { } w && battery is not null)
+        {
+            details.Add($"Износ: {w:0}%");
+            details.Add($"Ёмкость: {HardwareText.WattHours(battery.FullChargedCapacityMwh)} из {HardwareText.WattHours(battery.DesignedCapacityMwh)}");
+        }
+        else
+        {
+            details.Add("Износ: нет данных");
+        }
+
+        string? badge = null;
+        var tone = Tone.Neutral;
+        if (wear > RecommendationEngine.BatteryWearMediumPercent)
+            (badge, tone) = ("Пора заменить", Tone.Warning);
+        else if (wear > RecommendationEngine.BatteryWearLowPercent)
+            (badge, tone) = ($"Износ {wear:0}%", Tone.Info);
+        else if (wear is not null)
+            (badge, tone) = ("В хорошем состоянии", Tone.Good);
+
+        var wearNote = (wear, battery?.CapacityState) switch
+        {
+            ({ }, _) => "Износ — насколько ёмкость батареи уменьшилась по сравнению с новой. До 30% — нормально для батареи возрастом в пару лет.",
+            (null, SensorState.NeedsAdmin) => "Износ: нет данных — Windows сообщает ёмкость батареи только программам, запущенным от имени администратора.",
+            _ => "Износ: нет данных — ноутбук не сообщает ёмкость батареи. Её можно увидеть в «Отчёте о батарее».",
+        };
+        return new HardwareCard
+        {
+            Icon = "\uE83F",
+            Caption = "Батарея",
+            Title = s.BatteryChargePercent is { } charge ? $"Заряд {charge}%" : "Заряд неизвестен",
+            Primary = BatteryStateText(s.BatteryState),
+            Details = details,
+            Badge = badge,
+            BadgeTone = tone,
+            ToolTipText = string.Join("\n", new[] { battery?.Name is { } n ? $"Батарея: {n}" : null, wearNote }.Where(x => x is not null)),
+            ActionId = HardwareCardActions.BatteryReport,
+            ActionText = "Отчёт о батарее",
+            ActionToolTip = "Windows создаст подробный отчёт (история ёмкости, время работы) в папке «Документы» и откроет его в браузере. " +
+                            "Ничего в системе не меняется.",
         };
     }
 

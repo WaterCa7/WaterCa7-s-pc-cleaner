@@ -19,7 +19,9 @@ public sealed class OptimizerService : IHealthContributor
     {
         Registry = new RegistryTweakEngine();
         Power = new PowerPlanSwitcher();
-        var settingsProbe = new SettingsProbe(Power);
+        BatteryReport = new BatteryReportGenerator();
+        // The CPU is sampled only after our own hardware scan (WMI) has finished, so it is not counted as load.
+        var settingsProbe = new SettingsProbe(Power, WaitForHardwareScanAsync);
         _hardwareProbe = HardwareProbe.CollectAsync;
         _settingsProbe = settingsProbe.CollectAsync;
         _isElevated = () => Admin.IsElevated;
@@ -27,12 +29,13 @@ public sealed class OptimizerService : IHealthContributor
 
     /// <summary>For tests: synthetic snapshots and sandboxed tweak engines.</summary>
     internal OptimizerService(Func<Task<HardwareSnapshot>> hardwareProbe, Func<CancellationToken, Task<SettingsSnapshot>> settingsProbe,
-        RegistryTweakEngine registry, PowerPlanSwitcher power, Func<bool>? isElevated = null)
+        RegistryTweakEngine registry, PowerPlanSwitcher power, Func<bool>? isElevated = null, BatteryReportGenerator? batteryReport = null)
     {
         _hardwareProbe = hardwareProbe;
         _settingsProbe = settingsProbe;
         Registry = registry;
         Power = power;
+        BatteryReport = batteryReport ?? new BatteryReportGenerator();
         _isElevated = isElevated ?? (() => Admin.IsElevated);
     }
 
@@ -41,6 +44,29 @@ public sealed class OptimizerService : IHealthContributor
     internal RegistryTweakEngine Registry { get; }
 
     internal PowerPlanSwitcher Power { get; }
+
+    internal BatteryReportGenerator BatteryReport { get; }
+
+    /// <summary>Creates the Windows battery report (a read-only HTML report in Documents). No confirmation needed.</summary>
+    public Task<BatteryReportResult> CreateBatteryReportAsync(CancellationToken ct = default) => BatteryReport.CreateAsync(ct);
+
+    /// <summary>Completes when the hardware scan that is running now (if any) has finished; never throws.</summary>
+    private async Task WaitForHardwareScanAsync()
+    {
+        Task? running;
+        lock (_lock)
+            running = _hardwareTask;
+        if (running is null)
+            return;
+        try
+        {
+            await running.ConfigureAwait(false);
+        }
+        catch
+        {
+            // the caller only needs the scan to be over
+        }
+    }
 
     /// <summary>Last collected hardware snapshot, if any.</summary>
     public HardwareSnapshot? CachedHardware
