@@ -124,6 +124,13 @@ public class SuspicionTests
     }
 
     [Fact]
+    public void SignedSvchostCopiedToTemp_IsStillHighRisk()
+    {
+        var r = Suspicion.Analyze(Path.Combine(Path.GetTempPath(), "svchost.exe"), new SignatureInfo(SignatureStatus.Valid, "Microsoft Windows"));
+        Assert.Equal(SuspicionLevel.High, r.Level);
+    }
+
+    [Fact]
     public void FakeDefenderOutsideWindows_IsHighRisk()
     {
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Defender", "MsMpEng.exe");

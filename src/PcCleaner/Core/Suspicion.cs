@@ -85,9 +85,10 @@ public static class Suspicion
 
         // 1. Imitation of a system binary outside of the Windows folder.
         // Genuine Microsoft binaries also live outside Windows (Defender's MsMpEng.exe in ProgramData\Microsoft\Windows Defender\Platform),
-        // so a valid Microsoft signature clears this rule.
+        // so a valid Microsoft signature clears this rule — but only in Microsoft's own install locations: a signed svchost.exe
+        // copied to Temp and started from there is a classic trick.
         if (fileName.Length > 0 && SystemBinaryNames.Contains(fileName) && !IsUnder(path!, Win) &&
-            !(signature?.IsMicrosoft ?? false))
+            !((signature?.IsMicrosoft ?? false) && IsMicrosoftInstallLocation(path!)))
         {
             score += 70;
             reasons.Add($"Имя системного файла «{fileName}», но расположен не в папке Windows");
@@ -345,6 +346,18 @@ public static class Suspicion
             (prev, cur) = (cur, prev);
         }
         return prev[b.Length];
+    }
+
+    /// <summary>Windows, Program Files (both) and the Microsoft folders in ProgramData / LocalAppData.</summary>
+    public static bool IsMicrosoftInstallLocation(string path)
+    {
+        var pd = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return IsUnder(path, Win) ||
+               IsUnder(path, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) ||
+               IsUnder(path, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)) ||
+               IsUnder(path, Path.Combine(pd, "Microsoft")) ||
+               IsUnder(path, Path.Combine(local, "Microsoft"));
     }
 
     public static bool IsUnder(string path, string folder)
