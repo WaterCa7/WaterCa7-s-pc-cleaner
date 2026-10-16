@@ -36,7 +36,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
             new SettingsViewModel(),
         };
 
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
+        RestartAsAdminCommand = new RelayCommand(RestartAsAdmin, () => !Admin.IsElevated);
         Log.EntryAdded += entry => StatusText = entry.Message;
 
         SelectedPage = Pages[0];
@@ -67,6 +67,17 @@ public sealed class MainViewModel : ObservableObject, INavigator
     }
 
     public RelayCommand RestartAsAdminCommand { get; }
+
+    /// <summary>Restarting closes the app, so ask first if a page is in the middle of an operation.</summary>
+    private void RestartAsAdmin()
+    {
+        var busy = Pages.Where(p => p.IsBusy).Select(p => $"«{p.Title}»").ToList();
+        if (busy.Count > 0 &&
+            !Dialogs.Confirm("Перезапуск от имени администратора",
+                $"Сейчас идёт операция в разделе {string.Join(", ", busy)}. Перезапуск прервёт её.\n\nПерезапустить программу всё равно?"))
+            return;
+        Admin.RestartElevated();
+    }
 
     public void NavigateTo(string pageKey)
     {

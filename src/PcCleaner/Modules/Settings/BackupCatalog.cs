@@ -95,7 +95,7 @@ internal sealed record RegFileInfo(string? RootKey, bool SingleRoot, bool Delete
 /// <summary>Lists, describes and deletes files in %LOCALAPPDATA%\WaterCa7sPcCleaner\Backups.</summary>
 internal static class BackupCatalog
 {
-    private static readonly Regex StampRx = new(@"^(?<stamp>\d{8}-\d{6}(?:-\d{3})?)_(?<rest>.+)$", RegexOptions.CultureInvariant);
+    private static readonly Regex StampRx = new(@"^(?<stamp>\d{8}-\d{6}(?:-\d{3})?)(?:-[0-9a-fA-F]{4})?_(?<rest>.+)$", RegexOptions.CultureInvariant);
 
     private static readonly (string Long, string Short)[] Hives =
     {

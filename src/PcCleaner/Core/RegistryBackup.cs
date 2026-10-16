@@ -20,7 +20,8 @@ public static class RegistryBackup
         var safeName = Regex.Replace(fullKeyPath, @"[^\w\-]+", "_");
         if (safeName.Length > 80)
             safeName = safeName[^80..];
-        var file = Path.Combine(AppPaths.BackupsDir, $"{DateTime.Now:yyyyMMdd-HHmmss-fff}_{safeName}.reg");
+        // A short random suffix keeps names unique when two backups happen in the same millisecond.
+        var file = Path.Combine(AppPaths.BackupsDir, $"{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid().ToString("N")[..4]}_{safeName}.reg");
 
         using (var existing = OpenKey(fullKeyPath))
         {

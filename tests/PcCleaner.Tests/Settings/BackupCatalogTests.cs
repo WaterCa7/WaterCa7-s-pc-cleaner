@@ -18,6 +18,8 @@ public class BackupCatalogTests
     [InlineData("20240131-101500-123_HKEY_LOCAL_MACHINE_SOFTWARE_Vendor.reg", @"HKLM\SOFTWARE\Vendor")]
     [InlineData("20240131-101500-123_HKEY_CURRENT_USER_Control_Panel.reg", @"HKCU\Control\Panel")]
     [InlineData("20240131-101500-123_HKCU.reg", "HKCU")]
+    [InlineData("20240131-101500-123-a1b2_HKCU_Software_Microsoft_Windows_CurrentVersion_Run.reg",
+        @"HKCU\Software\Microsoft\Windows\CurrentVersion\Run")]
     [InlineData("20240131-101500-123_Windows_CurrentVersion_Run.reg", @"…\Windows\CurrentVersion\Run")]
     public void KeyFromFileName_RestoresReadableKey(string fileName, string expected)
         => Assert.Equal(expected, BackupCatalog.KeyFromFileName(fileName));
@@ -27,6 +29,8 @@ public class BackupCatalogTests
     {
         Assert.Equal(new DateTime(2024, 1, 31, 10, 15, 0, 123),
             BackupCatalog.TimeFromFileName("20240131-101500-123_HKCU_Software.reg"));
+        Assert.Equal(new DateTime(2024, 1, 31, 10, 15, 0, 123),
+            BackupCatalog.TimeFromFileName("20240131-101500-123-a1b2_HKCU_Software.reg"));
         Assert.Equal(new DateTime(2024, 1, 31, 10, 15, 0),
             BackupCatalog.TimeFromFileName("20240131-101500_hosts.hosts"));
         Assert.Null(BackupCatalog.TimeFromFileName("manual-backup.reg"));
