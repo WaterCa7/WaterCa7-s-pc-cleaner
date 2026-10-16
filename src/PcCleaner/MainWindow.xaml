@@ -1,0 +1,111 @@
+<Window x:Class="PcCleaner.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:PcCleaner"
+        Title="WaterCa7s PC Cleaner"
+        Width="1320" Height="840" MinWidth="1040" MinHeight="660"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <Grid x:Name="Root" Background="{StaticResource BackgroundBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="236" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ===== Sidebar ===== -->
+        <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,22,20,22">
+                    <Border Width="38" Height="38" CornerRadius="11" Background="{StaticResource AccentBrush}">
+                        <Path Data="M 12,2 C 12,2 4,11.5 4,16 A 8,8 0 0 0 20,16 C 20,11.5 12,2 12,2 Z"
+                              Fill="{StaticResource AccentTextBrush}" Stretch="Uniform" Width="16" Height="20" />
+                    </Border>
+                    <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="WaterCa7s" FontWeight="Bold" FontSize="15.5" />
+                        <TextBlock Text="PC Cleaner" Foreground="{StaticResource MutedBrush}" FontSize="12" />
+                    </StackPanel>
+                </StackPanel>
+
+                <Border DockPanel.Dock="Bottom" Margin="14,8,14,16" Style="{StaticResource InnerCard}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                     Fill="{Binding IsAdmin, Converter={StaticResource SeverityToBrush}}" />
+                            <TextBlock Text="{Binding AdminText}" Margin="8,0,0,0" FontSize="12.5" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <StackPanel Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,8" FontSize="11.5"
+                                       Text="Часть функций (системные папки, службы, HKLM) доступна только администратору." />
+                            <Button Content="Запустить как админ" Command="{Binding RestartAsAdminCommand}"
+                                    Padding="10,6" FontSize="12" HorizontalAlignment="Stretch" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding VersionText}" Style="{StaticResource Muted}" FontSize="11" Margin="0,8,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+                         ItemContainerStyle="{StaticResource NavItem}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="{Binding IconGlyph}"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                <TextBlock Text="{Binding Title}" Margin="13,0,0,0" FontSize="13.5" VerticalAlignment="Center"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- ===== Content ===== -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Margin="32,24,32,10">
+                <TextBlock Style="{StaticResource H1}" Text="{Binding SelectedPage.Title}" />
+                <TextBlock Style="{StaticResource Muted}" FontSize="13" Margin="0,4,0,0" Text="{Binding SelectedPage.Subtitle}" />
+            </StackPanel>
+
+            <!-- Shared busy strip for the current page -->
+            <Border Grid.Row="1" Margin="32,0,32,8" Style="{StaticResource InnerCard}" Padding="12,8"
+                    Visibility="{Binding SelectedPage.IsBusy, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SelectedPage.BusyText}" FontSize="12.5" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+                        <ProgressBar Value="{Binding SelectedPage.Progress, Mode=OneWay}" Maximum="100"
+                                     IsIndeterminate="{Binding SelectedPage.IsProgressIndeterminate, Mode=OneWay}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Отмена" Margin="12,0,0,0" Padding="12,5"
+                            Command="{Binding SelectedPage.CancelCommand}" />
+                </Grid>
+            </Border>
+
+            <ContentControl Grid.Row="2" Margin="32,4,32,16" Content="{Binding SelectedPage}" Focusable="False" />
+
+            <Border Grid.Row="3" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="32,7">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="Сделано для WaterCa7" Style="{StaticResource Muted}" FontSize="11.5" />
+                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" FontSize="11.5" TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap" />
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

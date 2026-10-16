@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net7.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>PcCleaner</RootNamespace>
+    <AssemblyName>WaterCa7sPcCleaner</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Runs on any newer installed .NET desktop runtime (8, 9, ...) when 7 is absent. -->
+    <RollForward>LatestMajor</RollForward>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
+    <Version>1.0.0</Version>
+    <Product>WaterCa7s PC Cleaner</Product>
+    <Company>WaterCa7</Company>
+    <Copyright>© 2026 WaterCa7</Copyright>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="7.0.2" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="7.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcCleaner.Tests" />
+  </ItemGroup>
+
+</Project>

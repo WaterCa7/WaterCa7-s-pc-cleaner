@@ -1,0 +1,41 @@
+<Application x:Class="PcCleaner.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:PcCleaner.Core"
+             xmlns:dashboard="clr-namespace:PcCleaner.Modules.Dashboard"
+             xmlns:cleaner="clr-namespace:PcCleaner.Modules.Cleaner"
+             xmlns:processes="clr-namespace:PcCleaner.Modules.Processes"
+             xmlns:startup="clr-namespace:PcCleaner.Modules.Startup"
+             xmlns:programs="clr-namespace:PcCleaner.Modules.Programs"
+             xmlns:disk="clr-namespace:PcCleaner.Modules.Disk"
+             xmlns:optimizer="clr-namespace:PcCleaner.Modules.Optimizer"
+             xmlns:security="clr-namespace:PcCleaner.Modules.Security"
+             xmlns:settings="clr-namespace:PcCleaner.Modules.Settings"
+             ShutdownMode="OnMainWindowClose">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <core:BoolToVisibilityConverter x:Key="BoolToVis" />
+            <core:InverseBoolConverter x:Key="InverseBool" />
+            <core:HasValueToVisibilityConverter x:Key="HasValueToVis" />
+            <core:BytesConverter x:Key="Bytes" />
+            <core:SeverityToBrushConverter x:Key="SeverityToBrush" />
+            <core:SeverityToTextConverter x:Key="SeverityToText" />
+            <core:PercentToBrushConverter x:Key="PercentToBrush" />
+
+            <!-- Page view-model -> view mapping -->
+            <DataTemplate DataType="{x:Type dashboard:DashboardViewModel}"><dashboard:DashboardView /></DataTemplate>
+            <DataTemplate DataType="{x:Type cleaner:CleanerViewModel}"><cleaner:CleanerView /></DataTemplate>
+            <DataTemplate DataType="{x:Type processes:ProcessesViewModel}"><processes:ProcessesView /></DataTemplate>
+            <DataTemplate DataType="{x:Type startup:StartupViewModel}"><startup:StartupView /></DataTemplate>
+            <DataTemplate DataType="{x:Type programs:ProgramsViewModel}"><programs:ProgramsView /></DataTemplate>
+            <DataTemplate DataType="{x:Type disk:DiskViewModel}"><disk:DiskView /></DataTemplate>
+            <DataTemplate DataType="{x:Type optimizer:OptimizerViewModel}"><optimizer:OptimizerView /></DataTemplate>
+            <DataTemplate DataType="{x:Type security:SecurityViewModel}"><security:SecurityView /></DataTemplate>
+            <DataTemplate DataType="{x:Type settings:SettingsViewModel}"><settings:SettingsView /></DataTemplate>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
