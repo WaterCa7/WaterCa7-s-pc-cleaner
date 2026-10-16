@@ -281,7 +281,7 @@
             </Border>
 
             <Grid Grid.Column="1" Margin="10,0" MinWidth="120" VerticalAlignment="Center">
-                <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="15,0,4,0" Height="34" VerticalContentAlignment="Center"
+                <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,0,8,0" Height="34" VerticalContentAlignment="Center"
                          ToolTip="Поиск по названию, издателю, команде или пути" />
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
                            Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />

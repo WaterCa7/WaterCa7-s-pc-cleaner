@@ -27,6 +27,23 @@ internal static class SystemTools
         }
     }
 
+    /// <summary>True if a process with this name (without ".exe") is running. Read-only, never throws.</summary>
+    public static bool IsRunning(string processName)
+    {
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcessesByName(processName);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
+        {
+            return false;
+        }
+        foreach (var p in processes)
+            p.Dispose();
+        return processes.Length > 0;
+    }
+
     /// <summary>
     /// Runs shell work (SHFileOperation may show a confirmation) on a dedicated STA thread, off the UI thread.
     /// </summary>
@@ -284,9 +301,51 @@ internal static class FinalPaths
         uint cchFilePath, uint dwFlags);
 }
 
+/// <summary>Why a file was not moved to the Recycle Bin.</summary>
+internal enum RecycleFailure
+{
+    None,
+    /// <summary>Removable or network drive: Windows has no Recycle Bin there, so the file is not touched.</summary>
+    NoRecycleBin,
+    /// <summary>The file does not fit into the Recycle Bin, Windows offered to delete it permanently and the user said no.</summary>
+    DeclinedPermanentDelete,
+    /// <summary>Another program has the file open.</summary>
+    InUse,
+    /// <summary>No permission to delete the file.</summary>
+    AccessDenied,
+    /// <summary>The file is gone (deleted or moved meanwhile).</summary>
+    Missing,
+    /// <summary>Anything else (the shell error code is kept).</summary>
+    Failed,
+}
+
+/// <summary>Result of one attempt to move a file to the Recycle Bin, with a plain-language reason on failure.</summary>
+internal readonly record struct RecycleOutcome(RecycleFailure Failure, int Code = 0)
+{
+    public static RecycleOutcome Ok => new(RecycleFailure.None);
+
+    public bool Success => Failure == RecycleFailure.None;
+
+    /// <summary>Why the file was skipped (shown after "имя файла — "), empty on success.</summary>
+    public string Reason => Failure switch
+    {
+        RecycleFailure.None => "",
+        RecycleFailure.NoRecycleBin => "у этого диска нет корзины (флешка или сетевой диск), поэтому файл не тронут",
+        RecycleFailure.DeclinedPermanentDelete =>
+            "в корзину файл не помещается, а удалить его навсегда вы отказались — файл не тронут",
+        RecycleFailure.InUse => "файл открыт в другой программе — закройте её и повторите",
+        RecycleFailure.AccessDenied => "нет прав на удаление этого файла",
+        RecycleFailure.Missing => "файл уже удалён или перемещён",
+        _ => Code == 0
+            ? "Windows не смогла переместить файл в корзину"
+            : $"Windows не смогла переместить файл в корзину (код {Code})",
+    };
+}
+
 /// <summary>
 /// Moves files to the Recycle Bin. Unlike a plain FO_DELETE with FOF_NOCONFIRMATION it sets FOF_WANTNUKEWARNING,
-/// so Windows asks before permanently deleting a file that is too big for the Recycle Bin.
+/// so Windows asks before permanently deleting a file that is too big for the Recycle Bin. A failure is reported with
+/// its real reason (no Recycle Bin on that drive, permanent deletion declined, file busy, access denied).
 /// </summary>
 internal static class SafeRecycler
 {
@@ -297,7 +356,18 @@ internal static class SafeRecycler
     private const ushort FofNoErrorUi = 0x0400;
     private const ushort FofWantNukeWarning = 0x4000;
 
-    public static bool Recycle(string path)
+    // Win32 errors and the legacy DE_* codes SHFileOperation may return.
+    private const int ErrorFileNotFound = 2;
+    private const int ErrorPathNotFound = 3;
+    private const int ErrorAccessDenied = 5;
+    private const int ErrorSharingViolation = 32;
+    private const int ErrorLockViolation = 33;
+    private const int ErrorCancelled = 1223;
+    private const int DeOpCancelled = 0x75;
+    private const int DeAccessDeniedSrc = 0x78;
+    private const int DeInvalidFiles = 0x7C;
+
+    public static RecycleOutcome Recycle(string path)
     {
         try
         {
@@ -305,13 +375,13 @@ internal static class SafeRecycler
             if (string.IsNullOrEmpty(root) || new DriveInfo(root).DriveType != DriveType.Fixed)
             {
                 Log.Warn($"Не перемещено в корзину (у этого диска нет корзины): {path}");
-                return false;
+                return new RecycleOutcome(RecycleFailure.NoRecycleBin);
             }
         }
         catch (Exception ex) when (ex is ArgumentException or IOException)
         {
             Log.Warn($"Не перемещено в корзину: {path}: {ex.Message}");
-            return false;
+            return new RecycleOutcome(RecycleFailure.NoRecycleBin);
         }
 
         var op = new SHFILEOPSTRUCT
@@ -321,13 +391,55 @@ internal static class SafeRecycler
             fFlags = FofAllowUndo | FofNoConfirmation | FofWantNukeWarning | FofNoErrorUi | FofSilent,
         };
         var rc = SHFileOperation(ref op);
-        var ok = rc == 0 && !op.fAnyOperationsAborted && !File.Exists(path);
-        if (ok)
+        var outcome = Classify(rc, op.fAnyOperationsAborted, File.Exists(path), () => ProbeDelete(path));
+        if (outcome.Success)
             Log.Action($"Перемещено в корзину: {path}");
         else
-            Log.Warn($"Не удалось переместить в корзину: {path} (код {rc})");
-        return ok;
+            Log.Warn($"Не удалось переместить в корзину: {path} — {outcome.Reason} (код {rc})");
+        return outcome;
     }
+
+    /// <summary>
+    /// Turns the result of SHFileOperation into a reason. <paramref name="probe"/> is asked only when the shell code says
+    /// nothing specific: it opens the file for deletion (without deleting anything) and returns the Win32 error, 0 if it opened.
+    /// </summary>
+    internal static RecycleOutcome Classify(int rc, bool aborted, bool stillExists, Func<int> probe)
+    {
+        if (rc == 0 && !aborted && !stillExists)
+            return RecycleOutcome.Ok;
+        // With FOF_NOCONFIRMATION and FOF_NOERRORUI the only question Windows can ask is "delete permanently?".
+        if (aborted || rc is ErrorCancelled or DeOpCancelled)
+            return new RecycleOutcome(RecycleFailure.DeclinedPermanentDelete, rc);
+        if (!stillExists)
+            return new RecycleOutcome(RecycleFailure.Missing, rc);
+        switch (rc)
+        {
+            case ErrorSharingViolation or ErrorLockViolation:
+                return new RecycleOutcome(RecycleFailure.InUse, rc);
+            case ErrorAccessDenied or DeAccessDeniedSrc:
+                return new RecycleOutcome(RecycleFailure.AccessDenied, rc);
+            case ErrorFileNotFound or ErrorPathNotFound or DeInvalidFiles:
+                return new RecycleOutcome(RecycleFailure.Missing, rc);
+        }
+        return probe() switch
+        {
+            ErrorSharingViolation or ErrorLockViolation => new RecycleOutcome(RecycleFailure.InUse, rc),
+            ErrorAccessDenied => new RecycleOutcome(RecycleFailure.AccessDenied, rc),
+            ErrorFileNotFound or ErrorPathNotFound => new RecycleOutcome(RecycleFailure.Missing, rc),
+            _ => new RecycleOutcome(RecycleFailure.Failed, rc),
+        };
+    }
+
+    /// <summary>Opens the file with DELETE access and closes it again (nothing is deleted). Returns the Win32 error or 0.</summary>
+    internal static int ProbeDelete(string path)
+    {
+        using var handle = CreateFileW(path, DeleteAccess, FileShareAll, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+        return handle.IsInvalid ? Marshal.GetLastWin32Error() : 0;
+    }
+
+    private const uint DeleteAccess = 0x00010000;
+    private const uint FileShareAll = 0x1 | 0x2 | 0x4;
+    private const uint OpenExisting = 3;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct SHFILEOPSTRUCT
@@ -344,4 +456,8 @@ internal static class SafeRecycler
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string lpFileName, uint dwDesiredAccess,
+        uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
 }

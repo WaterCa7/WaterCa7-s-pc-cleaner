@@ -43,9 +43,14 @@ internal sealed class StartupSandbox : IDisposable
                 File.Move(path, Path.Combine(RecycledDir, Path.GetFileName(path)));
                 return true;
             },
+            // A private trusted list: tests of other modules use the shared AppServices.Settings at the same time.
+            Settings = () => Settings,
         };
         Service = new StartupService(Environment);
     }
+
+    /// <summary>Settings (trusted list) seen by this sandbox's service. Saves go to the temp test data folder.</summary>
+    public AppSettings Settings { get; } = new();
 
     public string Id { get; }
 

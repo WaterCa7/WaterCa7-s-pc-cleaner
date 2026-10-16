@@ -7,6 +7,13 @@ using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Cleaner;
 
+public enum DiskCleanupLaunch
+{
+    Started,
+    AlreadyOpen,
+    Failed,
+}
+
 /// <summary>
 /// Finds and removes junk: temporary files, caches of Windows, browsers and apps, the Recycle Bin.
 /// Scanning never changes anything; cleaning happens only after the caller confirmed it with the user
@@ -295,8 +302,10 @@ public sealed class CleanerService : IHealthContributor
             : "ничего не удалено");
         if (r.DeletedDirectories > 0)
             text.Append($", удалено пустых папок: {Format.Number(r.DeletedDirectories)}");
-        if (r.SkippedFiles > 0)
-            text.Append($", пропущено занятых: {Format.Number(r.SkippedFiles)}");
+        if (r.LockedFiles > 0)
+            text.Append($", пропущено занятых: {Format.Number(r.LockedFiles)}");
+        if (r.DeniedFiles > 0)
+            text.Append($", пропущено без доступа: {Format.Number(r.DeniedFiles)}");
         if (r.SkippedAdminRoots > 0)
             text.Append(elevated ? ", системные папки пропущены" : ", системные папки пропущены (нужны права администратора)");
         if (r.Cancelled)
@@ -353,23 +362,22 @@ public sealed class CleanerService : IHealthContributor
         return error;
     }
 
-    /// <summary>Opens the built-in Windows "Disk Cleanup" for the system drive (it asks the user itself).</summary>
-    public void LaunchDiskCleanup()
+    /// <summary>
+    /// Opens the built-in Windows "Disk Cleanup" for the system drive (it asks the user itself) — unless its window is
+    /// already open. Never throws; the caller tells the user what happened.
+    /// </summary>
+    public DiskCleanupLaunch LaunchDiskCleanup()
     {
+        if (_env.IsDiskCleanupRunning())
+        {
+            Log.Info("Мастер очистки диска Windows уже открыт — второе окно не запускается");
+            return DiskCleanupLaunch.AlreadyOpen;
+        }
         var drive = _env.SystemDrive.TrimEnd('\\').TrimEnd(':');
-        try
-        {
-            Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cleanmgr.exe"), $"/d {drive}")
-            {
-                UseShellExecute = true,
-            })?.Dispose();
-            Log.Info("Открыт мастер очистки диска Windows");
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
-        {
-            Log.Warn($"Не удалось открыть мастер очистки диска: {ex.Message}");
-            Dialogs.Error("Очистка диска", "Не удалось открыть встроенную утилиту «Очистка диска».");
-        }
+        if (!_env.StartDiskCleanup(drive))
+            return DiskCleanupLaunch.Failed;
+        Log.Info("Открыт мастер очистки диска Windows");
+        return DiskCleanupLaunch.Started;
     }
 
     private static long FreeSpace(string drive)
@@ -519,7 +527,7 @@ public sealed class CleanerService : IHealthContributor
     public static string Summarize(IReadOnlyCollection<CategoryCleanResult> results)
     {
         var text = CleanerText.ResultLine(results.Sum(r => r.FreedBytes), results.Sum(r => r.DeletedFiles),
-            results.Sum(r => r.SkippedFiles));
+            results.Sum(r => r.LockedFiles), results.Sum(r => r.DeniedFiles));
         if (results.Any(r => r.Cancelled))
             text += " (очистка прервана)";
         return text + ".";

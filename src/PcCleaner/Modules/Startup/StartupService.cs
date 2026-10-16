@@ -74,6 +74,9 @@ public sealed partial class StartupService : IHealthContributor
 
     internal StartupEnvironment Env => _env;
 
+    /// <summary>The settings whose trusted list this service checks (AppServices.Settings outside tests).</summary>
+    internal AppSettings Settings => _env.Settings();
+
     // ===================== scanning =====================
 
     /// <summary>Full read-only enumeration (all sources + signatures + heuristics). Never changes the system.</summary>
@@ -180,17 +183,16 @@ public sealed partial class StartupService : IHealthContributor
     /// <summary>Recomputes the trust flag and the heuristic verdict (after "Доверять" or a settings change).</summary>
     public void Reanalyze(StartupItem item)
     {
-        var settings = AppServices.Settings;
-        // A trusted interpreter path (powershell.exe, rundll32.exe…) must not vouch for whatever script it is told to run.
-        item.IsTrusted = settings.IsTrusted(item.Id) ||
-                         (!StartupTargets.IsGenericHost(item.TargetFile) && settings.IsTrusted(item.TargetFile));
+        item.IsTrusted = IsTrustedNow(item, _env.Settings());
         if (item.IsTrusted || item.TargetExists == false)
         {
             item.Suspicion = SuspicionResult.Clean;
             return;
         }
 
-        var result = WithoutGenuineMicrosoftNames(Suspicion.Analyze(item.TargetFile, item.Signature, item.Command), item.Signature, item.Command);
+        // Core already treats a Microsoft-signed binary in a Microsoft install location (Defender's MsMpEng.exe in
+        // ProgramData\Microsoft\Windows Defender\Platform) as genuine, and still flags a signed copy started from Temp.
+        var result = Suspicion.Analyze(item.TargetFile, item.Signature, item.Command);
         // Known unwanted programs are often recognisable only by the entry name or publisher.
         if (!result.Reasons.Any(r => r.StartsWith("Потенциально нежелательная", StringComparison.Ordinal)))
         {
@@ -201,20 +203,34 @@ public sealed partial class StartupService : IHealthContributor
         item.Suspicion = result;
     }
 
-    private const string SystemNameReason = "Имя системного файла";
+    /// <summary>
+    /// Whether the entry is trusted according to the shared list: the entry itself, or its program file.
+    /// A trusted interpreter path (powershell.exe, rundll32.exe…) must not vouch for whatever script it is told to run.
+    /// </summary>
+    internal static bool IsTrustedNow(StartupItem item, AppSettings settings)
+        => settings.IsTrusted(item.Id) ||
+           (!StartupTargets.IsGenericHost(item.TargetFile) && settings.IsTrusted(item.TargetFile));
 
     /// <summary>
-    /// Core heuristics flag every "MsMpEng.exe"/"smartscreen.exe" outside C:\Windows as an imitation, but Microsoft Defender
-    /// legitimately lives in ProgramData\Microsoft\Windows Defender\Platform. A file with a valid Microsoft signature is the
-    /// genuine binary, so the verdict is recomputed without the file-name rule: only the command line is judged
-    /// (hidden PowerShell, script launchers, URLs stay flagged; everything else is cleared by the Microsoft signature).
+    /// "Доверять"/"Не доверять" for one entry. Changes the shared list only through AppSettings.AddTrusted/RemoveTrusted
+    /// (thread-safe, saved and logged). Returns the new trust state. Does not re-analyze the item.
     /// </summary>
-    internal static SuspicionResult WithoutGenuineMicrosoftNames(SuspicionResult result, SignatureInfo? signature, string? commandLine = null)
+    internal static bool SetTrusted(StartupItem item, bool trusted, AppSettings settings)
     {
-        if (signature is not { IsMicrosoft: true } ||
-            !result.Reasons.Any(r => r.StartsWith(SystemNameReason, StringComparison.Ordinal)))
-            return result;
-        return Suspicion.Analyze(null, signature, commandLine);
+        if (trusted)
+        {
+            settings.AddTrusted(TrustKey(item));
+        }
+        else
+        {
+            if (settings.IsTrusted(item.Id))
+                settings.RemoveTrusted(item.Id);
+            // The program file is untrusted too, unless it is a generic host (then only the entry was ever trusted).
+            if (!string.IsNullOrWhiteSpace(item.TargetFile) && !StartupTargets.IsGenericHost(item.TargetFile) &&
+                settings.IsTrusted(item.TargetFile))
+                settings.RemoveTrusted(item.TargetFile);
+        }
+        return IsTrustedNow(item, settings);
     }
 
     /// <summary>

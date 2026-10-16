@@ -255,7 +255,7 @@
                                                 <KeyBinding Key="Return" Command="{Binding AddExclusionCommand}" />
                                             </TextBox.InputBindings>
                                         </TextBox>
-                                        <TextBlock Style="{StaticResource Placeholder}" Margin="11,0,40,0" Text="Путь, например D:\Проекты"
+                                        <TextBlock Style="{StaticResource Placeholder}" Margin="11,0,40,0" Text="Например, D:\Проекты"
                                                    Visibility="{Binding Text, ElementName=ExclusionBox, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                                         <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                 Margin="0,0,4,0" Padding="8,6" Command="{Binding BrowseExclusionCommand}"
@@ -356,6 +356,9 @@
                                         <TextBlock Text="Убрать из доверенных" />
                                     </StackPanel>
                                 </Button>
+                                <TextBlock Text="{Binding TrustedMessage}" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12.5"
+                                           Foreground="{StaticResource SuccessBrush}"
+                                           Visibility="{Binding TrustedMessage, Converter={StaticResource HasValueToVis}}" />
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -705,8 +708,44 @@
                                         <TextBlock Text="Создать точку восстановления сейчас" />
                                     </StackPanel>
                                 </Button>
-                                <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="{Binding LastRestoreResult}"
-                                           Visibility="{Binding LastRestoreResult, Converter={StaticResource HasValueToVis}}" />
+                                <!-- Exact outcome of the last attempt: created / skipped by Windows / not created -->
+                                <Border Padding="10,7" Margin="0,10,0,0" HorizontalAlignment="Stretch"
+                                        Visibility="{Binding LastRestoreResult, Converter={StaticResource HasValueToVis}}">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource Badge}">
+                                            <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                                            <Setter Property="TextElement.Foreground" Value="{StaticResource WarningBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding LastRestoreResultKind}" Value="Success">
+                                                    <Setter Property="Background" Value="{StaticResource SuccessSoftBrush}" />
+                                                    <Setter Property="TextElement.Foreground" Value="{StaticResource SuccessBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding LastRestoreResultKind}" Value="Info">
+                                                    <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                                                    <Setter Property="TextElement.Foreground" Value="{StaticResource InfoBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <DockPanel>
+                                        <TextBlock FontSize="13" VerticalAlignment="Top" Margin="0,1,8,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                    <Setter Property="Text" Value="&#xE7BA;" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding LastRestoreResultKind}" Value="Success">
+                                                            <Setter Property="Text" Value="&#xE73E;" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding LastRestoreResultKind}" Value="Info">
+                                                            <Setter Property="Text" Value="&#xE946;" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding LastRestoreResult}" TextWrapping="Wrap" FontSize="12.5" />
+                                    </DockPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 

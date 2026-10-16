@@ -7,7 +7,7 @@ namespace PcCleaner.Tests.Disk;
 
 public class DiskServiceTests
 {
-    private static DiskService ServiceFor(DiskTestTree tree, Func<string, bool>? recycler = null)
+    private static DiskService ServiceFor(DiskTestTree tree, Func<string, RecycleOutcome>? recycler = null)
         => new(new DiskEnvironment
         {
             SystemDriveRoot = tree.Root,
@@ -51,7 +51,7 @@ public class DiskServiceTests
             Recycler = path =>
             {
                 called.Add(path);
-                return true;
+                return RecycleOutcome.Ok;
             },
         });
 
@@ -113,7 +113,7 @@ public class DiskServiceTests
         var service = ServiceFor(tree, path =>
         {
             called.Add(path);
-            return path == ok; // simulate "busy" failure for the other file
+            return path == ok ? RecycleOutcome.Ok : new RecycleOutcome(RecycleFailure.InUse); // the other file is busy
         });
 
         var result = service.RecycleFiles(new[] { (ok, 1234L), (busy, 10L), (system, 50L), (missing, 1L) });
@@ -124,7 +124,63 @@ public class DiskServiceTests
         Assert.Equal(3, result.Skipped.Count);
         Assert.Contains(result.Skipped, s => s.Path == system && s.Reason.Contains("системный"));
         Assert.Contains(result.Skipped, s => s.Path == missing);
+        Assert.Contains(result.Skipped, s => s.Path == busy && s.Reason.Contains("открыт в другой программе"));
         Assert.True(File.Exists(system));
+    }
+
+    [Theory]
+    [InlineData((int)RecycleFailure.NoRecycleBin, "нет корзины")]
+    [InlineData((int)RecycleFailure.DeclinedPermanentDelete, "удалить его навсегда вы отказались")]
+    [InlineData((int)RecycleFailure.InUse, "открыт в другой программе")]
+    [InlineData((int)RecycleFailure.AccessDenied, "нет прав")]
+    [InlineData((int)RecycleFailure.Missing, "уже удалён")]
+    public void Each_recycle_failure_states_its_real_reason(int failure, string expected)
+    {
+        using var tree = new DiskTestTree("recycle-reasons");
+        var file = tree.File(@"Users\U\film.mkv", 100);
+        var service = ServiceFor(tree, _ => new RecycleOutcome((RecycleFailure)failure));
+
+        var result = service.RecycleFiles(new[] { (file, 100L) });
+
+        Assert.Empty(result.Recycled);
+        Assert.Contains(expected, Assert.Single(result.Skipped).Reason);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public void Shell_results_are_classified_by_their_real_reason()
+    {
+        int NotAsked() => throw new InvalidOperationException("the probe is not needed here");
+
+        Assert.True(SafeRecycler.Classify(0, aborted: false, stillExists: false, NotAsked).Success);
+        // The user answered "No" to Windows' "delete permanently?" (the file is too big for the Recycle Bin).
+        Assert.Equal(RecycleFailure.DeclinedPermanentDelete, SafeRecycler.Classify(0, aborted: true, stillExists: true, NotAsked).Failure);
+        Assert.Equal(RecycleFailure.DeclinedPermanentDelete, SafeRecycler.Classify(1223, false, true, NotAsked).Failure);
+        Assert.Equal(RecycleFailure.InUse, SafeRecycler.Classify(32, false, true, NotAsked).Failure);
+        Assert.Equal(RecycleFailure.AccessDenied, SafeRecycler.Classify(0x78, false, true, NotAsked).Failure);
+        Assert.Equal(RecycleFailure.AccessDenied, SafeRecycler.Classify(5, false, true, NotAsked).Failure);
+        Assert.Equal(RecycleFailure.Missing, SafeRecycler.Classify(0x7C, false, true, NotAsked).Failure);
+        Assert.Equal(RecycleFailure.Missing, SafeRecycler.Classify(0x402, false, stillExists: false, NotAsked).Failure);
+
+        // Unspecific shell codes: the probe tells a busy file from a protected one.
+        Assert.Equal(RecycleFailure.InUse, SafeRecycler.Classify(0x402, false, true, () => 32).Failure);
+        Assert.Equal(RecycleFailure.AccessDenied, SafeRecycler.Classify(0x402, false, true, () => 5).Failure);
+        var unknown = SafeRecycler.Classify(0x402, false, true, () => 0);
+        Assert.Equal(RecycleFailure.Failed, unknown.Failure);
+        Assert.Contains("код 1026", unknown.Reason);
+    }
+
+    [Fact]
+    public void Delete_probe_tells_a_busy_file_from_a_free_one_without_deleting_anything()
+    {
+        using var tree = new DiskTestTree("recycle-probe");
+        var file = tree.File(@"Users\U\locked.bin", 10);
+
+        Assert.Equal(0, SafeRecycler.ProbeDelete(file));
+        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read)) // no FileShare.Delete: "in use"
+            Assert.Equal(32, SafeRecycler.ProbeDelete(file));
+        Assert.Equal(2, SafeRecycler.ProbeDelete(Path.Combine(tree.Root, "missing.bin")));
+        Assert.True(File.Exists(file));
     }
 
     [Fact]

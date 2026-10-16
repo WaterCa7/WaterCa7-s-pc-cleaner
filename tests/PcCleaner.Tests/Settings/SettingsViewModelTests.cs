@@ -8,7 +8,9 @@ namespace PcCleaner.Tests.Settings;
 /// <summary>
 /// View-model tests use a private AppSettings instance and a private log source,
 /// so they never touch AppServices.Settings (shared with other modules' tests) or the real settings file.
+/// (AppSettings.AddTrusted/RemoveTrusted save to the temp test data folder — hence the shared collection.)
 /// </summary>
+[Collection(SettingsFileCollection.Name)]
 public class SettingsViewModelTests
 {
     private readonly AppSettings _settings = new();
@@ -25,7 +27,7 @@ public class SettingsViewModelTests
         _settings.CreateRestorePoint = false;
         _settings.CleanerMinFileAgeHours = 12;
         _settings.CleanerExclusions.Add(@"D:\Keep");
-        _settings.TrustedItems.Add("tool.exe");
+        _settings.AddTrusted("tool.exe");
 
         var vm = Create();
         vm.LoadGeneral();
@@ -89,20 +91,43 @@ public class SettingsViewModelTests
     }
 
     [Fact]
-    public void RemoveTrusted_SavesSelection()
+    public void RemoveTrusted_GoesThroughAppSettingsAndRefreshesTheList()
     {
-        _settings.TrustedItems.AddRange(new[] { "a.exe", "b.exe" });
+        _settings.AddTrusted("a.exe");
+        _settings.AddTrusted("b.exe");
         var shared = _settings.TrustedItems;
         var vm = Create();
         vm.LoadGeneral();
+        Assert.Null(vm.TrustedMessage);
 
         vm.RemoveTrustedCommand.Execute(new List<object> { "A.EXE" });
 
         Assert.Equal(new[] { "b.exe" }, _settings.TrustedItems);
         Assert.Equal(new[] { "b.exe" }, vm.TrustedItems);
-        Assert.Equal(1, _saves);
+        Assert.False(_settings.IsTrusted("a.exe"));
+        Assert.StartsWith("Убрано из доверенных", vm.TrustedMessage);
+        // AppSettings.RemoveTrusted saved the change itself; the page does not save the whole settings again.
+        Assert.Equal(0, _saves);
         // The list other modules may be reading was replaced, not modified in place.
         Assert.Equal(new[] { "a.exe", "b.exe" }, shared);
+
+        // Removing something that is no longer there changes nothing.
+        vm.RemoveTrustedCommand.Execute(new List<object> { "a.exe" });
+        Assert.Equal(new[] { "b.exe" }, vm.TrustedItems);
+    }
+
+    [Fact]
+    public void TrustedListChangedOnAnotherPage_IsShownOnTheNextVisit()
+    {
+        var vm = Create();
+        vm.LoadGeneral();
+        Assert.Empty(vm.TrustedItems);
+
+        _settings.AddTrusted(@"C:\Tools\tool.exe"); // e.g. "Доверять" on the Startup page
+        vm.LoadGeneral();                           // what OnNavigatedToAsync does on every later visit
+
+        Assert.Equal(new[] { @"C:\Tools\tool.exe" }, vm.TrustedItems);
+        Assert.Equal(0, _saves);
     }
 
     [Fact]
@@ -110,7 +135,7 @@ public class SettingsViewModelTests
     {
         // TestEnvironment makes every confirmation answer "No".
         _settings.CreateRestorePoint = false;
-        _settings.TrustedItems.Add("keep.exe");
+        _settings.AddTrusted("keep.exe");
         var vm = Create();
         vm.LoadGeneral();
 

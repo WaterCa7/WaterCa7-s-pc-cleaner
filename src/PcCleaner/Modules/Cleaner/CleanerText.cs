@@ -13,16 +13,35 @@ public static class CleanerText
     public static string DeletedObjects(long items)
         => $"{(IsSingular(items) ? "удалён" : "удалено")} {Objects(items)}";
 
-    /// <summary>"пропущен 1 занятый", "пропущено 87 занятых".</summary>
+    /// <summary>"пропущен 1 занятый", "пропущено 87 занятых" (files open in a running program).</summary>
     public static string SkippedBusy(long files)
         => IsSingular(files) ? $"пропущен {Format.Number(files)} занятый" : $"пропущено {Format.Number(files)} занятых";
 
+    /// <summary>"пропущен 1 файл без доступа", "пропущено 5 файлов без доступа" (no permission to delete).</summary>
+    public static string SkippedDenied(long files)
+        => $"{(IsSingular(files) ? "пропущен" : "пропущено")} {Files(files)} без доступа";
+
+    /// <summary>
+    /// What was skipped, busy files told apart from protected ones: "пропущено 87 занятых", "пропущено 5 файлов без доступа",
+    /// "пропущено: 87 занятых, 5 без доступа". Empty when nothing was skipped.
+    /// </summary>
+    public static string Skipped(long busyFiles, long deniedFiles)
+    {
+        if (busyFiles > 0 && deniedFiles > 0)
+            return $"пропущено: {Format.Number(busyFiles)} {(IsSingular(busyFiles) ? "занятый" : "занятых")}, " +
+                   $"{Format.Number(deniedFiles)} без доступа";
+        if (busyFiles > 0)
+            return SkippedBusy(busyFiles);
+        return deniedFiles > 0 ? SkippedDenied(deniedFiles) : "";
+    }
+
     /// <summary>"Освобождено 3,2 ГБ, удалено 12 345 файлов, пропущено 87 занятых" (without the final period).</summary>
-    public static string ResultLine(long freedBytes, long deletedFiles, long skippedFiles)
+    public static string ResultLine(long freedBytes, long deletedFiles, long busyFiles, long deniedFiles = 0)
     {
         var text = $"Освобождено {Format.Bytes(freedBytes)}, {Deleted(deletedFiles)}";
-        if (skippedFiles > 0)
-            text += ", " + SkippedBusy(skippedFiles);
+        var skipped = Skipped(busyFiles, deniedFiles);
+        if (skipped.Length > 0)
+            text += ", " + skipped;
         return text;
     }
 

@@ -141,6 +141,18 @@ public sealed class InstalledProgram : ObservableObject
 
     public bool CanQuietUninstall => CanUninstall && HasQuietUninstall;
 
+    /// <summary>
+    /// Microsoft runtimes (Visual C++, .NET, DirectX…) can be uninstalled, but other programs need them: the details panel
+    /// offers that only as a muted secondary button, and the confirmation starts with a strong warning.
+    /// </summary>
+    public bool UninstallNotRecommended => CanUninstall && IsRuntime;
+
+    /// <summary>The red "Удалить программу" main action (everything that can be uninstalled except runtimes).</summary>
+    public bool ShowPrimaryUninstall => CanUninstall && !IsRuntime;
+
+    /// <summary>"Тихое удаление" is never offered for runtimes: removing one without any window is too easy to regret.</summary>
+    public bool ShowQuietUninstall => CanQuietUninstall && !IsRuntime;
+
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
 
     public string PublisherText => HasPublisher ? Publisher!.Trim() : "Не указан";

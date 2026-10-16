@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using PcCleaner.Core;
+using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Disk;
 
@@ -129,12 +130,10 @@ public sealed class DiskViewModel : PageViewModel
         RecycleSuggestionCommand = new AsyncRelayCommand(
             p => p is SuggestionItem s ? RecycleSuggestionAsync(s) : Task.CompletedTask, _ => !IsBusy);
         DisableHibernationCommand = new AsyncRelayCommand(DisableHibernationAsync, () => !IsBusy);
-        DiskCleanupCommand = new RelayCommand(OpenDiskCleanup);
-        SystemProtectionCommand = new RelayCommand(() =>
-        {
-            if (SystemTools.Launch(SystemTools.Exe("SystemPropertiesProtection.exe")))
-                Log.Info("Открыто окно «Защита системы»");
-        });
+        DiskCleanupCommand = new AsyncRelayCommand(() => OpenToolAsync("cleanmgr.exe",
+            $"/d {_service.SystemDriveRoot.TrimEnd('\\').TrimEnd(':')}", "cleanmgr", "«Очистка диска»"));
+        SystemProtectionCommand = new AsyncRelayCommand(() => OpenToolAsync("SystemPropertiesProtection.exe", "",
+            "SystemPropertiesProtection", "«Защита системы»"));
         OpenRecycleBinCommand = new RelayCommand(() => SystemTools.Open("shell:RecycleBinFolder"));
 
         OptimizeDriveCommand = new AsyncRelayCommand(p => p is DriveItem d ? OptimizeDriveAsync(d) : Task.CompletedTask, _ => !IsBusy);
@@ -144,7 +143,7 @@ public sealed class DiskViewModel : PageViewModel
             if (p is DriveItem d)
                 SystemTools.Open(d.Model.RootPath);
         });
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
+        RestartAsAdminCommand = new RelayCommand(() => ElevatedRestart.Request(), () => !Admin.IsElevated);
     }
 
     public override string Title => "Диски";
@@ -176,8 +175,14 @@ public sealed class DiskViewModel : PageViewModel
     public RelayCommand CheckAllCommand { get; }
     public AsyncRelayCommand RecycleSuggestionCommand { get; }
     public AsyncRelayCommand DisableHibernationCommand { get; }
-    public RelayCommand DiskCleanupCommand { get; }
-    public RelayCommand SystemProtectionCommand { get; }
+    public AsyncRelayCommand DiskCleanupCommand { get; }
+    public AsyncRelayCommand SystemProtectionCommand { get; }
+
+    /// <summary>
+    /// How long a tool button stays disabled after it opened its window (the window takes a moment to appear,
+    /// so a double click must not open a second one).
+    /// </summary>
+    internal TimeSpan ToolLaunchCooldown { get; set; } = TimeSpan.FromSeconds(3);
     public RelayCommand OpenRecycleBinCommand { get; }
     public AsyncRelayCommand OptimizeDriveCommand { get; }
     public AsyncRelayCommand EnableTrimCommand { get; }
@@ -820,9 +825,11 @@ public sealed class DiskViewModel : PageViewModel
         if (result.Skipped.Count > 0)
         {
             summary.AppendLine();
-            summary.AppendLine($"Пропущено: {result.Skipped.Count}");
+            summary.AppendLine($"Не перемещено: {Format.Count(result.Skipped.Count, "файл", "файла", "файлов")}");
             foreach (var (path, reason) in result.Skipped.Take(6))
                 summary.AppendLine($"• {Path.GetFileName(path)} — {reason}");
+            if (result.Skipped.Count > 6)
+                summary.AppendLine($"… и ещё {Format.Count(result.Skipped.Count - 6, "файл", "файла", "файлов")}");
         }
         if (result.Recycled.Count > 0)
         {
@@ -1110,7 +1117,7 @@ public sealed class DiskViewModel : PageViewModel
 
     private async Task DisableHibernationAsync()
     {
-        if (!Admin.RequireElevation("Отключить гибернацию"))
+        if (!ElevatedRestart.RequireElevation("Отключить гибернацию"))
             return;
         var hiber = DiskService.FindSystemFilesIn(_service.SystemDriveRoot).FirstOrDefault(f => f.Name == "hiberfil.sys");
         var size = hiber is null ? "" : $" ({Format.Bytes(hiber.Size)})";
@@ -1133,7 +1140,7 @@ public sealed class DiskViewModel : PageViewModel
 
     private async Task EnableTrimAsync()
     {
-        if (!Admin.RequireElevation("Включить TRIM"))
+        if (!ElevatedRestart.RequireElevation("Включить TRIM"))
             return;
         if (!Dialogs.Confirm("Включить TRIM",
                 "Windows снова начнёт сообщать SSD, какие блоки освободились после удаления файлов. Это сохраняет скорость " +
@@ -1153,7 +1160,7 @@ public sealed class DiskViewModel : PageViewModel
     private async Task OptimizeDriveAsync(DriveItem drive)
     {
         var letter = drive.Letter;
-        if (!Admin.RequireElevation($"Оптимизировать диск {letter}:"))
+        if (!ElevatedRestart.RequireElevation($"Оптимизировать диск {letter}:"))
             return;
 
         var text = drive.Kind switch
@@ -1213,11 +1220,24 @@ public sealed class DiskViewModel : PageViewModel
         _ = LoadOverviewAsync();
     }
 
-    private void OpenDiskCleanup()
+    /// <summary>Opens a Windows tool once: not again while its window is open, and not twice on a double click.</summary>
+    private async Task OpenToolAsync(string exe, string arguments, string processName, string displayName)
     {
-        var drive = _service.SystemDriveRoot.TrimEnd('\\').TrimEnd(':');
-        if (SystemTools.Launch(SystemTools.Exe("cleanmgr.exe"), $"/d {drive}"))
-            Log.Info("Открыта «Очистка диска» Windows");
+        var result = await Task.Run(() => _service.OpenTool(SystemTools.Exe(exe), arguments, processName));
+        switch (result)
+        {
+            case ToolLaunchResult.Started:
+                Log.Info($"Открыто окно {displayName}");
+                // The command stays busy (its buttons disabled) while the window appears.
+                await Task.Delay(ToolLaunchCooldown);
+                break;
+            case ToolLaunchResult.AlreadyOpen:
+                Dialogs.Info("Окно уже открыто", $"Окно {displayName} уже открыто — переключитесь на него через панель задач.");
+                break;
+            default:
+                Dialogs.Error("Не удалось открыть", $"Не удалось открыть окно {displayName}. Подробности — в журнале (раздел «Настройки»).");
+                break;
+        }
     }
 
     // ------------------------------------------------------------------ helpers

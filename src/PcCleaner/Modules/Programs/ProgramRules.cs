@@ -302,75 +302,59 @@ public static class ProgramRules
 
     /// <summary>
     /// Plain-language note when a program lives where normal programs do not (Temp, Downloads, Recycle Bin, Public).
-    /// Folders directly in AppData are normal for per-user apps and are not reported.
+    /// Folders directly in AppData are normal for per-user apps and are not reported. The classification is Core's
+    /// (<see cref="Suspicion.DescribeRiskyLocation"/> for an install folder); only the longer explanation is ours.
     /// </summary>
-    public static string? DescribeInstallLocationRisk(string? installLocation) => ClassifyInstallLocation(installLocation) switch
+    public static string? DescribeInstallLocationRisk(string? installLocation)
     {
-        LocationRisk.Temp => "Программа установлена во временную папку (Temp) — обычные программы так не делают.",
-        LocationRisk.Downloads => "Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.",
-        LocationRisk.RecycleBin => "Папка программы находится в корзине.",
-        LocationRisk.Public => "Программа установлена в общую папку пользователей (Public) — это необычно.",
-        _ => null,
-    };
+        var reason = InstallLocationReason(installLocation);
+        if (reason is null)
+            return null;
+        if (reason.Contains("Temp", StringComparison.OrdinalIgnoreCase))
+            return "Программа установлена во временную папку (Temp) — обычные программы так не делают.";
+        if (reason.Contains("Загрузки", StringComparison.OrdinalIgnoreCase))
+            return "Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.";
+        if (reason.Contains("корзин", StringComparison.OrdinalIgnoreCase))
+            return "Папка программы находится в корзине.";
+        if (reason.Contains("Public", StringComparison.OrdinalIgnoreCase))
+            return "Программа установлена в общую папку пользователей (Public) — это необычно.";
+        return reason;
+    }
 
     /// <summary>
-    /// PUP heuristics for an installed program: the Core checks (known PUPs, missing publisher) plus the install folder.
-    /// Unlike <see cref="Suspicion.AnalyzeProgram"/>, a folder directly in AppData is normal for programs (Discord, Telegram,
-    /// GitHub Desktop install per user there), and the reasons describe an install folder rather than a running file.
+    /// PUP heuristics for an installed program — Core's <see cref="Suspicion.AnalyzeProgram"/> (known PUPs, missing
+    /// publisher, unusual install folder). Only the folder is prepared here: quotes and variables are removed, and network
+    /// folders are not judged.
     /// </summary>
     public static SuspicionResult AnalyzeProgram(string displayName, string? publisher, string? installLocation)
-    {
-        if (AppServices.Settings.IsTrusted(displayName))
-            return SuspicionResult.Clean;
-        var core = Suspicion.AnalyzeProgram(displayName, publisher, installLocation: null);
-        var location = ClassifyInstallLocation(installLocation) switch
-        {
-            LocationRisk.Temp => "Установлена во временную папку (Temp)",
-            LocationRisk.Downloads => "Установлена прямо в папку «Загрузки»",
-            LocationRisk.RecycleBin => "Папка программы находится в корзине",
-            LocationRisk.Public => "Установлена в общую папку пользователей (Public)",
-            _ => null,
-        };
-        if (location is null)
-            return core;
-        return new SuspicionResult(Math.Clamp(core.Score + 20, 0, 100), core.Reasons.Append(location).ToList());
-    }
+        => Suspicion.AnalyzeProgram(displayName, publisher, AnalyzableFolder(installLocation));
 
-    private enum LocationRisk
+    /// <summary>Core's reason for an unusual install folder ("Установлена во временную папку (Temp)"), or null.</summary>
+    internal static string? InstallLocationReason(string? installLocation)
     {
-        None,
-        Temp,
-        Downloads,
-        RecycleBin,
-        Public,
-    }
-
-    private static LocationRisk ClassifyInstallLocation(string? installLocation)
-    {
-        var folder = NormalizeFolder(installLocation);
-        if (folder is null || IsNetworkPath(folder))
-            return LocationRisk.None;
-        string? reason;
+        var folder = AnalyzableFolder(installLocation);
+        if (folder is null)
+            return null;
         try
         {
-            // DescribeRiskyLocation looks at the parent folder of a file, so describe a file inside the install folder.
-            reason = Suspicion.DescribeRiskyLocation(Path.Combine(folder, "app.exe"));
+            return Suspicion.DescribeRiskyLocation(folder, isInstallFolder: true);
         }
         catch (ArgumentException)
         {
-            return LocationRisk.None;
+            return null;
         }
-        if (reason is null)
-            return LocationRisk.None;
-        if (reason.Contains("Temp", StringComparison.OrdinalIgnoreCase))
-            return LocationRisk.Temp;
-        if (reason.Contains("Загрузки", StringComparison.OrdinalIgnoreCase))
-            return LocationRisk.Downloads;
-        if (reason.Contains("корзин", StringComparison.OrdinalIgnoreCase))
-            return LocationRisk.RecycleBin;
-        if (reason.Contains("Public", StringComparison.OrdinalIgnoreCase))
-            return LocationRisk.Public;
-        return LocationRisk.None; // "directly in AppData" is normal for per-user programs
+    }
+
+    /// <summary>
+    /// The install folder in the form Core expects: normalized, with a trailing separator so that a program installed
+    /// right into a risky folder (e.g. %TEMP% itself) counts as being inside it. Null for empty and network folders.
+    /// </summary>
+    private static string? AnalyzableFolder(string? installLocation)
+    {
+        var folder = NormalizeFolder(installLocation);
+        if (folder is null || IsNetworkPath(folder))
+            return null;
+        return folder.TrimEnd('\\', '/') + "\\";
     }
 
     public static bool IsDriverPackage(string? displayName)

@@ -104,7 +104,7 @@ public sealed partial class SettingsViewModel
         var key = reg.RootKey!;
         var title = BackupCatalog.FriendlyKeyName(key);
         var needsAdmin = BackupCatalog.NeedsAdmin(key);
-        if (needsAdmin && !Admin.RequireElevation("Восстановить системный раздел реестра"))
+        if (needsAdmin && !ElevatedRestart.RequireElevation("Восстановить системный раздел реестра"))
             return;
 
         var exists = await Task.Run(() => KeyExists(key));

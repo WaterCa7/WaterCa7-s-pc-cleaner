@@ -5,6 +5,7 @@ using Xunit;
 
 namespace PcCleaner.Tests.Settings;
 
+[Collection(SettingsFileCollection.Name)]
 public class SettingsLogicTests
 {
     public SettingsLogicTests() => TestEnvironment.Init();
@@ -159,6 +160,8 @@ public class SettingsLogicTests
         };
         settings.ModuleData["Optimizer"] = new() { ["PowerPlan.Previous"] = "guid" };
 
+        var trustedBefore = settings.TrustedItems;
+
         SettingsLogic.ResetToDefaults(settings);
 
         Assert.True(settings.CreateRestorePoint);
@@ -166,7 +169,38 @@ public class SettingsLogicTests
         Assert.Empty(settings.CleanerExclusions);
         Assert.Empty(settings.CleanerDisabledCategories);
         Assert.Empty(settings.TrustedItems);
+        Assert.False(settings.IsTrusted("tool.exe"));
+        // Cleared through AppSettings.RemoveTrusted: the list other pages may be reading is replaced, not edited.
+        Assert.Equal(new[] { "tool.exe" }, trustedBefore);
         Assert.Equal("guid", settings.GetModuleValue("Optimizer", "PowerPlan.Previous"));
+    }
+
+    [Fact]
+    public void RemoveTrusted_IsCaseInsensitiveAndCountsWhatWasRemoved()
+    {
+        var settings = new AppSettings();
+        settings.AddTrusted(@"C:\Tools\a.exe");
+        settings.AddTrusted("Program B");
+
+        Assert.Equal(1, SettingsLogic.RemoveTrusted(settings, new[] { @"c:\tools\A.EXE", "missing.exe" }));
+        Assert.Equal(new[] { "Program B" }, settings.TrustedItems);
+        Assert.Equal(0, SettingsLogic.RemoveTrusted(settings, Array.Empty<string>()));
+        Assert.Equal(1, SettingsLogic.RemoveTrusted(settings, new[] { "program b", "PROGRAM B" }));
+        Assert.Empty(settings.TrustedItems);
+    }
+
+    [Fact]
+    public void Sanitize_RepairsTheTrustedListThroughAddRemoveTrusted()
+    {
+        var settings = new AppSettings { TrustedItems = new() { "a.exe", " ", "A.EXE", " b.exe " } };
+        var loaded = settings.TrustedItems;
+
+        Assert.True(SettingsLogic.Sanitize(settings) > 0);
+
+        Assert.Equal(new[] { "a.exe", "b.exe" }, settings.TrustedItems);
+        Assert.True(settings.IsTrusted("B.EXE"));
+        Assert.Equal(new[] { "a.exe", " ", "A.EXE", " b.exe " }, loaded); // never edited in place
+        Assert.Equal(0, SettingsLogic.Sanitize(settings));
     }
 
     [Fact]
@@ -231,9 +265,16 @@ public class SettingsLogicTests
             TrustedItems = new() { @"C:\Tools\trusted.exe" },
         };
         Assert.Equal(ExclusionAddResult.Added, SettingsLogic.TryAddExclusion(settings, marker, out _, out _));
-        settings.SetModuleValue("Settings.Tests", "Key", "Значение"); // also saves
 
-        var loaded = AppSettings.Load();
+        // Tests of other modules may save their own settings to the same temp file at any moment: retry a few times.
+        AppSettings loaded = null!;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            settings.SetModuleValue("Settings.Tests", "Key", "Значение"); // also saves
+            loaded = AppSettings.Load();
+            if (loaded.CleanerExclusions.Contains(marker))
+                break;
+        }
 
         Assert.False(loaded.CreateRestorePoint);
         Assert.Equal(720, loaded.CleanerMinFileAgeHours);

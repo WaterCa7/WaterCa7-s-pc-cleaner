@@ -190,6 +190,22 @@ internal static class SettingsLogic
     }
 
     /// <summary>
+    /// Removes the given entries from the shared trusted list (case-insensitive) through AppSettings.RemoveTrusted, which is
+    /// thread-safe, replaces the list instead of editing it in place, saves and logs. Returns how many entries were removed.
+    /// </summary>
+    public static int RemoveTrusted(AppSettings settings, IEnumerable<string> items)
+    {
+        var before = settings.TrustedItems.Count;
+        foreach (var item in items.Where(i => i is not null).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
+        {
+            // Blank entries (a hand-edited settings.json) are never "trusted", but they are still removed.
+            if (settings.IsTrusted(item) || settings.TrustedItems.Contains(item))
+                settings.RemoveTrusted(item);
+        }
+        return Math.Max(0, before - settings.TrustedItems.Count);
+    }
+
+    /// <summary>
     /// Resets user preferences to defaults. ModuleData is kept on purpose: it stores previous values
     /// that other modules need to undo their tweaks.
     /// </summary>
@@ -200,12 +216,13 @@ internal static class SettingsLogic
         settings.CleanerMinFileAgeHours = defaults.CleanerMinFileAgeHours;
         settings.CleanerExclusions = new List<string>(defaults.CleanerExclusions);
         settings.CleanerDisabledCategories = new List<string>(defaults.CleanerDisabledCategories);
-        settings.TrustedItems = new List<string>(defaults.TrustedItems);
+        RemoveTrusted(settings, settings.TrustedItems.ToList());
     }
 
     /// <summary>
     /// Repairs values loaded from a hand-edited settings.json (out-of-range age, null/blank/duplicate entries).
-    /// Returns the number of corrections. Does not save.
+    /// Returns the number of corrections. Does not save, except that a repaired trusted list is saved by
+    /// AppSettings.AddTrusted/RemoveTrusted (the only safe way to change it).
     /// </summary>
     public static int Sanitize(AppSettings settings)
     {
@@ -218,6 +235,7 @@ internal static class SettingsLogic
         }
 
         settings.CleanerExclusions ??= new List<string>();
+        // A missing list (JSON null) must exist before IsTrusted/AddTrusted/RemoveTrusted can be used at all.
         settings.TrustedItems ??= new List<string>();
         settings.CleanerDisabledCategories ??= new List<string>();
         settings.ModuleData ??= new Dictionary<string, Dictionary<string, string>>();
@@ -228,8 +246,24 @@ internal static class SettingsLogic
             settings.CleanerExclusions = exclusions;
         var trustedFixes = Dedupe(settings.TrustedItems, out var trusted);
         if (trustedFixes > 0)
-            settings.TrustedItems = trusted;
+            ReplaceTrusted(settings, trusted);
         return fixes + exclusionFixes + trustedFixes;
+    }
+
+    /// <summary>
+    /// Brings the trusted list to <paramref name="wanted"/> using only AppSettings.RemoveTrusted/AddTrusted
+    /// (the list is shared with background scans of other pages).
+    /// </summary>
+    private static void ReplaceTrusted(AppSettings settings, IReadOnlyList<string> wanted)
+    {
+        // RemoveTrusted is case-insensitive: removing "A.EXE" also removes "a.exe", which is added back below.
+        foreach (var entry in settings.TrustedItems.ToList())
+        {
+            if (!wanted.Contains(entry, StringComparer.Ordinal))
+                settings.RemoveTrusted(entry);
+        }
+        foreach (var entry in wanted)
+            settings.AddTrusted(entry);
     }
 
     private static int Dedupe(List<string> list, out List<string> cleaned)

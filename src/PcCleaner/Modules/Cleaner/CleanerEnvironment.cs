@@ -25,6 +25,15 @@ public sealed class CleanerEnvironment
     /// <summary>Returns the names (no .exe, case-insensitive) of running processes.</summary>
     public Func<IReadOnlySet<string>> RunningProcessNames { get; init; } = GetRunningProcessNames;
 
+    /// <summary>
+    /// Opens the Windows "Очистка диска" wizard (cleanmgr.exe) for a drive letter such as "C". Returns false if it could not
+    /// be started. Tests replace it, so they never open the real wizard.
+    /// </summary>
+    public Func<string, bool> StartDiskCleanup { get; init; } = StartDiskCleanupProcess;
+
+    /// <summary>True while a "Очистка диска" window is open (a second one must not be started).</summary>
+    public Func<bool> IsDiskCleanupRunning { get; init; } = () => IsProcessRunning("cleanmgr");
+
     public string SystemDrive => Path.GetPathRoot(WindowsDir) ?? @"C:\";
 
     public string DeliveryOptimizationCache => Path.Combine(WindowsDir,
@@ -47,8 +56,12 @@ public sealed class CleanerEnvironment
         };
     }
 
-    /// <summary>A fake environment where every well-known folder lives under <paramref name="root"/>.</summary>
-    internal static CleanerEnvironment ForTests(string root, IReadOnlySet<string>? running = null)
+    /// <summary>
+    /// A fake environment where every well-known folder lives under <paramref name="root"/>. The Disk Cleanup wizard is
+    /// never really started: <paramref name="startDiskCleanup"/> (default: report a failure) is called instead.
+    /// </summary>
+    internal static CleanerEnvironment ForTests(string root, IReadOnlySet<string>? running = null,
+        Func<string, bool>? startDiskCleanup = null, Func<bool>? isDiskCleanupRunning = null)
     {
         var profile = Path.Combine(root, "Users", "Test");
         var local = Path.Combine(profile, "AppData", "Local");
@@ -61,7 +74,42 @@ public sealed class CleanerEnvironment
             WindowsDir = Path.Combine(root, "Windows"),
             UserProfile = profile,
             RunningProcessNames = () => running ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            StartDiskCleanup = startDiskCleanup ?? (_ => false),
+            IsDiskCleanupRunning = isDiskCleanupRunning ?? (() => false),
         };
+    }
+
+    private static bool StartDiskCleanupProcess(string driveLetter)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cleanmgr.exe"), $"/d {driveLetter}")
+            {
+                UseShellExecute = true,
+            })?.Dispose();
+            return true;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or FileNotFoundException)
+        {
+            Core.Log.Warn($"Не удалось открыть мастер очистки диска: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool IsProcessRunning(string name)
+    {
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcessesByName(name);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+        foreach (var p in processes)
+            p.Dispose();
+        return processes.Length > 0;
     }
 
     public static IReadOnlySet<string> GetRunningProcessNames()

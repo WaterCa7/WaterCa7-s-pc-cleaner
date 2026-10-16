@@ -2,6 +2,7 @@
 using System.Text;
 using System.Windows.Input;
 using PcCleaner.Core;
+using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -47,8 +48,8 @@ public sealed class CleanerViewModel : PageViewModel
         SelectRecommendedCommand = new RelayCommand(SelectRecommended, () => !IsBusy && _items.Count > 0);
         UnselectAllCommand = new RelayCommand(UnselectAll, () => !IsBusy && _items.Count > 0);
         RunDismCommand = new AsyncRelayCommand(RunComponentCleanupAsync, () => !IsBusy);
-        LaunchDiskCleanupCommand = new RelayCommand(() => _service.LaunchDiskCleanup());
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !IsBusy && !_service.IsElevated);
+        LaunchDiskCleanupCommand = new AsyncRelayCommand(LaunchDiskCleanupAsync);
+        RestartAsAdminCommand = new RelayCommand(() => ElevatedRestart.Request(), () => !IsBusy && !_service.IsElevated);
         DismissResultCommand = new RelayCommand(() => LastResult = null);
 
         PropertyChanged += OnSelfPropertyChanged;
@@ -315,12 +316,13 @@ public sealed class CleanerViewModel : PageViewModel
         if (_batchUpdate)
             return;
         var settings = _service.Settings;
-        settings.CleanerDisabledCategories ??= new List<string>();
-        var disabled = settings.CleanerDisabledCategories;
+        // Copy-on-write: the Settings page may be reading the list (e.g. while resetting it).
+        var disabled = new List<string>(settings.CleanerDisabledCategories ?? new List<string>());
         if (item.IsChecked)
             disabled.RemoveAll(id => id == item.Id);
         else if (item.Category.DefaultChecked && !disabled.Contains(item.Id))
             disabled.Add(item.Id);
+        settings.CleanerDisabledCategories = disabled;
         settings.Save();
         Recalculate();
     }
@@ -368,10 +370,11 @@ public sealed class CleanerViewModel : PageViewModel
     private void ExcludePath(string path)
     {
         var settings = _service.Settings;
-        settings.CleanerExclusions ??= new List<string>();
-        if (!settings.CleanerExclusions.Contains(path, StringComparer.OrdinalIgnoreCase))
+        var exclusions = settings.CleanerExclusions ?? new List<string>();
+        if (!exclusions.Contains(path, StringComparer.OrdinalIgnoreCase))
         {
-            settings.CleanerExclusions.Add(path);
+            // Copy-on-write: a scan on a background thread may be enumerating the current list right now.
+            settings.CleanerExclusions = new List<string>(exclusions) { path };
             settings.Save();
         }
         Log.Info($"Добавлено в исключения очистки: {path}");
@@ -432,7 +435,7 @@ public sealed class CleanerViewModel : PageViewModel
                 (index, category) => ReportProgress(index * 100.0 / categories.Count,
                     $"Очистка: {category.Name} ({index + 1} из {categories.Count})"),
                 ct);
-            LastResult = new CleanResultViewModel(results, ct.IsCancellationRequested);
+            LastResult = new CleanResultViewModel(results, ct.IsCancellationRequested, _service.IsElevated);
             Log.Info("Очистка завершена: " + CleanerService.Summarize(results));
 
             // Show what is left in the cleaned categories (quick, so not cancellable).
@@ -482,9 +485,35 @@ public sealed class CleanerViewModel : PageViewModel
 
     // ===== Deep cleaning =====
 
+    /// <summary>
+    /// How long "Открыть" stays disabled after the wizard was started: its window takes a moment to appear, and a double
+    /// click must not open a second one.
+    /// </summary>
+    internal TimeSpan DiskCleanupCooldown { get; set; } = TimeSpan.FromSeconds(3);
+
+    private async Task LaunchDiskCleanupAsync()
+    {
+        // Off the UI thread: starting a process can take a moment. AsyncRelayCommand ignores clicks until this returns.
+        var result = await Task.Run(_service.LaunchDiskCleanup);
+        switch (result)
+        {
+            case DiskCleanupLaunch.Started:
+                await Task.Delay(DiskCleanupCooldown);
+                break;
+            case DiskCleanupLaunch.AlreadyOpen:
+                Dialogs.Info("Очистка диска",
+                    "Мастер очистки диска Windows уже открыт — переключитесь на его окно через панель задач.");
+                break;
+            default:
+                Dialogs.Error("Очистка диска",
+                    "Не удалось открыть встроенную утилиту «Очистка диска». Подробности — в журнале (раздел «Настройки»).");
+                break;
+        }
+    }
+
     private async Task RunComponentCleanupAsync()
     {
-        if (!Admin.RequireElevation("Очистка компонентов Windows (DISM)"))
+        if (!ElevatedRestart.RequireElevation("Очистка компонентов Windows (DISM)"))
             return;
         var confirmed = Dialogs.Confirm("Очистка компонентов Windows",
             "Будет запущена встроенная команда Windows:\n" +

@@ -261,27 +261,30 @@ public sealed class ProgramsService : IHealthContributor
     }
 
     /// <summary>Re-evaluates the PUP heuristics and trust flag (after the user trusts/untrusts a program).</summary>
-    public static void ApplyTrust(InstalledProgram p)
+    public static void ApplyTrust(InstalledProgram p) => ApplyTrust(p, AppServices.Settings);
+
+    internal static void ApplyTrust(InstalledProgram p, AppSettings settings)
     {
-        p.IsTrusted = AppServices.Settings.IsTrusted(p.DisplayName);
+        p.IsTrusted = settings.IsTrusted(p.DisplayName);
         p.Suspicion = p.IsTrusted
             ? SuspicionResult.Clean
             : ProgramRules.AnalyzeProgram(p.DisplayName, p.Publisher, p.InstallLocation);
         p.RefreshBadges();
     }
 
-    /// <summary>Adds or removes the program name in AppSettings.TrustedItems. Returns the new trust state.</summary>
-    public static bool SetTrusted(string displayName, bool trusted)
+    /// <summary>
+    /// Adds or removes the program name in the shared trusted list (through AppSettings.AddTrusted/RemoveTrusted, which
+    /// are thread-safe, save the settings and log the change). Returns the new trust state.
+    /// </summary>
+    public static bool SetTrusted(string displayName, bool trusted) => SetTrusted(AppServices.Settings, displayName, trusted);
+
+    internal static bool SetTrusted(AppSettings settings, string displayName, bool trusted)
     {
-        var settings = AppServices.Settings;
-        settings.TrustedItems.RemoveAll(t => string.Equals(t, displayName, StringComparison.OrdinalIgnoreCase));
         if (trusted)
-            settings.TrustedItems.Add(displayName);
-        settings.Save();
-        Log.Info(trusted
-            ? $"Программа «{displayName}» добавлена в доверенные"
-            : $"Программа «{displayName}» убрана из доверенных");
-        return trusted;
+            settings.AddTrusted(displayName);
+        else
+            settings.RemoveTrusted(displayName);
+        return settings.IsTrusted(displayName);
     }
 
     /// <summary>True if the program's registry key still exists.</summary>
