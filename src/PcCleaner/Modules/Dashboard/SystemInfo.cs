@@ -29,7 +29,10 @@ public sealed record LiveSnapshot(
     long SystemDriveFree,
     TimeSpan Uptime);
 
-/// <summary>Read-only system information for the dashboard (registry reads and cheap Win32 calls only).</summary>
+/// <summary>
+/// Read-only system information for the dashboard: registry reads, cheap Win32 calls and one WMI query for the video
+/// adapters (<see cref="ReadStatic"/> may take a moment — always call it off the UI thread).
+/// </summary>
 public static class SystemInfo
 {
     private const string CurrentVersionKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion";

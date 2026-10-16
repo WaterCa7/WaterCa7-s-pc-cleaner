@@ -347,8 +347,11 @@
                                 <TextBlock Text="{Binding ScanButtonText}" Margin="10,0,0,0" />
                             </StackPanel>
                         </Button>
+                        <!-- describes the scan button, so it stays right under it (not under the report buttons) -->
+                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,8,0,0" TextAlignment="Center" MaxWidth="214"
+                                   HorizontalAlignment="Center" TextWrapping="Wrap" Text="Около минуты · только чтение, ничего не меняет" />
                         <!-- report: enabled after a full scan in this session -->
-                        <Grid Margin="0,8,0,0">
+                        <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="8" />
@@ -368,10 +371,7 @@
                                 <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8C8;" />
                             </Button>
                         </Grid>
-                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,9,0,0" TextAlignment="Center" MaxWidth="214"
-                                   HorizontalAlignment="Center" Text="Около минуты · только чтение, ничего не меняет"
-                                   Visibility="{Binding HasReportStatus, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
-                        <DockPanel Margin="0,9,0,0" HorizontalAlignment="Center" MaxWidth="214"
+                        <DockPanel Margin="0,8,0,0" HorizontalAlignment="Center" MaxWidth="214"
                                    Visibility="{Binding HasReportStatus, Converter={StaticResource BoolToVis}}">
                             <TextBlock FontSize="12" VerticalAlignment="Top" Margin="0,1,6,0">
                                 <TextBlock.Style>

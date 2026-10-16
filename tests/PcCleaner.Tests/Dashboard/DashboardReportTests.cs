@@ -244,7 +244,7 @@ public class ReportBuilderTests
 
         Assert.Contains("Отчёт о проверке компьютера — WaterCa7s PC Cleaner", text);
         Assert.Contains("Оценка: 67 из 100 — Нужно внимание", text);
-        Assert.Contains("Было 52 → стало 67 (+15)", text);
+        Assert.Contains("Было 52 → стало 67 (+15) — сравнение с проверкой 14 октября 2026 г., 09:00", text);
         Assert.Contains("ОБ ЭТОМ КОМПЬЮТЕРЕ", text);
         Assert.Contains("  Имя компьютера: WATERCAT-PC", text);
         Assert.Contains("ПРОВЕРЕННЫЕ РАЗДЕЛЫ", text);
@@ -311,6 +311,25 @@ public class ScoreDeltaAndReclaimableTests
     {
         var delta = ScoreDelta.Create(50, 60, new DateTime(2026, 10, 15, 9, 5, 0))!;
         Assert.Equal("Сравнение с прошлой проверкой (вчера в 09:05)", delta.Explanation(new DateTime(2026, 10, 16, 12, 0, 0)));
+    }
+
+    [Fact]
+    public void Delta_InASavedReport_NamesTheAbsoluteDate()
+    {
+        // "вчера" would be wrong when the file is opened a week later
+        var delta = ScoreDelta.Create(50, 60, new DateTime(2026, 10, 15, 9, 5, 0))!;
+        Assert.Equal("Сравнение с проверкой 15 октября 2026 г., 09:05", ReportBuilder.DeltaExplanation(delta));
+        Assert.Equal("Сравнение с прошлой проверкой", ReportBuilder.DeltaExplanation(ScoreDelta.Create(50, 60)!));
+
+        var html = ReportBuilder.BuildHtml(new DashboardReport
+        {
+            CreatedAt = new DateTime(2026, 10, 16, 12, 0, 0),
+            ScanTime = new DateTime(2026, 10, 16, 11, 0, 0),
+            Score = 60,
+            Delta = delta,
+        });
+        Assert.Contains("title=\"Сравнение с проверкой 15 октября 2026 г., 09:05\"", html);
+        Assert.DoesNotContain("вчера", html);
     }
 
     private static HealthIssue Space(long bytes, bool fixable, bool isFixed = false)
@@ -401,13 +420,27 @@ public class ScoreDeltaAndReclaimableTests
         var legacy = ScanSummary.Load(settings)!;
         Assert.Equal(new ReclaimableSplit(4096, 0), legacy.Reclaimable);
         Assert.Null(legacy.Delta);
+        Assert.Null(legacy.MeasuredScore);
+        Assert.Equal(60, legacy.BaselineScore);                        // older summaries compare with their score
 
         // absurd stored values are clamped
         settings.ModuleData["Dashboard"]["LastScan"] =
-            "{\"Score\":60,\"Time\":\"2026-10-01T10:00:00\",\"ReclaimableBytes\":100,\"ManualReclaimableBytes\":900,\"PreviousScore\":400}";
+            "{\"Score\":60,\"Time\":\"2026-10-01T10:00:00\",\"ReclaimableBytes\":100,\"ManualReclaimableBytes\":900,\"PreviousScore\":400,\"MeasuredScore\":-7}";
         var odd = ScanSummary.Load(settings)!;
         Assert.Equal(new ReclaimableSplit(0, 100), odd.Reclaimable);
         Assert.Equal(100, odd.PreviousScore);
+        Assert.Equal(0, odd.BaselineScore);
+    }
+
+    [Fact]
+    public void Summary_RoundTripsTheMeasuredScore()
+    {
+        var settings = new AppSettings();
+        var summary = new ScanSummary { Score = 100, MeasuredScore = 94, Time = new DateTime(2026, 10, 16, 14, 32, 0) };
+        summary.Save(settings);
+        var loaded = ScanSummary.Load(settings)!;
+        Assert.Equal(summary, loaded);
+        Assert.Equal(94, loaded.BaselineScore);
     }
 }
 
@@ -506,7 +539,8 @@ public class DashboardReportViewModelTests
         Assert.Equal(7, vm.QuickLinks.Count);
         var network = vm.QuickLinks.Single(l => l.Key == "Network");
         Assert.Equal("Сеть", network.Title);
-        Assert.Equal("Скорость, задержки, Wi-Fi и порты", network.Description);
+        Assert.Equal("Скорость, задержки, Wi-Fi и порты", network.Description.Replace('\u2011', '-'));
+        Assert.Contains("Wi\u2011Fi", network.Description); // never wrapped as "Wi-" / "Fi" on a narrow tile
         Assert.Equal("", network.Glyph);
         Assert.Equal("Cleaner", vm.FeaturedLink.Key);
         Assert.Equal(6, vm.MoreLinks.Count);                      // 3 x 2 or 2 x 3
@@ -796,5 +830,99 @@ public class DashboardReportViewModelTests
         Assert.True(vm.HasManualReclaimable);
         Assert.Equal("До 10 ГБ можно освободить после проверки вручную", vm.ManualReclaimableText);
         Assert.Equal(10 * gb, vm.ReclaimableBytes);
+    }
+
+    [Fact]
+    public async Task ScoreDelta_AfterFixingAndRescanning_ComparesWithWhatThePreviousScanMeasured()
+    {
+        // Scan 1 measures 94. The fix is estimated to bring it to 100, but it frees a bit less and the rescan still
+        // finds a small leftover (98). The user improved the PC: "Было 94 → стало 98", never a red "100 → 98".
+        var settings = new AppSettings();
+        var round = 0;
+        var cleaner = new FakeContributor("Очистка", _ => Task.FromResult<IReadOnlyList<HealthIssue>>(
+            Interlocked.Increment(ref round) == 1
+                ? new[] { Issue("Очистка", IssueSeverity.Medium, "Мусор", reclaimable: 2048, fix: _ => Task.FromResult("Удалено."), autoFixSafe: true) }
+                : new[] { Issue("Очистка", IssueSeverity.Low, "Немного мусора осталось") }));
+        var vm = Vm(settings, cleaner);
+        await vm.ScanCoreAsync(CancellationToken.None, persist: true);
+        Assert.Equal(94, vm.Score);
+
+        var previous = Dialogs.ConfirmHandler;
+        Dialogs.ConfirmHandler = (_, _) => true;
+        try
+        {
+            await vm.FixSafeAsync();
+        }
+        finally
+        {
+            Dialogs.ConfirmHandler = previous;
+        }
+        Assert.Equal(100, vm.Score);                                   // estimate after the fix
+        Assert.Equal(94, ScanSummary.Load(settings)!.MeasuredScore);   // the measured value is kept
+
+        await vm.ScanCoreAsync(CancellationToken.None, persist: true);
+        Assert.Equal(98, vm.Score);
+        Assert.Equal("Было 94 → стало 98 (+4)", vm.ScoreDeltaText);
+        Assert.Equal(ScoreTrend.Better, vm.ScoreTrend);
+
+        // the same after a restart
+        var restarted = Vm(settings, cleaner);
+        await restarted.OnNavigatedToAsync();
+        restarted.OnNavigatedFrom();
+        Assert.Equal("Было 94 → стало 98 (+4)", restarted.ScoreDeltaText);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Отчёты\отчёт.html", true)]
+    [InlineData(@"C:\Отчёты\отчёт.HTM", true)]
+    [InlineData(@"C:\Отчёты\отчёт.txt", false)]
+    [InlineData(@"C:\Отчёты\отчёт.bat", false)]
+    [InlineData(@"C:\Отчёты\отчёт.html.cmd", false)]
+    [InlineData(@"C:\Отчёты\отчёт", false)]
+    public void OnlyHtmlFiles_AreOfferedToOpen(string path, bool html)
+        => Assert.Equal(html, DashboardViewModel.IsHtmlFile(path));
+
+    [Fact]
+    public async Task SaveReport_WithAnotherExtension_IsSaved_ButNeverHandedToTheShell()
+    {
+        var dir = TestEnvironment.NewTempDir("report-ext");
+        try
+        {
+            var vm = Vm(new AppSettings(), new FakeContributor("Очистка"));
+            await vm.ScanCoreAsync(CancellationToken.None, persist: false);
+            var target = Path.Combine(dir, "отчёт.txt");
+            vm.PickReportPath = _ => target;
+
+            var asked = 0;
+            string? info = null;
+            var previousConfirm = Dialogs.ConfirmHandler;
+            var previousInfo = Dialogs.InfoHandler;
+            Dialogs.ConfirmHandler = (_, _) =>
+            {
+                asked++;
+                return false;
+            };
+            Dialogs.InfoHandler = (_, m) => info = m;
+            string? path;
+            try
+            {
+                path = await vm.SaveReportAsync();
+            }
+            finally
+            {
+                Dialogs.ConfirmHandler = previousConfirm;
+                Dialogs.InfoHandler = previousInfo;
+            }
+
+            Assert.Equal(target, path);
+            Assert.True(File.Exists(target));
+            Assert.Equal(0, asked);                                    // "Открыть отчёт в браузере?" is not offered
+            Assert.Contains(".html", info);
+            Assert.True(vm.ReportStatusOk);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }

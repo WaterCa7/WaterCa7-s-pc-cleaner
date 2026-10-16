@@ -44,6 +44,17 @@ public sealed record ScanSummary
     /// <summary>Modules that failed or timed out (the score may be incomplete).</summary>
     public int FailedModules { get; init; }
 
+    /// <summary>
+    /// Score the scan itself measured. <see cref="Score"/> is re-estimated after fixes made in that session; the next
+    /// scan compares with this measured value, so "Проверить снова" right after fixing shows the real improvement
+    /// (not "Было 100 → стало 94" because a fix freed slightly less than estimated). Null in older summaries.
+    /// </summary>
+    public int? MeasuredScore { get; init; }
+
+    /// <summary>What the next scan is compared with: the measured score, or <see cref="Score"/> for older summaries.</summary>
+    [JsonIgnore]
+    public int BaselineScore => MeasuredScore ?? Score;
+
     /// <summary>Score of the scan before this one (for "Было 52 → стало 78"); null on the first scan.</summary>
     public int? PreviousScore { get; init; }
 
@@ -78,6 +89,7 @@ public sealed record ScanSummary
             return summary with
             {
                 Score = Math.Clamp(summary.Score, 0, 100),
+                MeasuredScore = summary.MeasuredScore is { } m ? Math.Clamp(m, 0, 100) : null,
                 PreviousScore = summary.PreviousScore is { } p ? Math.Clamp(p, 0, 100) : null,
             };
         }

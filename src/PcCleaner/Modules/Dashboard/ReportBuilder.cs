@@ -63,7 +63,7 @@ public static class ReportBuilder
                 ScoreTrend.Worse => "chip-bad",
                 _ => "",
             };
-            sb.Append("<span class=\"chip ").Append(trend).Append("\" title=\"").Append(E(delta.Explanation(r.CreatedAt))).Append("\">")
+            sb.Append("<span class=\"chip ").Append(trend).Append("\" title=\"").Append(E(DeltaExplanation(delta))).Append("\">")
                 .Append(E(delta.Text)).Append("</span>");
         }
         sb.Append("<span class=\"chip\">").Append(E(r.FindingsText)).Append("</span>");
@@ -178,7 +178,10 @@ public static class ReportBuilder
         sb.Append("Оценка: ").Append(r.Score is { } s ? $"{Math.Clamp(s, 0, 100)} из 100" : "нет").Append(" — ").Append(r.Verdict).Append(nl);
         sb.Append(r.VerdictDescription).Append(nl);
         if (r.Delta is { } delta)
-            sb.Append(delta.Text).Append(nl);
+        {
+            var explanation = DeltaExplanation(delta);
+            sb.Append(delta.Text).Append(" — ").Append(char.ToLower(explanation[0], Format.Ru)).Append(explanation[1..]).Append(nl);
+        }
         sb.Append(r.FindingsText).Append(r.FixedCount > 0 ? $", исправлено в этом сеансе: {r.FixedCount}" : "").Append(nl);
         if (r.Reclaimable.SummaryText is { } space)
             sb.Append(space).Append(nl);
@@ -240,6 +243,13 @@ public static class ReportBuilder
     // ============================================================ Helpers
 
     private static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
+
+    /// <summary>
+    /// "Сравнение с проверкой 14 октября 2026 г., 09:00". Absolute, not "вчера": a saved report is read days later.
+    /// </summary>
+    internal static string DeltaExplanation(ScoreDelta delta) => delta.PreviousTime is { } t
+        ? "Сравнение с проверкой " + LongDateTime(t)
+        : "Сравнение с прошлой проверкой";
 
     private static string Capitalize(string? s)
         => string.IsNullOrEmpty(s) ? "" : char.ToUpper(s[0], Format.Ru) + s[1..];

@@ -98,7 +98,8 @@ public sealed class DashboardViewModel : PageViewModel
             new QuickLink("Processes", "Процессы", "Что работает в фоне прямо сейчас", ""),
             new QuickLink("Programs", "Программы", "Установленные и нежелательные", ""),
             new QuickLink("Optimizer", "Ускорение", "Настройки Windows и железо", ""),
-            new QuickLink("Network", "Сеть", "Скорость, задержки, Wi-Fi и порты", ""),
+            // U+2011 (non-breaking hyphen): a narrow tile must not wrap "Wi-" / "Fi".
+            new QuickLink("Network", "Сеть", "Скорость, задержки, Wi\u2011Fi и порты", ""),
             new QuickLink("Security", "Безопасность", "Антивирус, брандмауэр, hosts", ""),
         };
         MoreLinks = QuickLinks.Skip(1).ToList();
@@ -792,9 +793,10 @@ public sealed class DashboardViewModel : PageViewModel
                 else
                 {
                     score = HealthScoring.ComputeScore(issues);
-                    // "Было → стало": the scan before this one is the latest known state (after its fixes, if any).
+                    // "Было → стало": compare with what the previous scan MEASURED. Its post-fix score is only an
+                    // estimate; comparing with it would show "worse" right after fixing if a fix freed a bit less.
                     var previous = _summary;
-                    _summary = MakeSummary(score.Value, Now(), failed.Count, previous?.Score, previous?.Time);
+                    _summary = MakeSummary(score.Value, score.Value, Now(), failed.Count, previous?.BaselineScore, previous?.Time);
                     _summaryFromThisSession = true;
                     _lastScanPersisted = persist;
                     if (persist)
@@ -862,12 +864,14 @@ public sealed class DashboardViewModel : PageViewModel
         }
     }
 
-    private ScanSummary MakeSummary(int score, DateTime time, int failedModules, int? previousScore, DateTime? previousTime)
+    private ScanSummary MakeSummary(int score, int measuredScore, DateTime time, int failedModules, int? previousScore,
+        DateTime? previousTime)
     {
         var split = ReclaimableSplit.From(_issues);
         return new ScanSummary
         {
             Score = score,
+            MeasuredScore = measuredScore,
             Time = time,
             IssueCount = _issues.Count(i => !i.IsFixed),
             TipCount = _issues.Count(i => !i.IsFixed && !HealthScoring.IsProblem(i)),
@@ -1157,8 +1161,8 @@ public sealed class DashboardViewModel : PageViewModel
         FixedCount = _issues.Count(i => i.IsFixed);
         if (State == DashboardScanState.Completed && _summary is not null && _summaryFromThisSession)
         {
-            _summary = MakeSummary(HealthScoring.ComputeScore(_issues), _summary.Time, _summary.FailedModules,
-                _summary.PreviousScore, _summary.PreviousTime);
+            _summary = MakeSummary(HealthScoring.ComputeScore(_issues), _summary.BaselineScore, _summary.Time,
+                _summary.FailedModules, _summary.PreviousScore, _summary.PreviousTime);
             if (_lastScanPersisted)
                 SaveSummary();
         }
@@ -1250,6 +1254,15 @@ public sealed class DashboardViewModel : PageViewModel
         Log.Action($"Главная: отчёт о проверке сохранён — {path}");
         SetReportStatus("Отчёт сохранён", toolTip: path);
         ActionSummary = $"Отчёт о проверке сохранён: {path}";
+        if (!IsHtmlFile(path))
+        {
+            // The user typed another extension (.txt, .bat, ...): never hand such a file to the shell — it would not
+            // open in a browser and could even be run as a script (issue details contain program paths).
+            Dialogs.Info("Отчёт сохранён",
+                $"Отчёт о проверке сохранён в файл:\n{path}\n\nЭто веб-страница: чтобы открыть её в браузере, " +
+                "сохраните отчёт с расширением .html.");
+            return path;
+        }
         if (Dialogs.Confirm("Отчёт сохранён",
                 $"Отчёт о проверке сохранён в файл:\n{path}\n\nЕго можно открыть в любом браузере, распечатать или отправить. " +
                 "Открыть отчёт в браузере?"))
@@ -1285,6 +1298,14 @@ public sealed class DashboardViewModel : PageViewModel
         Log.Info("Главная: отчёт о проверке скопирован в буфер обмена");
         SetReportStatus("Отчёт скопирован — вставьте его клавишами Ctrl+V");
         return true;
+    }
+
+    /// <summary>Only .html / .htm files are offered to be opened in the browser.</summary>
+    internal static bool IsHtmlFile(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".htm", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ShowSaveReportDialog(string defaultFileName)
