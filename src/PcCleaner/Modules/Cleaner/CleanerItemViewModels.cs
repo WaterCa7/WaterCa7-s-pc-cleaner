@@ -84,11 +84,13 @@ public sealed class CategoryItemViewModel : ObservableObject
         private set => Set(ref _isRunning, value);
     }
 
-    public string RunningText => Category.IsBrowser ? "Браузер запущен" : "Программа запущена";
+    public string RunningText => Category.IsBrowser
+        ? "Закройте браузер для полной очистки"
+        : "Закройте программу для полной очистки";
 
     public string RunningTip => Category.IsBrowser
-        ? "Закройте браузер для полной очистки: пока он открыт, часть файлов кэша занята и будет пропущена."
-        : "Закройте программу для полной очистки: пока она открыта, часть файлов занята и будет пропущена.";
+        ? "Браузер сейчас запущен: пока он открыт, часть файлов кэша занята и будет пропущена."
+        : "Программа сейчас запущена: пока она открыта, часть её файлов занята и будет пропущена.";
 
     public bool IsChecked
     {
@@ -486,7 +488,9 @@ public sealed class CleanResultViewModel
     {
         var parts = new List<string>();
         if (r.DeletedFiles > 0)
-            parts.Add(CleanerText.Deleted(r.DeletedFiles));
+            parts.Add(r.CategoryId == CleanerCatalog.RecycleBinId
+                ? CleanerText.DeletedObjects(r.DeletedFiles)
+                : CleanerText.Deleted(r.DeletedFiles));
         if (r.SkippedFiles > 0)
             parts.Add(CleanerText.SkippedBusy(r.SkippedFiles));
         if (r.SkippedAdminRoots > 0)

@@ -114,7 +114,10 @@ internal static class SafeFileWalker
             if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
             {
                 if (stats is not null)
+                {
                     stats.RootIsReparsePoint = true;
+                    stats.ReparsePointsSkipped++; // shown in the details ("junction/symlink skipped")
+                }
                 return false;
             }
             return true;

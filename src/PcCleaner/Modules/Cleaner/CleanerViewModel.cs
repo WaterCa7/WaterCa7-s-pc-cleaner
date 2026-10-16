@@ -173,7 +173,8 @@ public sealed class CleanerViewModel : PageViewModel
 
     public override Task OnNavigatedToAsync()
     {
-        if (!_visited)
+        // Also when an earlier (preview) scan was cancelled before the list was built.
+        if (!_visited || (!IsBusy && !IsCatalogLoaded))
         {
             _visited = true;
             _ = StartScan(); // non-blocking: the page fills in as categories finish
@@ -193,6 +194,7 @@ public sealed class CleanerViewModel : PageViewModel
             if (CancelCommand.CanExecute(null))
                 CancelCommand.Execute(null);
         }));
+        _visited = true; // the first visit afterwards shows these results instead of scanning again
         if (_scanTask is { IsCompleted: false })
             await _scanTask;
         if (!HasScanned && !ct.IsCancellationRequested)

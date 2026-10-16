@@ -39,6 +39,7 @@
         <Style x:Key="BadgeText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11.5" />
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
         <Style x:Key="BadgeIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
             <Setter Property="FontSize" Value="10.5" />

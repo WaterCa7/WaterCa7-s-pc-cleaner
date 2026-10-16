@@ -9,6 +9,10 @@ public static class CleanerText
     public static string Deleted(long files)
         => $"{(IsSingular(files) ? "удалён" : "удалено")} {Format.Count(files, "файл", "файла", "файлов")}";
 
+    /// <summary>"удалён 1 объект", "удалено 8 объектов" (Recycle Bin items can be files or folders).</summary>
+    public static string DeletedObjects(long items)
+        => $"{(IsSingular(items) ? "удалён" : "удалено")} {Objects(items)}";
+
     /// <summary>"пропущен 1 занятый", "пропущено 87 занятых".</summary>
     public static string SkippedBusy(long files)
         => IsSingular(files) ? $"пропущен {Format.Number(files)} занятый" : $"пропущено {Format.Number(files)} занятых";

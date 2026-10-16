@@ -150,9 +150,16 @@ public sealed class CleanerCategory
 /// <summary>Rules applied to every file at scan and clean time.</summary>
 public sealed class CleanerRules
 {
+    /// <summary>
+    /// Upper limit for the minimum file age (10 years). settings.json can be edited by hand; a huge value would
+    /// otherwise overflow TimeSpan/DateTime and break every analysis.
+    /// </summary>
+    internal const int MaxMinFileAgeHours = 24 * 3650;
+
     public CleanerRules(TimeSpan minFileAge, IEnumerable<string>? exclusions, bool isElevated, DateTime? nowUtc = null)
     {
-        MinFileAge = minFileAge < TimeSpan.Zero ? TimeSpan.Zero : minFileAge;
+        var max = TimeSpan.FromHours(MaxMinFileAgeHours);
+        MinFileAge = minFileAge < TimeSpan.Zero ? TimeSpan.Zero : minFileAge > max ? max : minFileAge;
         Exclusions = NormalizeExclusions(exclusions);
         IsElevated = isElevated;
         NowUtc = nowUtc ?? DateTime.UtcNow;
@@ -174,7 +181,8 @@ public sealed class CleanerRules
         var exclusions = new List<string>(settings.CleanerExclusions ?? new List<string>());
         exclusions.Add(AppPaths.DataDir);
         exclusions.Add(AppContext.BaseDirectory);
-        return new CleanerRules(TimeSpan.FromHours(Math.Max(0, settings.CleanerMinFileAgeHours)), exclusions, isElevated);
+        var hours = Math.Clamp(settings.CleanerMinFileAgeHours, 0, MaxMinFileAgeHours);
+        return new CleanerRules(TimeSpan.FromHours(hours), exclusions, isElevated);
     }
 
     public TimeSpan MinAgeFor(CleanerCategory category) => category.Age switch
@@ -197,6 +205,9 @@ public sealed class CleanerRules
         {
             if (path.StartsWith(e, StringComparison.OrdinalIgnoreCase))
                 return true;
+            // "C:\Keep\" also protects the folder C:\Keep itself: it is neither walked nor removed when empty.
+            if (e.Length == path.Length + 1 && e[^1] == '\\' && e.StartsWith(path, StringComparison.OrdinalIgnoreCase))
+                return true;
         }
         return false;
     }
@@ -211,6 +222,11 @@ public sealed class CleanerRules
             if (string.IsNullOrWhiteSpace(raw))
                 continue;
             var value = Environment.ExpandEnvironmentVariables(raw.Trim().Trim('"')).Replace('/', '\\');
+            // Same form as the paths the walker produces: 8.3 names expanded (%TEMP% is often C:\Users\NAME~1\...),
+            // ".." resolved. Otherwise such an exclusion would silently never match and its files would be deleted.
+            var full = SafePathTools.Normalize(value);
+            if (full is not null)
+                value = value.EndsWith('\\') && !full.EndsWith('\\') ? full + "\\" : full;
             if (value.Length > 0 && !list.Contains(value, StringComparer.OrdinalIgnoreCase))
                 list.Add(value);
         }

@@ -50,7 +50,7 @@ public sealed class CleanerService : IHealthContributor
 
     /// <summary>All categories available on this PC (installed browsers/apps only). Cheap: only checks folders.</summary>
     public IReadOnlyList<CleanerCategory> LoadCategories()
-        => CleanerCatalog.Build(_env, Math.Max(0, _settings().CleanerMinFileAgeHours));
+        => CleanerCatalog.Build(_env, Math.Clamp(_settings().CleanerMinFileAgeHours, 0, CleanerRules.MaxMinFileAgeHours));
 
     /// <summary>Re-checks which programs (browsers, Discord, Steam...) are running.</summary>
     public void RefreshRunning(IEnumerable<CleanerCategory> categories)
@@ -179,16 +179,24 @@ public sealed class CleanerService : IHealthContributor
     // ===== Cleaning (changes the system — callers confirm first) =====
 
     /// <summary>Cleans one category and writes a Log.Action summary. Never throws except for cancellation.</summary>
-    public async Task<CategoryCleanResult> CleanCategoryAsync(CleanerCategory category, CancellationToken ct)
+    public Task<CategoryCleanResult> CleanCategoryAsync(CleanerCategory category, CancellationToken ct)
+        => CleanCategoryAsync(category, userFoldersOnly: false, ct);
+
+    /// <param name="userFoldersOnly">Skip folders that need administrator rights even when elevated (dashboard fix).</param>
+    private async Task<CategoryCleanResult> CleanCategoryAsync(CleanerCategory category, bool userFoldersOnly,
+        CancellationToken ct)
     {
         CategoryCleanResult result;
         try
         {
+            var rules = userFoldersOnly ? CleanerRules.FromSettings(_settings(), isElevated: false) : CurrentRules();
             result = category.Kind switch
             {
                 CategoryKind.RecycleBin => await Task.Run(() => EmptyRecycleBin(category), ct),
+                CategoryKind.DeliveryOptimization when userFoldersOnly =>
+                    new CategoryCleanResult { CategoryId = category.Id, Name = category.Name, SkippedAdminRoots = 1 },
                 CategoryKind.DeliveryOptimization => await CleanDeliveryOptimizationAsync(category, ct),
-                _ => await Task.Run(() => CleanerEngine.Clean(category, CurrentRules(), _guard, ct), CancellationToken.None),
+                _ => await Task.Run(() => CleanerEngine.Clean(category, rules, _guard, ct), CancellationToken.None),
             };
         }
         catch (Exception ex) when (IsExpected(ex))
@@ -203,13 +211,13 @@ public sealed class CleanerService : IHealthContributor
             result = new CategoryCleanResult { CategoryId = category.Id, Name = category.Name };
             result.Errors.Add(ex.Message);
         }
-        LogResult(category, result);
+        LogResult(category, result, IsElevated);
         return result;
     }
 
     /// <summary>Cleans categories one after another; stops early (keeping the results so far) when cancelled.</summary>
     public async Task<IReadOnlyList<CategoryCleanResult>> CleanAsync(IReadOnlyList<CleanerCategory> categories,
-        Action<int, CleanerCategory>? onStart, CancellationToken ct)
+        Action<int, CleanerCategory>? onStart, CancellationToken ct, bool userFoldersOnly = false)
     {
         var results = new List<CategoryCleanResult>();
         for (var i = 0; i < categories.Count; i++)
@@ -219,7 +227,7 @@ public sealed class CleanerService : IHealthContributor
             onStart?.Invoke(i, categories[i]);
             try
             {
-                results.Add(await CleanCategoryAsync(categories[i], ct));
+                results.Add(await CleanCategoryAsync(categories[i], userFoldersOnly, ct));
             }
             catch (OperationCanceledException)
             {
@@ -279,7 +287,7 @@ public sealed class CleanerService : IHealthContributor
         return result;
     }
 
-    private static void LogResult(CleanerCategory category, CategoryCleanResult r)
+    private static void LogResult(CleanerCategory category, CategoryCleanResult r, bool elevated)
     {
         var text = new StringBuilder($"Очистка «{category.Name}»: ");
         text.Append(r.DeletedFiles > 0 || r.FreedBytes > 0
@@ -290,7 +298,7 @@ public sealed class CleanerService : IHealthContributor
         if (r.SkippedFiles > 0)
             text.Append($", пропущено занятых: {Format.Number(r.SkippedFiles)}");
         if (r.SkippedAdminRoots > 0)
-            text.Append(", системные папки пропущены (нужны права администратора)");
+            text.Append(elevated ? ", системные папки пропущены" : ", системные папки пропущены (нужны права администратора)");
         if (r.Cancelled)
             text.Append(" (прервано)");
         if (r.Message is not null)
@@ -406,13 +414,16 @@ public sealed class CleanerService : IHealthContributor
         }
 
         var sized = junk.Where(c => results.ContainsKey(c.Id)).ToList();
+        // The one-click fix only cleans what a normal user may clean: system folders (Windows\Temp, update cache,
+        // Delivery Optimization...) are never part of it, even when the app runs as administrator.
         var cleanable = sized
-            .Select(c => (Category: c, Bytes: results[c.Id].CleanableBytes(elevated)))
+            .Where(c => c.Kind == CategoryKind.Files && !c.RequiresAdmin)
+            .Select(c => (Category: c, Bytes: results[c.Id].CleanableBytes(elevated: false)))
             .Where(x => x.Bytes > 0)
             .OrderByDescending(x => x.Bytes)
             .ToList();
         var total = cleanable.Sum(x => x.Bytes);
-        var adminOnly = elevated ? 0 : sized.Sum(c => results[c.Id].AdminBytes);
+        var systemBytes = sized.Sum(c => results[c.Id].AdminBytes);
 
         var severity = SeverityFor(total);
         if (severity is not null)
@@ -434,21 +445,25 @@ public sealed class CleanerService : IHealthContributor
             });
         }
 
-        if (adminOnly > 500 * Mb)
+        if (systemBytes > 500 * Mb)
         {
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Ещё {Format.Bytes(adminOnly)} системного мусора",
-                Details = "Временные файлы Windows, кэш обновлений и другие системные папки можно очистить только " +
-                          "с правами администратора. Перезапустите программу от имени администратора и откройте «Очистку».",
+                Title = $"Ещё {Format.Bytes(systemBytes)} системного мусора",
+                Details = elevated
+                    ? "Временные файлы Windows, кэш обновлений и другие системные папки не очищаются автоматически. " +
+                      "Откройте «Очистку», проверьте список и удалите их вручную."
+                    : "Временные файлы Windows, кэш обновлений и другие системные папки можно очистить только " +
+                      "с правами администратора. Перезапустите программу от имени администратора и откройте «Очистку».",
                 Severity = IssueSeverity.Info,
-                Gain = $"Освободит до {Format.Bytes(adminOnly)}",
+                Gain = $"Освободит до {Format.Bytes(systemBytes)}",
                 TargetPageKey = "Cleaner",
             });
         }
 
-        var bin = _recycleBin.Query();
+        // SHQueryRecycleBin walks the bins of every drive: keep it off the caller's (UI) thread.
+        var bin = await Task.Run(() => _recycleBin.Query(), ct);
         if (bin is { Items: > 0 })
         {
             var (bytes, items) = bin.Value;
@@ -485,16 +500,18 @@ public sealed class CleanerService : IHealthContributor
         _ => null,
     };
 
-    /// <summary>Dashboard fix: cleans the given recommended categories that do not need admin rights (or all if elevated).</summary>
+    /// <summary>
+    /// Dashboard fix: cleans the given recommended categories, user folders only. Folders that need administrator
+    /// rights are skipped even when the app is elevated, so the fix does exactly what the issue promised.
+    /// </summary>
     private async Task<string> FixJunkAsync(IReadOnlySet<string> categoryIds, CancellationToken ct)
     {
-        var elevated = IsElevated;
         var categories = (await Task.Run(LoadCategories, ct))
-            .Where(c => categoryIds.Contains(c.Id) && c.Kind != CategoryKind.RecycleBin && (elevated || !c.RequiresAdmin))
+            .Where(c => categoryIds.Contains(c.Id) && c.Kind == CategoryKind.Files && !c.RequiresAdmin)
             .ToList();
         if (categories.Count == 0)
             return "Нечего очищать: подходящие файлы уже удалены.";
-        var results = await CleanAsync(categories, null, ct);
+        var results = await CleanAsync(categories, null, ct, userFoldersOnly: true);
         return Summarize(results);
     }
 

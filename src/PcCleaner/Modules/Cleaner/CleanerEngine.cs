@@ -15,15 +15,6 @@ internal static class CleanerEngine
     /// <summary>How many of the largest files are remembered per category for the details view.</summary>
     public const int DefaultSampleSize = 200;
 
-    internal enum DeleteOutcome
-    {
-        Deleted,
-        Locked,
-        Denied,
-        Gone,
-        Skipped,
-    }
-
     /// <summary>Read-only: counts matching files and remembers the largest ones.</summary>
     public static CategoryScanResult Scan(CleanerCategory category, CleanerRules rules, RootGuard guard, int sampleSize,
         CancellationToken ct)
@@ -47,6 +38,12 @@ internal static class CleanerEngine
             if (rules.IsExcluded(rootPath))
             {
                 stats.Excluded++;
+                continue;
+            }
+            if (guard.IsRedirected(rootPath, root.IsSingleFile))
+            {
+                // A folder on the way to the root is a junction/symlink: the files physically live elsewhere.
+                stats.ReparsePointsSkipped++;
                 continue;
             }
             foreach (var file in EnumerateCandidates(root, rootPath, rules, cutoff, stats, null, ct))
@@ -113,6 +110,11 @@ internal static class CleanerEngine
                 var rootPath = SafePathTools.Normalize(root.Path)!;
                 if (rules.IsExcluded(rootPath))
                     continue;
+                if (guard.IsRedirected(rootPath, root.IsSingleFile))
+                {
+                    Log.Info($"Очистка: «{root.Path}» пропущено — путь к папке проходит через ссылку (junction/symlink)");
+                    continue;
+                }
 
                 if (root.IsSingleFile)
                 {
@@ -120,6 +122,10 @@ internal static class CleanerEngine
                     continue;
                 }
 
+                // Where the root really is; every file must turn out to be exactly below it (checked through its handle).
+                var rootReal = SafeDelete.GetRealFolderPath(rootPath);
+                if (rootReal is null)
+                    continue; // missing, itself a junction, or not accessible
                 var directories = new List<string>();
                 var stats = new WalkStats();
                 string? verifiedDir = null;
@@ -134,12 +140,13 @@ internal static class CleanerEngine
                             continue;
                         verifiedDir = dir;
                     }
-                    Record(result, TryDeleteFile(file.FullPath, rootPath, root, rules, cutoff, out var size, out var error),
+                    Record(result,
+                        TryDeleteFile(file.FullPath, rootPath, rootReal, root, rules, cutoff, out var size, out var error),
                         size, error);
                 }
 
                 if (category.RemoveEmptyDirectories && root.Recursive)
-                    RemoveEmptyDirectories(rootPath, directories, rules, cutoff, result, ct);
+                    RemoveEmptyDirectories(rootPath, rootReal, directories, rules, cutoff, result, ct);
             }
         }
         catch (OperationCanceledException)
@@ -161,92 +168,27 @@ internal static class CleanerEngine
         return false;
     }
 
-    /// <summary>Re-checks one file and deletes it. Never throws.</summary>
-    internal static DeleteOutcome TryDeleteFile(string path, string rootPath, CleanRoot root, CleanerRules rules,
-        DateTime? cutoff, out long size, out string? error)
+    /// <summary>
+    /// Re-checks one file and deletes it. The path checks (inside the root, not excluded, pattern) are done on the
+    /// path; type, age and the real location (no junction/symlink on the way) are checked through the handle
+    /// that deletes the file, so they cannot change in between. Read-only files are deleted too. Never throws.
+    /// </summary>
+    /// <param name="rootReal">The real path of <paramref name="rootPath"/> (<see cref="SafeDelete.GetRealFolderPath"/>).</param>
+    internal static DeleteOutcome TryDeleteFile(string path, string rootPath, string rootReal, CleanRoot root,
+        CleanerRules rules, DateTime? cutoff, out long size, out string? error)
     {
         size = 0;
         error = null;
-        FileInfo info;
-        FileAttributes attributes;
-        try
-        {
-            info = new FileInfo(path);
-            if (!info.Exists)
-                return DeleteOutcome.Gone;
-            attributes = info.Attributes;
-            size = info.Length;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException or ArgumentException)
-        {
-            return DeleteOutcome.Gone;
-        }
-
         if (!SafePathTools.IsStrictlyUnder(path, rootPath))
             return DeleteOutcome.Skipped;
         if (!root.Recursive && !string.Equals(Path.GetDirectoryName(path), rootPath, StringComparison.OrdinalIgnoreCase))
             return DeleteOutcome.Skipped;
-        if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
-            return DeleteOutcome.Skipped;
-        if (rules.IsExcluded(path) || !MatchesPatterns(root, info.Name))
-            return DeleteOutcome.Skipped;
-        if (cutoff is not null && Newest(info) > cutoff.Value)
+        if (rules.IsExcluded(path) || !MatchesPatterns(root, Path.GetFileName(path)))
             return DeleteOutcome.Skipped;
 
-        return DeleteFile(path, attributes, out error);
-    }
-
-    private static DeleteOutcome DeleteFile(string path, FileAttributes attributes, out string? error)
-    {
-        error = null;
-        try
-        {
-            File.Delete(path);
-            return DeleteOutcome.Deleted;
-        }
-        catch (UnauthorizedAccessException) when ((attributes & FileAttributes.ReadOnly) != 0)
-        {
-            // Read-only temp files are common (unpacked installers): clear the flag and retry once.
-            try
-            {
-                File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
-                File.Delete(path);
-                return DeleteOutcome.Deleted;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                try
-                {
-                    File.SetAttributes(path, attributes);
-                }
-                catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)
-                {
-                    // file is gone or still locked
-                }
-                return ex is UnauthorizedAccessException ? DeleteOutcome.Denied : DeleteOutcome.Locked;
-            }
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return DeleteOutcome.Denied;
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return DeleteOutcome.Gone;
-        }
-        catch (PathTooLongException ex)
-        {
-            error = $"{path}: {ex.Message}";
-            return DeleteOutcome.Skipped;
-        }
-        catch (IOException)
-        {
-            return DeleteOutcome.Locked; // in use by another program
-        }
-        catch (SecurityException)
-        {
-            return DeleteOutcome.Denied;
-        }
+        var expectedReal = rootReal.TrimEnd('\\') + path[rootPath.Length..];
+        return SafeDelete.Delete(path, expectedReal, isDirectory: false,
+            info => cutoff is null || info.NewestUtc <= cutoff.Value, out size, out error);
     }
 
     private static void Record(CategoryCleanResult result, DeleteOutcome outcome, long size, string? error)
@@ -272,22 +214,15 @@ internal static class CleanerEngine
         CategoryCleanResult result)
     {
         var dir = Path.GetDirectoryName(filePath);
-        if (dir is null || !IsDirectoryRealFolder(dir))
+        if (dir is null || !IsDirectoryRealFolder(dir) || rules.IsExcluded(filePath))
             return;
-        try
-        {
-            var info = new FileInfo(filePath);
-            if (!info.Exists || (info.Attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
-                return;
-            if (cutoff is not null && Newest(info) > cutoff.Value)
-                return;
-            var size = info.Length;
-            Record(result, DeleteFile(filePath, info.Attributes, out var error), size, error);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
-        {
-            result.DeniedFiles++;
-        }
+        var dirReal = SafeDelete.GetRealFolderPath(dir);
+        if (dirReal is null)
+            return;
+        var expectedReal = dirReal.TrimEnd('\\') + "\\" + Path.GetFileName(filePath);
+        var outcome = SafeDelete.Delete(filePath, expectedReal, isDirectory: false,
+            info => cutoff is null || info.NewestUtc <= cutoff.Value, out var size, out var error);
+        Record(result, outcome, size, error);
     }
 
     private static IEnumerable<WalkedEntry> EnumerateCandidates(CleanRoot root, string rootPath, CleanerRules rules,
@@ -352,9 +287,13 @@ internal static class CleanerEngine
         }
     }
 
-    /// <summary>Removes sub-folders that are empty now, deepest first. The root itself is never removed.</summary>
-    private static void RemoveEmptyDirectories(string rootPath, List<string> directories, CleanerRules rules,
-        DateTime? cutoff, CategoryCleanResult result, CancellationToken ct)
+    /// <summary>
+    /// Removes sub-folders that are empty now, deepest first. The root itself is never removed. Like files, each
+    /// folder is removed through its own handle after confirming its real location and age; Windows refuses to
+    /// delete a folder that is not empty, so nothing inside can be lost.
+    /// </summary>
+    private static void RemoveEmptyDirectories(string rootPath, string rootReal, List<string> directories,
+        CleanerRules rules, DateTime? cutoff, CategoryCleanResult result, CancellationToken ct)
     {
         // A child path is always longer than its parent, so this order removes children first.
         foreach (var dir in directories.OrderByDescending(d => d.Length))
@@ -363,22 +302,11 @@ internal static class CleanerEngine
                 break;
             if (!SafePathTools.IsStrictlyUnder(dir, rootPath) || rules.IsExcluded(dir))
                 continue;
-            try
-            {
-                var info = new DirectoryInfo(dir);
-                if (!info.Exists || (info.Attributes & FileAttributes.ReparsePoint) != 0)
-                    continue;
-                if (cutoff is not null && info.CreationTimeUtc > cutoff.Value)
-                    continue;
-                if (Directory.EnumerateFileSystemEntries(dir).Any())
-                    continue;
-                Directory.Delete(dir, recursive: false);
+            var expectedReal = rootReal.TrimEnd('\\') + dir[rootPath.Length..];
+            var outcome = SafeDelete.Delete(dir, expectedReal, isDirectory: true,
+                info => cutoff is null || info.CreationUtc <= cutoff.Value, out _, out _);
+            if (outcome == DeleteOutcome.Deleted)
                 result.DeletedDirectories++;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
-            {
-                // in use or not allowed: keep it
-            }
         }
     }
 
@@ -412,12 +340,5 @@ internal static class CleanerEngine
         {
             return false;
         }
-    }
-
-    private static DateTime Newest(FileInfo info)
-    {
-        var created = info.CreationTimeUtc;
-        var written = info.LastWriteTimeUtc;
-        return created > written ? created : written;
     }
 }

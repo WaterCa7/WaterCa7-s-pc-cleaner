@@ -144,11 +144,31 @@ internal static class SafePathTools
         return root is not null && string.Equals(root.TrimEnd('\\'), normalized.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Expands 8.3 short names (C:\Users\WATERC~1) so prefix comparisons are reliable.</summary>
+    /// <summary>
+    /// Expands 8.3 short names (C:\Users\WATERC~1) so prefix comparisons are reliable. When the path itself does not
+    /// exist (yet), its longest existing parent is expanded and the rest is kept as written.
+    /// </summary>
     private static string ToLongPath(string path)
     {
         if (!path.Contains('~'))
             return path;
+        var probe = path;
+        var suffix = "";
+        while (true)
+        {
+            var expanded = GetLongPath(probe);
+            if (expanded is not null)
+                return suffix.Length == 0 ? expanded : expanded.TrimEnd('\\') + suffix;
+            var parent = Path.GetDirectoryName(probe);
+            if (string.IsNullOrEmpty(parent) || parent.Length >= probe.Length)
+                return path;
+            suffix = probe[parent.TrimEnd('\\').Length..] + suffix;
+            probe = parent;
+        }
+    }
+
+    private static string? GetLongPath(string path)
+    {
         try
         {
             var buffer = new char[1024];
@@ -160,7 +180,7 @@ internal static class SafePathTools
         {
             // keep the original
         }
-        return path;
+        return null;
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

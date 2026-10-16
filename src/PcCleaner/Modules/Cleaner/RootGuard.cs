@@ -146,6 +146,45 @@ internal sealed class RootGuard
         return true;
     }
 
+    /// <summary>
+    /// True when an existing folder between the allowed base and the root is a junction/symlink, i.e. the root
+    /// physically lies somewhere else (a cache moved to another drive, or a link into Documents). Such roots are
+    /// skipped just like junctions inside a root. The root itself is checked by the walker / the deletion.
+    /// </summary>
+    public bool IsRedirected(string normalizedRoot, bool isSingleFile)
+    {
+        string? basePath = null;
+        foreach (var (path, _) in _allowedBases)
+        {
+            if (SafePathTools.IsSameOrUnder(normalizedRoot, path) && (basePath is null || path.Length > basePath.Length))
+                basePath = path;
+        }
+        if (basePath is null)
+            return true;
+
+        var current = Path.GetDirectoryName(normalizedRoot);
+        while (current is not null && SafePathTools.IsStrictlyUnder(current, basePath))
+        {
+            if (IsReparsePoint(current))
+                return true;
+            current = Path.GetDirectoryName(current);
+        }
+        return false;
+    }
+
+    private static bool IsReparsePoint(string folder)
+    {
+        try
+        {
+            var info = new DirectoryInfo(folder);
+            return info.Exists && (info.Attributes & FileAttributes.ReparsePoint) != 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or global::System.Security.SecurityException)
+        {
+            return true; // cannot tell: be conservative
+        }
+    }
+
     private bool IsInsideAllowedBase(string normalized, bool allowEqual)
     {
         foreach (var (path, baseAllowsEqual) in _allowedBases)

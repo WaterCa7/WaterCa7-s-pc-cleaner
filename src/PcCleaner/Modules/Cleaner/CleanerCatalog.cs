@@ -11,6 +11,8 @@ namespace PcCleaner.Modules.Cleaner;
 /// </summary>
 internal static class CleanerCatalog
 {
+    internal const string RecycleBinId = "win.recyclebin";
+
     /// <summary>Cache sub-folders of a Chromium profile (Default, Profile N, Guest Profile).</summary>
     internal static readonly string[] ChromiumProfileCacheFolders =
         { "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache" };
@@ -164,7 +166,7 @@ internal static class CleanerCatalog
         };
         yield return new CleanerCategory
         {
-            Id = "win.recyclebin",
+            Id = RecycleBinId,
             Group = g,
             Name = "Корзина",
             Hint = "Размер и число объектов во всех корзинах на всех дисках.",
@@ -207,6 +209,9 @@ internal static class CleanerCatalog
             var installed = b.UserData.Where(DirExists).ToList();
             if (installed.Count == 0)
                 continue;
+            var roots = ChromiumCacheRoots(installed, b.UserDataIsProfile);
+            if (roots.Count == 0)
+                continue; // an empty leftover folder of an uninstalled browser: nothing to show or clean
             yield return new CleanerCategory
             {
                 Id = b.Id,
@@ -215,7 +220,7 @@ internal static class CleanerCatalog
                 Description = BrowserDescription,
                 Hint = BrowserHint,
                 Glyph = "",
-                Roots = ChromiumCacheRoots(installed, b.UserDataIsProfile),
+                Roots = roots,
                 ProcessNames = b.Processes,
                 OpenFolder = installed[0],
             };
@@ -229,6 +234,8 @@ internal static class CleanerCatalog
                 .Where(DirExists)
                 .Select(p => CleanRoot.Folder(p))
                 .ToList();
+            if (roots.Count == 0)
+                yield break;
             yield return new CleanerCategory
             {
                 Id = "browser.firefox",
