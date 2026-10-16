@@ -132,7 +132,7 @@ internal static class QuarantineActions
 
         try
         {
-            Quarantine.Restore(item with { OriginalPath = target });
+            Quarantine.Restore(item, target);
         }
         catch (UnauthorizedAccessException ex)
         {

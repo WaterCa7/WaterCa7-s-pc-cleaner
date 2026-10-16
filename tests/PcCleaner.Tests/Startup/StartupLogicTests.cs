@@ -6,6 +6,8 @@ using Xunit;
 namespace PcCleaner.Tests.Startup;
 
 /// <summary>Pure logic: filters, flags, target parsing, dashboard findings, confirmation rules.</summary>
+// Trust tests save an AppSettings instance to the temp test settings file, like the Settings tests.
+[Collection(PcCleaner.Tests.Settings.SettingsFileCollection.Name)]
 public class StartupLogicTests
 {
     private static readonly SignatureInfo Microsoft = new(SignatureStatus.Valid, "Microsoft Windows");
@@ -201,24 +203,83 @@ public class StartupLogicTests
         var app = Path.Combine(sandbox.Dir, "app.exe");
         var script = Item("Script", target: powershell);
         var program = Item("Program", target: app);
-        var settings = AppServices.Settings;
-        settings.TrustedItems.Add(powershell);
-        settings.TrustedItems.Add(app);
-        try
-        {
-            sandbox.Service.Reanalyze(script);
-            sandbox.Service.Reanalyze(program);
-            Assert.False(script.IsTrusted);
-            Assert.True(program.IsTrusted);
+        var settings = sandbox.Settings;
+        settings.AddTrusted(powershell);
+        settings.AddTrusted(app);
 
-            settings.TrustedItems.Add(script.Id);
-            sandbox.Service.Reanalyze(script);
-            Assert.True(script.IsTrusted);
-        }
-        finally
-        {
-            settings.TrustedItems.RemoveAll(t => t == powershell || t == app || t == script.Id);
-        }
+        sandbox.Service.Reanalyze(script);
+        sandbox.Service.Reanalyze(program);
+        Assert.False(script.IsTrusted);
+        Assert.True(program.IsTrusted);
+
+        settings.AddTrusted(script.Id);
+        sandbox.Service.Reanalyze(script);
+        Assert.True(script.IsTrusted);
+    }
+
+    [Fact]
+    public void TrustCommand_ChangesTheSharedListOnlyThroughAddRemoveTrusted()
+    {
+        using var sandbox = new StartupSandbox();
+        var app = Path.Combine(sandbox.Dir, "trusted-app.exe");
+        var first = Item("First", target: app, risk: 50, signature: Unsigned);
+        var second = Item("Second", StartupKind.StartupFolder, target: app, signature: Unsigned); // same program file
+        var other = Item("Other", target: Path.Combine(sandbox.Dir, "other.exe"), signature: Unsigned);
+        var vm = new StartupViewModel(sandbox.Service);
+        vm.ApplyItems(new[] { first, second, other });
+        var settings = sandbox.Settings;
+        var listBefore = settings.TrustedItems;
+
+        vm.TrustCommand.Execute(first);
+
+        Assert.True(settings.IsTrusted(app));                        // the program file is trusted…
+        Assert.True(first.IsTrusted);
+        Assert.True(second.IsTrusted);                               // …so every entry that starts it
+        Assert.False(other.IsTrusted);
+        Assert.False(first.IsSuspicious);
+        Assert.Empty(listBefore);                                    // the list was replaced, never edited in place
+        Assert.Contains("доверенный", vm.Message);
+
+        vm.TrustCommand.Execute(second);
+
+        Assert.False(settings.IsTrusted(app));
+        Assert.False(first.IsTrusted);
+        Assert.False(second.IsTrusted);
+        Assert.Contains("больше не в списке доверенных", vm.Message);
+
+        // An interpreter entry is trusted as the entry itself, never as powershell.exe.
+        var powershell = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+        var script = Item("Script", target: powershell, signature: Microsoft);
+        vm.ApplyItems(new[] { script });
+        vm.TrustCommand.Execute(script);
+        Assert.True(settings.IsTrusted(script.Id));
+        Assert.False(settings.IsTrusted(powershell));
+        vm.TrustCommand.Execute(script);
+        Assert.Empty(settings.TrustedItems);
+    }
+
+    [Fact]
+    public void TrustChangedOnAnotherPage_IsAppliedWhenThePageOpensAgain()
+    {
+        using var sandbox = new StartupSandbox();
+        var app = Path.Combine(sandbox.Dir, "elsewhere.exe");
+        var item = Item("Elsewhere", target: app, signature: Unsigned);
+        var vm = new StartupViewModel(sandbox.Service);
+        vm.ApplyItems(new[] { item });
+        sandbox.Service.Reanalyze(item);
+        Assert.False(item.IsTrusted);
+        var settings = sandbox.Settings;
+
+        settings.AddTrusted(app); // e.g. "Доверять" on the Processes page
+        vm.OnNavigatedToAsync();
+
+        Assert.True(item.IsTrusted);
+        Assert.Equal("Доверено", item.RiskText);
+
+        settings.RemoveTrusted(app); // e.g. removed in «Настройки» → «Доверенные»
+        vm.OnNavigatedToAsync();
+
+        Assert.False(item.IsTrusted);
     }
 
     [Theory]
@@ -351,20 +412,43 @@ public class StartupLogicTests
     // ---------- heuristics ----------
 
     [Fact]
-    public void GenuineDefenderBinary_IsNotAnImitation()
+    public void GenuineDefenderBinary_IsNotAnImitation_ButASignedCopyStartedFromTempIs()
     {
-        var path = @"C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26090.9-0\MsMpEng.exe";
-        var raw = Suspicion.Analyze(path, Microsoft);
-        Assert.Equal(SuspicionLevel.None, raw.Level); // core now exempts Microsoft-signed binaries
+        // The page relies on Core here: a Microsoft signature clears the "system file name" rule only in Microsoft's own
+        // install locations. (The page used to have a looser exemption of its own that also cleared a signed copy in Temp.)
+        using var sandbox = new StartupSandbox();
+        var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var path = Path.Combine(programData, @"Microsoft\Windows Defender\Platform\4.18.26090.9-0\MsMpEng.exe");
 
-        Assert.Equal(SuspicionLevel.None, StartupService.WithoutGenuineMicrosoftNames(raw, Microsoft).Level);
+        var genuine = Item("Defender", signature: Microsoft, target: path);
+        sandbox.Service.Reanalyze(genuine);
+        Assert.Equal(SuspicionLevel.None, genuine.RiskLevel);
+        Assert.False(genuine.HasReasons);
 
-        var fake = Suspicion.Analyze(@"C:\Users\Public\MsMpEng.exe", Unsigned);
-        Assert.Equal(SuspicionLevel.High, StartupService.WithoutGenuineMicrosoftNames(fake, Unsigned).Level);
+        var signedCopy = Item("Copy", signature: Microsoft, target: Path.Combine(Path.GetTempPath(), "MsMpEng.exe"));
+        sandbox.Service.Reanalyze(signedCopy);
+        Assert.True(signedCopy.IsSuspicious);
+        Assert.Contains(signedCopy.Reasons, r => r.StartsWith("Имя системного файла", StringComparison.Ordinal));
+
+        var fake = Item("Fake", signature: Unsigned, target: @"C:\Users\Public\MsMpEng.exe");
+        sandbox.Service.Reanalyze(fake);
+        Assert.Equal(SuspicionLevel.High, fake.RiskLevel);
 
         const string hidden = "powershell.exe -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAA=";
-        var scripted = Suspicion.Analyze(path, Microsoft, hidden);
-        Assert.True(StartupService.WithoutGenuineMicrosoftNames(scripted, Microsoft, hidden).IsSuspicious);
+        var scripted = new StartupItem
+        {
+            Id = "RegistryRun|Scripted",
+            Kind = StartupKind.RegistryRun,
+            Scope = StartupScope.CurrentUser,
+            Name = "Scripted",
+            Command = hidden,
+            TargetFile = path,
+            IsEnabled = true,
+        };
+        scripted.Signature = Microsoft;
+        scripted.TargetExists = true;
+        sandbox.Service.Reanalyze(scripted);
+        Assert.True(scripted.IsSuspicious);
     }
 
     // ---------- dashboard findings ----------

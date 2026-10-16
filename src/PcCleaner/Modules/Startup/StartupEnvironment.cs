@@ -33,6 +33,9 @@ internal sealed class StartupEnvironment
 
     public bool IncludeServices { get; init; } = true;
 
+    /// <summary>The settings with the shared trusted list (tests use a private instance).</summary>
+    public Func<AppSettings> Settings { get; init; } = () => AppServices.Settings;
+
     /// <summary>Whether machine-wide changes are allowed (admin rights).</summary>
     public Func<bool> IsElevated { get; init; } = () => Admin.IsElevated;
 

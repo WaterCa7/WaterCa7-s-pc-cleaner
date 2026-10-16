@@ -413,7 +413,7 @@
                 </StackPanel>
                 <TextBlock Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" TextAlignment="Right"
                            VerticalAlignment="Center" Margin="12,0,4,0"
-                           Text="Удаляются только временные файлы и кэш — документы и личные данные не затрагиваются"
+                           Text="Документы, пароли и история браузеров не затрагиваются"
                            ToolTip="Удаляются только временные файлы и кэш — документы, пароли, история и cookie браузеров не затрагиваются. Файлы, занятые программами, и свежие временные файлы пропускаются." />
             </DockPanel>
 

@@ -433,11 +433,13 @@ public sealed class LargeFileViewModel
 /// <summary>The "Готово" card shown after cleaning.</summary>
 public sealed class CleanResultViewModel
 {
-    public CleanResultViewModel(IReadOnlyList<CategoryCleanResult> results, bool cancelled)
+    public CleanResultViewModel(IReadOnlyList<CategoryCleanResult> results, bool cancelled, bool elevated = false)
     {
         Freed = results.Sum(r => r.FreedBytes);
         Deleted = results.Sum(r => r.DeletedFiles);
-        Skipped = results.Sum(r => r.SkippedFiles);
+        Busy = results.Sum(r => r.LockedFiles);
+        Denied = results.Sum(r => r.DeniedFiles);
+        _elevated = elevated;
         Cancelled = cancelled || results.Any(r => r.Cancelled);
         Lines = results
             .OrderByDescending(r => r.FreedBytes)
@@ -451,7 +453,15 @@ public sealed class CleanResultViewModel
 
     public long Deleted { get; }
 
-    public long Skipped { get; }
+    private readonly bool _elevated;
+
+    /// <summary>Files skipped because a running program has them open.</summary>
+    public long Busy { get; }
+
+    /// <summary>Files skipped because there is no permission to delete them.</summary>
+    public long Denied { get; }
+
+    public long Skipped => Busy + Denied;
 
     public bool Cancelled { get; }
 
@@ -470,7 +480,7 @@ public sealed class CleanResultViewModel
             var text = CleanerText.Deleted(Deleted);
             text = char.ToUpper(text[0], Format.Ru) + text[1..];
             if (Skipped > 0)
-                text += ", " + CleanerText.SkippedBusy(Skipped);
+                text += ", " + CleanerText.Skipped(Busy, Denied);
             text += ".";
             if (ErrorCount > 0)
                 text += $" Ошибок: {Format.Number(ErrorCount)} (подробности в журнале).";
@@ -478,9 +488,21 @@ public sealed class CleanResultViewModel
         }
     }
 
-    public string? Hint => Skipped > 0
-        ? "Занятые файлы сейчас используются запущенными программами. Закройте их и повторите очистку, чтобы удалить остальное."
-        : null;
+    /// <summary>What to do about the skipped files: busy ones and protected ones need different advice.</summary>
+    public string? Hint
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (Busy > 0)
+                parts.Add("Занятые файлы сейчас открыты в запущенных программах — закройте их и повторите очистку, чтобы удалить остальное.");
+            if (Denied > 0)
+                parts.Add(_elevated
+                    ? "Файлы без доступа защищены Windows или принадлежат другой учётной записи — так и должно быть, их можно не трогать."
+                    : "Файлы без доступа принадлежат системе или другой учётной записи — часть из них можно удалить, запустив программу от имени администратора.");
+            return parts.Count == 0 ? null : string.Join(" ", parts);
+        }
+    }
 
     public IReadOnlyList<CleanResultLine> Lines { get; }
 
@@ -492,7 +514,7 @@ public sealed class CleanResultViewModel
                 ? CleanerText.DeletedObjects(r.DeletedFiles)
                 : CleanerText.Deleted(r.DeletedFiles));
         if (r.SkippedFiles > 0)
-            parts.Add(CleanerText.SkippedBusy(r.SkippedFiles));
+            parts.Add(CleanerText.Skipped(r.LockedFiles, r.DeniedFiles));
         if (r.SkippedAdminRoots > 0)
             parts.Add("системные папки пропущены — нужны права администратора");
         if (r.Errors.Count > 0)

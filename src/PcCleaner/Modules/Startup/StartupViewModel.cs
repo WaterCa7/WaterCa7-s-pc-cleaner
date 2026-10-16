@@ -6,6 +6,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Data;
 using PcCleaner.Core;
+using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Startup;
 
@@ -72,7 +73,7 @@ public sealed class StartupViewModel : PageViewModel
         OpenTaskSchedulerCommand = new RelayCommand(p => OpenTaskScheduler(ItemOf(p)), p => ItemOf(p) is { IsTask: true });
         OpenServicesCommand = new RelayCommand(p => OpenServices(ItemOf(p)), p => ItemOf(p) is { IsService: true });
         SetStatusFilterCommand = new RelayCommand(p => SetStatusFilter(p));
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RequireElevation("просмотр и изменение всех записей автозагрузки"),
+        RestartAsAdminCommand = new RelayCommand(() => ElevatedRestart.RequireElevation("просмотр и изменение всех записей автозагрузки"),
             () => !Admin.IsElevated);
         DismissMessageCommand = new RelayCommand(() => Message = null);
 
@@ -292,6 +293,8 @@ public sealed class StartupViewModel : PageViewModel
             : _stale || DateTime.Now - _loadedAt > RefreshAfter;
         if (needLoad)
             _ = LoadAsync();
+        else if (_isLoaded && !IsBusy)
+            RefreshTrust(); // the trusted list may have been edited on another page
         return Task.CompletedTask;
     }
 
@@ -411,7 +414,7 @@ public sealed class StartupViewModel : PageViewModel
             var action = enable ? $"включение «{item.DisplayName}»" : $"отключение «{item.DisplayName}»";
             if (item.RequiresAdmin && !Admin.IsElevated && !item.IsTask)
             {
-                Admin.RequireElevation(action);
+                ElevatedRestart.RequireElevation(action);
                 return;
             }
             if (NeedsToggleConfirm(item, enable) &&
@@ -435,7 +438,7 @@ public sealed class StartupViewModel : PageViewModel
             if (result.NeedsAdmin)
             {
                 ShowMessage(result.Message, isError: true);
-                Admin.RequireElevation(action);
+                ElevatedRestart.RequireElevation(action);
                 return;
             }
             ShowMessage(result.Message, !result.Success);
@@ -521,7 +524,7 @@ public sealed class StartupViewModel : PageViewModel
         }
         if (item.RequiresAdmin && !Admin.IsElevated && !item.IsTask)
         {
-            Admin.RequireElevation($"удаление «{item.DisplayName}» из автозагрузки");
+            ElevatedRestart.RequireElevation($"удаление «{item.DisplayName}» из автозагрузки");
             return;
         }
         if (!Dialogs.Confirm("Удалить из автозагрузки?", BuildDeleteConfirm(item)))
@@ -537,7 +540,7 @@ public sealed class StartupViewModel : PageViewModel
         if (result.NeedsAdmin)
         {
             ShowMessage(result.Message, isError: true);
-            Admin.RequireElevation($"удаление «{item.DisplayName}» из автозагрузки");
+            ElevatedRestart.RequireElevation($"удаление «{item.DisplayName}» из автозагрузки");
             return;
         }
         ShowMessage(result.Message, !result.Success);
@@ -604,7 +607,7 @@ public sealed class StartupViewModel : PageViewModel
         var skipped = broken.Count - allowed.Count;
         if (allowed.Count == 0)
         {
-            Admin.RequireElevation("удаление битых записей автозагрузки для всех пользователей");
+            ElevatedRestart.RequireElevation("удаление битых записей автозагрузки для всех пользователей");
             return;
         }
 
@@ -730,34 +733,39 @@ public sealed class StartupViewModel : PageViewModel
     {
         if (item is null)
             return;
-        var settings = AppServices.Settings;
         // Interpreters (powershell.exe, rundll32.exe…) are trusted per entry, never as a file: see StartupService.TrustKey.
-        var key = StartupService.TrustKey(item);
-        var byFile = !string.Equals(key, item.Id, StringComparison.Ordinal);
-        if (item.IsTrusted)
-        {
-            settings.TrustedItems.RemoveAll(t =>
-                string.Equals(t, item.Id, StringComparison.OrdinalIgnoreCase) ||
-                (byFile && string.Equals(t, item.TargetFile, StringComparison.OrdinalIgnoreCase)));
-            ShowMessage($"«{item.DisplayName}» больше не в списке доверенных.");
-            Log.Info($"Автозагрузка: «{item.DisplayName}» убран из доверенных");
-        }
-        else
-        {
-            settings.TrustedItems.Add(key);
-            ShowMessage($"«{item.DisplayName}» отмечен как доверенный — предупреждения для него больше не показываются.");
-            Log.Info($"Автозагрузка: «{item.DisplayName}» добавлен в доверенные");
-        }
-        settings.Save();
+        var trusted = StartupService.SetTrusted(item, !item.IsTrusted, _service.Settings);
+        ShowMessage(trusted
+            ? $"«{item.DisplayName}» отмечен как доверенный — предупреждения для него больше не показываются. " +
+              "Убрать его из доверенных можно здесь же или в «Настройках»."
+            : $"«{item.DisplayName}» больше не в списке доверенных — проверки снова включены.");
 
-        // The same program file may be used by several entries.
-        foreach (var other in _items.Where(i => ReferenceEquals(i, item) ||
-                                                (byFile && string.Equals(i.TargetFile, item.TargetFile, StringComparison.OrdinalIgnoreCase))))
-        {
-            _service.Reanalyze(other);
-            other.NotifyStateChanged();
-        }
+        // The same program file may be used by several entries (and by the Processes/Programs checks).
+        RefreshTrust();
         AfterItemChanged(item);
+    }
+
+    /// <summary>
+    /// Re-applies the shared trusted list to the entries whose trust changed (here, or on another page such as
+    /// «Настройки» → «Доверенные»). Cheap: only those entries are re-analyzed.
+    /// </summary>
+    internal void RefreshTrust()
+    {
+        var settings = _service.Settings;
+        var changed = false;
+        foreach (var item in _items)
+        {
+            if (StartupService.IsTrustedNow(item, settings) == item.IsTrusted)
+                continue;
+            _service.Reanalyze(item);
+            item.NotifyStateChanged();
+            changed = true;
+        }
+        if (changed)
+        {
+            RecomputeCounts();
+            RelayCommand.Refresh();
+        }
     }
 
     private void OpenTaskScheduler(StartupItem? item)

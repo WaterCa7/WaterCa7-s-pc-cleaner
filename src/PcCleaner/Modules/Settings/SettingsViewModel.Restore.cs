@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using PcCleaner.Core;
@@ -58,8 +56,17 @@ public sealed partial class SettingsViewModel
     }
 
     public AsyncRelayCommand CreateRestorePointCommand { get; private set; } = null!;
-    public RelayCommand OpenSystemRestoreCommand { get; private set; } = null!;
-    public RelayCommand OpenProtectionSettingsCommand { get; private set; } = null!;
+    public AsyncRelayCommand OpenSystemRestoreCommand { get; private set; } = null!;
+    public AsyncRelayCommand OpenProtectionSettingsCommand { get; private set; } = null!;
+
+    /// <summary>Starts «Восстановление системы» / «Защита системы» (tests replace it: nothing real is started).</summary>
+    internal SystemToolLauncher ToolLauncher { get; set; } = new();
+
+    /// <summary>
+    /// How long a tool button stays disabled after it started the tool: the window (and its UAC prompt) takes a moment
+    /// to appear, and a double click must not open a second one.
+    /// </summary>
+    internal TimeSpan ToolLaunchCooldown { get; set; } = TimeSpan.FromSeconds(3);
 
     // ----- "О программе" -----
 
@@ -97,17 +104,17 @@ public sealed partial class SettingsViewModel
     private void InitRestoreCommands()
     {
         CreateRestorePointCommand = new AsyncRelayCommand(CreateRestorePointAsync, () => !IsBusy);
-        OpenSystemRestoreCommand = new RelayCommand(() =>
-            LaunchSystemTool("rstrui.exe", "Восстановление системы"));
-        OpenProtectionSettingsCommand = new RelayCommand(() =>
-            LaunchSystemTool("SystemPropertiesProtection.exe", "Защита системы"));
+        OpenSystemRestoreCommand = new AsyncRelayCommand(() =>
+            LaunchSystemToolAsync("rstrui.exe", "Восстановление системы"));
+        OpenProtectionSettingsCommand = new AsyncRelayCommand(() =>
+            LaunchSystemToolAsync("SystemPropertiesProtection.exe", "Защита системы"));
     }
 
     private void InitAboutCommands()
     {
         OpenRepoCommand = new RelayCommand(() => ProcessRunner.ShellOpen(AppInfo.RepoUrl));
         OpenDataFolderCommand = new RelayCommand(() => OpenFolder(AppPaths.DataDir));
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
+        RestartAsAdminCommand = new RelayCommand(() => ElevatedRestart.Request(), () => !Admin.IsElevated);
     }
 
     internal async Task LoadRestoreInfoAsync(CancellationToken ct)
@@ -139,7 +146,7 @@ public sealed partial class SettingsViewModel
 
     private async Task CreateRestorePointAsync()
     {
-        if (!Admin.RequireElevation("Создать точку восстановления"))
+        if (!ElevatedRestart.RequireElevation("Создать точку восстановления"))
             return;
 
         var message =
@@ -153,13 +160,14 @@ public sealed partial class SettingsViewModel
         if (!Dialogs.Confirm("Точка восстановления", message))
             return;
 
-        var ok = false;
+        RestorePointResult? outcome = null;
         var cancelled = false;
         await RunBusyAsync("Создание точки восстановления… Это может занять пару минут", async ct =>
         {
             try
             {
-                ok = await RestorePoint.TryCreateAsync("Создана вручную в настройках", ct, force: true);
+                // force: the switch on the «Основные» tab is about automatic points; this one the user asked for explicitly.
+                outcome = await RestorePoint.CreateAsync("Создана вручную в настройках", ct, force: true);
             }
             catch (OperationCanceledException)
             {
@@ -168,19 +176,17 @@ public sealed partial class SettingsViewModel
             }
         });
 
-        LastRestoreResult = ok
-            ? $"Точка восстановления создана {Format.DateTime(DateTime.Now)}."
-            : cancelled
-                ? "Создание точки восстановления прервано."
-                : "Windows не создала точку восстановления. Подробности — во вкладке «Журнал».";
-        if (cancelled)
+        if (cancelled || outcome is null)
         {
-            Dialogs.Info("Точка восстановления",
-                "Создание точки восстановления прервано. Если Windows успела её создать, она появится в списке справа " +
-                "и в мастере «Восстановление системы».");
+            SetRestoreResult(RestoreResultKind.Warning, "Создание точки восстановления прервано.");
+            if (cancelled)
+                Dialogs.Info("Точка восстановления",
+                    "Создание точки восстановления прервано. Если Windows успела её создать, она появится в списке справа " +
+                    "и в мастере «Восстановление системы».");
             _ = SafeRun(() => LoadRestoreInfoAsync(CancellationToken.None));
             return;
         }
+
         try
         {
             await LoadRestoreInfoAsync(CancellationToken.None);
@@ -190,11 +196,25 @@ public sealed partial class SettingsViewModel
             Log.Warn($"Не удалось обновить список точек восстановления: {ex.Message}");
         }
 
-        Dialogs.Info("Точка восстановления", ok
-            ? "Готово: точка восстановления создана. К ней можно вернуться через «Открыть восстановление системы»."
-            : "Windows не создала точку восстановления.\n\nЧаще всего причина в том, что точка уже создавалась за последние 24 часа, " +
-              "или защита системы выключена групповой политикой. Подробности — во вкладке «Журнал».");
+        var text = RestorePointText.Describe(outcome.Value, DateTime.Now, RestorePolicyWarning is not null);
+        SetRestoreResult(text.Kind, text.Status);
+        Dialogs.Info("Точка восстановления", text.Details);
     }
+
+    private void SetRestoreResult(RestoreResultKind kind, string text)
+    {
+        LastRestoreResultKind = kind;
+        LastRestoreResult = text;
+    }
+
+    /// <summary>How the last result line is colored: green (created), blue (Windows skipped it), amber (not created).</summary>
+    public RestoreResultKind LastRestoreResultKind
+    {
+        get => _lastRestoreResultKind;
+        private set => Set(ref _lastRestoreResultKind, value);
+    }
+
+    private RestoreResultKind _lastRestoreResultKind;
 
     private static string SystemDriveText()
     {
@@ -202,28 +222,34 @@ public sealed partial class SettingsViewModel
         return string.IsNullOrEmpty(drive) ? "C:" : drive;
     }
 
-    /// <summary>Starts a Windows tool that shows its own UAC prompt; cancelling the prompt is not an error.</summary>
-    private static void LaunchSystemTool(string exe, string displayName)
+    /// <summary>
+    /// Starts a Windows tool that shows its own UAC prompt — once: not again while its window is open, and not twice on a
+    /// double click (the command stays disabled for a moment). Cancelling the UAC prompt is not an error.
+    /// </summary>
+    private async Task LaunchSystemToolAsync(string exe, string displayName)
     {
-        var path = Path.Combine(Environment.SystemDirectory, exe);
-        if (!File.Exists(path))
+        var launcher = ToolLauncher;
+        // Off the UI thread: Process.Start waits for the UAC prompt of an elevated tool.
+        var result = await Task.Run(() => launcher.Launch(exe));
+        switch (result)
         {
-            Dialogs.Info(displayName, $"Не найден системный компонент {exe}. Возможно, он отключён в этой редакции Windows.");
-            return;
-        }
-        try
-        {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
-            Log.Info($"Открыто: {displayName}");
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
-        {
-            Log.Info($"{displayName}: запуск отменён пользователем");
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
-        {
-            Log.Warn($"Не удалось открыть {displayName}: {ex.Message}");
-            Dialogs.Error(displayName, $"Не удалось открыть «{displayName}»: {ex.Message}");
+            case ToolLaunchResult.Started:
+                Log.Info($"Открыто: {displayName}");
+                await Task.Delay(ToolLaunchCooldown);
+                break;
+            case ToolLaunchResult.AlreadyOpen:
+                Log.Info($"{displayName}: окно уже открыто — второе не запускается");
+                Dialogs.Info(displayName, $"Окно «{displayName}» уже открыто — переключитесь на него через панель задач.");
+                break;
+            case ToolLaunchResult.Cancelled:
+                Log.Info($"{displayName}: запуск отменён пользователем");
+                break;
+            case ToolLaunchResult.Missing:
+                Dialogs.Info(displayName, $"Не найден системный компонент {exe}. Возможно, он отключён в этой редакции Windows.");
+                break;
+            default:
+                Dialogs.Error(displayName, $"Не удалось открыть «{displayName}». Подробности — во вкладке «Журнал».");
+                break;
         }
     }
 }

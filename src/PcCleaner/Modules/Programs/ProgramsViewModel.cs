@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
 using PcCleaner.Core;
+using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Programs;
 
@@ -124,7 +125,8 @@ public sealed class ProgramsViewModel : PageViewModel
         UninstallCommand = new AsyncRelayCommand(() => UninstallAsync(SelectedProgram, quiet: false),
             () => !IsBusy && SelectedProgram is { CanUninstall: true });
         QuietUninstallCommand = new AsyncRelayCommand(() => UninstallAsync(SelectedProgram, quiet: true),
-            () => !IsBusy && SelectedProgram is { CanUninstall: true, HasQuietUninstall: true });
+            () => !IsBusy && SelectedProgram is { ShowQuietUninstall: true });
+        ToggleDetailsCommand = new RelayCommand(() => IsDetailsOpen = !IsDetailsOpen);
         DeleteEntryCommand = new AsyncRelayCommand(() => DeleteEntryAsync(SelectedProgram),
             () => !IsBusy && SelectedProgram is { IsBroken: true });
         CleanBrokenCommand = new AsyncRelayCommand(CleanBrokenAsync, () => !IsBusy && BrokenCount > 0);
@@ -174,12 +176,27 @@ public sealed class ProgramsViewModel : PageViewModel
                 OnPropertyChanged(nameof(HasSelectedProgram));
                 OnPropertyChanged(nameof(TrustButtonText));
                 OnPropertyChanged(nameof(NeedsAdminForEntry));
+                OnPropertyChanged(nameof(UninstallMenuText));
                 RelayCommand.Refresh();
             }
         }
     }
 
     public bool HasSelectedProgram => SelectedProgram is not null;
+
+    /// <summary>Context menu text: runtimes say right away that removing them is not recommended.</summary>
+    public string UninstallMenuText => SelectedProgram?.IsRuntime == true
+        ? "Удалить компонент… (не рекомендуется)"
+        : "Удалить программу…";
+
+    /// <summary>The details panel on the right; the user can fold it into a slim strip to give the list more room.</summary>
+    public bool IsDetailsOpen
+    {
+        get => _isDetailsOpen;
+        set => Set(ref _isDetailsOpen, value);
+    }
+
+    private bool _isDetailsOpen = true;
 
     public StoreApp? SelectedStoreApp
     {
@@ -402,6 +419,7 @@ public sealed class ProgramsViewModel : PageViewModel
     public RelayCommand OpenFolderCommand { get; }
     public RelayCommand SearchWebCommand { get; }
     public RelayCommand ToggleTrustCommand { get; }
+    public RelayCommand ToggleDetailsCommand { get; }
     public AsyncRelayCommand VirusTotalCommand { get; }
     public RelayCommand CopyNameCommand { get; }
     public RelayCommand ShowFilterCommand { get; }
@@ -421,7 +439,42 @@ public sealed class ProgramsViewModel : PageViewModel
         var stale = _loaded && !IsBusy && DateTime.Now - _lastLoad > TimeSpan.FromMinutes(2);
         if (firstVisit || previousFailed || stale)
             _loadTask = LoadAsync();
+        else if (_loaded && !IsBusy)
+            RefreshTrust(); // the trusted list may have been edited on another page (e.g. «Настройки»)
         return Task.CompletedTask;
+    }
+
+    /// <summary>The settings with the shared trusted list (tests use a private instance).</summary>
+    internal Func<AppSettings> Settings { get; set; } = () => AppServices.Settings;
+
+    /// <summary>Test seam: shows a ready list (on the calling thread) as if it had just been loaded.</summary>
+    internal void ShowProgramsForTests(IReadOnlyList<InstalledProgram> programs)
+    {
+        ApplyPrograms(new ProgramScanResult(programs, 0));
+        _loaded = true;
+        _lastLoad = DateTime.Now;
+        _loadTask = Task.CompletedTask;
+        RaiseAllSummary();
+    }
+
+    /// <summary>Re-applies the shared trusted list to the programs whose trust changed since they were checked.</summary>
+    internal void RefreshTrust()
+    {
+        var settings = Settings();
+        var changed = false;
+        foreach (var p in _programs)
+        {
+            if (settings.IsTrusted(p.DisplayName) == p.IsTrusted)
+                continue;
+            ProgramsService.ApplyTrust(p, settings);
+            changed = true;
+        }
+        if (!changed)
+            return;
+        OnPropertyChanged(nameof(TrustButtonText));
+        UpdateSummary();
+        if (_filter == ProgramFilter.Unwanted)
+            RefreshProgramsView();
     }
 
     public override async Task PreviewScanAsync(CancellationToken ct)
@@ -708,30 +761,11 @@ public sealed class ProgramsViewModel : PageViewModel
             return;
         }
 
-        var launch = quiet ? p.QuietLaunch : p.Launch;
-        var sb = new StringBuilder();
-        sb.AppendLine($"Удалить программу «{p.DisplayName}»?");
-        sb.AppendLine();
-        sb.AppendLine($"Издатель: {p.PublisherText}");
-        if (!string.IsNullOrWhiteSpace(p.Version))
-            sb.AppendLine($"Версия: {p.Version}");
-        if (p.SizeBytes > 0)
-            sb.AppendLine($"Размер: {Format.Bytes(p.SizeBytes)}");
-        sb.AppendLine();
-        sb.AppendLine(quiet
-            ? "Программа будет удалена в тихом режиме — без окон и вопросов. Будет выполнена команда её установщика:"
-            : "Откроется стандартный деинсталлятор программы — дальше следуйте его шагам. Будет запущено:");
-        sb.AppendLine(launch?.DisplayText ?? p.UninstallString ?? "—");
-        sb.AppendLine();
-        if (p.IsRuntime)
-        {
-            sb.AppendLine("Внимание: это компонент, который нужен другим программам и играм. После его удаления они могут перестать запускаться.");
-            sb.AppendLine();
-        }
-        sb.AppendLine("Перед удалением будет создана точка восстановления Windows (если это включено в настройках и есть права администратора).");
-        sb.Append("Отменить удаление нельзя, но программу можно установить заново.");
+        if (quiet && p.IsRuntime)
+            return; // never offered for runtimes (see InstalledProgram.ShowQuietUninstall)
 
-        if (!Dialogs.Confirm("Удаление программы", sb.ToString()))
+        if (!Dialogs.Confirm(p.IsRuntime ? "Удаление компонента Microsoft — не рекомендуется" : "Удаление программы",
+                BuildUninstallConfirmation(p, quiet)))
             return;
         if (quiet && !Dialogs.Confirm("Тихое удаление",
                 $"Тихое удаление пройдёт без вопросов деинсталлятора, и остановить его на полпути не получится.\n\n" +
@@ -786,11 +820,51 @@ public sealed class ProgramsViewModel : PageViewModel
         }
     }
 
+    /// <summary>
+    /// The uninstall confirmation. For Microsoft runtimes it opens with a strong warning: other programs and games stop
+    /// starting without them, and several versions side by side are normal.
+    /// </summary>
+    internal static string BuildUninstallConfirmation(InstalledProgram p, bool quiet)
+    {
+        var launch = quiet ? p.QuietLaunch : p.Launch;
+        var sb = new StringBuilder();
+        if (p.IsRuntime)
+        {
+            sb.AppendLine($"Внимание! «{p.DisplayName}» — компонент Microsoft, на котором работают другие программы и игры.");
+            sb.AppendLine();
+            sb.AppendLine("После его удаления они могут перестать запускаться — с ошибками вроде «Не найден файл MSVCP140.dll» " +
+                          "или «Для запуска нужна платформа .NET». Несколько версий одного компонента — это нормально: " +
+                          "каждая нужна своим программам.");
+            sb.AppendLine();
+            sb.AppendLine("Удаляйте его, только если точно знаете, что он больше не нужен (например, так советует служба поддержки). " +
+                          "Вернуть компонент можно, скачав его установщик с сайта Microsoft.");
+            sb.AppendLine();
+        }
+        sb.AppendLine(p.IsRuntime ? $"Всё равно удалить «{p.DisplayName}»?" : $"Удалить программу «{p.DisplayName}»?");
+        sb.AppendLine();
+        sb.AppendLine($"Издатель: {p.PublisherText}");
+        if (!string.IsNullOrWhiteSpace(p.Version))
+            sb.AppendLine($"Версия: {p.Version}");
+        if (p.SizeBytes > 0)
+            sb.AppendLine($"Размер: {Format.Bytes(p.SizeBytes)}");
+        sb.AppendLine();
+        sb.AppendLine(quiet
+            ? "Программа будет удалена в тихом режиме — без окон и вопросов. Будет выполнена команда её установщика:"
+            : "Откроется стандартный деинсталлятор программы — дальше следуйте его шагам. Будет запущено:");
+        sb.AppendLine(launch?.DisplayText ?? p.UninstallString ?? "—");
+        sb.AppendLine();
+        sb.AppendLine("Перед удалением будет создана точка восстановления Windows (если это включено в настройках и есть права администратора).");
+        sb.Append(p.IsRuntime
+            ? "Отменить удаление нельзя, но компонент можно установить заново."
+            : "Отменить удаление нельзя, но программу можно установить заново.");
+        return sb.ToString();
+    }
+
     private async Task DeleteEntryAsync(InstalledProgram? p)
     {
         if (p is null || !p.IsBroken || IsBusy)
             return;
-        if (p.IsMachineWide && !Admin.RequireElevation("Удаление записи из списка программ"))
+        if (p.IsMachineWide && !ElevatedRestart.RequireElevation("Удаление записи из списка программ"))
             return;
         if (!Dialogs.Confirm("Удаление записи из списка",
                 $"Убрать «{p.DisplayName}» из списка установленных программ?\n\n" +
@@ -830,7 +904,7 @@ public sealed class ProgramsViewModel : PageViewModel
             targets = broken.Where(p => !p.IsMachineWide).ToList();
             if (targets.Count == 0)
             {
-                Admin.RequireElevation("Очистка битых записей в списке программ");
+                ElevatedRestart.RequireElevation("Очистка битых записей в списке программ");
                 return;
             }
             skippedNote = $"\n\nЕщё {Format.Count(machine.Count, "запись", "записи", "записей")} для всех пользователей можно удалить " +
@@ -886,15 +960,12 @@ public sealed class ProgramsViewModel : PageViewModel
         var p = SelectedProgram;
         if (p is null)
             return;
-        var trusted = ProgramsService.SetTrusted(p.DisplayName, !p.IsTrusted);
-        foreach (var item in _programs.Where(x => string.Equals(x.DisplayName, p.DisplayName, StringComparison.OrdinalIgnoreCase)))
-            ProgramsService.ApplyTrust(item);
-        OnPropertyChanged(nameof(TrustButtonText));
-        UpdateSummary();
-        if (_filter == ProgramFilter.Unwanted)
-            RefreshProgramsView();
+        var trusted = ProgramsService.SetTrusted(Settings(), p.DisplayName, !p.IsTrusted);
+        // Every entry with the same name (e.g. 32- and 64-bit) follows the shared list.
+        RefreshTrust();
         Dialogs.Info("Доверенные программы", trusted
-            ? $"«{p.DisplayName}» отмечена как доверенная: она больше не будет помечаться как нежелательная."
+            ? $"«{p.DisplayName}» отмечена как доверенная: она больше не будет помечаться как нежелательная. " +
+              "Убрать её из доверенных можно здесь же или в «Настройках»."
             : $"«{p.DisplayName}» убрана из доверенных: проверки снова включены.");
     }
 

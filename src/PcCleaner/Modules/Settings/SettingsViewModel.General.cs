@@ -156,7 +156,12 @@ public sealed partial class SettingsViewModel
             OnPropertyChanged(nameof(AgeHint));
 
             Exclusions = new ObservableCollection<string>(s.CleanerExclusions);
-            TrustedItems = new ObservableCollection<string>(s.TrustedItems);
+            // Other pages may have trusted or untrusted something since the last visit.
+            if (!TrustedItems.SequenceEqual(s.TrustedItems))
+            {
+                TrustedItems = new ObservableCollection<string>(s.TrustedItems);
+                TrustedMessage = null;
+            }
         }
         finally
         {
@@ -209,13 +214,25 @@ public sealed partial class SettingsViewModel
     {
         if (items.Count == 0)
             return;
-        var remaining = SettingsLogic.Without(Settings.TrustedItems, items, out var removed);
+        // Only through AppSettings.RemoveTrusted: other pages read the shared list on background threads.
+        // It saves the settings and logs every removed item itself.
+        var removed = SettingsLogic.RemoveTrusted(Settings, items);
+        TrustedItems = new ObservableCollection<string>(Settings.TrustedItems);
         if (removed == 0)
             return;
-        Settings.TrustedItems = remaining;
-        SaveSettings($"Настройки: убрано из доверенных — {string.Join("; ", items)}");
-        TrustedItems = new ObservableCollection<string>(Settings.TrustedItems);
+        TrustedMessage = removed == 1
+            ? "Убрано из доверенных. Проверки в «Процессах», «Автозагрузке» и «Программах» снова будут это учитывать."
+            : $"Убрано из доверенных: {Format.Number(removed)}. Проверки снова будут их учитывать.";
     }
+
+    /// <summary>Result of the last removal from the trusted list (shown under the list).</summary>
+    public string? TrustedMessage
+    {
+        get => _trustedMessage;
+        private set => Set(ref _trustedMessage, value);
+    }
+
+    private string? _trustedMessage;
 
     private void ResetSettings()
     {

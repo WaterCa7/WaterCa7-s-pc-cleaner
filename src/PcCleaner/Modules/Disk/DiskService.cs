@@ -19,8 +19,18 @@ internal sealed class DiskEnvironment
     public IReadOnlyList<string> ProgramDataDirs { get; init; } = Array.Empty<string>();
 
     public PathRules Rules { get; init; } = PathRules.Default;
-    public Func<string, bool> Recycler { get; init; } = SafeRecycler.Recycle;
+    /// <summary>Moves one file to the Recycle Bin and says why it did not (tests use a fake).</summary>
+    public Func<string, RecycleOutcome> Recycler { get; init; } = SafeRecycler.Recycle;
     public Func<DateTime> Now { get; init; } = () => DateTime.Now;
+
+    /// <summary>Starts a Windows GUI tool (exe, arguments). Tests use a fake: nothing real is ever launched.</summary>
+    public Func<string, string, ToolLaunchResult> LaunchTool { get; init; } = SystemTools.Launch;
+
+    /// <summary>
+    /// True while a window of this tool (process name without ".exe") is open, e.g. an already open "Очистка диска".
+    /// A windowless instance (Windows' own hidden "cleanmgr /autoclean" maintenance task) does not count.
+    /// </summary>
+    public Func<string, bool> IsToolRunning { get; init; } = SystemTools.IsRunning;
     public long BigVideoThreshold { get; init; } = 1L << 30;
 
     public static DiskEnvironment CreateDefault()
@@ -68,6 +78,15 @@ internal sealed class DiskEnvironment
     }
 }
 
+internal enum ToolLaunchResult
+{
+    Started,
+    AlreadyOpen,
+    /// <summary>The user cancelled the tool's UAC prompt («Защита системы» needs admin rights): not an error.</summary>
+    Cancelled,
+    Failed,
+}
+
 public sealed record OptimizeOutcome(bool Success, bool NeedsAdmin, string Summary, string Output);
 
 public sealed class DiskService : IHealthContributor
@@ -98,6 +117,20 @@ public sealed class DiskService : IHealthContributor
     internal DiskEnvironment Env => _env;
 
     public string SystemDriveRoot => _env.SystemDriveRoot;
+
+    /// <summary>
+    /// Opens a Windows tool unless its window is already open (a double click must not open two wizards).
+    /// <paramref name="processName"/> is the tool's process name without ".exe".
+    /// </summary>
+    internal ToolLaunchResult OpenTool(string exe, string arguments, string processName)
+    {
+        if (_env.IsToolRunning(processName))
+        {
+            Log.Info($"{Path.GetFileName(exe)} уже открыт — второе окно не запускается");
+            return ToolLaunchResult.AlreadyOpen;
+        }
+        return _env.LaunchTool(exe, arguments);
+    }
 
     public string? DownloadsDir => _env.DownloadsDir;
 
@@ -807,20 +840,22 @@ public sealed class DiskService : IHealthContributor
                 result.Skipped.Add((path, "файл уже удалён или перемещён"));
                 continue;
             }
-            bool ok;
+            RecycleOutcome outcome;
             try
             {
-                ok = _env.Recycler(path);
+                outcome = _env.Recycler(path);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
             {
                 Log.Warn($"Не удалось переместить в корзину {path}: {ex.Message}");
-                ok = false;
+                outcome = ex is UnauthorizedAccessException
+                    ? new RecycleOutcome(RecycleFailure.AccessDenied)
+                    : new RecycleOutcome(RecycleFailure.Failed, ex.HResult);
             }
-            if (ok)
+            if (outcome.Success)
                 result.Recycled.Add((path, size));
             else
-                result.Skipped.Add((path, "файл занят другой программой или нет прав"));
+                result.Skipped.Add((path, outcome.Reason));
         }
         return result;
     }

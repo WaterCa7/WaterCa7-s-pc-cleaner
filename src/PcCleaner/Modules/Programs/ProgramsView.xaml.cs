@@ -18,12 +18,7 @@ public partial class ProgramsView : UserControl
     {
         if (sender is not DataGrid grid)
             return;
-        var element = e.OriginalSource as DependencyObject;
-        while (element is not null and not DataGridRow)
-            element = element is Visual or System.Windows.Media.Media3D.Visual3D
-                ? VisualTreeHelper.GetParent(element)
-                : LogicalTreeHelper.GetParent(element);
-        if (element is DataGridRow row)
+        if (FindRow(e.OriginalSource as DependencyObject) is { } row)
         {
             grid.SelectedItem = row.Item;
             row.Focus();
@@ -39,21 +34,30 @@ public partial class ProgramsView : UserControl
 
     /// <summary>
     /// On a narrow window the summary cards drop their icons so the titles stay readable.
-    /// On a low window the action buttons of the details panels scroll together with the details: pinned, they would
-    /// leave only a few lines for the explanation.
+    /// On a low window (the minimum size) the cards switch to two lines with the number in front of the title (Tag = "Compact",
+    /// see the CardTitle / CardNumber / CardHint styles), and the action buttons of the details panels move right under the
+    /// program's name:
+    /// pinned at the bottom they would leave only a few lines for the details, at the end of the details they would be
+    /// out of sight.
     /// </summary>
     private void View_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         var visibility = e.NewSize.Width < 900 ? Visibility.Collapsed : Visibility.Visible;
         foreach (var icon in new[] { CardIcon0, CardIcon1, CardIcon2, CardIcon3 })
             icon.Visibility = visibility;
+        // The search box shares the row with the tab pills: narrower on a narrow window.
+        SearchHost.Width = e.NewSize.Width < 800 ? 190 : 230;
 
         var compact = e.NewSize.Height < CompactHeight;
+        Tag = compact ? "Compact" : null;
         PlaceActions(ProgramDetailsGrid, ProgramDetailsStack, ProgramActions, compact);
         PlaceActions(StoreDetailsGrid, StoreDetailsStack, StoreActions, compact);
     }
 
     private const double CompactHeight = 600;
+
+    /// <summary>Position of the actions in a compact details panel: after the header and the badges.</summary>
+    private const int CompactActionsIndex = 2;
 
     private static void PlaceActions(Grid detailsGrid, StackPanel detailsStack, Border actions, bool insideScroll)
     {
@@ -63,17 +67,36 @@ public partial class ProgramsView : UserControl
             current.Children.Remove(actions);
         if (insideScroll)
         {
-            actions.Padding = new Thickness(0, 12, 0, 0);
-            actions.Margin = new Thickness(0, 8, 0, 0);
-            detailsStack.Children.Add(actions);
+            actions.Padding = new Thickness(0, 12, 0, 4);
+            actions.Margin = new Thickness(0, 10, 0, 6);
+            actions.BorderThickness = new Thickness(0, 1, 0, 1);
+            detailsStack.Children.Insert(Math.Min(CompactActionsIndex, detailsStack.Children.Count), actions);
         }
         else
         {
             actions.Padding = new Thickness(16, 12, 16, 8);
             actions.Margin = new Thickness(0);
+            actions.BorderThickness = new Thickness(0, 1, 0, 0);
             Grid.SetRow(actions, 1);
             detailsGrid.Children.Add(actions);
         }
+    }
+
+    /// <summary>Double-clicking a row opens the folded details panel.</summary>
+    private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is ProgramsViewModel { IsDetailsOpen: false } vm && e.OriginalSource is DependencyObject source &&
+            FindRow(source) is not null)
+            vm.IsDetailsOpen = true;
+    }
+
+    private static DataGridRow? FindRow(DependencyObject? element)
+    {
+        while (element is not null and not DataGridRow)
+            element = element is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(element)
+                : LogicalTreeHelper.GetParent(element);
+        return element as DataGridRow;
     }
 
     /// <summary>Hides secondary columns when the grid gets narrow (minimum window size).</summary>
