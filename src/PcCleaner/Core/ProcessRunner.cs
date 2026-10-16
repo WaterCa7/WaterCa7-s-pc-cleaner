@@ -39,6 +39,24 @@ public static class ProcessRunner
         }
     }
 
+    /// <summary>
+    /// "reg.exe" -> "C:\Windows\System32\reg.exe". CreateProcess looks in the application's own folder first,
+    /// so a bare name would let a planted reg.exe next to our exe (e.g. in Downloads) run with our — possibly
+    /// administrator — rights. Names that are not found in System32 are returned unchanged.
+    /// </summary>
+    public static string ResolveSystemTool(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName) || Path.IsPathRooted(fileName) ||
+            fileName.Contains('\\') || fileName.Contains('/'))
+            return fileName;
+        var name = Path.HasExtension(fileName) ? fileName : fileName + ".exe";
+        var system = Path.Combine(Environment.SystemDirectory, name);
+        if (File.Exists(system))
+            return system;
+        var wbem = Path.Combine(Environment.SystemDirectory, "wbem", name);
+        return File.Exists(wbem) ? wbem : fileName;
+    }
+
     public static async Task<ProcessResult> RunAsync(
         string fileName,
         string arguments,
@@ -46,7 +64,7 @@ public static class ProcessRunner
         CancellationToken ct = default,
         Encoding? outputEncoding = null)
     {
-        var psi = new ProcessStartInfo(fileName, arguments)
+        var psi = new ProcessStartInfo(ResolveSystemTool(fileName), arguments)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -168,15 +186,17 @@ public static class ProcessRunner
         }
     }
 
+    private static string ExplorerPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+
     /// <summary>Opens Explorer with the file selected.</summary>
     public static void ShowInExplorer(string path)
     {
         try
         {
             if (File.Exists(path))
-                Process.Start("explorer.exe", $"/select,\"{path}\"");
+                Process.Start(ExplorerPath, $"/select,\"{path}\"")?.Dispose();
             else if (Directory.Exists(path))
-                Process.Start("explorer.exe", $"\"{path}\"");
+                Process.Start(ExplorerPath, $"\"{path}\"")?.Dispose();
             else
                 Dialogs.Info("Файл не найден", path);
         }

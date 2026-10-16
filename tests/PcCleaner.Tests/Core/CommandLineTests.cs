@@ -72,6 +72,28 @@ public class CommandLineTests
         => Assert.Null(CommandLine.Split("  ").Executable);
 }
 
+public class SystemToolResolutionTests
+{
+    [Theory]
+    [InlineData("reg.exe")]
+    [InlineData("reg")]
+    [InlineData("netsh.exe")]
+    [InlineData("ipconfig.exe")]
+    public void BareSystemTool_ResolvesToSystem32(string name)
+    {
+        var resolved = ProcessRunner.ResolveSystemTool(name);
+        Assert.True(Path.IsPathRooted(resolved));
+        Assert.StartsWith(Environment.SystemDirectory, resolved, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void FullPathOrUnknownName_IsUnchanged()
+    {
+        Assert.Equal(@"C:\Tools\x.exe", ProcessRunner.ResolveSystemTool(@"C:\Tools\x.exe"));
+        Assert.Equal("definitely-not-a-tool.exe", ProcessRunner.ResolveSystemTool("definitely-not-a-tool.exe"));
+    }
+}
+
 public class PowerShellRunnerTests
 {
     [Fact]
