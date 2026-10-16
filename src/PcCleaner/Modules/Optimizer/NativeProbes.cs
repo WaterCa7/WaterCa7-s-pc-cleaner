@@ -149,23 +149,95 @@ internal static class NativeProbes
     }
 
     /// <summary>true = on AC power, false = on battery, null = unknown.</summary>
-    public static bool? IsOnAcPower()
+    public static bool? IsOnAcPower() => GetPowerStatus().OnAc;
+
+    /// <summary>AC line, battery charge and charging flag from GetSystemPowerStatus (cheap, no WMI).</summary>
+    public static PowerStatus GetPowerStatus()
     {
         try
         {
             if (!GetSystemPowerStatus(out var status))
-                return null;
-            return status.ACLineStatus switch
+                return new PowerStatus(null, null, BatteryChargeState.Unknown);
+            bool? onAc = status.ACLineStatus switch
             {
                 0 => false,
                 1 => true,
                 _ => null,
             };
+            return new PowerStatus(onAc, ChargePercent(status.BatteryFlag, status.BatteryLifePercent),
+                ChargeState(onAc, status.BatteryFlag, status.BatteryLifePercent));
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return new PowerStatus(null, null, BatteryChargeState.Unknown);
+        }
+    }
+
+    private const byte BatteryFlagCharging = 8;
+    private const byte BatteryFlagNoBattery = 128;
+    private const byte BatteryFlagUnknown = 255;
+
+    /// <summary>BatteryLifePercent is 255 when unknown; no battery -> null.</summary>
+    internal static int? ChargePercent(byte batteryFlag, byte lifePercent)
+        => batteryFlag is BatteryFlagUnknown || (batteryFlag & BatteryFlagNoBattery) != 0 || lifePercent > 100 ? null : lifePercent;
+
+    internal static BatteryChargeState ChargeState(bool? onAc, byte batteryFlag, byte lifePercent)
+    {
+        if (batteryFlag == BatteryFlagUnknown || (batteryFlag & BatteryFlagNoBattery) != 0)
+            return BatteryChargeState.Unknown;
+        if ((batteryFlag & BatteryFlagCharging) != 0)
+            return BatteryChargeState.Charging;
+        return onAc switch
+        {
+            false => BatteryChargeState.Discharging,
+            true when lifePercent is >= 99 and <= 100 => BatteryChargeState.Full,
+            true => BatteryChargeState.PluggedIn,
+            _ => BatteryChargeState.Unknown,
+        };
+    }
+
+    /// <summary>GetFirmwareType: 1 = legacy BIOS, 2 = UEFI; null when the call is not available or fails.</summary>
+    public static int? GetFirmwareTypeValue()
+    {
+        try
+        {
+            return GetFirmwareType(out var type) ? type : null;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// CPU load over <paramref name="duration"/>, without the CPU time this app used meanwhile (so our own scans,
+    /// e.g. the dashboard smart scan, do not look like a busy PC). Kept separate from SystemStats on purpose:
+    /// SystemStats.CpuUsagePercent measures "since the previous call" for live widgets, and a 2-second sample from here
+    /// would shorten their interval. Null if the counters are not available.
+    /// </summary>
+    public static async Task<double?> SampleCpuLoadAsync(TimeSpan duration, CancellationToken ct)
+    {
+        try
+        {
+            if (!GetSystemTimes(out var idle1, out var kernel1, out var user1))
+                return null;
+            var own1 = OwnCpuTime();
+            await Task.Delay(duration, ct).ConfigureAwait(false);
+            if (!GetSystemTimes(out var idle2, out var kernel2, out var user2))
+                return null;
+            var own2 = OwnCpuTime();
+            return HardwareText.CpuLoadPercent(idle2 - idle1, kernel2 - kernel1, user2 - user1, own2 - own1);
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static long OwnCpuTime()
+    {
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        return self.TotalProcessorTime.Ticks; // 100 ns units, same as GetSystemTimes
     }
 
     private static DISPLAY_DEVICE NewDisplayDevice() => new() { cb = Marshal.SizeOf<DISPLAY_DEVICE>() };
@@ -287,4 +359,16 @@ internal static class NativeProbes
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
+
+    /// <summary>FIRMWARE_TYPE: 0 unknown, 1 BIOS, 2 UEFI (Windows 8+).</summary>
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFirmwareType(out int firmwareType);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetSystemTimes(out ulong idleTime, out ulong kernelTime, out ulong userTime);
 }
+
+/// <summary>Live power state from GetSystemPowerStatus.</summary>
+internal sealed record PowerStatus(bool? OnAc, int? BatteryChargePercent, BatteryChargeState BatteryState);

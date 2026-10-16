@@ -63,3 +63,31 @@ public sealed class ColumnsForWidthConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>
+/// [available width, item count] -> UniformGrid columns: as many as fit (ConverterParameter = minimal column width),
+/// then balanced so the rows stay full — 9 cards become 3 × 3 instead of 4 + 4 + 1 lonely card.
+/// </summary>
+public sealed class BalancedColumnsConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var width = values.Length > 0 && values[0] is double d && !double.IsNaN(d) ? d : 0;
+        var count = values.Length > 1 && values[1] is int n ? n : 0;
+        var min = parameter is string s && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var p) ? p : 240;
+        return Columns(width, count, min);
+    }
+
+    /// <summary>Most columns that fit, reduced to the fewest that still need the same number of rows.</summary>
+    public static int Columns(double width, int count, double minColumnWidth)
+    {
+        var max = width <= 0 || minColumnWidth <= 0 ? 1 : Math.Clamp((int)(width / minColumnWidth), 1, 6);
+        if (count <= max)
+            return max;
+        var rows = (count + max - 1) / max;
+        return (count + rows - 1) / rows;
+    }
+
+    public object[] ConvertBack(object? value, Type[] targetTypes, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

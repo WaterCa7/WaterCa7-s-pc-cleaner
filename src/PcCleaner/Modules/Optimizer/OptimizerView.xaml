@@ -11,6 +11,7 @@
         <local:ToneToBrushConverter x:Key="ToneBrush" />
         <local:ToneToSoftBrushConverter x:Key="ToneSoft" />
         <local:ColumnsForWidthConverter x:Key="Columns" />
+        <local:BalancedColumnsConverter x:Key="BalancedColumns" />
 
         <!-- Small coloured pill bound to a Tone -->
         <Style x:Key="ToneBadgeText" TargetType="TextBlock">
@@ -42,6 +43,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <DockPanel>
                         <Border DockPanel.Dock="Left" Width="28" Height="28" CornerRadius="7" Background="{StaticResource AccentSoftBrush}">
@@ -64,7 +66,12 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <Border Grid.Row="4" Style="{StaticResource Badge}" Margin="0,9,0,0"
+                    <Button Grid.Row="4" Style="{StaticResource LinkButton}" Margin="0,8,0,0" FontSize="12.5"
+                            HorizontalAlignment="Left" Content="{Binding ActionText}" ToolTip="{Binding ActionToolTip}"
+                            Command="{Binding DataContext.CardActionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            Visibility="{Binding HasAction, Converter={StaticResource BoolToVis}}" />
+                    <Border Grid.Row="5" Style="{StaticResource Badge}" Margin="0,9,0,0"
                             Background="{Binding BadgeTone, Converter={StaticResource ToneSoft}}"
                             Visibility="{Binding HasBadge, Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="{Binding Badge}" Style="{StaticResource ToneBadgeText}"
@@ -397,7 +404,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" Foreground="{StaticResource WarningBrush}" />
                     <TextBlock Grid.Column="1" Style="{StaticResource Muted}" Margin="10,0,12,0" VerticalAlignment="Center"
-                               Text="Программа работает без прав администратора. Анализ выполнен полностью, но настройки с пометкой «Нужны права администратора» можно применить только после перезапуска от имени администратора." />
+                               Text="{Binding AdminHintText}" />
                     <Button Grid.Column="2" Content="Перезапустить" Padding="12,5" Command="{Binding RestartAsAdminCommand}"
                             ToolTip="Перезапустить программу от имени администратора" />
                 </Grid>
@@ -413,7 +420,15 @@
                           ItemTemplate="{StaticResource HardwareCardTemplate}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <UniformGrid Columns="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource Columns}, ConverterParameter=225}" />
+                        <!-- Balanced: 8 cards = 4 × 2, 9 cards (laptop with battery) = 3 × 3, never a lonely last card -->
+                        <UniformGrid>
+                            <UniformGrid.Columns>
+                                <MultiBinding Converter="{StaticResource BalancedColumns}" ConverterParameter="225">
+                                    <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                    <Binding Path="HardwareCards.Count" />
+                                </MultiBinding>
+                            </UniformGrid.Columns>
+                        </UniformGrid>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>

@@ -13,6 +13,25 @@ public static class RecommendationEngine
 
     public const int HighMemoryLoadPercent = 85;
 
+    /// <summary>CPU load (2-second sample) above which the PC is called busy.</summary>
+    public const double HighCpuLoadPercent = 90;
+
+    /// <summary>Thermal zone temperature from which the PC is overheating.</summary>
+    public const double HighTemperatureC = 85;
+
+    /// <summary>Page files filled more than this are a sign of a RAM shortage.</summary>
+    public const double PagefilePressurePercent = 50;
+
+    /// <summary>Battery wear (lost capacity, %) above which a replacement is suggested: Low, then Medium.</summary>
+    public const double BatteryWearLowPercent = 30;
+
+    public const double BatteryWearMediumPercent = 40;
+
+    /// <summary>Pseudo-URI for the "Отчёт о батарее" button (handled by the page, not by the shell).</summary>
+    public const string BatteryReportUri = "waterca7s:battery-report";
+
+    public const string MbrToGptGuideUri = "https://learn.microsoft.com/ru-ru/windows/deployment/mbr-to-gpt";
+
     public static readonly TimeSpan DriverMaxAge = TimeSpan.FromDays(183);
     public static readonly TimeSpan BiosMaxAge = TimeSpan.FromDays(365 * 3);
     public static readonly TimeSpan UptimeLimit = TimeSpan.FromDays(7);
@@ -33,11 +52,16 @@ public static class RecommendationEngine
         AddMemoryChannels(list, hw);
         AddMemoryAmount(list, hw);
         AddMemoryLoad(list, s);
+        AddCpuLoad(list, s);
+        AddTemperature(list, hw, s);
         AddSystemDisk(list, hw);
         AddRefreshRate(list, hw);
         AddMonitorOnIntegratedGpu(list, hw);
         AddGpuDrivers(list, hw, now);
         AddBios(list, hw, now);
+        AddBootMode(list, hw);
+        AddVirtualization(list, hw);
+        AddBattery(list, hw);
         AddPowerPlan(list, hw, s);
         AddGameMode(list, s);
         AddGameDvr(list, s);
@@ -45,6 +69,7 @@ public static class RecommendationEngine
         AddVisualEffects(list, hw, s);
         AddTransparency(list, hw, s);
         AddPagefile(list, hw, s);
+        AddFastStartup(list, s);
         AddRestart(list, s);
         AddMaintenanceLinks(list);
         return Sort(list);
@@ -105,8 +130,17 @@ public static class RecommendationEngine
             "Выберите «Profile 1» и сохраните настройки клавишей F10.",
             "Если после этого компьютер не запускается — подождите: многие платы сами сбрасывают неудачные настройки после 2–3 попыток. " +
             "Иначе сбросьте BIOS (Clear CMOS) или выберите профиль с меньшей частотой.",
+            "Если пункта XMP нет или частота после включения не выросла, её ограничивает процессор или материнская плата " +
+            "(например, платы Intel на чипсетах H и B до 500-й серии). Тогда менять ничего не нужно.",
         };
     }
+
+    /// <summary>
+    /// Memory speed as the engine sees it. <see cref="Rated"/> is the slowest module's rating: the higher of the SPD speed
+    /// Windows reports and the speed encoded in the part number (Windows often reports only the JEDEC speed, e.g. 2133
+    /// for a DDR4-3200 kit with XMP off). <see cref="PartRated"/> is set only when every module's part number was decoded.
+    /// </summary>
+    public sealed record MemorySpeedInfo(int Rated, int Configured, string? Type, bool FromPartNumber, int? PartRated, string? PartNumber);
 
     /// <summary>
     /// Rated (slowest module) and configured (MT/s) memory speed, or null when Windows does not report them.
@@ -114,14 +148,22 @@ public static class RecommendationEngine
     /// but only when the reported value is below anything the memory type really runs at — so a DDR4-4400 kit
     /// stuck at its JEDEC 2133 is still recognised as slow.
     /// </summary>
-    public static (int Rated, int Configured, string? Type)? MemorySpeed(HardwareSnapshot hw)
+    public static MemorySpeedInfo? MemorySpeed(HardwareSnapshot hw)
     {
-        var mods = hw.RamModules.Where(m => m.RatedMhz > 0 && m.ConfiguredMhz > 0).ToList();
+        var mods = hw.RamModules
+            .Select(m => (Module: m, Part: HardwareText.DecodeMemoryPart(m.PartNumber)))
+            .Where(x => x.Module.ConfiguredMhz > 0 && (x.Module.RatedMhz > 0 || x.Part is not null))
+            .ToList();
         if (mods.Count == 0)
             return null;
-        var rated = mods.Min(m => m.RatedMhz);
-        var configured = mods.Max(m => m.ConfiguredMhz);
-        var type = mods.Select(m => HardwareText.MemoryTypeName(m.MemoryType)).FirstOrDefault(t => t is not null);
+        static int RatingOf((RamModule Module, (int Speed, string? Type)? Part) x) => Math.Max(x.Module.RatedMhz, x.Part?.Speed ?? 0);
+        var slowest = mods.MinBy(RatingOf);
+        var rated = RatingOf(slowest);
+        var fromPart = slowest.Part is { } sp && sp.Speed > slowest.Module.RatedMhz;
+        int? partRated = mods.All(x => x.Part is not null) ? mods.Min(x => x.Part!.Value.Speed) : null;
+        var configured = mods.Max(x => x.Module.ConfiguredMhz);
+        var type = mods.Select(x => HardwareText.MemoryTypeName(x.Module.MemoryType)).FirstOrDefault(t => t is not null)
+                   ?? mods.Select(x => x.Part?.Type).FirstOrDefault(t => t is not null);
         var lowestReal = type switch
         {
             "DDR3" or "LPDDR3" => 1066,
@@ -131,17 +173,41 @@ public static class RecommendationEngine
         };
         if (configured < lowestReal && configured * 2 >= rated * 0.95 && configured * 2 <= rated * 1.05)
             configured *= 2;
-        return (rated, configured, type);
+        return new MemorySpeedInfo(rated, configured, type, fromPart, partRated, slowest.Part is null ? null : slowest.Module.PartNumber);
     }
 
     /// <summary>True when the memory runs noticeably (more than 10%) below its rated speed.</summary>
     public static bool IsMemoryBelowRated(int rated, int configured) => rated > configured * (1 + MemorySpeedTolerance);
 
+    /// <summary>
+    /// The standard (JEDEC) speed every module starts at without XMP/EXPO: DDR4 2133/2400/2666, DDR5 4800.
+    /// Windows reports 2666 as 2667 on some boards, so a small tolerance is allowed.
+    /// </summary>
+    public static bool IsJedecSpeed(string? type, int configured)
+    {
+        static bool Near(int value, int target) => Math.Abs(value - target) <= 20;
+        return type switch
+        {
+            "DDR4" => Near(configured, 2133) || Near(configured, 2400) || Near(configured, 2666),
+            "DDR5" => Near(configured, 4800),
+            _ => false,
+        };
+    }
+
+    /// <summary>The memory runs without XMP/EXPO although the modules are rated faster (desktop only, see the RamSpeed rule).</summary>
+    public static bool IsXmpOff(HardwareSnapshot hw)
+        => !hw.IsLaptop && MemorySpeed(hw) is { } s && IsMemoryBelowRated(s.Rated, s.Configured) && IsJedecSpeed(s.Type, s.Configured);
+
+    /// <summary>
+    /// One memory-speed item at most: "without XMP/EXPO" (JEDEC speed, modules rated faster — by SPD or part number),
+    /// "below rated speed" (other slow speeds), "check the sticker" (JEDEC speed, rating unknown) or "fine".
+    /// </summary>
     private static void AddMemorySpeed(List<Recommendation> list, HardwareSnapshot hw)
     {
         if (MemorySpeed(hw) is not { } speed)
             return;
-        var (rated, configured, type) = speed;
+        var (rated, configured, type) = (speed.Rated, speed.Configured, speed.Type);
+        var current = $"{configured} МГц из {rated} МГц";
 
         if (IsMemoryBelowRated(rated, configured))
         {
@@ -157,22 +223,44 @@ public static class RecommendationEngine
                     Kind = RecommendationKind.Info,
                     Impact = RecommendationImpact.Low,
                     Severity = IssueSeverity.Info,
-                    CurrentValue = $"{configured} МГц из {rated} МГц",
+                    CurrentValue = current,
+                });
+                return;
+            }
+            var source = speed.FromPartNumber
+                ? $"Судя по маркировке модулей ({speed.PartNumber}), они рассчитаны на {rated} МГц"
+                : $"Модули рассчитаны на {rated} МГц";
+            if (IsJedecSpeed(type, configured))
+            {
+                list.Add(new Recommendation
+                {
+                    Id = "RamSpeed",
+                    Title = "Память работает без XMP/EXPO",
+                    Explanation = $"{source}, но работают на стандартной частоте {type} — {configured} МГц. Так бывает, когда в BIOS " +
+                                  "не включён профиль XMP (у плат для AMD он называется EXPO или DOCP): без него любая память запускается " +
+                                  "на базовой частоте. Включение профиля бесплатно ускоряет память, а с ней — игры и тяжёлые программы.",
+                    Category = RecommendationCategory.Hardware,
+                    Kind = RecommendationKind.Manual,
+                    Impact = RecommendationImpact.High,
+                    Severity = IssueSeverity.High,
+                    CurrentValue = current,
+                    Gain = "Быстрее игры и тяжёлые программы",
+                    Steps = XmpSteps(hw),
                 });
                 return;
             }
             list.Add(new Recommendation
             {
                 Id = "RamSpeed",
-                Title = $"Память работает на {configured} МГц вместо {rated} МГц — включите XMP/EXPO/DOCP в BIOS",
-                Explanation = $"Модули рассчитаны на {rated} МГц, но сейчас работают медленнее. Обычно так бывает, когда в BIOS не включён " +
-                              "профиль разгона памяти XMP (у плат для AMD — EXPO или DOCP). Включение профиля бесплатно ускоряет память, " +
-                              "а с ней — игры и тяжёлые программы.",
+                Title = $"Память работает на {configured} МГц вместо {rated} МГц",
+                Explanation = $"{source}, но сейчас работают медленнее. Обычно так бывает, когда в BIOS не включён " +
+                              "профиль разгона памяти XMP (у плат для AMD — EXPO или DOCP) или выбрана частота вручную. Включение профиля " +
+                              "бесплатно ускоряет память, а с ней — игры и тяжёлые программы.",
                 Category = RecommendationCategory.Hardware,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.High,
                 Severity = IssueSeverity.High,
-                CurrentValue = $"{configured} МГц из {rated} МГц",
+                CurrentValue = current,
                 Gain = "Быстрее игры и тяжёлые программы",
                 Steps = XmpSteps(hw),
             });
@@ -180,7 +268,9 @@ public static class RecommendationEngine
         }
 
         // Windows often reports only the JEDEC base speed, so a module at 2133/2400 (DDR4) or 4800 (DDR5) may still have XMP off.
-        var baseSpeed = !hw.IsLaptop && ((type == "DDR4" && configured <= 2400) || (type == "DDR5" && configured <= 4800));
+        // When every part number was decoded, the real rating is known and there is nothing to check.
+        var baseSpeed = !hw.IsLaptop && speed.PartRated is null &&
+                        ((type == "DDR4" && configured <= 2400) || (type == "DDR5" && configured <= 4800));
         if (baseSpeed)
         {
             list.Add(new Recommendation
@@ -429,6 +519,72 @@ public static class RecommendationEngine
             Gain = "Освободится память",
             NavigateKey = "Processes",
             NavigateLabel = "Открыть «Процессы»",
+        });
+    }
+
+    private static void AddCpuLoad(List<Recommendation> list, SettingsSnapshot s)
+    {
+        if (s.CpuLoadPercent is not { } load || load <= HighCpuLoadPercent)
+            return;
+        var text = Format.Percent(Math.Round(load));
+        list.Add(new Recommendation
+        {
+            Id = "CpuLoad",
+            Title = "Процессор загружен более чем на 90%",
+            Explanation = $"Пока шла проверка, процессор был занят на {text} (замер за 2 секунды, без учёта самой программы). " +
+                          "Когда процессор загружен до предела, всё работает с задержками. Откройте «Процессы» и посмотрите, что его " +
+                          "нагружает: часто это обновление Windows, проверка антивирусом или вкладки браузера, а бывает и скрытый майнер.",
+            Category = RecommendationCategory.Maintenance,
+            Kind = RecommendationKind.Manual,
+            Impact = RecommendationImpact.Medium,
+            Severity = IssueSeverity.Medium,
+            CurrentValue = $"Загрузка {text}",
+            Gain = "Быстрее отклик системы",
+            NavigateKey = "Processes",
+            NavigateLabel = "Открыть «Процессы»",
+        });
+    }
+
+    private static void AddTemperature(List<Recommendation> list, HardwareSnapshot hw, SettingsSnapshot s)
+    {
+        if (s.TemperatureC is not { } t)
+            return;
+        var text = HardwareText.Celsius(t);
+        if (t < HighTemperatureC)
+        {
+            list.Add(Good("Temperature", "Температура в норме", text, RecommendationCategory.Hardware));
+            return;
+        }
+        var steps = hw.IsLaptop
+            ? new[]
+            {
+                "Почистите вентиляционные решётки ноутбука и не ставьте его на мягкие поверхности — кровать, диван, колени.",
+                "Помогает охлаждающая подставка с вентиляторами.",
+                "Если ноутбуку больше 2–3 лет, отдайте его в сервис на чистку системы охлаждения и замену термопасты.",
+                "Точную температуру ядер под нагрузкой покажут бесплатные программы HWiNFO или Core Temp.",
+            }
+            : new[]
+            {
+                "Выключите компьютер, отключите его от розетки и почистите от пыли радиатор процессора, вентиляторы и пылевые " +
+                "фильтры корпуса — баллончиком со сжатым воздухом или мягкой кисточкой.",
+                "Проверьте, что все вентиляторы крутятся, а корпус не стоит вплотную к стене или батарее отопления.",
+                "Если компьютеру больше 2–3 лет, замените термопасту на процессоре (или попросите об этом сервис).",
+                "Точную температуру ядер под нагрузкой покажут бесплатные программы HWiNFO или Core Temp.",
+            };
+        list.Add(new Recommendation
+        {
+            Id = "Temperature",
+            Title = "Высокая температура",
+            Explanation = $"Датчик температуры показывает {text}. При перегреве процессор сбрасывает частоту, чтобы не повредиться " +
+                          "(это называется троттлингом), — компьютер начинает тормозить, а при сильном перегреве может внезапно " +
+                          "выключаться. Чаще всего виноваты пыль в радиаторе и вентиляторах или высохшая термопаста.",
+            Category = RecommendationCategory.Hardware,
+            Kind = RecommendationKind.Manual,
+            Impact = RecommendationImpact.High,
+            Severity = IssueSeverity.High,
+            CurrentValue = text,
+            Gain = "Без троттлинга и внезапных выключений",
+            Steps = steps,
         });
     }
 
@@ -686,6 +842,142 @@ public static class RecommendationEngine
                     "Во время обновления не выключайте компьютер; для ноутбука подключите зарядку.",
                 }
                 : Array.Empty<string>(),
+        });
+    }
+
+    private static void AddBootMode(List<Recommendation> list, HardwareSnapshot hw)
+    {
+        if (hw.BootMode == BootMode.Uefi)
+        {
+            list.Add(Good("BootMode", "Компьютер загружается в режиме UEFI", "UEFI", RecommendationCategory.Hardware));
+            return;
+        }
+        if (hw.BootMode != BootMode.LegacyBios)
+            return;
+        list.Add(new Recommendation
+        {
+            Id = "BootMode",
+            Title = "Компьютер загружается в режиме Legacy BIOS",
+            Explanation = "Windows запускается в устаревшем режиме совместимости (Legacy BIOS, он же CSM), а не в современном UEFI. " +
+                          "С UEFI компьютер включается быстрее, а ещё этот режим обязателен для безопасной загрузки (Secure Boot) и для " +
+                          "Windows 11. Переход — сложная операция для опытных пользователей: системный диск нужно преобразовать из MBR " +
+                          "в GPT, и ошибка может оставить компьютер без загружаемой Windows. Если всё работает и Windows 11 не нужна, " +
+                          "можно ничего не менять.",
+            Category = RecommendationCategory.Hardware,
+            Kind = RecommendationKind.Manual,
+            Impact = RecommendationImpact.Medium,
+            Severity = IssueSeverity.Medium,
+            CurrentValue = "Legacy BIOS (CSM)",
+            Gain = "Быстрее загрузка, Secure Boot и Windows 11",
+            SettingsUri = MbrToGptGuideUri,
+            SettingsLabel = "Инструкция Microsoft",
+            Steps = new[]
+            {
+                "Это сложная и рискованная операция. Сначала сохраните важные файлы на другой диск или в облако, а лучше сделайте " +
+                "полную резервную копию системы.",
+                "Убедитесь, что материнская плата умеет загружаться в режиме UEFI: такой пункт есть в BIOS почти всех плат, " +
+                "выпущенных после 2012 года.",
+                "Запустите «Командную строку» от имени администратора и выполните mbr2gpt /validate /allowFullOS — эта команда " +
+                "только проверяет диск и ничего не меняет.",
+                "Если проверка прошла без ошибок, выполните mbr2gpt /convert /allowFullOS. Если появилась ошибка — остановитесь: " +
+                "на этом диске преобразование небезопасно.",
+                "Сразу после преобразования перезагрузите компьютер, откройте BIOS (Delete или F2) и переключите режим загрузки " +
+                "на UEFI: выключите CSM (Legacy Support) или выберите Boot Mode → UEFI. Сохраните настройки клавишей F10.",
+                "Если Windows не загружается, проверьте в BIOS, что включён режим UEFI, а первым в порядке загрузки стоит " +
+                "Windows Boot Manager.",
+            },
+        });
+    }
+
+    private static void AddVirtualization(List<Recommendation> list, HardwareSnapshot hw)
+    {
+        switch (hw.VirtualizationEnabled)
+        {
+            case true:
+                list.Add(Good("Virtualization", "Аппаратная виртуализация включена",
+                    hw.HypervisorPresent == true ? "Работает гипервизор Windows" : null, RecommendationCategory.Hardware));
+                return;
+            case null:
+                return;
+        }
+        var name = hw.Cpu?.Name ?? "";
+        var intel = name.Contains("Intel", StringComparison.OrdinalIgnoreCase);
+        var amd = name.Contains("AMD", StringComparison.OrdinalIgnoreCase);
+        var tech = intel ? "Intel VT-x" : amd ? "AMD SVM" : "Intel VT-x или AMD SVM";
+        list.Add(new Recommendation
+        {
+            Id = "Virtualization",
+            Title = "Аппаратная виртуализация выключена в BIOS",
+            Explanation = $"Виртуализация процессора ({tech}) нужна для WSL, Docker, эмуляторов Android (BlueStacks, LDPlayer, " +
+                          "эмулятор Android Studio) и виртуальных машин (VirtualBox, VMware, Hyper-V). Без неё они работают очень медленно " +
+                          "или вовсе не запускаются. Если вы такими программами не пользуетесь, ничего менять не нужно.",
+            Category = RecommendationCategory.Hardware,
+            Kind = RecommendationKind.Info,
+            Impact = RecommendationImpact.Low,
+            Severity = IssueSeverity.Info,
+            CurrentValue = "Выключена",
+            Steps = new[]
+            {
+                "Перезагрузите компьютер и сразу нажимайте Delete (или F2), чтобы открыть BIOS. На ноутбуках клавиша бывает " +
+                "другой — F1, F10 или Esc.",
+                intel
+                    ? "Найдите пункт Intel Virtualization Technology (VT-x) — обычно он в разделе Advanced → CPU Configuration."
+                    : amd
+                        ? "Найдите пункт SVM Mode (AMD-V) — обычно он в разделе Advanced → CPU Configuration или в разделе разгона (OC, Tweaker)."
+                        : "Найдите пункт Intel Virtualization Technology (VT-x) или SVM Mode (AMD-V) — обычно он в разделе " +
+                          "Advanced → CPU Configuration.",
+                "Переключите его в Enabled и сохраните настройки клавишей F10.",
+            },
+        });
+    }
+
+    /// <summary>Lost battery capacity in whole percent (0..100), or null when a capacity is unknown.</summary>
+    public static double? BatteryWearPercent(long designedMwh, long fullChargedMwh)
+    {
+        if (designedMwh <= 0 || fullChargedMwh <= 0)
+            return null;
+        return Math.Round(Math.Clamp(100.0 * (1 - (double)fullChargedMwh / designedMwh), 0, 100));
+    }
+
+    private static void AddBattery(List<Recommendation> list, HardwareSnapshot hw)
+    {
+        if (!hw.IsLaptop || hw.Battery is not { WearPercent: { } wear } battery)
+            return;
+        if (wear <= BatteryWearLowPercent)
+        {
+            list.Add(Good("Battery", "Батарея в хорошем состоянии", $"Износ {wear:0}%", RecommendationCategory.Hardware));
+            return;
+        }
+        var replace = wear > BatteryWearMediumPercent;
+        var impact = replace ? RecommendationImpact.Medium : RecommendationImpact.Low;
+        list.Add(new Recommendation
+        {
+            Id = "Battery",
+            Title = replace ? "Батарею стоит заменить" : $"Батарея изношена на {wear:0}%",
+            Explanation = $"Полностью заряженная батарея сейчас вмещает {HardwareText.WattHours(battery.FullChargedCapacityMwh)} из " +
+                          $"{HardwareText.WattHours(battery.DesignedCapacityMwh)} — {100 - wear:0}% от ёмкости новой. " +
+                          (replace
+                              ? "Ноутбук работает от неё заметно меньше, чем раньше, а сильно изношенная батарея может внезапно " +
+                                "отключаться под нагрузкой. Замена вернёт прежнее время работы."
+                              : "Это обычный износ за несколько лет работы. Менять её пока не обязательно, но если ноутбук держит " +
+                                "заряд слишком мало, замена вернёт прежнее время работы."),
+            Category = RecommendationCategory.Hardware,
+            Kind = RecommendationKind.Manual,
+            Impact = impact,
+            Severity = SeverityOf(impact),
+            CurrentValue = $"Износ {wear:0}%",
+            Gain = "Дольше работа без зарядки",
+            SettingsUri = BatteryReportUri,
+            SettingsLabel = "Отчёт о батарее",
+            Steps = new[]
+            {
+                "Нажмите «Отчёт о батарее» — Windows покажет историю ёмкости и время работы от батареи.",
+                "Найдите батарею для своей модели ноутбука (модель указана на наклейке снизу) — лучше оригинальную или от " +
+                "проверенного продавца.",
+                "Если батарея встроенная и не снимается, замените её в сервисном центре.",
+                "Чтобы новая батарея изнашивалась медленнее, включите в фирменной программе ноутбука ограничение заряда до 80%, " +
+                "если оно есть.",
+            },
         });
     }
 
@@ -1085,11 +1377,76 @@ public static class RecommendationEngine
             });
             return;
         }
+        if (s.PagefileUsagePercent is { } usage && usage > PagefilePressurePercent)
+        {
+            var used = Format.Bytes(s.PagefileUsedMb * 1024 * 1024);
+            var allocated = Format.Bytes(s.PagefileAllocatedMb * 1024 * 1024);
+            var drive = s.PagefilePath is { Length: >= 2 } path && path[1] == ':' ? char.ToUpperInvariant(path[0]).ToString() : null;
+            var onHdd = drive is not null && hw.SystemDisk is { MediaKind: DiskMediaKind.Hdd } disk &&
+                        string.Equals(disk.DriveLetter, drive, StringComparison.OrdinalIgnoreCase);
+            list.Add(new Recommendation
+            {
+                Id = "PagefileUsage",
+                Title = "Активно используется файл подкачки",
+                Explanation = $"Файл подкачки заполнен на {Format.Percent(Math.Round(usage))}: {used} из {allocated}. Windows переносит туда " +
+                              "то, что не помещается в оперативную память, а диск намного медленнее памяти — отсюда подтормаживания. " +
+                              "Это признак того, что оперативной памяти не хватает для ваших задач." +
+                              (onHdd ? " К тому же файл подкачки лежит на медленном жёстком диске (HDD) — это тормозит систему ещё сильнее." : ""),
+                Category = RecommendationCategory.Windows,
+                Kind = RecommendationKind.Manual,
+                Impact = RecommendationImpact.Low,
+                Severity = IssueSeverity.Low,
+                CurrentValue = $"Занято {used} из {allocated}",
+                Gain = "Меньше подтормаживаний",
+                NavigateKey = "Processes",
+                NavigateLabel = "Открыть «Процессы»",
+                SettingsUri = PerformanceOptions,
+                SettingsLabel = "Параметры быстродействия",
+                Steps = new[]
+                {
+                    "Закройте программы, которые занимают много памяти, — их видно в разделе «Процессы».",
+                    "Если так бывает постоянно, добавьте оперативной памяти — это самое действенное решение.",
+                    "Держите файл подкачки на SSD. Если он сейчас на жёстком диске, перенесите его: «Параметры быстродействия» → " +
+                    "«Дополнительно» → «Виртуальная память» → «Изменить».",
+                },
+            });
+            return;
+        }
         if (s.PagefileAutomatic == true || s.PagefileCount > 0)
         {
             list.Add(Good("Pagefile", "Файл подкачки включён",
                 s.PagefileAutomatic == true ? "Размер выбирается автоматически" : "Размер задан вручную", RecommendationCategory.Windows));
         }
+    }
+
+    private static void AddFastStartup(List<Recommendation> list, SettingsSnapshot s)
+    {
+        if (!s.FastStartupEnabled)
+            return;
+        list.Add(new Recommendation
+        {
+            Id = "FastStartup",
+            Title = "Включён быстрый запуск Windows",
+            Explanation = "Плюс: после «Завершения работы» компьютер включается быстрее. Минус: Windows выключается не полностью — " +
+                          "ядро системы и драйверы сохраняются на диск, как при гибернации. Поэтому часть обновлений и новых драйверов " +
+                          "применяется только после «Перезагрузки», после включения иногда сбоят устройства, а если на компьютере есть " +
+                          "вторая система (Linux или другая Windows), диск с Windows может оказаться недоступным. Если всё работает " +
+                          "нормально, оставьте как есть.",
+            Category = RecommendationCategory.Windows,
+            Kind = RecommendationKind.Info,
+            Impact = RecommendationImpact.Low,
+            Severity = IssueSeverity.Info,
+            CurrentValue = "Включён",
+            SettingsUri = "powercfg.cpl",
+            SettingsLabel = "Электропитание",
+            Steps = new[]
+            {
+                "Нажмите «Электропитание» (Панель управления → Электропитание).",
+                "Слева выберите «Действия кнопок питания».",
+                "Нажмите «Изменение параметров, которые сейчас недоступны» — для этого нужны права администратора.",
+                "Снимите флажок «Включить быстрый запуск (рекомендуется)» и нажмите «Сохранить изменения».",
+            },
+        });
     }
 
     private static void AddRestart(List<Recommendation> list, SettingsSnapshot s)

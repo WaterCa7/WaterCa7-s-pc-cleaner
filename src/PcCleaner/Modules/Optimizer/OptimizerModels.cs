@@ -27,6 +27,57 @@ public enum PowerPlanKind
     UltimatePerformance,
 }
 
+/// <summary>How the firmware boots Windows (GetFirmwareType / PEFirmwareType).</summary>
+public enum BootMode
+{
+    Unknown,
+    LegacyBios,
+    Uefi,
+}
+
+/// <summary>Whether an optional reading (temperature, battery capacity) could be taken, and if not — why.</summary>
+public enum SensorState
+{
+    /// <summary>Not queried or an unexpected error.</summary>
+    Unknown,
+    Available,
+
+    /// <summary>Windows gives the value only to elevated programs.</summary>
+    NeedsAdmin,
+
+    /// <summary>The firmware/driver does not report it.</summary>
+    NotSupported,
+}
+
+public enum BatteryChargeState
+{
+    Unknown,
+    Charging,
+    Discharging,
+
+    /// <summary>On AC power but not charging (e.g. a charge limit is set).</summary>
+    PluggedIn,
+    Full,
+}
+
+/// <summary>Static battery data (root\wmi BatteryStaticData / BatteryFullChargedCapacity).</summary>
+public sealed record BatteryInfo
+{
+    public string? Name { get; init; }
+
+    /// <summary>Capacity of a new battery, mWh (0 = unknown).</summary>
+    public long DesignedCapacityMwh { get; init; }
+
+    /// <summary>What the battery holds now when fully charged, mWh (0 = unknown).</summary>
+    public long FullChargedCapacityMwh { get; init; }
+
+    /// <summary>Why the capacities are missing, if they are.</summary>
+    public SensorState CapacityState { get; init; }
+
+    /// <summary>Lost capacity in percent (0..100), or null when Windows did not report the capacities.</summary>
+    public double? WearPercent => RecommendationEngine.BatteryWearPercent(DesignedCapacityMwh, FullChargedCapacityMwh);
+}
+
 public sealed record CpuInfo
 {
     public string Name { get; init; } = "";
@@ -145,7 +196,25 @@ public sealed record HardwareSnapshot
     public bool HasBattery { get; init; }
     public bool IsLaptop { get; init; }
 
+    /// <summary>UEFI or legacy BIOS boot.</summary>
+    public BootMode BootMode { get; init; }
+
+    /// <summary>Win32_Processor.VirtualizationFirmwareEnabled (VT-x / SVM enabled in BIOS); null if unknown.</summary>
+    public bool? VirtualizationFirmwareEnabled { get; init; }
+
+    /// <summary>Win32_ComputerSystem.HypervisorPresent; null if unknown.</summary>
+    public bool? HypervisorPresent { get; init; }
+
+    /// <summary>Laptop battery capacities (null on desktops or when there is no battery).</summary>
+    public BatteryInfo? Battery { get; init; }
+
     public DateTime CollectedAt { get; init; } = DateTime.Now;
+
+    /// <summary>
+    /// Hardware virtualization is on. A running hypervisor (Hyper-V, WSL 2, memory integrity) hides VT-x from Windows,
+    /// so VirtualizationFirmwareEnabled reads false although it is enabled — a hypervisor means "on".
+    /// </summary>
+    public bool? VirtualizationEnabled => HypervisorPresent == true ? true : VirtualizationFirmwareEnabled;
 
     public long TotalRamBytes => RamModules.Count > 0 ? RamModules.Sum(m => m.CapacityBytes) : VisibleRamBytes;
 
@@ -194,8 +263,23 @@ public sealed record SettingsSnapshot
     /// <summary>Number of page files in use or configured (Win32_PageFileUsage / Win32_PageFileSetting), -1 if unknown.</summary>
     public int PagefileCount { get; init; } = -1;
 
+    /// <summary>Win32_PageFileUsage: used megabytes summed over all page files.</summary>
+    public long PagefileUsedMb { get; init; }
+
+    /// <summary>Win32_PageFileUsage: allocated megabytes summed over all page files.</summary>
+    public long PagefileAllocatedMb { get; init; }
+
+    /// <summary>Path of the first page file, e.g. "C:\pagefile.sys".</summary>
+    public string? PagefilePath { get; init; }
+
     public bool PendingReboot { get; init; }
     public TimeSpan Uptime { get; init; }
+
+    /// <summary>HKLM\...\Session Manager\Power HiberbootEnabled (1 = fast startup on, null = missing).</summary>
+    public int? FastStartupValue { get; init; }
+
+    /// <summary>HKLM\...\Control\Power HibernateEnabled (0 = hibernation off, which also turns fast startup off).</summary>
+    public int? HibernateValue { get; init; }
 
     /// <summary>true = plugged in, false = on battery, null = unknown/desktop.</summary>
     public bool? OnAcPower { get; init; }
@@ -203,6 +287,19 @@ public sealed record SettingsSnapshot
     public int MemoryLoadPercent { get; init; }
     public long MemoryUsedBytes { get; init; }
     public long MemoryTotalBytes { get; init; }
+
+    /// <summary>Total CPU load over a 2-second sample, without this app's own work; null if not measured.</summary>
+    public double? CpuLoadPercent { get; init; }
+
+    /// <summary>Highest valid ACPI thermal zone temperature, °C; null when not available (see <see cref="TemperatureState"/>).</summary>
+    public double? TemperatureC { get; init; }
+
+    public SensorState TemperatureState { get; init; }
+
+    /// <summary>Battery charge 0..100 (null if unknown or no battery).</summary>
+    public int? BatteryChargePercent { get; init; }
+
+    public BatteryChargeState BatteryState { get; init; }
 
     public DateTime CollectedAt { get; init; } = DateTime.Now;
 
@@ -214,6 +311,14 @@ public sealed record SettingsSnapshot
     public bool TransparencyEnabled => TransparencyValue is null || TransparencyValue.Value != 0;
 
     public bool PagefileDisabled => PagefileAutomatic == false && PagefileCount == 0;
+
+    /// <summary>How full the page files are (0..100), or null when the sizes are unknown.</summary>
+    public double? PagefileUsagePercent => PagefileAllocatedMb > 0
+        ? Math.Clamp(100.0 * PagefileUsedMb / PagefileAllocatedMb, 0, 100)
+        : null;
+
+    /// <summary>Fast startup works only when it is switched on and hibernation is not disabled.</summary>
+    public bool FastStartupEnabled => FastStartupValue == 1 && HibernateValue != 0;
 }
 
 public enum RecommendationKind

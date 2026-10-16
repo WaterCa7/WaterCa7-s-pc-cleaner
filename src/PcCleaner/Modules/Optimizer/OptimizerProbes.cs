@@ -26,16 +26,21 @@ internal static class HardwareProbe
         var boardTask = Q("SELECT Manufacturer, Product FROM Win32_BaseBoard");
         var biosTask = Q("SELECT SMBIOSBIOSVersion, ReleaseDate FROM Win32_BIOS");
         var osTask = Q("SELECT Caption, Version, BuildNumber, InstallDate, LastBootUpTime FROM Win32_OperatingSystem");
-        var batteryTask = Q("SELECT DeviceID FROM Win32_Battery");
+        var batteryTask = Q("SELECT DeviceID, Name FROM Win32_Battery");
         var csTask = Q("SELECT PCSystemType, TotalPhysicalMemory FROM Win32_ComputerSystem");
         var enclosureTask = Q("SELECT ChassisTypes FROM Win32_SystemEnclosure");
         var monitorNamesTask = Q("SELECT InstanceName, UserFriendlyName FROM WmiMonitorID", Wmi.WmiRoot);
+        // Separate queries: if an old provider lacks these properties, only this detail is lost, not the whole CPU/PC info.
+        var vtxTask = Q("SELECT VirtualizationFirmwareEnabled FROM Win32_Processor");
+        var hypervisorTask = Q("SELECT HypervisorPresent FROM Win32_ComputerSystem");
         var diskTask = Task.Run(GetSystemDisk);
         var displaysTask = Task.Run(NativeProbes.GetDisplays);
         var vramTask = Task.Run(ReadVramByName);
+        var bootTask = Task.Run(ReadBootMode);
+        var batteryInfoTask = Task.Run(async () => ReadBatterySafe(await batteryTask.ConfigureAwait(false)));
 
         await Task.WhenAll(cpuTask, ramTask, arrayTask, gpuTask, boardTask, biosTask, osTask, batteryTask, csTask, enclosureTask,
-            monitorNamesTask, diskTask, displaysTask, vramTask).ConfigureAwait(false);
+            monitorNamesTask, vtxTask, hypervisorTask, diskTask, displaysTask, vramTask, bootTask, batteryInfoTask).ConfigureAwait(false);
 
         var cpu = cpuTask.Result.FirstOrDefault() is { } c
             ? new CpuInfo
@@ -147,7 +152,68 @@ internal static class HardwareProbe
             SystemDisk = diskTask.Result,
             HasBattery = hasBattery,
             IsLaptop = isLaptop,
+            BootMode = bootTask.Result,
+            // Several CPU sockets: enabled only if every socket says so.
+            VirtualizationFirmwareEnabled = vtxTask.Result.Select(r => r.Bool("VirtualizationFirmwareEnabled")).ToList() is { Count: > 0 } vtx &&
+                                            vtx.All(v => v is not null)
+                ? vtx.All(v => v == true)
+                : null,
+            HypervisorPresent = hypervisorTask.Result.FirstOrDefault()?.Bool("HypervisorPresent"),
+            Battery = batteryInfoTask.Result,
             CollectedAt = DateTime.Now,
+        };
+    }
+
+    /// <summary>GetFirmwareType, falling back to HKLM\SYSTEM\CurrentControlSet\Control PEFirmwareType.</summary>
+    private static BootMode ReadBootMode()
+    {
+        var mode = HardwareText.BootModeFrom(NativeProbes.GetFirmwareTypeValue());
+        if (mode != BootMode.Unknown)
+            return mode;
+        return HardwareText.BootModeFrom(SettingsProbe.ReadInt(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control", "PEFirmwareType"));
+    }
+
+    /// <summary>
+    /// Design and full-charge capacity from root\wmi (summed over all batteries). Some laptops give these classes only to
+    /// administrators — then the state says so and the card explains it.
+    /// </summary>
+    /// <summary>Null without a battery; an unexpected failure only loses the battery details, never the whole snapshot.</summary>
+    private static BatteryInfo? ReadBatterySafe(List<Dictionary<string, object?>> win32Batteries)
+    {
+        if (win32Batteries.Count == 0)
+            return null;
+        try
+        {
+            return ReadBattery(win32Batteries);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException or OverflowException)
+        {
+            Log.Warn($"Ускорение: не удалось прочитать сведения о батарее: {ex.Message}");
+            return new BatteryInfo { CapacityState = SensorState.Unknown };
+        }
+    }
+
+    private static BatteryInfo ReadBattery(List<Dictionary<string, object?>> win32Batteries)
+    {
+        var name = win32Batteries.Select(b => Clean(b.Str("Name"))).FirstOrDefault(n => n is not null);
+        var timeout = TimeSpan.FromSeconds(8);
+        var (designRows, designState) = WmiSensorQuery.Query("SELECT DesignedCapacity FROM BatteryStaticData", Wmi.WmiRoot, timeout);
+        var (fullRows, fullState) = WmiSensorQuery.Query("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity", Wmi.WmiRoot, timeout);
+        var designed = designRows.Sum(r => Math.Max(0, r.Long("DesignedCapacity") ?? 0));
+        var full = fullRows.Sum(r => Math.Max(0, r.Long("FullChargedCapacity") ?? 0));
+        var state = designed > 0 && full > 0
+            ? SensorState.Available
+            : designState == SensorState.NeedsAdmin || fullState == SensorState.NeedsAdmin
+                ? SensorState.NeedsAdmin
+                : designState == SensorState.Unknown || fullState == SensorState.Unknown
+                    ? SensorState.Unknown
+                    : SensorState.NotSupported;
+        return new BatteryInfo
+        {
+            Name = name,
+            DesignedCapacityMwh = state == SensorState.Available ? designed : 0,
+            FullChargedCapacityMwh = state == SensorState.Available ? full : 0,
+            CapacityState = state,
         };
     }
 
@@ -349,12 +415,29 @@ internal static class HardwareProbe
     };
 }
 
-/// <summary>Collects the settings snapshot (powercfg, registry, WMI). Read-only.</summary>
+/// <summary>Collects the settings snapshot (powercfg, registry, WMI, live sensors). Read-only.</summary>
 internal sealed class SettingsProbe
 {
-    private readonly PowerPlanSwitcher _power;
+    /// <summary>Length of the CPU load sample.</summary>
+    public static readonly TimeSpan CpuSampleDuration = TimeSpan.FromSeconds(2);
 
-    public SettingsProbe(PowerPlanSwitcher power) => _power = power;
+    /// <summary>A fresh sample is reused for this long (e.g. reloading right after "Применить" does not wait 2 s again).</summary>
+    private static readonly TimeSpan CpuSampleReuse = TimeSpan.FromSeconds(20);
+
+    private readonly PowerPlanSwitcher _power;
+    private readonly Func<Task>? _beforeCpuSample;
+    private readonly object _cpuLock = new();
+    private (DateTime At, double? Value)? _lastCpu;
+
+    /// <param name="power">Reads the power plans.</param>
+    /// <param name="beforeCpuSample">
+    /// Awaited before the CPU is sampled — the service waits for its own hardware scan (WMI) so it is not measured as load.
+    /// </param>
+    public SettingsProbe(PowerPlanSwitcher power, Func<Task>? beforeCpuSample = null)
+    {
+        _power = power;
+        _beforeCpuSample = beforeCpuSample;
+    }
 
     public async Task<SettingsSnapshot> CollectAsync(CancellationToken ct)
     {
@@ -363,16 +446,21 @@ internal sealed class SettingsProbe
         var pagefileTask = Task.Run(() =>
         {
             var cs = Wmi.Query("SELECT AutomaticManagedPagefile FROM Win32_ComputerSystem").FirstOrDefault();
-            var usage = Wmi.Query("SELECT Name FROM Win32_PageFileUsage");
+            var usage = Wmi.Query("SELECT Name, CurrentUsage, AllocatedBaseSize FROM Win32_PageFileUsage");
             // A configured page file (Win32_PageFileSetting) also counts: "disabled" must never be reported just because
             // the usage list came back empty (e.g. the file is enabled but waits for a restart).
             var configured = Wmi.Query("SELECT Name FROM Win32_PageFileSetting");
-            return (Automatic: cs?.Bool("AutomaticManagedPagefile"), Count: cs is null ? -1 : Math.Max(usage.Count, configured.Count));
+            return (Automatic: cs?.Bool("AutomaticManagedPagefile"), Count: cs is null ? -1 : Math.Max(usage.Count, configured.Count),
+                UsedMb: usage.Sum(u => Math.Max(0, u.Long("CurrentUsage") ?? 0)),
+                AllocatedMb: usage.Sum(u => Math.Max(0, u.Long("AllocatedBaseSize") ?? 0)),
+                Path: usage.Select(u => u.Str("Name")).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)));
         }, ct);
         var hagsTask = Task.Run(NativeProbes.QueryHagsCaps, ct);
         var registryTask = Task.Run(ReadRegistry, ct);
+        var temperatureTask = Task.Run(ReadTemperature, ct);
+        var cpuTask = SampleCpuAsync(ct);
 
-        await Task.WhenAll(activeTask, listTask, pagefileTask, hagsTask, registryTask).ConfigureAwait(false);
+        await Task.WhenAll(activeTask, listTask, pagefileTask, hagsTask, registryTask, temperatureTask, cpuTask).ConfigureAwait(false);
 
         var active = activeTask.Result;
         var plans = listTask.Result;
@@ -386,6 +474,9 @@ internal sealed class SettingsProbe
         var reg = registryTask.Result;
         var mem = SystemStats.Memory();
         var hags = hagsTask.Result;
+        var power = NativeProbes.GetPowerStatus();
+        var pagefile = pagefileTask.Result;
+        var (temperature, temperatureState) = temperatureTask.Result;
         return new SettingsSnapshot
         {
             ActivePlan = active,
@@ -399,20 +490,67 @@ internal sealed class SettingsProbe
             HagsActive = hags?.Enabled,
             VisualFxSetting = reg.VisualFx,
             TransparencyValue = reg.Transparency,
-            PagefileAutomatic = pagefileTask.Result.Automatic,
-            PagefileCount = pagefileTask.Result.Count,
+            PagefileAutomatic = pagefile.Automatic,
+            PagefileCount = pagefile.Count,
+            PagefileUsedMb = pagefile.UsedMb,
+            PagefileAllocatedMb = pagefile.AllocatedMb,
+            PagefilePath = pagefile.Path,
             PendingReboot = reg.PendingReboot,
             Uptime = SystemStats.Uptime,
-            OnAcPower = NativeProbes.IsOnAcPower(),
+            FastStartupValue = reg.FastStartup,
+            HibernateValue = reg.Hibernate,
+            OnAcPower = power.OnAc,
+            BatteryChargePercent = power.BatteryChargePercent,
+            BatteryState = power.BatteryState,
             MemoryLoadPercent = (int)mem.LoadPercent,
             MemoryUsedBytes = (long)mem.UsedBytes,
             MemoryTotalBytes = (long)mem.TotalBytes,
+            CpuLoadPercent = cpuTask.Result,
+            TemperatureC = temperature,
+            TemperatureState = temperatureState,
             CollectedAt = DateTime.Now,
         };
     }
 
+    /// <summary>2-second CPU sample (taken after the caller's hardware scan finished), reused for a short while.</summary>
+    private async Task<double?> SampleCpuAsync(CancellationToken ct)
+    {
+        lock (_cpuLock)
+        {
+            if (_lastCpu is { } last && DateTime.UtcNow - last.At < CpuSampleReuse)
+                return last.Value;
+        }
+        if (_beforeCpuSample is not null)
+        {
+            try
+            {
+                await _beforeCpuSample().WaitAsync(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                // A failed or slow hardware scan must not block the measurement.
+            }
+        }
+        var value = await NativeProbes.SampleCpuLoadAsync(CpuSampleDuration, ct).ConfigureAwait(false);
+        lock (_cpuLock)
+            _lastCpu = (DateTime.UtcNow, value);
+        return value;
+    }
+
+    /// <summary>Highest valid ACPI thermal zone (root\wmi; usually needs administrator rights).</summary>
+    private static (double? Celsius, SensorState State) ReadTemperature()
+    {
+        var (rows, state) = WmiSensorQuery.Query("SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature", Wmi.WmiRoot,
+            TimeSpan.FromSeconds(6));
+        if (state != SensorState.Available)
+            return (null, state);
+        var values = rows.Select(r => HardwareText.KelvinTenthsToCelsius(r.Long("CurrentTemperature"))).OfType<double>().ToList();
+        // Thermal zones that only return placeholders are as good as no sensor.
+        return values.Count == 0 ? (null, SensorState.NotSupported) : (values.Max(), SensorState.Available);
+    }
+
     private sealed record RegistryValues(int? GameMode, int? GameDvr, int? AppCapture, int? Historical, int? Hags, int? VisualFx,
-        int? Transparency, bool PendingReboot);
+        int? Transparency, bool PendingReboot, int? FastStartup, int? Hibernate);
 
     private static RegistryValues ReadRegistry()
     {
@@ -427,7 +565,9 @@ internal sealed class SettingsProbe
             ReadInt(hkcu, @"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects", "VisualFXSetting"),
             ReadInt(hkcu, @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency"),
             KeyExists(hklm, @"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") ||
-            KeyExists(hklm, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"));
+            KeyExists(hklm, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"),
+            ReadInt(hklm, @"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled"),
+            ReadInt(hklm, @"SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled"));
     }
 
     internal static int? ReadInt(RegistryHive hive, string subKey, string name)

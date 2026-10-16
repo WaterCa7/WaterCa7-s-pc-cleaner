@@ -33,6 +33,7 @@ public sealed class OptimizerViewModel : PageViewModel
     private string? _loadError;
     private int _showVersion;
     private bool _showAdminHint;
+    private string _adminHintText = "";
     private string? _banner;
     private Tone _bannerTone = Tone.Good;
 
@@ -50,6 +51,7 @@ public sealed class OptimizerViewModel : PageViewModel
                 r.IsExpanded = !r.IsExpanded;
         });
         OpenSettingsCommand = new RelayCommand(p => OpenSettings(p as Recommendation));
+        CardActionCommand = new AsyncRelayCommand(p => RunCardActionAsync(p as HardwareCard), p => !IsBusy && p is HardwareCard { HasAction: true });
         NavigateCommand = new RelayCommand(p => Navigate(p as Recommendation));
         CopyRecommendationCommand = new RelayCommand(p => CopyRecommendation(p as Recommendation));
         CopyReportCommand = new RelayCommand(CopyReport, () => HasData);
@@ -195,6 +197,13 @@ public sealed class OptimizerViewModel : PageViewModel
         private set => Set(ref _showAdminHint, value);
     }
 
+    /// <summary>What exactly needs administrator rights (settings to apply and/or sensors Windows hides).</summary>
+    public string AdminHintText
+    {
+        get => _adminHintText;
+        private set => Set(ref _adminHintText, value);
+    }
+
     /// <summary>Result summary of the last action (shown at the top of the page).</summary>
     public string? Banner
     {
@@ -219,6 +228,9 @@ public sealed class OptimizerViewModel : PageViewModel
     public AsyncRelayCommand RevertCommand { get; }
     public RelayCommand ToggleStepsCommand { get; }
     public RelayCommand OpenSettingsCommand { get; }
+
+    /// <summary>Action button of a hardware card (e.g. "Отчёт о батарее").</summary>
+    public AsyncRelayCommand CardActionCommand { get; }
     public RelayCommand NavigateCommand { get; }
     public RelayCommand CopyRecommendationCommand { get; }
     public RelayCommand CopyReportCommand { get; }
@@ -357,7 +369,9 @@ public sealed class OptimizerViewModel : PageViewModel
         SummaryText = $"Проверок: {recs.Count + Passed.Count} · в порядке: {Passed.Count} · данные на {DateTime.Now:HH:mm}. " +
                       "Все изменения обратимы: прежние значения запоминаются, а перед правкой реестра создаётся резервная копия.";
         Chips = groups.Select(g => new SummaryChip($"{g.Title}: {g.Count}", g.Tone)).ToList();
-        ShowAdminHint = !Admin.IsElevated && recs.Any(r => r.NeedsAdmin);
+        var adminHint = AdminHint(Admin.IsElevated, recs.Any(r => r.NeedsAdmin), hardware, settings);
+        AdminHintText = adminHint ?? "";
+        ShowAdminHint = adminHint is not null;
         HasData = true;
     }
 
@@ -373,6 +387,32 @@ public sealed class OptimizerViewModel : PageViewModel
         return auto > 0
             ? $"{head}, из них {auto} можно применить автоматически"
             : $"{head} — подскажем, что сделать вручную";
+    }
+
+    /// <summary>
+    /// Hint for a non-elevated app: settings that need administrator rights and readings Windows shows only to
+    /// administrators (temperature, battery wear). Null when there is nothing to say.
+    /// </summary>
+    internal static string? AdminHint(bool elevated, bool adminFixes, HardwareSnapshot hw, SettingsSnapshot s)
+    {
+        if (elevated)
+            return null;
+        var hidden = new List<string>();
+        if (s.TemperatureState == SensorState.NeedsAdmin)
+            hidden.Add("температуру");
+        if (hw.IsLaptop && hw.HasBattery && hw.Battery?.CapacityState == SensorState.NeedsAdmin)
+            hidden.Add("износ батареи");
+        var data = string.Join(" и ", hidden);
+        if (adminFixes && hidden.Count > 0)
+            return "Программа работает без прав администратора. Настройки с пометкой «Нужны права администратора» можно применить " +
+                   $"только после перезапуска от имени администратора. Также без этих прав Windows не показывает {data}.";
+        if (adminFixes)
+            return "Программа работает без прав администратора. Анализ выполнен полностью, но настройки с пометкой «Нужны права " +
+                   "администратора» можно применить только после перезапуска от имени администратора.";
+        if (hidden.Count > 0)
+            return $"Программа работает без прав администратора, поэтому Windows не показывает {data}. Остальной анализ выполнен " +
+                   "полностью — чтобы увидеть и это, перезапустите программу от имени администратора.";
+        return null;
     }
 
     // ----- actions -----
@@ -446,10 +486,11 @@ public sealed class OptimizerViewModel : PageViewModel
 
         var results = new List<(Recommendation Rec, TweakResult Result)>();
         var reloaded = false;
+        RestorePointResult? restorePoint = null;
         await RunBusyAsync("Применяем рекомендуемые настройки…", async ct =>
         {
             ReportProgress(-1, "Создаём точку восстановления…");
-            await RestorePoint.TryCreateAsync("Ускорение: рекомендуемые настройки", ct);
+            restorePoint = await RestorePoint.CreateAsync("Ускорение: рекомендуемые настройки", ct);
             for (var i = 0; i < items.Count; i++)
             {
                 ReportProgress(100.0 * i / items.Count, $"Применяем: {items[i].Title}");
@@ -478,6 +519,8 @@ public sealed class OptimizerViewModel : PageViewModel
               .Append('.');
         if (ok > 0)
             sb.Append("\nВсё можно вернуть кнопками «Вернуть» в списке «Уже в порядке».");
+        if (RestorePointText(restorePoint) is { } restoreText)
+            sb.Append('\n').Append(restoreText);
         var summary = sb.ToString();
         ShowBanner(summary, ok == items.Count ? Tone.Good : Tone.Warning);
         Dialogs.Info("Готово", summary);
@@ -518,18 +561,66 @@ public sealed class OptimizerViewModel : PageViewModel
         ShowBanner(text, result.Success ? Tone.Good : Tone.Warning);
     }
 
+    /// <summary>One line about the restore point for the result summary (null when it was switched off in the settings).</summary>
+    internal static string? RestorePointText(RestorePointResult? result) => result switch
+    {
+        RestorePointResult.Created => "Перед изменениями создана точка восстановления Windows.",
+        RestorePointResult.RecentPointExists =>
+            "Новая точка восстановления не понадобилась: Windows создала её меньше суток назад, она и защищает систему.",
+        RestorePointResult.NotElevated =>
+            "Точка восстановления не создана — для этого нужны права администратора. Изменения всё равно можно вернуть кнопкой «Вернуть».",
+        RestorePointResult.Failed =>
+            "Точку восстановления создать не удалось (возможно, выключена защита системы). Изменения можно вернуть кнопкой «Вернуть».",
+        _ => null,
+    };
+
     private void ShowBanner(string text, Tone tone)
     {
         BannerTone = tone;
         Banner = text;
     }
 
-    private static void OpenSettings(Recommendation? rec)
+    private void OpenSettings(Recommendation? rec)
     {
         if (rec?.SettingsUri is not { Length: > 0 } uri)
             return;
+        if (uri == RecommendationEngine.BatteryReportUri)
+        {
+            _ = CreateBatteryReportAsync();
+            return;
+        }
         Log.Info($"Ускорение: открыто «{rec.SettingsLabel ?? uri}» ({uri})");
         ProcessRunner.ShellOpen(ResolveSystemTool(uri));
+    }
+
+    private Task RunCardActionAsync(HardwareCard? card) => card?.ActionId switch
+    {
+        HardwareCardActions.BatteryReport => CreateBatteryReportAsync(),
+        _ => Task.CompletedTask,
+    };
+
+    /// <summary>
+    /// "Отчёт о батарее": powercfg writes an HTML report to Documents, then it is opened in the browser.
+    /// Nothing in the system changes, so no confirmation is asked.
+    /// </summary>
+    private async Task CreateBatteryReportAsync()
+    {
+        if (IsBusy)
+            return;
+        BatteryReportResult? result = null;
+        await RunBusyAsync("Создаём отчёт о батарее…", async ct => result = await _service.CreateBatteryReportAsync(ct));
+        if (result is null)
+            return;
+        if (result.Success && result.Path is { } path)
+        {
+            ProcessRunner.ShellOpen(path);
+            ShowBanner($"Отчёт о батарее сохранён в папке «Документы» ({path}) и открыт в браузере. " +
+                       "В нём видно, как менялась ёмкость батареи и сколько ноутбук работает без зарядки.", Tone.Good);
+        }
+        else
+        {
+            ShowBanner(result.Message, Tone.Warning);
+        }
     }
 
     /// <summary>
