@@ -31,7 +31,8 @@
                 <Border.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Скопировать" Command="{Binding CopyCommand}" />
-                        <MenuItem Header="Найти в интернете" Command="{Binding SearchCommand}" />
+                        <MenuItem Header="Найти в интернете" Command="{Binding SearchCommand}"
+                                  Visibility="{Binding HasSearch, Converter={StaticResource BoolToVis}}" />
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
@@ -272,6 +273,33 @@
                                    Text="Собираем сведения о процессоре, памяти, видеокарте, мониторах и настройках Windows. Ничего не меняем — только смотрим." />
                     </StackPanel>
                 </StackPanel>
+            </Border>
+
+            <!-- ===== First load cancelled / failed ===== -->
+            <Border Style="{StaticResource Card}" Padding="22,20"
+                    Visibility="{Binding ShowLoadError, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="44" Height="44" CornerRadius="12" Background="{StaticResource WarningSoftBrush}" VerticalAlignment="Top">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="22" Foreground="{StaticResource WarningBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="16,0,16,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource H3}" Text="Сведения о компьютере не собраны" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0" Text="{Binding LoadError}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource AccentButton}" Padding="16,8" VerticalAlignment="Center"
+                            Command="{Binding RetryCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" Foreground="{StaticResource AccentTextBrush}" />
+                            <TextBlock Text="Повторить" Margin="8,0,0,0" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
             </Border>
 
             <!-- ===== Summary ===== -->

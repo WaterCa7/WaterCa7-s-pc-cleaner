@@ -164,7 +164,8 @@ public sealed class OptimizerService : IHealthContributor
         var tweak = RegistryTweaks.Get(rec.FixId);
         if (tweak is null)
             return new TweakResult(false, "Неизвестная настройка. Ничего не изменено.");
-        if (tweak.NeedsAdmin && Registry.SandboxSubKey is null && !_isElevated())
+        // Checked even for a sandboxed engine, so tests can verify this guard without a real-registry engine.
+        if (tweak.NeedsAdmin && !_isElevated())
             return new TweakResult(false, $"Для изменения «{tweak.Title}» нужны права администратора. " +
                                           "Ничего не изменено — перезапустите программу от имени администратора.");
         if (createRestorePoint && tweak.NeedsAdmin && Registry.SandboxSubKey is null)
@@ -180,7 +181,7 @@ public sealed class OptimizerService : IHealthContributor
         var tweak = RegistryTweaks.Get(fixId);
         if (tweak is null)
             return new TweakResult(false, "Неизвестная настройка.");
-        if (tweak.NeedsAdmin && Registry.SandboxSubKey is null && !_isElevated())
+        if (tweak.NeedsAdmin && !_isElevated())
             return new TweakResult(false, $"Чтобы вернуть «{tweak.Title}», нужны права администратора. Ничего не изменено.");
         return await Registry.RevertAsync(tweak, ct).ConfigureAwait(false);
     }

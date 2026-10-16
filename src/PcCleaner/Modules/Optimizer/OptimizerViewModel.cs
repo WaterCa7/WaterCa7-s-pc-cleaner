@@ -30,6 +30,8 @@ public sealed class OptimizerViewModel : PageViewModel
     private int _recommendationCount;
     private int _safeCount;
     private bool _hasData;
+    private string? _loadError;
+    private int _showVersion;
     private bool _showAdminHint;
     private string? _banner;
     private Tone _bannerTone = Tone.Good;
@@ -38,6 +40,7 @@ public sealed class OptimizerViewModel : PageViewModel
     {
         _service = service;
         RefreshCommand = new AsyncRelayCommand(() => LoadAsync(refreshHardware: true), () => !IsBusy);
+        RetryCommand = new AsyncRelayCommand(() => LoadAsync(refreshHardware: false), () => !IsBusy);
         ApplyAllCommand = new AsyncRelayCommand(ApplyAllAsync, () => !IsBusy && SafeCount > 0);
         ApplyCommand = new AsyncRelayCommand(p => ApplyAsync(p as Recommendation), p => !IsBusy && p is Recommendation);
         RevertCommand = new AsyncRelayCommand(p => RevertAsync(p as Recommendation), p => !IsBusy && p is Recommendation);
@@ -51,7 +54,8 @@ public sealed class OptimizerViewModel : PageViewModel
         CopyRecommendationCommand = new RelayCommand(p => CopyRecommendation(p as Recommendation));
         CopyReportCommand = new RelayCommand(CopyReport, () => HasData);
         DismissBannerCommand = new RelayCommand(() => Banner = null);
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
+        // Not while a change is being applied: the restart closes the app immediately.
+        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated && !IsBusy);
     }
 
     public override string Title => "Ускорение";
@@ -155,12 +159,31 @@ public sealed class OptimizerViewModel : PageViewModel
             if (Set(ref _hasData, value))
             {
                 OnPropertyChanged(nameof(ShowPlaceholder));
+                OnPropertyChanged(nameof(ShowLoadError));
                 RelayCommand.Refresh();
             }
         }
     }
 
-    public bool ShowPlaceholder => !HasData;
+    /// <summary>Why the first load did not finish (cancelled or failed); null while loading or after success.</summary>
+    public string? LoadError
+    {
+        get => _loadError;
+        private set
+        {
+            if (Set(ref _loadError, value))
+            {
+                OnPropertyChanged(nameof(ShowPlaceholder));
+                OnPropertyChanged(nameof(ShowLoadError));
+            }
+        }
+    }
+
+    /// <summary>"Изучаем ваш компьютер…" while the first load runs.</summary>
+    public bool ShowPlaceholder => !HasData && LoadError is null;
+
+    /// <summary>The first load was cancelled or failed: show why and a "Повторить" button instead of an endless placeholder.</summary>
+    public bool ShowLoadError => !HasData && LoadError is not null;
 
     public bool HasRecommendations => RecommendationCount > 0;
 
@@ -188,6 +211,9 @@ public sealed class OptimizerViewModel : PageViewModel
     // ----- commands -----
 
     public AsyncRelayCommand RefreshCommand { get; }
+
+    /// <summary>"Повторить" after a cancelled/failed first load (reuses a hardware scan that may still be running).</summary>
+    public AsyncRelayCommand RetryCommand { get; }
     public AsyncRelayCommand ApplyAllCommand { get; }
     public AsyncRelayCommand ApplyCommand { get; }
     public AsyncRelayCommand RevertCommand { get; }
@@ -209,8 +235,12 @@ public sealed class OptimizerViewModel : PageViewModel
             _loadTask = LoadAsync(refreshHardware: false);
             return Task.CompletedTask;
         }
-        if (!IsBusy && HasData)
+        if (IsBusy)
+            return Task.CompletedTask;
+        if (HasData)
             _ = QuietRefreshAsync();
+        else
+            _loadTask = LoadAsync(refreshHardware: false); // the first load was cancelled or failed: try again
         return Task.CompletedTask;
     }
 
@@ -230,27 +260,45 @@ public sealed class OptimizerViewModel : PageViewModel
 
     // ----- loading -----
 
-    private Task LoadAsync(bool refreshHardware) => RunBusyAsync(
-        refreshHardware ? "Обновляем сведения о компьютере…" : "Собираем сведения о компьютере…",
-        async ct =>
+    private async Task LoadAsync(bool refreshHardware)
+    {
+        if (IsBusy)
+            return;
+        LoadError = null;
+        var completed = false;
+        var token = CancellationToken.None;
+        await RunBusyAsync(
+            refreshHardware ? "Обновляем сведения о компьютере…" : "Собираем сведения о компьютере…",
+            async ct =>
+            {
+                token = ct;
+                var sw = Stopwatch.StartNew();
+                ReportProgress(-1, "Определяем процессор, память, видеокарту и мониторы…");
+                var hardwareTask = _service.GetHardwareAsync(refreshHardware, ct);
+                var settingsTask = _service.GetSettingsAsync(ct);
+                var hardware = await hardwareTask;
+                ReportProgress(-1, "Проверяем настройки Windows…");
+                var settings = await settingsTask;
+                Show(hardware, settings);
+                completed = true;
+                Log.Info($"Ускорение: анализ за {sw.Elapsed.TotalSeconds:0.0} с, рекомендаций: {RecommendationCount}");
+            });
+        if (!completed && !HasData)
         {
-            var sw = Stopwatch.StartNew();
-            ReportProgress(-1, "Определяем процессор, память, видеокарту и мониторы…");
-            var hardwareTask = _service.GetHardwareAsync(refreshHardware, ct);
-            var settingsTask = _service.GetSettingsAsync(ct);
-            var hardware = await hardwareTask;
-            ReportProgress(-1, "Проверяем настройки Windows…");
-            var settings = await settingsTask;
-            Show(hardware, settings);
-            Log.Info($"Ускорение: анализ за {sw.Elapsed.TotalSeconds:0.0} с, рекомендаций: {RecommendationCount}");
-        });
+            LoadError = token.IsCancellationRequested
+                ? "Сбор сведений остановлен. Нажмите «Повторить», чтобы начать заново."
+                : "Не удалось собрать сведения о компьютере — подробности в журнале. Попробуйте ещё раз.";
+        }
+    }
 
     private async Task QuietRefreshAsync()
     {
         try
         {
+            var version = _showVersion;
             var settings = await _service.GetSettingsAsync();
-            if (!IsBusy && _hardware is not null)
+            // Skip if the page was refreshed meanwhile (e.g. after "Применить"): this snapshot would be older.
+            if (!IsBusy && _hardware is not null && version == _showVersion)
                 Show(_hardware, settings);
         }
         catch (Exception ex)
@@ -269,6 +317,7 @@ public sealed class OptimizerViewModel : PageViewModel
     /// <summary>Runs the engine and rebuilds every list (UI thread).</summary>
     private void Show(HardwareSnapshot hardware, SettingsSnapshot settings)
     {
+        _showVersion++;
         _hardware = hardware;
         var expanded = _all.Where(r => r.IsExpanded).Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
         var items = RecommendationEngine.Evaluate(hardware, settings, DateTime.Now);
@@ -361,11 +410,15 @@ public sealed class OptimizerViewModel : PageViewModel
             return;
 
         TweakResult? result = null;
+        var reloaded = false;
         await RunBusyAsync($"Применяем: {rec.Title}…", async ct =>
         {
             result = await _service.ApplyAsync(rec, createRestorePoint: true, ct);
             await ReloadSettingsAsync(ct);
+            reloaded = true;
         });
+        if (!reloaded)
+            await QuietRefreshAsync(); // cancelled or failed midway: show what is really set now
         if (result is null)
             return;
 
@@ -392,6 +445,7 @@ public sealed class OptimizerViewModel : PageViewModel
             return;
 
         var results = new List<(Recommendation Rec, TweakResult Result)>();
+        var reloaded = false;
         await RunBusyAsync("Применяем рекомендуемые настройки…", async ct =>
         {
             ReportProgress(-1, "Создаём точку восстановления…");
@@ -403,7 +457,10 @@ public sealed class OptimizerViewModel : PageViewModel
             }
             ReportProgress(100, "Обновляем сведения…");
             await ReloadSettingsAsync(ct);
+            reloaded = true;
         });
+        if (!reloaded)
+            await QuietRefreshAsync(); // stopped midway: the list must show what was really changed
         if (results.Count == 0)
             return;
 
@@ -415,6 +472,10 @@ public sealed class OptimizerViewModel : PageViewModel
             if (result.Success && result.Changed && !string.IsNullOrWhiteSpace(rec.AfterApplyNote))
                 sb.Append(' ').Append(rec.AfterApplyNote);
         }
+        if (results.Count < items.Count)
+            sb.Append("\nПрименение остановлено, не изменены: ")
+              .Append(string.Join(", ", items.Skip(results.Count).Select(r => $"«{r.Title}»")))
+              .Append('.');
         if (ok > 0)
             sb.Append("\nВсё можно вернуть кнопками «Вернуть» в списке «Уже в порядке».");
         var summary = sb.ToString();
@@ -438,11 +499,15 @@ public sealed class OptimizerViewModel : PageViewModel
             return;
 
         TweakResult? result = null;
+        var reloaded = false;
         await RunBusyAsync($"Возвращаем: {title}…", async ct =>
         {
             result = await _service.RevertAsync(fixId, ct);
             await ReloadSettingsAsync(ct);
+            reloaded = true;
         });
+        if (!reloaded)
+            await QuietRefreshAsync();
         if (result is null)
             return;
         var text = result.Message;
@@ -464,7 +529,21 @@ public sealed class OptimizerViewModel : PageViewModel
         if (rec?.SettingsUri is not { Length: > 0 } uri)
             return;
         Log.Info($"Ускорение: открыто «{rec.SettingsLabel ?? uri}» ({uri})");
-        ProcessRunner.ShellOpen(uri);
+        ProcessRunner.ShellOpen(ResolveSystemTool(uri));
+    }
+
+    /// <summary>
+    /// "powercfg.cpl" / "SystemPropertiesPerformance.exe" -> full System32 path, so the shell never picks up a file
+    /// with the same name from the current folder. URIs (ms-settings:, https:) are returned as is.
+    /// </summary>
+    internal static string ResolveSystemTool(string target)
+    {
+        if (target.Contains(':') || target.Contains('\\') || target.Contains('/'))
+            return target;
+        if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !target.EndsWith(".cpl", StringComparison.OrdinalIgnoreCase))
+            return target;
+        var full = System.IO.Path.Combine(Environment.SystemDirectory, target);
+        return System.IO.File.Exists(full) ? full : target;
     }
 
     private static void Navigate(Recommendation? rec)

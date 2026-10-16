@@ -191,7 +191,7 @@ public sealed record SettingsSnapshot
 
     public bool? PagefileAutomatic { get; init; }
 
-    /// <summary>Number of page files in use (Win32_PageFileUsage), -1 if unknown.</summary>
+    /// <summary>Number of page files in use or configured (Win32_PageFileUsage / Win32_PageFileSetting), -1 if unknown.</summary>
     public int PagefileCount { get; init; } = -1;
 
     public bool PendingReboot { get; init; }

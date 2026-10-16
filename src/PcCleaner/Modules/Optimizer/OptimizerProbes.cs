@@ -364,7 +364,10 @@ internal sealed class SettingsProbe
         {
             var cs = Wmi.Query("SELECT AutomaticManagedPagefile FROM Win32_ComputerSystem").FirstOrDefault();
             var usage = Wmi.Query("SELECT Name FROM Win32_PageFileUsage");
-            return (Automatic: cs?.Bool("AutomaticManagedPagefile"), Count: cs is null ? -1 : usage.Count);
+            // A configured page file (Win32_PageFileSetting) also counts: "disabled" must never be reported just because
+            // the usage list came back empty (e.g. the file is enabled but waits for a restart).
+            var configured = Wmi.Query("SELECT Name FROM Win32_PageFileSetting");
+            return (Automatic: cs?.Bool("AutomaticManagedPagefile"), Count: cs is null ? -1 : Math.Max(usage.Count, configured.Count));
         }, ct);
         var hagsTask = Task.Run(NativeProbes.QueryHagsCaps, ct);
         var registryTask = Task.Run(ReadRegistry, ct);

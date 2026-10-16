@@ -11,7 +11,8 @@ public sealed class HardwareCard
     public HardwareCard()
     {
         CopyCommand = new RelayCommand(() => ClipboardText.TrySet(CopyText));
-        SearchCommand = new RelayCommand(() => FileTools.SearchWeb(SearchQuery ?? Title ?? ""), () => !string.IsNullOrWhiteSpace(SearchQuery ?? Title));
+        // Only cards that name a real device can be searched (not "Нет данных" or a power plan name).
+        SearchCommand = new RelayCommand(() => FileTools.SearchWeb(SearchQuery!), () => HasSearch);
     }
 
     public required string Icon { get; init; }
@@ -29,6 +30,7 @@ public sealed class HardwareCard
     public bool HasBadge => !string.IsNullOrEmpty(Badge);
     public bool HasPrimary => !string.IsNullOrEmpty(Primary);
     public bool HasToolTip => !string.IsNullOrWhiteSpace(ToolTipText);
+    public bool HasSearch => !string.IsNullOrWhiteSpace(SearchQuery);
 
     public RelayCommand CopyCommand { get; }
     public RelayCommand SearchCommand { get; }
@@ -162,8 +164,10 @@ public static class HardwareCardBuilder
         if (total <= 0)
             return Empty("\uEEA0", "Оперативная память");
         var type = mods.Select(m => HardwareText.MemoryTypeName(m.MemoryType)).FirstOrDefault(t => t is not null);
-        var configured = mods.Count > 0 ? mods.Max(m => m.ConfiguredMhz) : 0;
-        var rated = mods.Where(m => m.RatedMhz > 0).Select(m => m.RatedMhz).DefaultIfEmpty(0).Min();
+        // Same numbers as the engine (incl. the half-clock correction), so the card never contradicts the advice.
+        var speed = RecommendationEngine.MemorySpeed(hw);
+        var configured = speed?.Configured ?? (mods.Count > 0 ? mods.Max(m => m.ConfiguredMhz) : 0);
+        var rated = speed?.Rated ?? 0;
 
         var details = mods
             .GroupBy(m => (m.CapacityBytes, Name: string.Join(" ", new[] { m.Manufacturer, m.PartNumber }.Where(x => !string.IsNullOrWhiteSpace(x)))))
@@ -185,7 +189,9 @@ public static class HardwareCardBuilder
 
         string? primary = null;
         if (configured > 0)
-            primary = rated > configured * 1.1 ? $"{configured} МГц из {rated} МГц" : HardwareText.Mhz(configured);
+            primary = rated > 0 && RecommendationEngine.IsMemoryBelowRated(rated, configured)
+                ? $"{configured} МГц из {rated} МГц"
+                : HardwareText.Mhz(configured);
 
         return new HardwareCard
         {
@@ -248,22 +254,39 @@ public static class HardwareCardBuilder
         if (d is null)
             return Empty("\uE7F4", "Монитор");
         var details = new List<string>();
-        if (d.MaxHzAtCurrentResolution > d.CurrentHz)
-            details.Add($"Поддерживает до {d.MaxHzAtCurrentResolution} Гц");
-        else
-            details.Add("Работает на максимальной частоте");
+        // "Below max" uses exactly the engine's rule, so the badge and the recommendation always agree.
+        var primaryBelow = RecommendationEngine.IsRefreshBelowMax(d);
+        var atMax = d.MaxHzAtCurrentResolution <= d.CurrentHz;
+        // 0 or 1 Hz means "hardware default" (remote/virtual displays): the real rate is unknown.
+        var hzKnown = d.CurrentHz > 1;
+        details.Add(!hzKnown ? "Частота обновления не сообщается" :
+            atMax ? "Работает на максимальной частоте" : $"Поддерживает до {d.MaxHzAtCurrentResolution} Гц");
         if (hw.Displays.Count > 1)
             details.Add($"Ещё {Format.Count(hw.Displays.Count - 1, "монитор", "монитора", "мониторов")}");
-        var primaryBelow = d.MaxHzAtCurrentResolution >= d.CurrentHz + 10 && d.MaxHzAtCurrentResolution >= d.CurrentHz * 1.15;
+        string? badge;
+        Tone tone;
+        if (!hzKnown)
+            (badge, tone) = (belowMax ? "Проверьте второй монитор" : null, belowMax ? Tone.Warning : Tone.Neutral);
+        else if (primaryBelow)
+            (badge, tone) = ($"{d.CurrentHz} из {d.MaxHzAtCurrentResolution} Гц", Tone.Warning);
+        else if (belowMax)
+            (badge, tone) = ("Проверьте второй монитор", Tone.Warning);
+        else if (atMax)
+            (badge, tone) = ($"{d.CurrentHz} Гц — максимум", Tone.Good);
+        else
+            (badge, tone) = ($"{d.CurrentHz} из {d.MaxHzAtCurrentResolution} Гц", Tone.Neutral); // e.g. 59 of 60 Hz: not worth advice
         return new HardwareCard
         {
             Icon = "\uE7F4",
             Caption = hw.Displays.Count > 1 ? "Основной монитор" : "Монитор",
             Title = string.IsNullOrWhiteSpace(d.MonitorName) ? "Монитор" : d.MonitorName!,
-            Primary = $"{d.Width}×{d.Height} · {d.CurrentHz} Гц",
+            Primary = hzKnown ? $"{d.Width}×{d.Height} · {d.CurrentHz} Гц" : $"{d.Width}×{d.Height}",
             Details = details,
-            Badge = primaryBelow ? $"{d.CurrentHz} из {d.MaxHzAtCurrentResolution} Гц" : belowMax ? "Проверьте второй монитор" : $"{d.CurrentHz} Гц — максимум",
-            BadgeTone = primaryBelow || belowMax ? Tone.Warning : Tone.Good,
+            Badge = badge,
+            BadgeTone = tone,
+            SearchQuery = string.IsNullOrWhiteSpace(d.MonitorName) || d.MonitorName.StartsWith("Монитор", StringComparison.Ordinal)
+                ? null
+                : $"{d.MonitorName} монитор",
             ToolTipText = string.Join("\n", hw.Displays.Select(x =>
                 $"{x.MonitorName ?? x.DeviceName}: {x.Width}×{x.Height}, {x.CurrentHz} Гц (макс. {x.MaxHzAtCurrentResolution} Гц), видеокарта: {x.AdapterName}")),
         };

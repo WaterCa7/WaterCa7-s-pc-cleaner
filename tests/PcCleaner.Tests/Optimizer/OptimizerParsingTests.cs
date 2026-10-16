@@ -82,8 +82,11 @@ public class HardwareTextTests
 {
     [Theory]
     [InlineData("ChannelA-DIMM0", "BANK 0", "A")]
-    [InlineData("Controller1-ChannelB-DIMM1", "BANK 3", "B")]
+    [InlineData("Controller0-ChannelB-DIMM1", "BANK 1", "B")]
+    [InlineData("Controller1-ChannelB-DIMM1", "BANK 3", "B (контроллер 1)")]
+    [InlineData("Controller1-ChannelA-DIMM1", "BANK 2", "A (контроллер 1)")] // Intel 12th gen+: second channel
     [InlineData("DIMM 1", "P0 CHANNEL B", "B")]
+    [InlineData("DIMM 1", "P1 CHANNEL A", "A (процессор 2)")]
     [InlineData("DIMM_A2", "BANK 1", "A")]
     [InlineData("DDR4_B1", null, "B")]
     [InlineData("DIMM 0", "BANK 0", null)]
@@ -172,6 +175,20 @@ public class HardwareTextTests
     [InlineData(0, 11, 4294967295L, DiskMediaKind.Unknown)]
     public void ClassifiesDiskMedia(int mediaType, int busType, long? spindle, DiskMediaKind expected)
         => Assert.Equal(expected, HardwareProbe.MediaKindOf(mediaType, busType, spindle));
+
+    [Theory]
+    [InlineData("powercfg.cpl", true)]
+    [InlineData("SystemPropertiesPerformance.exe", true)]
+    [InlineData("ms-settings:display-advanced", false)]
+    [InlineData("https://www.nvidia.com/ru-ru/drivers/", false)]
+    public void SystemTools_AreOpenedByFullSystem32Path(string target, bool resolved)
+    {
+        var result = OptimizerViewModel.ResolveSystemTool(target);
+        if (resolved)
+            Assert.Equal(System.IO.Path.Combine(Environment.SystemDirectory, target), result, ignoreCase: true);
+        else
+            Assert.Equal(target, result);
+    }
 
     [Theory]
     [InlineData(0, 0, 0, "Всё настроено отлично — рекомендаций нет")]

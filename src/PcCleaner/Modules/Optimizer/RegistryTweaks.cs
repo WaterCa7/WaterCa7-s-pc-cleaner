@@ -37,7 +37,7 @@ public static class RegistryTweaks
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled", RegistryValueKind.DWord, 1),
     });
 
-    public static readonly RegistryTweak GameDvr = new(TweakIds.GameDvr, "Фоновая запись игр Xbox Game Bar", new[]
+    public static readonly RegistryTweak GameDvr = new(TweakIds.GameDvr, "Запись игр Xbox Game Bar", new[]
     {
         new RegistryValueSpec(RegistryHive.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", RegistryValueKind.DWord, 0),
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", RegistryValueKind.DWord, 0),

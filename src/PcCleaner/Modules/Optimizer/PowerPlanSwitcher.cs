@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.IO;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -22,8 +24,26 @@ public sealed class PowerPlanSwitcher
     /// <param name="settings">Storage for the previous plan (defaults to AppServices.Settings).</param>
     internal PowerPlanSwitcher(Func<string, CancellationToken, Task<ProcessResult>>? powercfg, AppSettings? settings)
     {
-        _powercfg = powercfg ?? ((args, ct) => ProcessRunner.RunAsync("powercfg.exe", args, TimeSpan.FromSeconds(20), ct));
+        _powercfg = powercfg ?? RunPowercfgAsync;
         _settings = settings;
+    }
+
+    /// <summary>
+    /// Runs %SystemRoot%\System32\powercfg.exe by full path (a bare name would also be looked up in the app and current
+    /// folders). A launch failure (e.g. blocked by AppLocker) becomes a failed result instead of an exception.
+    /// </summary>
+    private static async Task<ProcessResult> RunPowercfgAsync(string args, CancellationToken ct)
+    {
+        var exe = Path.Combine(Environment.SystemDirectory, "powercfg.exe");
+        try
+        {
+            return await ProcessRunner.RunAsync(exe, args, TimeSpan.FromSeconds(20), ct);
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
+        {
+            Log.Warn($"Ускорение: не удалось запустить powercfg {args}: {ex.Message}");
+            return new ProcessResult(-1, "", ex.Message, false);
+        }
     }
 
     private AppSettings Settings => _settings ?? AppServices.Settings;

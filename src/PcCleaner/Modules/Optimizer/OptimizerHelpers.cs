@@ -15,9 +15,16 @@ public static class HardwareText
     private static readonly Regex DimmLetterRegex = new(@"(?:DIMM|DDR\d?)[\s_\-]?([A-H])\d",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    // "Controller1-ChannelA-DIMM0" (Intel 12th gen+: one memory controller per channel) and "P1 CHANNEL A" (second CPU socket).
+    private static readonly Regex ControllerRegex = new(@"(controller|\bP)\s*(\d+)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     /// <summary>
-    /// Memory channel letter from Win32_PhysicalMemory slot names:
-    /// "ChannelA-DIMM0", "Controller0-ChannelB-DIMM1", "P0 CHANNEL A", "DIMM_A1", "DDR4_B2". Null if unknown.
+    /// Memory channel from Win32_PhysicalMemory slot names:
+    /// "ChannelA-DIMM0" -> "A", "P0 CHANNEL A" -> "A", "DIMM_A1" -> "A", "DDR4_B2" -> "B". Null if unknown.
+    /// A memory controller / socket number other than 0 is part of the channel: Intel 12th gen and newer report
+    /// dual channel as "Controller0-ChannelA-DIMM1" + "Controller1-ChannelA-DIMM1" -> "A" and "A (контроллер 1)",
+    /// i.e. two different channels, not one.
     /// </summary>
     public static string? ParseChannel(string? deviceLocator, string? bankLabel)
     {
@@ -26,8 +33,15 @@ public static class HardwareText
             if (string.IsNullOrWhiteSpace(text))
                 continue;
             var m = ChannelRegex.Match(text);
-            if (m.Success)
-                return m.Groups[1].Value.ToUpperInvariant();
+            if (!m.Success)
+                continue;
+            var letter = m.Groups[1].Value.ToUpperInvariant();
+            var owner = ControllerRegex.Match(text[..m.Index]);
+            if (!owner.Success || !int.TryParse(owner.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) || n == 0)
+                return letter;
+            return owner.Groups[1].Value.Equals("P", StringComparison.OrdinalIgnoreCase)
+                ? $"{letter} (процессор {n + 1})"
+                : $"{letter} (контроллер {n})";
         }
         foreach (var text in new[] { deviceLocator, bankLabel })
         {
@@ -39,6 +53,9 @@ public static class HardwareText
         }
         return null;
     }
+
+    /// <summary>LPDDR is soldered and multi-channel by design: one reported module does not mean single channel.</summary>
+    public static bool IsSolderedLowPowerMemory(int smbiosType) => smbiosType is 27 or 28 or 29 or 30 or 35;
 
     /// <summary>SMBIOS memory type -> "DDR4". Null if unknown.</summary>
     public static string? MemoryTypeName(int smbiosType) => smbiosType switch

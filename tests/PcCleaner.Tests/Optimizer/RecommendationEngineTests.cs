@@ -77,6 +77,45 @@ public class RecommendationEngineTests
     }
 
     [Fact]
+    public void HighRatedKitAtJedecSpeed_IsNotMistakenForHalfClockReport()
+    {
+        // Regression: DDR4-4400 at its JEDEC 2133 was "doubled" to 4266 and reported as running at rated speed.
+        var hw = GoodDesktop() with
+        {
+            RamModules = new[] { Stick(rated: 4400, configured: 2133, locator: "ChannelA-DIMM1"), Stick(rated: 4400, configured: 2133, locator: "ChannelB-DIMM1") },
+        };
+        var items = Evaluate(hw, GoodSettings());
+        var rec = items.Find("RamSpeed");
+        Assert.NotNull(rec);
+        Assert.Contains("2133", rec!.Title);
+        Assert.DoesNotContain(items, r => r.CurrentValue?.Contains("4266", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
+    public void Ddr5HalfClockReport_IsNotTreatedAsSlow()
+    {
+        var hw = GoodDesktop() with
+        {
+            RamModules = new[] { Stick(rated: 6000, configured: 3000, type: 34, locator: "ChannelA-DIMM1"), Stick(rated: 6000, configured: 3000, type: 34, locator: "ChannelB-DIMM1") },
+        };
+        Assert.Null(Evaluate(hw, GoodSettings()).Find("RamSpeed"));
+    }
+
+    [Fact]
+    public void MemoryCard_UsesTheSameHalfClockCorrection()
+    {
+        // Regression: the card said "1600 МГц из 3200 МГц" while the engine (correctly) found nothing wrong.
+        var hw = GoodDesktop() with
+        {
+            RamModules = new[] { Stick(rated: 3200, configured: 1600, locator: "ChannelA-DIMM1"), Stick(rated: 3200, configured: 1600, locator: "ChannelB-DIMM1") },
+        };
+        var items = Evaluate(hw, GoodSettings());
+        var card = HardwareCardBuilder.Build(hw, GoodSettings(), items, Now).Single(c => c.Caption == "Оперативная память");
+        Assert.Equal("3200 МГц", card.Primary);
+        Assert.NotEqual(Tone.Warning, card.BadgeTone);
+    }
+
+    [Fact]
     public void Ddr4AtJedecBaseSpeed_SuggestsCheckingXmpAsInfo()
     {
         var hw = GoodDesktop() with
@@ -119,8 +158,61 @@ public class RecommendationEngineTests
     }
 
     [Fact]
-    public void DifferentAmountPerChannel_IsReportedAsInfo()
+    public void IntelControllerSlotNames_AreTwoChannels_NotOne()
     {
+        // Regression: Intel 12th gen+ names dual channel "Controller0-ChannelA-DIMM1" + "Controller1-ChannelA-DIMM1";
+        // the module told users to move correctly installed sticks.
+        var hw = GoodDesktop() with
+        {
+            RamModules = new[] { Stick(locator: "Controller0-ChannelA-DIMM1"), Stick(locator: "Controller1-ChannelA-DIMM1") },
+        };
+        var items = Evaluate(hw, GoodSettings());
+        Assert.Null(items.Find("RamOneChannel"));
+        Assert.NotNull(items.Find("Ok:RamChannels"));
+
+        var sameController = GoodDesktop() with
+        {
+            RamModules = new[] { Stick(locator: "Controller0-ChannelA-DIMM0"), Stick(locator: "Controller0-ChannelA-DIMM1") },
+        };
+        Assert.NotNull(Evaluate(sameController, GoodSettings()).Find("RamOneChannel"));
+    }
+
+    [Fact]
+    public void IntelControllerSlotNames_FourBalancedSticks_AreFine()
+    {
+        var hw = GoodDesktop() with
+        {
+            RamModules = new[]
+            {
+                Stick(gb: 8, locator: "Controller0-ChannelA-DIMM0"), Stick(gb: 16, locator: "Controller0-ChannelA-DIMM1"),
+                Stick(gb: 8, locator: "Controller1-ChannelA-DIMM0"), Stick(gb: 16, locator: "Controller1-ChannelA-DIMM1"),
+            },
+        };
+        var items = Evaluate(hw, GoodSettings());
+        Assert.Null(items.Find("RamOneChannel"));
+        Assert.Null(items.Find("RamAsymmetric"));
+        Assert.NotNull(items.Find("Ok:RamChannels"));
+    }
+
+    [Fact]
+    public void SolderedLpddr_IsNeverCalledSingleChannel()
+    {
+        // LPDDR is soldered and multi-channel by design even when Windows lists a single module.
+        var hw = GoodDesktop() with { IsLaptop = true, RamModules = new[] { Stick(gb: 16, type: 35, locator: "Controller0-ChannelA") }, RamSlots = 0 };
+        Assert.Null(Evaluate(hw, GoodSettings()).Find("RamSingle"));
+
+        var oneChannel = GoodDesktop() with
+        {
+            IsLaptop = true,
+            RamModules = new[] { Stick(gb: 8, type: 30, locator: "ChannelA-DIMM0"), Stick(gb: 8, type: 30, locator: "ChannelA-DIMM1") },
+        };
+        Assert.Null(Evaluate(oneChannel, GoodSettings()).Find("RamOneChannel"));
+    }
+
+    [Fact]
+    public void DifferentAmountPerChannel_SuggestsTheSwapThatBalancesThem()
+    {
+        // 8 + 8 GB in channel A and 16 + 16 GB in channel B: swapping one pair gives 24 GB per channel (full dual channel).
         var hw = GoodDesktop() with
         {
             RamModules = new[]
@@ -131,9 +223,48 @@ public class RecommendationEngineTests
         };
         var rec = Evaluate(hw, GoodSettings()).Find("RamAsymmetric");
         Assert.NotNull(rec);
+        Assert.Equal(RecommendationKind.Manual, rec!.Kind);
+        Assert.Equal(RecommendationImpact.Low, rec.Impact);
+        Assert.Contains("32 ГБ", rec.Explanation); // 2 × 16 GB in dual channel now
+        Assert.Contains("по 24 ГБ (8 ГБ + 16 ГБ)", rec.Explanation);
+        Assert.Contains(rec.Steps, s => s.Contains("8 ГБ из канала A", StringComparison.Ordinal) &&
+                                        s.Contains("16 ГБ из канала B", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DifferentAmountPerChannel_WithoutABalancingSwap_IsInfo()
+    {
+        var hw = GoodDesktop() with { RamModules = new[] { Stick(gb: 8, locator: "ChannelA-DIMM1"), Stick(gb: 16, locator: "ChannelB-DIMM1") } };
+        var rec = Evaluate(hw, GoodSettings()).Find("RamAsymmetric");
+        Assert.NotNull(rec);
         Assert.Equal(RecommendationKind.Info, rec!.Kind);
-        Assert.Contains("32 ГБ", rec.Explanation); // 2 × 16 GB in dual channel
-        Assert.Contains("16 ГБ", rec.Explanation); // the rest in single channel
+        Assert.Contains("16 ГБ", rec.Explanation); // 2 × 8 GB in dual channel
+        Assert.Contains("8 ГБ", rec.Explanation);  // the rest in single channel
+        Assert.Empty(rec.Steps);
+    }
+
+    [Theory]
+    [InlineData(new[] { 8, 8 }, new[] { 16, 16 }, 8, 16)]
+    [InlineData(new[] { 16, 16 }, new[] { 8, 8 }, 16, 8)]
+    [InlineData(new[] { 4, 16 }, new[] { 8, 4 }, 0, 0)]    // 20 vs 12 GB: no single swap evens them out
+    [InlineData(new[] { 8 }, new[] { 16 }, 0, 0)]          // one module per channel cannot be balanced by swapping
+    [InlineData(new[] { 8, 16 }, new[] { 16, 8 }, 0, 0)]   // already equal
+    public void BalancingSwap_FindsAPairThatEqualisesTheChannels(int[] a, int[] b, int fromA, int fromB)
+    {
+        var channelA = a.Select((gb, i) => Stick(gb: gb, locator: $"ChannelA-DIMM{i}")).ToList();
+        var channelB = b.Select((gb, i) => Stick(gb: gb, locator: $"ChannelB-DIMM{i}")).ToList();
+        var swap = RecommendationEngine.BalancingSwap(channelA, channelB);
+        if (fromA == 0)
+        {
+            Assert.Null(swap);
+            return;
+        }
+        Assert.NotNull(swap);
+        Assert.Equal(fromA * Gb, swap!.Value.FromA.CapacityBytes);
+        Assert.Equal(fromB * Gb, swap.Value.FromB.CapacityBytes);
+        var newA = channelA.Sum(m => m.CapacityBytes) - swap.Value.FromA.CapacityBytes + swap.Value.FromB.CapacityBytes;
+        var newB = channelB.Sum(m => m.CapacityBytes) - swap.Value.FromB.CapacityBytes + swap.Value.FromA.CapacityBytes;
+        Assert.Equal(newA, newB);
     }
 
     // ----- amount -----
@@ -199,24 +330,53 @@ public class RecommendationEngineTests
     // ----- refresh rate -----
 
     [Theory]
-    [InlineData(60, 144, true)]
-    [InlineData(60, 75, true)]
-    [InlineData(120, 144, true)]
-    [InlineData(59, 60, false)]
-    [InlineData(144, 165, false)]
-    [InlineData(144, 144, false)]
-    public void RefreshRateRule(int current, int max, bool expected)
+    [InlineData(60, 144, true, RecommendationImpact.High)]
+    [InlineData(60, 75, true, RecommendationImpact.High)]
+    [InlineData(120, 144, true, RecommendationImpact.Low)]        // +20%: a small gain
+    [InlineData(144, 165, true, RecommendationImpact.Low)]        // a 165 Hz monitor left at 144 Hz is worth a hint
+    [InlineData(59, 60, false, RecommendationImpact.Low)]
+    [InlineData(165, 175, false, RecommendationImpact.Low)]       // +6%: not worth advice
+    [InlineData(144, 144, false, RecommendationImpact.Low)]
+    public void RefreshRateRule(int current, int max, bool expected, RecommendationImpact impact)
     {
         var hw = GoodDesktop() with { Displays = new[] { Display(current, max) } };
         var rec = Evaluate(hw, GoodSettings()).FirstOrDefault(r => r.Id.StartsWith("Refresh:", StringComparison.Ordinal));
         Assert.Equal(expected, rec is not null);
         if (rec is not null)
         {
-            Assert.Equal(RecommendationImpact.High, rec.Impact);
+            Assert.Equal(impact, rec.Impact);
             Assert.Equal("ms-settings:display-advanced", rec.SettingsUri);
             Assert.Contains($"{max} Гц", rec.Title);
             Assert.Contains($"{current} Гц", rec.Title);
         }
+    }
+
+    [Theory]
+    [InlineData(144, 165, true, Tone.Warning)]
+    [InlineData(59, 60, false, Tone.Neutral)]
+    [InlineData(144, 144, false, Tone.Good)]
+    public void MonitorCard_AgreesWithTheRefreshRule(int current, int max, bool recommended, Tone tone)
+    {
+        // Regression: a 165 Hz monitor at 144 Hz showed "144 Гц — максимум" next to "Поддерживает до 165 Гц".
+        var hw = GoodDesktop() with { Displays = new[] { Display(current, max) } };
+        var items = Evaluate(hw, GoodSettings());
+        var card = HardwareCardBuilder.Build(hw, GoodSettings(), items, Now).Single(c => c.Caption == "Монитор");
+        Assert.Equal(recommended, items.Any(r => r.Id.StartsWith("Refresh:", StringComparison.Ordinal)));
+        Assert.Equal(tone, card.BadgeTone);
+        if (max > current)
+            Assert.DoesNotContain("максимум", card.Badge);
+    }
+
+    [Fact]
+    public void MonitorCard_WithDefaultRefreshRate_DoesNotClaimOneHertz()
+    {
+        // EnumDisplaySettings reports 0/1 Hz for "hardware default" (remote and virtual displays).
+        var hw = GoodDesktop() with { Displays = new[] { Display(1, 1) } };
+        var items = Evaluate(hw, GoodSettings());
+        var card = HardwareCardBuilder.Build(hw, GoodSettings(), items, Now).Single(c => c.Caption == "Монитор");
+        Assert.DoesNotContain("Гц", card.Primary);
+        Assert.Null(card.Badge);
+        Assert.DoesNotContain(items, r => r.Id.StartsWith("Refresh:", StringComparison.Ordinal) || r.Id == "Ok:Refresh");
     }
 
     [Fact]
@@ -427,6 +587,23 @@ public class RecommendationEngineTests
         Assert.Contains("FPS", rec.Explanation);
 
         Assert.Null(Evaluate(GoodDesktop(), GoodSettings() with { GameDvrValue = 0, AppCaptureValue = 1 }).Find("GameDvr"));
+    }
+
+    [Fact]
+    public void GameBar_OnlyRealBackgroundRecordingIsMediumImpact()
+    {
+        // Regression: with "Record what happened" off (the Windows default) the module claimed background recording was on.
+        var standby = Evaluate(GoodDesktop(), GoodSettings() with { GameDvrValue = 1, AppCaptureValue = null, HistoricalCaptureValue = null }).Find("GameDvr");
+        Assert.NotNull(standby);
+        Assert.Equal(RecommendationImpact.Low, standby!.Impact);
+        Assert.DoesNotContain("фоновую", standby.Title);
+        Assert.Contains("фоновая запись выключена", standby.CurrentValue);
+
+        var background = Evaluate(GoodDesktop(), GoodSettings() with { GameDvrValue = 1, AppCaptureValue = 1, HistoricalCaptureValue = 1 }).Find("GameDvr");
+        Assert.NotNull(background);
+        Assert.Equal(RecommendationImpact.Medium, background!.Impact);
+        Assert.Contains("фоновую запись", background.Title);
+        Assert.True(background.IsSafe);
     }
 
     [Fact]

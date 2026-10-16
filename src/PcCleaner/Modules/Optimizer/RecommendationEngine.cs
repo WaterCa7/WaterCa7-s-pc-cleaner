@@ -108,19 +108,42 @@ public static class RecommendationEngine
         };
     }
 
-    private static void AddMemorySpeed(List<Recommendation> list, HardwareSnapshot hw)
+    /// <summary>
+    /// Rated (slowest module) and configured (MT/s) memory speed, or null when Windows does not report them.
+    /// Some firmware reports the real clock instead of the transfer rate (1600 for DDR4-3200); that is corrected,
+    /// but only when the reported value is below anything the memory type really runs at — so a DDR4-4400 kit
+    /// stuck at its JEDEC 2133 is still recognised as slow.
+    /// </summary>
+    public static (int Rated, int Configured, string? Type)? MemorySpeed(HardwareSnapshot hw)
     {
         var mods = hw.RamModules.Where(m => m.RatedMhz > 0 && m.ConfiguredMhz > 0).ToList();
         if (mods.Count == 0)
-            return;
+            return null;
         var rated = mods.Min(m => m.RatedMhz);
         var configured = mods.Max(m => m.ConfiguredMhz);
-        // Some firmware reports the real clock (half of the transfer rate): 1600 for DDR4-3200. That is not a slowdown.
-        if (configured * 2 >= rated * 0.95 && configured * 2 <= rated * 1.05)
+        var type = mods.Select(m => HardwareText.MemoryTypeName(m.MemoryType)).FirstOrDefault(t => t is not null);
+        var lowestReal = type switch
+        {
+            "DDR3" or "LPDDR3" => 1066,
+            "DDR4" or "LPDDR4" => 2133,
+            "DDR5" or "LPDDR5" => 4400,
+            _ => int.MaxValue, // unknown type: rely on the ratio alone
+        };
+        if (configured < lowestReal && configured * 2 >= rated * 0.95 && configured * 2 <= rated * 1.05)
             configured *= 2;
-        var type = HardwareText.MemoryTypeName(mods[0].MemoryType);
+        return (rated, configured, type);
+    }
 
-        if (rated > configured * (1 + MemorySpeedTolerance))
+    /// <summary>True when the memory runs noticeably (more than 10%) below its rated speed.</summary>
+    public static bool IsMemoryBelowRated(int rated, int configured) => rated > configured * (1 + MemorySpeedTolerance);
+
+    private static void AddMemorySpeed(List<Recommendation> list, HardwareSnapshot hw)
+    {
+        if (MemorySpeed(hw) is not { } speed)
+            return;
+        var (rated, configured, type) = speed;
+
+        if (IsMemoryBelowRated(rated, configured))
         {
             if (hw.IsLaptop)
             {
@@ -188,8 +211,8 @@ public static class RecommendationEngine
 
         if (mods.Count == 1)
         {
-            if (hw.RamSlots == 1)
-                return; // nothing can be added
+            if (hw.RamSlots == 1 || HardwareText.IsSolderedLowPowerMemory(mods[0].MemoryType))
+                return; // nothing can be added / soldered LPDDR is multi-channel by design
             var slots = hw.RamSlots > 1 ? $", слотов на плате: {hw.RamSlots}" : "";
             list.Add(new Recommendation
             {
@@ -224,6 +247,8 @@ public static class RecommendationEngine
 
         if (channels.Count == 1)
         {
+            if (mods.Any(m => HardwareText.IsSolderedLowPowerMemory(m.MemoryType)))
+                return; // soldered memory cannot be moved to other slots
             var both = mods.Count == 2 ? "оба модуля" : $"все {Format.Count(mods.Count, "модуль", "модуля", "модулей")}";
             list.Add(new Recommendation
             {
@@ -255,6 +280,40 @@ public static class RecommendationEngine
             {
                 var dual = 2 * Math.Min(a, b);
                 var single = a + b - dual;
+                if (BalancingSwap(channels[0].ToList(), channels[1].ToList()) is { } swap &&
+                    !mods.Any(m => HardwareText.IsSolderedLowPowerMemory(m.MemoryType)))
+                {
+                    // E.g. 8 + 8 GB in channel A and 16 + 16 GB in channel B: swapping one pair gives 24 GB per channel for free.
+                    var half = HardwareText.Gb((a + b) / 2);
+                    var combo = string.Join(" + ", channels[0].Where(m => !ReferenceEquals(m, swap.FromA)).Append(swap.FromB)
+                        .Select(m => m.CapacityBytes).OrderBy(c => c).Select(HardwareText.Gb));
+                    list.Add(new Recommendation
+                    {
+                        Id = "RamAsymmetric",
+                        Title = "Переставьте модули памяти — часть памяти работает в одноканальном режиме",
+                        Explanation = $"В каналах установлен разный объём памяти (канал {channels[0].Key}: {HardwareText.Gb(a)}, " +
+                                      $"канал {channels[1].Key}: {HardwareText.Gb(b)}), поэтому {HardwareText.Gb(dual)} работают в быстром " +
+                                      $"двухканальном режиме, а оставшиеся {HardwareText.Gb(single)} — в одноканальном. Если поменять местами " +
+                                      $"два модуля, в каждом канале будет по {half} ({combo}) и вся память заработает в двухканальном режиме. " +
+                                      "Это бесплатно и занимает несколько минут.",
+                        Category = RecommendationCategory.Hardware,
+                        Kind = RecommendationKind.Manual,
+                        Impact = RecommendationImpact.Low,
+                        Severity = IssueSeverity.Low,
+                        CurrentValue = $"Канал {channels[0].Key}: {HardwareText.Gb(a)} · канал {channels[1].Key}: {HardwareText.Gb(b)}",
+                        Gain = "Вся память в двухканальном режиме",
+                        Steps = new[]
+                        {
+                            "Выключите компьютер, отключите его от розетки и снимите боковую крышку корпуса.",
+                            $"Поменяйте местами один модуль на {HardwareText.Gb(swap.FromA.CapacityBytes)} из канала {channels[0].Key} " +
+                            $"и один модуль на {HardwareText.Gb(swap.FromB.CapacityBytes)} из канала {channels[1].Key} (Windows называет " +
+                            $"их слоты «{SlotName(swap.FromA)}» и «{SlotName(swap.FromB)}»). Слоты одного канала обычно стоят рядом и " +
+                            "подписаны на плате буквой канала (A1, A2, B1, B2); точная схема — в инструкции к материнской плате.",
+                            $"Включите компьютер и откройте этот раздел снова: в каналах должно быть по {half}.",
+                        },
+                    });
+                    return;
+                }
                 list.Add(new Recommendation
                 {
                     Id = "RamAsymmetric",
@@ -277,6 +336,28 @@ public static class RecommendationEngine
             channels.Count == 2 ? "Память работает в двухканальном режиме" : "Память работает в многоканальном режиме",
             Format.Count(mods.Count, "модуль", "модуля", "модулей") + " в " + Format.Count(channels.Count, "канале", "каналах", "каналах"),
             RecommendationCategory.Hardware));
+    }
+
+    private static string SlotName(RamModule m) => m.DeviceLocator ?? m.BankLabel ?? "?";
+
+    /// <summary>
+    /// One module from channel A and one from channel B whose swap makes both channels hold the same amount of memory
+    /// (module counts per channel stay the same), or null when a single swap cannot balance them.
+    /// </summary>
+    internal static (RamModule FromA, RamModule FromB)? BalancingSwap(IReadOnlyList<RamModule> channelA, IReadOnlyList<RamModule> channelB)
+    {
+        var diff = channelA.Sum(m => m.CapacityBytes) - channelB.Sum(m => m.CapacityBytes);
+        if (diff == 0 || diff % 2 != 0)
+            return null;
+        foreach (var x in channelA)
+        {
+            foreach (var y in channelB)
+            {
+                if (x.CapacityBytes - y.CapacityBytes == diff / 2)
+                    return (x, y);
+            }
+        }
+        return null;
     }
 
     private static void AddMemoryAmount(List<Recommendation> list, HardwareSnapshot hw)
@@ -393,27 +474,39 @@ public static class RecommendationEngine
 
     private static string MonitorLabel(DisplayInfo d) => string.IsNullOrWhiteSpace(d.MonitorName) ? "Монитор" : d.MonitorName!;
 
+    /// <summary>
+    /// The monitor offers a noticeably higher refresh rate at the current resolution (at least +10 Hz and +10%:
+    /// 60 -> 75, 144 -> 165; but not 59 -> 60 or 165 -> 175).
+    /// </summary>
+    public static bool IsRefreshBelowMax(DisplayInfo d)
+        => d.CurrentHz > 1 && d.MaxHzAtCurrentResolution >= d.CurrentHz + 10 && d.MaxHzAtCurrentResolution >= d.CurrentHz * 1.10;
+
     private static void AddRefreshRate(List<Recommendation> list, HardwareSnapshot hw)
     {
         var fine = new List<DisplayInfo>();
         foreach (var d in hw.Displays.Where(d => d.CurrentHz > 1))
         {
             var max = d.MaxHzAtCurrentResolution;
-            if (max >= d.CurrentHz + 10 && max >= d.CurrentHz * 1.15)
+            if (IsRefreshBelowMax(d))
             {
                 var name = MonitorLabel(d);
+                // 60 -> 144 is a night-and-day difference; 144 -> 165 is nice to have.
+                var big = max >= d.CurrentHz * 1.25;
+                var impact = !big ? RecommendationImpact.Low : hw.IsLaptop ? RecommendationImpact.Medium : RecommendationImpact.High;
                 list.Add(new Recommendation
                 {
                     Id = "Refresh:" + d.DeviceName,
                     Title = $"Монитор поддерживает {max} Гц, а работает на {d.CurrentHz} Гц",
                     Explanation = $"Сейчас изображение на мониторе «{name}» обновляется {d.CurrentHz} раз в секунду, хотя он умеет {max}. " +
-                                  "Более высокая частота делает движение мыши, прокрутку и игры заметно плавнее. Переключение безопасно " +
-                                  "и делается в параметрах Windows за минуту." +
+                                  (big
+                                      ? "Более высокая частота делает движение мыши, прокрутку и игры заметно плавнее. "
+                                      : "Разница небольшая, но в динамичных играх движение станет чуть плавнее. ") +
+                                  "Переключение безопасно и делается в параметрах Windows за минуту." +
                                   (hw.IsLaptop ? " На ноутбуке высокая частота немного быстрее расходует батарею." : ""),
                     Category = RecommendationCategory.Games,
                     Kind = RecommendationKind.Manual,
-                    Impact = hw.IsLaptop ? RecommendationImpact.Medium : RecommendationImpact.High,
-                    Severity = hw.IsLaptop ? IssueSeverity.Medium : IssueSeverity.High,
+                    Impact = impact,
+                    Severity = SeverityOf(impact),
                     CurrentValue = $"{d.CurrentHz} Гц при {d.Width}×{d.Height}",
                     Gain = "Плавнее изображение",
                     SettingsUri = DisplaySettingsUri,
@@ -573,8 +666,9 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "BiosOld",
-            Title = $"BIOS материнской платы не обновлялся с {date.Year} года",
-            Explanation = "Обновления BIOS исправляют ошибки, улучшают совместимость с памятью и новыми процессорами и закрывают уязвимости. " +
+            Title = $"Версия BIOS материнской платы вышла в {date.Year} году",
+            Explanation = "Возможно, для вашей платы уже есть более новая версия. Обновления BIOS исправляют ошибки, улучшают " +
+                          "совместимость с памятью и новыми процессорами и закрывают уязвимости. " +
                           "Но прошивка BIOS — рискованная операция: обновляйте его, только если есть проблемы или нужна поддержка нового " +
                           "железа, и строго по инструкции с сайта производителя платы.",
             Category = RecommendationCategory.Hardware,
@@ -789,21 +883,29 @@ public static class RecommendationEngine
     {
         if (!s.GameDvrActive)
         {
-            list.Add(Good("GameDvr", "Фоновая запись игр Xbox Game Bar отключена", null, RecommendationCategory.Games, TweakIds.GameDvr));
+            list.Add(Good("GameDvr", "Запись игр Xbox Game Bar отключена", null, RecommendationCategory.Games, TweakIds.GameDvr));
             return;
         }
+        // "Record what happened" (HistoricalCaptureEnabled, off by default) records the last minutes of every game all the time:
+        // that is what costs FPS. With it off, Game DVR is only on standby, so the gain is small — say so honestly.
+        var background = s.HistoricalCaptureValue is { } h && h != 0;
+        var impact = background ? RecommendationImpact.Medium : RecommendationImpact.Low;
         list.Add(new Recommendation
         {
             Id = "GameDvr",
-            Title = "Отключите фоновую запись игр Xbox Game Bar",
-            Explanation = "Функция записи игр (Game DVR) держит наготове видеозапись и может отнимать FPS, особенно на слабых видеокартах. " +
-                          "Если вы не записываете клипы через Win+Alt+R, её лучше выключить. Само меню Game Bar (Win+G) " +
-                          "продолжит открываться.",
+            Title = background ? "Отключите фоновую запись игр Xbox Game Bar" : "Отключите запись игр Xbox Game Bar, если не пользуетесь ей",
+            Explanation = background
+                ? "Включена фоновая запись: Xbox Game Bar постоянно записывает последние минуты игры, чтобы их можно было сохранить. " +
+                  "Это нагружает видеокарту и диск и может отнимать FPS, особенно на слабых видеокартах. Если вы не сохраняете клипы " +
+                  "через Win+Alt+G, запись лучше выключить. Само меню Game Bar (Win+G) продолжит открываться."
+                : "Постоянная фоновая запись выключена, но функция записи игр (Game DVR) включена и запускается вместе с играми. " +
+                  "Если вы не записываете клипы через Win+Alt+R, её можно выключить — на слабых компьютерах это иногда добавляет " +
+                  "пару FPS. Само меню Game Bar (Win+G) продолжит открываться.",
             Category = RecommendationCategory.Games,
             Kind = RecommendationKind.AutoFix,
-            Impact = RecommendationImpact.Medium,
-            Severity = IssueSeverity.Medium,
-            CurrentValue = "Запись включена",
+            Impact = impact,
+            Severity = SeverityOf(impact),
+            CurrentValue = background ? "Идёт фоновая запись" : "Запись клипов включена, фоновая запись выключена",
             Gain = "Может прибавить FPS в играх",
             FixId = TweakIds.GameDvr,
             ApplySummary = "• Будет отключена запись игр Xbox Game Bar (Game DVR).\n" + RegistryTweaks.Describe(RegistryTweaks.GameDvr),
@@ -896,9 +998,10 @@ public static class RecommendationEngine
         {
             Id = "VisualFx",
             Title = "Упростите визуальные эффекты Windows",
-            Explanation = $"На этом компьютере {WeakReason(hw)}. Анимации окон, тени и плавные эффекты отнимают ресурсы — если их " +
-                          "отключить, окна и меню будут открываться быстрее. Полностью изменения применятся после выхода из системы " +
-                          "и повторного входа.",
+            Explanation = $"На этом компьютере {WeakReason(hw)}. Анимации окон и другие визуальные эффекты отнимают ресурсы — без них " +
+                          "окна сворачиваются и открываются быстрее. «Применить» выключит анимацию окон и панели задач (подействует после " +
+                          "выхода из системы и повторного входа); остальные эффекты, например тени и плавное появление меню, можно " +
+                          "выключить в «Параметрах быстродействия» — см. «Как сделать».",
             Category = RecommendationCategory.Windows,
             Kind = RecommendationKind.AutoFix,
             Impact = RecommendationImpact.Medium,
@@ -906,7 +1009,8 @@ public static class RecommendationEngine
             CurrentValue = VisualFxText(s.VisualFxSetting),
             Gain = "Отзывчивее интерфейс",
             FixId = TweakIds.VisualEffects,
-            ApplySummary = "• Параметры быстродействия: «Обеспечить наилучшее быстродействие», без анимации окон и панели задач.\n" +
+            ApplySummary = "• Будет выключена анимация сворачивания и разворачивания окон и анимация панели задач, а в окне " +
+                           "«Параметры быстродействия» будет отмечен режим «Обеспечить наилучшее быстродействие».\n" +
                            RegistryTweaks.Describe(RegistryTweaks.VisualEffects),
             AfterApplyNote = "Изменения полностью вступят в силу после выхода из системы и повторного входа.",
             IsSafe = true,

@@ -22,6 +22,7 @@ internal static class NativeProbes
     private const int DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x1;
     private const int DISPLAY_DEVICE_PRIMARY_DEVICE = 0x4;
     private const int DISPLAY_DEVICE_MIRRORING_DRIVER = 0x8;
+    private const int DM_INTERLACED = 0x2;
     private const uint EDD_GET_DEVICE_INTERFACE_NAME = 0x1;
     private const int KMTQAITYPE_WDDM_2_7_CAPS = 70;
 
@@ -52,7 +53,9 @@ internal static class NativeProbes
                     var dm = NewDevMode();
                     if (!EnumDisplaySettingsEx(adapter.DeviceName, mode, ref dm, 0))
                         break;
-                    if (dm.dmPelsWidth == width && dm.dmPelsHeight == height && dm.dmDisplayFrequency > max)
+                    // Interlaced TV modes (1080i) are not a real refresh-rate upgrade.
+                    if (dm.dmPelsWidth == width && dm.dmPelsHeight == height && dm.dmDisplayFrequency > max &&
+                        (dm.dmDisplayFlags & DM_INTERLACED) == 0)
                         max = dm.dmDisplayFrequency;
                 }
 

@@ -410,8 +410,10 @@ public sealed class OptimizerServiceTests : IDisposable
     [Fact]
     public async Task AdminTweak_WithoutElevation_ChangesNothing()
     {
+        // The engine is sandboxed: even if the guard regressed, nothing outside the test key could be touched.
         var service = new OptimizerService(() => Task.FromResult(GoodDesktop()), _ => Task.FromResult(GoodSettings()),
-            new RegistryTweakEngine(), new PowerPlanSwitcher((_, _) => throw new InvalidOperationException("must not run"), _settings),
+            new RegistryTweakEngine(_sandbox, _settings, null),
+            new PowerPlanSwitcher((_, _) => throw new InvalidOperationException("must not run"), _settings),
             () => false);
         var rec = new Recommendation
         {
@@ -419,7 +421,25 @@ public sealed class OptimizerServiceTests : IDisposable
         };
         var result = await service.ApplyAsync(rec, createRestorePoint: true);
         Assert.False(result.Success);
+        Assert.False(result.Changed);
         Assert.Contains("администратора", result.Message);
+        using (var key = Registry.CurrentUser.OpenSubKey($@"{_sandbox}\HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers"))
+            Assert.Null(key?.GetValue("HwSchMode"));
+        Assert.False(service.CanRevert(TweakIds.Hags));
+
+        var issues = service.ToHealthIssues(new[] { rec });
+        Assert.Null(Assert.Single(issues).FixAsync); // the dashboard gets no fix button without elevation
+    }
+
+    [Fact]
+    public async Task PowercfgLaunchFailure_IsAFailedResult_NotACrash()
+    {
+        var switcher = new PowerPlanSwitcher((_, _) => Task.FromResult(new ProcessResult(-1, "", "Доступ запрещён", false)), _settings);
+        Assert.Null(await switcher.GetActiveAsync());
+        Assert.Empty(await switcher.ListAsync());
+        var result = await switcher.ApplyAsync(PowerPlans.HighPerformance, "Высокая производительность");
+        Assert.False(result.Success);
+        Assert.False(switcher.HasStoredState);
     }
 
     [Fact]
