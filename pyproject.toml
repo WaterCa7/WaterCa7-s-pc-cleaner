@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pccleaner"
+version = "0.1.0"
+description = "Бесплатная проверка, очистка и оптимизация ПК"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["psutil>=5.9"]
+
+[project.scripts]
+pccleaner = "pccleaner.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pccleaner*"]
