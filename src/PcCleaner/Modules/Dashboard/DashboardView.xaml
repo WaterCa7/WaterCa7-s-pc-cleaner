@@ -13,6 +13,9 @@
         <local:SeverityBrushConverter x:Key="SevBrush" />
         <local:SeverityGlyphConverter x:Key="SevGlyph" />
         <local:WidthToColumnsConverter x:Key="Cols" />
+        <local:BalancedColumnsConverter x:Key="BalancedCols" />
+        <local:TrendBrushConverter x:Key="TrendBrush" />
+        <local:WidthToVisibilityConverter x:Key="WidthToVis" />
 
         <!-- Clickable tile (quick links) -->
         <Style x:Key="TileButton" TargetType="Button">
@@ -22,12 +25,14 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="1" CornerRadius="8" Padding="12,11" SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -97,6 +102,48 @@
             <Setter Property="FontSize" Value="13" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
+
+        <!-- Hero chips: under the verdict on a wide window, as a full-width strip under the gauge on a narrow one -->
+        <DataTemplate x:Key="HeroChips">
+            <WrapPanel>
+                <Border Style="{StaticResource HeroChip}">
+                    <DockPanel>
+                        <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE823;" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding LastScanText}" FontSize="12.5" Margin="7,0,0,0" TextWrapping="Wrap" />
+                    </DockPanel>
+                </Border>
+                    <Border Style="{StaticResource HeroChip}" Background="{StaticResource AccentSoftBrush}"
+                        Visibility="{Binding HasAutoReclaimable, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Столько места освободят исправления, которые можно запустить прямо здесь: временные файлы, кэш, корзина.">
+                    <DockPanel>
+                        <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE74D;" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding AutoReclaimableText}" FontSize="12.5" Margin="7,0,0,0" FontWeight="SemiBold" TextWrapping="Wrap"
+                                   Foreground="{StaticResource AccentBrush}" />
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource HeroChip}"
+                        Visibility="{Binding HasManualReclaimable, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Старые установщики и архивы в «Загрузках», папка Windows.old и т. п. Программа не удаляет их сама: просмотрите их в разделах «Очистка» и «Диски» и решите, что вам не нужно.">
+                    <DockPanel>
+                        <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8B7;" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding ManualReclaimableText}" FontSize="12.5" Margin="7,0,0,0" TextWrapping="Wrap" />
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource HeroChip}" Visibility="{Binding HasIssueCount, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE9D9;" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding IssueCountText}" FontSize="12.5" Margin="7,0,0,0" TextWrapping="Wrap" />
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource HeroChip}" Background="{StaticResource WarningSoftBrush}"
+                        Visibility="{Binding IsScanOld, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE7BA;" Foreground="{StaticResource WarningBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                        <TextBlock Text="Больше недели без проверки" FontSize="12.5" Margin="7,0,0,0" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" />
+                    </DockPanel>
+                </Border>
+            </WrapPanel>
+        </DataTemplate>
 
         <!-- ===== One issue row ===== -->
         <DataTemplate x:Key="IssueTemplate" DataType="{x:Type local:IssueItem}">
@@ -227,12 +274,16 @@
 
             <!-- ===== 1. Hero: health score ===== -->
             <Border Style="{StaticResource Card}" Padding="24,20">
-                <Grid>
+                <Grid x:Name="HeroGrid">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
                     <Grid Width="148" Height="148" VerticalAlignment="Center"
                           ToolTip="Оценка от 0 до 100. Каждая найденная проблема снижает её: критичная — на 25, важная — на 12, средняя — на 6, мелкая — на 2 балла (один раздел снижает оценку не больше чем на 40).">
@@ -253,52 +304,97 @@
 
                     <StackPanel Grid.Column="1" Margin="26,0,18,0" VerticalAlignment="Center">
                         <TextBlock Text="СОСТОЯНИЕ КОМПЬЮТЕРА" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
-                        <TextBlock Text="{Binding VerdictText}" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,3,0,4"
-                                   Foreground="{Binding Score, Converter={StaticResource ScoreToBrush}}" />
-                        <TextBlock Text="{Binding VerdictDescription}" Style="{StaticResource Muted}" FontSize="13" />
-                        <WrapPanel Margin="0,14,0,-8">
-                            <Border Style="{StaticResource HeroChip}">
+                        <WrapPanel Margin="0,3,0,4">
+                            <TextBlock Text="{Binding VerdictText}" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,14,0"
+                                       VerticalAlignment="Center" Foreground="{Binding Score, Converter={StaticResource ScoreToBrush}}" />
+                            <!-- before / after: green when the score went up, red when it went down -->
+                            <Border Style="{StaticResource HeroChip}" Margin="0,4,0,4" VerticalAlignment="Center"
+                                    Background="{Binding ScoreTrend, Converter={StaticResource TrendBrush}, ConverterParameter=Soft}"
+                                    Visibility="{Binding HasScoreDelta, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="{Binding ScoreDeltaToolTip}">
                                 <DockPanel>
-                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE823;" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
-                                    <TextBlock Text="{Binding LastScanText}" FontSize="12.5" Margin="7,0,0,0" TextWrapping="Wrap" />
+                                    <TextBlock FontSize="13" VerticalAlignment="Top" Margin="0,2,0,0"
+                                               Foreground="{Binding ScoreTrend, Converter={StaticResource TrendBrush}}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                <Setter Property="Text" Value="&#xE72A;" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ScoreTrend}" Value="Better">
+                                                        <Setter Property="Text" Value="&#xE74A;" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ScoreTrend}" Value="Worse">
+                                                        <Setter Property="Text" Value="&#xE74B;" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding ScoreDeltaText}" FontSize="12.5" FontWeight="SemiBold" Margin="7,0,0,0" TextWrapping="Wrap"
+                                               Foreground="{Binding ScoreTrend, Converter={StaticResource TrendBrush}}" />
                                 </DockPanel>
                             </Border>
-                            <Border Style="{StaticResource HeroChip}" Background="{StaticResource AccentSoftBrush}"
-                                    Visibility="{Binding HasReclaimable, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Сколько места освободится, если исправить найденные проблемы (временные файлы, кэш и т. п.)">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE74D;" Foreground="{StaticResource AccentBrush}" />
-                                    <TextBlock Text="{Binding ReclaimableText}" FontSize="12.5" Margin="7,0,0,0" FontWeight="SemiBold"
-                                               Foreground="{StaticResource AccentBrush}" />
-                                </StackPanel>
-                            </Border>
-                            <Border Style="{StaticResource HeroChip}" Visibility="{Binding HasIssueCount, Converter={StaticResource BoolToVis}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE9D9;" Foreground="{StaticResource MutedBrush}" />
-                                    <TextBlock Text="{Binding IssueCountText}" FontSize="12.5" Margin="7,0,0,0" />
-                                </StackPanel>
-                            </Border>
-                            <Border Style="{StaticResource HeroChip}" Background="{StaticResource WarningSoftBrush}"
-                                    Visibility="{Binding IsScanOld, Converter={StaticResource BoolToVis}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE7BA;" Foreground="{StaticResource WarningBrush}" />
-                                    <TextBlock Text="Больше недели без проверки" FontSize="12.5" Margin="7,0,0,0" Foreground="{StaticResource WarningBrush}" />
-                                </StackPanel>
-                            </Border>
                         </WrapPanel>
+                        <TextBlock Text="{Binding VerdictDescription}" Style="{StaticResource Muted}" FontSize="13" />
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource HeroChips}" Focusable="False" Margin="0,14,0,-8"
+                                        Visibility="{Binding ActualWidth, ElementName=HeroGrid, Converter={StaticResource WidthToVis}, ConverterParameter=820}" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="190">
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="214">
                         <Button Style="{StaticResource AccentButton}" Command="{Binding ScanCommand}" Padding="18,13" FontSize="14.5"
-                                ToolTip="Проверит все разделы: мусор, автозагрузку, процессы, программы, диски, настройки и защиту">
+                                ToolTip="Проверит все разделы: мусор, автозагрузку, процессы, программы, диски, настройки, сеть и защиту">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" FontSize="16" Text="&#xE721;" />
                                 <TextBlock Text="{Binding ScanButtonText}" Margin="10,0,0,0" />
                             </StackPanel>
                         </Button>
-                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,9,0,0" TextAlignment="Center" MaxWidth="200"
-                                   HorizontalAlignment="Center" Text="Около минуты · только чтение, ничего не меняет" />
+                        <!-- report: enabled after a full scan in this session -->
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button Command="{Binding SaveReportCommand}" Padding="10,7" ToolTipService.ShowOnDisabled="True"
+                                    AutomationProperties.Name="Сохранить отчёт"
+                                    ToolTip="Сохранить результаты проверки в HTML-файл: его можно открыть в любом браузере, распечатать или отправить. Доступно после проверки.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE74E;" />
+                                    <TextBlock Text="Сохранить отчёт" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Grid.Column="2" Command="{Binding CopyReportCommand}" Padding="11,7" ToolTipService.ShowOnDisabled="True"
+                                    AutomationProperties.Name="Скопировать отчёт"
+                                    ToolTip="Скопировать отчёт текстом — чтобы вставить его в сообщение, письмо или на форум. Доступно после проверки.">
+                                <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8C8;" />
+                            </Button>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,9,0,0" TextAlignment="Center" MaxWidth="214"
+                                   HorizontalAlignment="Center" Text="Около минуты · только чтение, ничего не меняет"
+                                   Visibility="{Binding HasReportStatus, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
+                        <DockPanel Margin="0,9,0,0" HorizontalAlignment="Center" MaxWidth="214"
+                                   Visibility="{Binding HasReportStatus, Converter={StaticResource BoolToVis}}">
+                            <TextBlock FontSize="12" VerticalAlignment="Top" Margin="0,1,6,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                        <Setter Property="Text" Value="&#xE73E;" />
+                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ReportStatusOk}" Value="False">
+                                                <Setter Property="Text" Value="&#xE7BA;" />
+                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding ReportStatus}" FontSize="11.5" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                                       ToolTip="{Binding ReportStatusToolTip}" />
+                        </DockPanel>
                     </StackPanel>
+
+                    <ContentControl Grid.Row="1" Grid.ColumnSpan="3" Content="{Binding}" ContentTemplate="{StaticResource HeroChips}"
+                                    Focusable="False" Margin="0,16,0,-8"
+                                    Visibility="{Binding ActualWidth, ElementName=HeroGrid, Converter={StaticResource WidthToVis}, ConverterParameter=&lt;820}" />
                 </Grid>
             </Border>
 
@@ -421,8 +517,8 @@
                         <Border Style="{StaticResource InnerCard}" Margin="6,0,6,12">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xEDA2;" FontSize="18" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Left" />
-                                <TextBlock Text="Диски и быстродействие" FontWeight="SemiBold" Margin="0,8,0,2" />
-                                <TextBlock Style="{StaticResource Muted}" FontSize="12" Text="Свободное место, состояние дисков, настройки Windows" />
+                                <TextBlock Text="Диски, сеть и скорость" FontWeight="SemiBold" Margin="0,8,0,2" />
+                                <TextBlock Style="{StaticResource Muted}" FontSize="12" Text="Свободное место, здоровье дисков, подключение к интернету и настройки Windows" />
                             </StackPanel>
                         </Border>
                     </UniformGrid>
@@ -505,23 +601,33 @@
                     <ItemsControl ItemsSource="{Binding ModuleRows}" Margin="-4,14,-4,0" Focusable="False">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <UniformGrid Columns="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource Cols}, ConverterParameter=860:3:2}" />
+                                <!-- every row full: 8 modules -> 4 x 2 on a wide window, 2 x 4 on a narrow one -->
+                                <UniformGrid>
+                                    <UniformGrid.Columns>
+                                        <MultiBinding Converter="{StaticResource BalancedCols}" ConverterParameter="215">
+                                            <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                            <Binding Path="Items.Count" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                        </MultiBinding>
+                                    </UniformGrid.Columns>
+                                </UniformGrid>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type local:ModuleScanRow}">
-                                <Border Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="10,7" Margin="4,0,4,8"
+                                <Border Background="{StaticResource Surface2Brush}" CornerRadius="8" Padding="11,8" Margin="4,0,4,8"
                                         ToolTip="{Binding ToolTipText}">
                                     <DockPanel>
-                                        <TextBlock x:Name="StateIcon" Style="{StaticResource Icon}" FontSize="13" Text="&#xE9F3;"
+                                        <TextBlock x:Name="StateIcon" Style="{StaticResource Icon}" FontSize="15" Text="&#xE9F3;"
                                                    Foreground="{StaticResource MutedBrush}" RenderTransformOrigin="0.5,0.5">
                                             <TextBlock.RenderTransform>
                                                 <RotateTransform x:Name="Spin" />
                                             </TextBlock.RenderTransform>
                                         </TextBlock>
-                                        <TextBlock Text="{Binding ModuleName}" FontWeight="SemiBold" FontSize="12.5" Margin="9,0,0,0" VerticalAlignment="Center" />
-                                        <TextBlock x:Name="StateText" Text="{Binding StatusText, StringFormat='— {0}'}" FontSize="12.5" Margin="5,0,0,0"
-                                                   Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding ModuleName}" FontWeight="SemiBold" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="StateText" Text="{Binding DisplayStatus}" FontSize="11.5" Margin="0,1,0,0"
+                                                       Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
                                     </DockPanel>
                                 </Border>
                                 <DataTemplate.Triggers>
@@ -661,13 +767,41 @@
                 </Grid.ColumnDefinitions>
 
                 <Border Style="{StaticResource Card}" Padding="18,16">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource H3}" Text="Быстрый переход" />
-                        <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,10" Text="Разделы для ручной проверки и тонкой настройки" />
-                        <ItemsControl ItemsSource="{Binding QuickLinks}" Margin="-4,0,-4,-8" Focusable="False">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource H3}" Text="Быстрый переход" />
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,10"
+                                   Text="Разделы для ручной проверки и тонкой настройки" />
+
+                        <!-- wide first tile + 6 tiles (3 x 2 or 2 x 3): every row is full at any window width -->
+                        <Button DockPanel.Dock="Top" Style="{StaticResource TileButton}" Margin="0,0,0,8" DataContext="{Binding FeaturedLink}"
+                                Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding Key}" ToolTip="{Binding ToolTip}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Icon}" FontSize="12" Text="&#xE76C;"
+                                           Foreground="{StaticResource MutedBrush}" Margin="10,0,2,0" />
+                                <Border Style="{StaticResource IconChip}" Width="38" Height="38" CornerRadius="10">
+                                    <TextBlock Style="{StaticResource Icon}" FontSize="18" Text="{Binding Glyph}" Foreground="{StaticResource AccentBrush}"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Description}" Foreground="{StaticResource MutedBrush}" FontSize="11.5" Margin="0,2,0,0"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Button>
+
+                        <ItemsControl ItemsSource="{Binding MoreLinks}" Margin="-4,0,-4,-8" Focusable="False">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <UniformGrid Columns="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource Cols}, ConverterParameter=560:3:2}" />
+                                    <UniformGrid>
+                                        <UniformGrid.Columns>
+                                            <MultiBinding Converter="{StaticResource BalancedCols}" ConverterParameter="185">
+                                                <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                <Binding Path="Items.Count" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                            </MultiBinding>
+                                        </UniformGrid.Columns>
+                                    </UniformGrid>
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
@@ -689,7 +823,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </StackPanel>
+                    </DockPanel>
                 </Border>
 
                 <Border Grid.Column="2" Style="{StaticResource Card}" Padding="18,16">
@@ -708,6 +842,8 @@
                         <TextBlock Style="{StaticResource InfoValue}" Text="{Binding CpuName}" />
                         <TextBlock Style="{StaticResource InfoLabel}" Text="Оперативная память" />
                         <TextBlock Style="{StaticResource InfoValue}" Text="{Binding RamText}" />
+                        <TextBlock Style="{StaticResource InfoLabel}" Text="{Binding GpuLabel}" />
+                        <TextBlock Style="{StaticResource InfoValue}" Text="{Binding GpuText}" />
                         <TextBlock Style="{StaticResource InfoLabel}" Text="Права" />
                         <TextBlock Style="{StaticResource InfoValue}" Text="{Binding AccessText}" />
                     </StackPanel>

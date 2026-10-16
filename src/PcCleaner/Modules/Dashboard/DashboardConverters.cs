@@ -91,6 +91,94 @@ public sealed class WidthToColumnsConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>Pure layout helpers of the dashboard.</summary>
+public static class LayoutMath
+{
+    /// <summary>
+    /// Column count for <paramref name="count"/> equal tiles that leaves the last row as full as possible. Tries
+    /// <paramref name="maxColumns"/> down to max(2, maxColumns − 2) and picks the fewest empty cells (ties → more
+    /// columns). E.g. 8 tiles: 4 columns when 4 fit, otherwise 2 — never 3 + 3 + 2.
+    /// </summary>
+    public static int BalancedColumns(int count, int maxColumns)
+    {
+        if (count <= 1 || maxColumns <= 1)
+            return 1;
+        var max = Math.Min(maxColumns, count);
+        var min = Math.Max(2, max - 2);
+        var best = max;
+        var bestEmpty = int.MaxValue;
+        for (var columns = max; columns >= min; columns--)
+        {
+            var empty = (columns - count % columns) % columns;
+            if (empty < bestEmpty)
+            {
+                best = columns;
+                bestEmpty = empty;
+            }
+        }
+        return best;
+    }
+}
+
+/// <summary>
+/// [available width, item count] → balanced column count for a UniformGrid (see <see cref="LayoutMath.BalancedColumns"/>).
+/// ConverterParameter = minimum cell width in pixels, e.g. "220".
+/// </summary>
+public sealed class BalancedColumnsConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var width = values.Length > 0 && values[0] is double d && !double.IsNaN(d) ? d : 0;
+        var count = values.Length > 1 && values[1] is int n ? n : 0;
+        var minCell = double.TryParse(parameter as string, NumberStyles.Float, CultureInfo.InvariantCulture, out var m) && m > 0 ? m : 200;
+        var max = width <= 0 ? 4 : Math.Max(1, (int)(width / minCell));
+        return LayoutMath.BalancedColumns(Math.Max(1, count), max);
+    }
+
+    public object[] ConvertBack(object? value, Type[] targetTypes, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>ScoreTrend → chip background (Soft) or foreground brush: green when better, red when worse, neutral otherwise.</summary>
+public sealed class TrendBrushConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var soft = parameter is "Soft";
+        var key = value switch
+        {
+            ScoreTrend.Better => soft ? "SuccessSoftBrush" : "SuccessBrush",
+            ScoreTrend.Worse => soft ? "DangerSoftBrush" : "DangerBrush",
+            _ => soft ? "Surface2Brush" : "TextBrush",
+        };
+        return ThemeBrushes.Get(key);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Available width → Visibility. ConverterParameter="820": visible when width ≥ 820 (or not measured yet);
+/// "&lt;820": visible when 0 &lt; width &lt; 820. Used to move content between a wide and a narrow layout.
+/// </summary>
+public sealed class WidthToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var width = value is double d && !double.IsNaN(d) ? d : 0;
+        var text = (parameter as string ?? "").Trim();
+        var narrow = text.StartsWith('<');
+        if (!double.TryParse(narrow ? text[1..] : text, NumberStyles.Float, CultureInfo.InvariantCulture, out var threshold))
+            threshold = 0;
+        var isWide = width <= 0 || width >= threshold;
+        return (narrow ? !isWide : isWide) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>All bound values are true → Visible, otherwise Collapsed.</summary>
 public sealed class AllTrueToVisibilityConverter : IMultiValueConverter
 {

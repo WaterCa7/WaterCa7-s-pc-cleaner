@@ -25,8 +25,17 @@ public sealed class ModuleScanRow : ObservableObject
     public string StatusText
     {
         get => _statusText;
-        private set => Set(ref _statusText, value);
+        private set
+        {
+            if (Set(ref _statusText, value))
+                OnPropertyChanged(nameof(DisplayStatus));
+        }
     }
+
+    /// <summary>Status as a standalone line under the module name: "Готово: 1 проблема".</summary>
+    public string DisplayStatus => string.IsNullOrEmpty(StatusText)
+        ? ""
+        : char.ToUpper(StatusText[0], Format.Ru) + StatusText[1..];
 
     public int IssueCount
     {
@@ -111,9 +120,7 @@ public sealed class IssueItem : ObservableObject
     public bool HasGain => !string.IsNullOrWhiteSpace(GainText);
 
     /// <summary>Module's gain text, or the reclaimable size when the module did not provide one.</summary>
-    public string? GainText => !string.IsNullOrWhiteSpace(Issue.Gain)
-        ? Issue.Gain
-        : Issue.ReclaimableBytes > 0 ? "Освободит " + Format.Bytes(Issue.ReclaimableBytes) : null;
+    public string? GainText => HealthScoring.GainText(Issue);
 
     public bool HasTargetPage => !string.IsNullOrWhiteSpace(Issue.TargetPageKey)
                                  && !string.Equals(Issue.TargetPageKey, "Dashboard", StringComparison.OrdinalIgnoreCase);
