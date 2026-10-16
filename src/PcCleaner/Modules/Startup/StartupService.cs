@@ -162,7 +162,9 @@ public sealed partial class StartupService : IHealthContributor
                 item.Publisher = fileInfo.Signature.Publisher ?? fileInfo.Company;
                 item.FileDescription = fileInfo.Description;
             }
-            item.TargetExists = StartupNative.TargetExists(item.TargetFile, item.Is32Bit);
+            var exists = StartupNative.TargetExists(item.TargetFile, item.Is32Bit);
+            // Missing in this profile only: it may exist for the account the entry really runs for, so never call it broken.
+            item.TargetExists = exists == false && item.TargetDependsOnUser ? null : exists;
             try
             {
                 Reanalyze(item);
@@ -179,7 +181,9 @@ public sealed partial class StartupService : IHealthContributor
     public void Reanalyze(StartupItem item)
     {
         var settings = AppServices.Settings;
-        item.IsTrusted = settings.IsTrusted(item.TargetFile) || settings.IsTrusted(item.Id);
+        // A trusted interpreter path (powershell.exe, rundll32.exe…) must not vouch for whatever script it is told to run.
+        item.IsTrusted = settings.IsTrusted(item.Id) ||
+                         (!StartupTargets.IsGenericHost(item.TargetFile) && settings.IsTrusted(item.TargetFile));
         if (item.IsTrusted || item.TargetExists == false)
         {
             item.Suspicion = SuspicionResult.Clean;
@@ -213,6 +217,14 @@ public sealed partial class StartupService : IHealthContributor
         return Suspicion.Analyze(null, signature, commandLine);
     }
 
+    /// <summary>
+    /// What "Доверять" stores in AppSettings.TrustedItems: the program file (shared with the Processes/Programs checks),
+    /// or the entry itself when the file is unknown or a generic host such as powershell.exe / rundll32.exe —
+    /// trusting the interpreter would silence warnings for every script started through it, everywhere in the app.
+    /// </summary>
+    internal static string TrustKey(StartupItem item)
+        => string.IsNullOrWhiteSpace(item.TargetFile) || StartupTargets.IsGenericHost(item.TargetFile) ? item.Id : item.TargetFile!;
+
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     // ===================== analysis for the dashboard =====================
@@ -237,7 +249,8 @@ public sealed partial class StartupService : IHealthContributor
                 Module = ModuleName,
                 Title = $"Подозрительная запись в автозагрузке: {item.DisplayName}",
                 Details = $"{string.Join("; ", item.Reasons)}. Источник: {item.SourceText}. Команда: {item.Command}\n" +
-                          "Проверьте файл на VirusTotal или Защитником Windows; если программа вам незнакома — отключите её.",
+                          "Проверьте файл на VirusTotal или Защитником Windows; если программа вам незнакома — " +
+                          (item.IsRunOnce ? "удалите эту запись на странице «Автозагрузка»." : "отключите её."),
                 Severity = item.RiskLevel == SuspicionLevel.High ? IssueSeverity.High : IssueSeverity.Medium,
                 TargetPageKey = ModuleKey,
             });
@@ -283,9 +296,9 @@ public sealed partial class StartupService : IHealthContributor
         return issues;
     }
 
-    /// <summary>Enabled non-Microsoft programs that start at logon (Run, Startup folder, tasks).</summary>
+    /// <summary>Enabled non-Microsoft programs that start at logon (Run, Startup folder, tasks). Hidden Windows items never count.</summary>
     internal static List<StartupItem> CountedPrograms(IEnumerable<StartupItem> items) => items
-        .Where(i => i.IsEnabled && !i.IsMicrosoft && !i.IsBroken &&
+        .Where(i => i.IsEnabled && !i.IsMicrosoft && !i.IsBroken && !i.IsProtected &&
                     i.Kind is StartupKind.RegistryRun or StartupKind.StartupFolder or StartupKind.ScheduledTask)
         .ToList();
 

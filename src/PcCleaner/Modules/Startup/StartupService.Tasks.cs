@@ -21,6 +21,8 @@ public sealed partial class StartupService
     private sealed class TaskScanContext
     {
         public int Denied;
+        public int Failed;
+        public string? FirstError;
         public required string UserName { get; init; }
         public required string ShortUserName { get; init; }
         public required string UserSid { get; init; }
@@ -68,9 +70,22 @@ public sealed partial class StartupService
         }
 
         if (context is { Denied: > 0 })
-            Log.Warn($"Автозагрузка: {Format.Count(context.Denied, "задание или папка", "задания или папки", "заданий или папок")} " +
-                     "планировщика недоступны без прав администратора — пропущены");
+            Log.Warn($"Автозагрузка: без прав администратора пропущено объектов планировщика (заданий и папок): {context.Denied}");
+        if (context is { Failed: > 0 })
+            Log.Warn($"Автозагрузка: не удалось прочитать заданий планировщика: {context.Failed} ({context.FirstError})");
         return list;
+    }
+
+    /// <summary>One unreadable task or folder must never hide the rest of the scheduler.</summary>
+    private static void CountTaskError(TaskScanContext context, Exception ex)
+    {
+        if (IsAccessDenied(ex) || ex is COMException or FileNotFoundException)
+        {
+            context.Denied++;
+            return;
+        }
+        context.Failed++;
+        context.FirstError ??= $"{ex.GetType().Name}: {ex.Message}";
     }
 
     private void WalkTaskFolder(object folderObject, List<StartupItem> list, TaskScanContext context, int depth)
@@ -97,9 +112,9 @@ public sealed partial class StartupService
                 {
                     throw;
                 }
-                catch (Exception ex) when (IsAccessDenied(ex) || ex is COMException or FileNotFoundException)
+                catch (Exception ex)
                 {
-                    context.Denied++;
+                    CountTaskError(context, ex);
                 }
                 finally
                 {
@@ -111,9 +126,9 @@ public sealed partial class StartupService
         {
             throw;
         }
-        catch (Exception ex) when (IsAccessDenied(ex) || ex is COMException or FileNotFoundException)
+        catch (Exception ex)
         {
-            context.Denied++;
+            CountTaskError(context, ex);
         }
         finally
         {
@@ -140,9 +155,9 @@ public sealed partial class StartupService
         {
             throw;
         }
-        catch (Exception ex) when (IsAccessDenied(ex) || ex is COMException or FileNotFoundException)
+        catch (Exception ex)
         {
-            context.Denied++;
+            CountTaskError(context, ex);
         }
         finally
         {
@@ -231,6 +246,8 @@ public sealed partial class StartupService
                 Name = StartupTargets.FriendlyTaskName(taskName, taskPath),
                 Command = command,
                 TargetFile = target,
+                // A task of another account expands %LOCALAPPDATA% & co. in that account's profile, not in ours.
+                TargetDependsOnUser = !runsAsMe && StartupTargets.HasUserVariable(exe),
                 LocationText = taskPath,
                 TaskPath = taskPath,
                 TaskAuthor = author,

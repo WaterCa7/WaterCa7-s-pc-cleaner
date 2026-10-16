@@ -150,10 +150,33 @@
 
         <!-- Compact tool button in the details panel -->
         <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="Padding" Value="6,6" />
             <Setter Property="Margin" Value="0,0,6,6" />
-            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        </Style>
+
+        <!-- Label of a tool button: trimmed instead of clipped when the details panel is narrow -->
+        <Style x:Key="ToolLabel" TargetType="TextBlock">
+            <Setter Property="Margin" Value="5,0,0,0" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Link that wraps on narrow widths (the theme's LinkButton is single-line) -->
+        <Style x:Key="WrapLinkButton" TargetType="Button" BasedOn="{StaticResource LinkButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="T" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" TextWrapping="Wrap" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="T" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
 
@@ -351,14 +374,14 @@
 
                         <DataGrid.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="{Binding SelectedItem.ToggleActionText}" Command="{Binding ToggleCommand}" />
+                                <MenuItem Header="{Binding SelectedItem.ToggleActionText, FallbackValue=Отключить или включить}" Command="{Binding ToggleCommand}" />
                                 <MenuItem Header="Открыть расположение файла" Command="{Binding OpenLocationCommand}" />
                                 <MenuItem Header="Скопировать команду" Command="{Binding CopyCommandCommand}" />
                                 <Separator />
                                 <MenuItem Header="Найти в интернете" Command="{Binding SearchWebCommand}" />
                                 <MenuItem Header="Проверить на VirusTotal" Command="{Binding VirusTotalCommand}" />
                                 <MenuItem Header="Проверить Защитником Windows" Command="{Binding DefenderCommand}" />
-                                <MenuItem Header="{Binding SelectedItem.TrustActionText}" Command="{Binding TrustCommand}" />
+                                <MenuItem Header="{Binding SelectedItem.TrustActionText, FallbackValue=Доверять}" Command="{Binding TrustCommand}" />
                                 <MenuItem Header="Открыть в планировщике заданий" Command="{Binding OpenTaskSchedulerCommand}"
                                           Visibility="{Binding SelectedItem.IsTask, Converter={StaticResource BoolToVis}}" />
                                 <MenuItem Header="Открыть список служб Windows" Command="{Binding OpenServicesCommand}"
@@ -535,7 +558,7 @@
                                     </StackPanel>
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,8"
                                                Text="Без прав администратора часть заданий планировщика может быть скрыта, а записи для всех пользователей и службы можно только просматривать." />
-                                    <Button Style="{StaticResource LinkButton}" Content="Перезапустить с правами администратора"
+                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить с правами администратора"
                                             Command="{Binding RestartAsAdminCommand}" HorizontalAlignment="Left" />
                                 </StackPanel>
                             </Border>
@@ -621,65 +644,66 @@
                             <UniformGrid Columns="2" Margin="0,10,-6,0">
                                 <Button Style="{StaticResource ToolButton}" ToolTip="Открыть папку с файлом программы"
                                         Command="{Binding DataContext.OpenLocationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" />
-                                        <TextBlock Text="Папка" Margin="6,0,0,0" />
-                                    </StackPanel>
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Папка" />
+                                    </DockPanel>
                                 </Button>
                                 <Button Style="{StaticResource ToolButton}" ToolTip="Найти в интернете, что это за программа"
                                         Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" />
-                                        <TextBlock Text="Поиск" Margin="6,0,0,0" />
-                                    </StackPanel>
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Поиск" />
+                                    </DockPanel>
                                 </Button>
                                 <Button Style="{StaticResource ToolButton}"
                                         ToolTip="Открыть отчёт VirusTotal по контрольной сумме файла (сам файл не отправляется)"
                                         Command="{Binding DataContext.VirusTotalCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" />
-                                        <TextBlock Text="VirusTotal" Margin="6,0,0,0" />
-                                    </StackPanel>
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="VirusTotal" />
+                                    </DockPanel>
                                 </Button>
                                 <Button Style="{StaticResource ToolButton}" ToolTip="Проверить файл Защитником Windows"
                                         Command="{Binding DataContext.DefenderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" />
-                                        <TextBlock Text="Защитник" Margin="6,0,0,0" />
-                                    </StackPanel>
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Защитник" />
+                                    </DockPanel>
                                 </Button>
                                 <Button Style="{StaticResource ToolButton}"
                                         ToolTip="Доверенные записи не помечаются как подозрительные"
                                         Command="{Binding DataContext.TrustCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" />
-                                        <TextBlock Text="{Binding TrustActionText}" Margin="6,0,0,0" />
-                                    </StackPanel>
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="{Binding TrustActionText}" />
+                                    </DockPanel>
                                 </Button>
                                 <Button Style="{StaticResource ToolButton}" ToolTip="Скопировать команду запуска"
                                         Command="{Binding DataContext.CopyCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8C8;" FontSize="13" />
-                                        <TextBlock Text="Копировать" Margin="6,0,0,0" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Style="{StaticResource ToolButton}" ToolTip="Открыть «Планировщик заданий» (путь задания будет скопирован)"
-                                        Visibility="{Binding IsTask, Converter={StaticResource BoolToVis}}"
-                                        Command="{Binding DataContext.OpenTaskSchedulerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE787;" FontSize="13" />
-                                        <TextBlock Text="Планировщик" Margin="6,0,0,0" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Style="{StaticResource ToolButton}" ToolTip="Открыть список служб Windows"
-                                        Visibility="{Binding IsService, Converter={StaticResource BoolToVis}}"
-                                        Command="{Binding DataContext.OpenServicesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE713;" FontSize="13" />
-                                        <TextBlock Text="Службы" Margin="6,0,0,0" />
-                                    </StackPanel>
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE8C8;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Копировать" />
+                                    </DockPanel>
                                 </Button>
                             </UniformGrid>
+                            <Button Style="{StaticResource ToolButton}" Margin="0,0,0,6"
+                                    ToolTip="Открыть «Планировщик заданий» (путь задания будет скопирован в буфер обмена)"
+                                    Visibility="{Binding IsTask, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.OpenTaskSchedulerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <DockPanel HorizontalAlignment="Center">
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE787;" FontSize="13" />
+                                    <TextBlock Style="{StaticResource ToolLabel}" Text="Открыть в планировщике" />
+                                </DockPanel>
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Margin="0,0,0,6" ToolTip="Открыть список служб Windows"
+                                    Visibility="{Binding IsService, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.OpenServicesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <DockPanel HorizontalAlignment="Center">
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE713;" FontSize="13" />
+                                    <TextBlock Style="{StaticResource ToolLabel}" Text="Открыть список служб" />
+                                </DockPanel>
+                            </Button>
 
                             <!-- Facts -->
                             <TextBlock Style="{StaticResource H3}" Text="Подробности" Margin="0,10,0,0" />

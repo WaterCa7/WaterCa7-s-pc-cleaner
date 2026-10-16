@@ -52,6 +52,8 @@ public sealed partial class StartupService
                         Name = valueName,
                         Command = command,
                         TargetFile = StartupTargets.Resolve(command),
+                        // HKLM entries run for every user: "%APPDATA%\x.exe" may be missing only in this profile.
+                        TargetDependsOnUser = source.Scope == StartupScope.AllUsers && StartupTargets.HasUserVariable(command),
                         Is32Bit = source.Is32Bit,
                         LocationText = $@"{hiveName}\{source.KeyPath}",
                         Hive = source.Hive,

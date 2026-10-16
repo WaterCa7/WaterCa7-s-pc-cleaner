@@ -195,16 +195,29 @@ public sealed class StartupItem : ObservableObject
     };
 
     /// <summary>
-    /// Built-in Windows task: under \Microsoft\ and its target is Microsoft-signed (or cannot be resolved at all, e.g. a COM
-    /// handler hosted by Windows). Hidden by default and never changed. Tasks under \Microsoft\ that run a non-Microsoft file
-    /// stay visible — that is a classic way for malware to hide.
+    /// Built-in Windows task: under \Microsoft\ and its target is Microsoft-signed, or cannot be checked at all (a COM handler
+    /// hosted by Windows, a binary removed with a Windows component). Hidden by default and never changed.
+    /// Tasks under \Microsoft\ that run an existing non-Microsoft file stay visible — that is a classic way for malware to hide —
+    /// and so do suspicious ones: "powershell -w hidden -enc …" or "mshta http://…" run Microsoft-signed interpreters, so the
+    /// signature alone must never shield them from being disabled or removed.
     /// </summary>
     public bool IsWindowsTask => IsTask &&
                                  (TaskPath ?? "").StartsWith(@"\Microsoft\", StringComparison.OrdinalIgnoreCase) &&
-                                 (IsMicrosoft || string.IsNullOrWhiteSpace(TargetFile));
+                                 !Suspicion.IsSuspicious &&
+                                 (IsMicrosoft || string.IsNullOrWhiteSpace(TargetFile) || TargetExists != true);
 
-    /// <summary>Microsoft service (or a Microsoft-signed binary in the Windows folder): hidden by default, never changed.</summary>
-    public bool IsMicrosoftService => IsService && (IsMicrosoft || IsProtectedSystemFile(TargetFile, Signature));
+    /// <summary>
+    /// Microsoft service (or a Microsoft-signed binary in the Windows folder): hidden by default, never changed.
+    /// A service that looks suspicious (e.g. "cmd.exe /c powershell -enc …") is never treated as a Windows service.
+    /// </summary>
+    public bool IsMicrosoftService => IsService && !Suspicion.IsSuspicious &&
+                                      (IsMicrosoft || IsProtectedSystemFile(TargetFile, Signature));
+
+    /// <summary>
+    /// The target path depends on who logs on (%LOCALAPPDATA%, %APPDATA%, %USERPROFILE%… in a machine-wide entry or in a task
+    /// of another account): a file missing in the current profile may exist for the user the entry really runs for.
+    /// </summary>
+    public bool TargetDependsOnUser { get; init; }
 
     /// <summary>Items the app never modifies.</summary>
     public bool IsProtected => IsWindowsTask || IsMicrosoftService;
@@ -385,7 +398,8 @@ public sealed class StartupItem : ObservableObject
             if (IsBroken)
                 return "Файл программы удалён, поэтому запись ничего не запускает. Её можно спокойно удалить.";
             if (IsSuspicious)
-                return "Запись выглядит необычно. Проверьте файл на VirusTotal или Защитником Windows. Если программа вам незнакома — отключите её.";
+                return "Запись выглядит необычно. Проверьте файл на VirusTotal или Защитником Windows. Если программа вам незнакома — " +
+                       (IsRunOnce ? "удалите эту запись (однократный запуск нельзя отключить)." : "отключите её.");
             if (IsRunOnce)
                 return "Обычно эту запись лучше не трогать: Windows сама удалит её после следующего входа.";
             if (IsService)
@@ -421,6 +435,7 @@ public sealed class StartupItem : ObservableObject
         nameof(RiskLevel), nameof(RiskScore), nameof(RiskText), nameof(RiskTooltip), nameof(IsSuspicious), nameof(HasReasons),
         nameof(Reasons), nameof(ToggleActionText), nameof(TrustActionText), nameof(ToggleTooltip), nameof(DisabledTimeText), nameof(Advice),
         nameof(IsTrusted), nameof(Suspicion), nameof(CanToggle), nameof(CanDelete),
+        nameof(IsWindowsTask), nameof(IsMicrosoftService), nameof(IsProtected), nameof(ToggleBlockedReason),
     };
 
     /// <summary>Microsoft-signed file inside the Windows folder (protected even if the item is not flagged as Microsoft).</summary>

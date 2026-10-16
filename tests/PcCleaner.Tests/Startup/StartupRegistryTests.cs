@@ -88,6 +88,28 @@ public class StartupRegistryTests
     }
 
     [Fact]
+    public void MachineEntryWithPerUserPath_IsNeverReportedBroken()
+    {
+        using var sandbox = new StartupSandbox();
+        var missing = $@"%LOCALAPPDATA%\WaterCa7sTests-{sandbox.Id}\gone.exe";
+        sandbox.SetValue("HKLM\\Run", "PerUserMachine", $"\"{missing}\" /tray", RegistryValueKind.ExpandString);
+        sandbox.SetValue("HKCU\\Run", "PerUserMine", $"\"{missing}\" /tray", RegistryValueKind.ExpandString);
+
+        var items = Scan(sandbox);
+
+        // HKLM entries run for every account: the file may exist in another user's profile.
+        var machine = Find(items, "PerUserMachine");
+        Assert.True(machine.TargetDependsOnUser);
+        Assert.Null(machine.TargetExists);
+        Assert.False(machine.IsBroken);
+        // The current user's own entry really is broken.
+        Assert.True(Find(items, "PerUserMine").IsBroken);
+        var issue = Assert.Single(sandbox.Service.BuildIssues(items));
+        Assert.Contains("(1)", issue.Title);
+        Assert.DoesNotContain("PerUserMachine", issue.Details);
+    }
+
+    [Fact]
     public async Task DisableAndEnable_WriteTaskManagerCompatibleFlags()
     {
         using var sandbox = new StartupSandbox();

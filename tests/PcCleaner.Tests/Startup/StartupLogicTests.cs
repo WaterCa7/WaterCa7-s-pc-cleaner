@@ -116,6 +116,134 @@ public class StartupLogicTests
     }
 
     [Fact]
+    public void SuspiciousTaskUnderMicrosoftFolder_IsNeverShieldedByTheInterpreterSignature()
+    {
+        // Classic persistence: a task hidden among Windows tasks that runs Microsoft-signed powershell.exe with a payload.
+        var powershell = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+        var task = Item("Updater", StartupKind.ScheduledTask, signature: Microsoft, target: powershell,
+            taskPath: @"\Microsoft\Windows\Maintenance\Updater", risk: 65);
+
+        Assert.True(task.IsSuspicious);
+        Assert.False(task.IsWindowsTask);
+        Assert.False(task.IsProtected);
+        Assert.True(task.CanToggle);
+        Assert.True(task.CanDelete);
+        Assert.True(StartupFilter.IsVisible(task, new StartupFilterOptions())); // not hidden behind "Показать задачи Windows"
+    }
+
+    [Fact]
+    public void SuspiciousServiceRunningASystemInterpreter_IsNotAWindowsService()
+    {
+        var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        var service = Item("UpdSvc", StartupKind.Service, signature: Microsoft, target: cmd, risk: 65);
+
+        Assert.False(service.IsMicrosoftService);
+        Assert.True(service.CanToggle);
+        Assert.False(service.CanDelete); // services are still never deleted
+        Assert.True(StartupFilter.IsVisible(service, new StartupFilterOptions()));
+
+        // The same binary without suspicious signs stays a protected Windows service.
+        Assert.True(Item("Ok", StartupKind.Service, signature: Microsoft, target: cmd).IsMicrosoftService);
+    }
+
+    [Fact]
+    public void WindowsTaskWithMissingOrUncheckableTarget_StaysProtected()
+    {
+        var notFound = new SignatureInfo(SignatureStatus.NotFound, null);
+        var missing = Item("Gone", StartupKind.ScheduledTask, signature: notFound, exists: false,
+            taskPath: @"\Microsoft\Windows\Feature\Gone", target: @"C:\Windows\System32\removedfeature.exe");
+        var unknown = Item("Com", StartupKind.ScheduledTask, signature: notFound, exists: null,
+            taskPath: @"\Microsoft\Windows\Feature\Com", target: "handler.dll");
+        var vendorBroken = Item("VendorGone", StartupKind.ScheduledTask, signature: notFound, exists: false,
+            taskPath: @"\Vendor\Updater", target: @"C:\Program Files\Vendor\gone.exe");
+
+        Assert.True(missing.IsWindowsTask);
+        Assert.False(missing.CanDelete);
+        Assert.True(unknown.IsWindowsTask);
+        Assert.False(unknown.CanToggle);
+        Assert.False(vendorBroken.IsProtected);
+
+        using var sandbox = new StartupSandbox();
+        var issue = Assert.Single(sandbox.Service.BuildIssues(new[] { missing, unknown, vendorBroken }));
+        Assert.Contains("(1)", issue.Title); // only the vendor task is offered for removal
+        Assert.Contains("VendorGone", issue.Details);
+    }
+
+    [Fact]
+    public void HiddenWindowsTasks_AreNotCountedAsPrograms()
+    {
+        var hidden = Item("ComTask", StartupKind.ScheduledTask, signature: new SignatureInfo(SignatureStatus.NotFound, null),
+            exists: null, taskPath: @"\Microsoft\Windows\X\ComTask", target: null);
+        Assert.True(hidden.IsProtected);
+        Assert.Empty(StartupService.CountedPrograms(new[] { hidden }));
+    }
+
+    [Fact]
+    public void TrustKey_NeverTrustsAnInterpreterAsAFile()
+    {
+        var powershell = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+        var script = Item("Script", target: powershell);
+        var dllHost = Item("Dll", target: Path.Combine(Environment.SystemDirectory, "rundll32.exe"));
+        var app = Item("App", target: @"C:\Program Files\App\app.exe");
+        var unknown = Item("Unknown", StartupKind.ScheduledTask, target: null);
+
+        Assert.Equal(script.Id, StartupService.TrustKey(script));
+        Assert.Equal(dllHost.Id, StartupService.TrustKey(dllHost));
+        Assert.Equal(@"C:\Program Files\App\app.exe", StartupService.TrustKey(app));
+        Assert.Equal(unknown.Id, StartupService.TrustKey(unknown));
+    }
+
+    [Fact]
+    public void TrustedInterpreterPath_DoesNotVouchForAScriptEntry()
+    {
+        using var sandbox = new StartupSandbox();
+        var powershell = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+        var app = Path.Combine(sandbox.Dir, "app.exe");
+        var script = Item("Script", target: powershell);
+        var program = Item("Program", target: app);
+        var settings = AppServices.Settings;
+        settings.TrustedItems.Add(powershell);
+        settings.TrustedItems.Add(app);
+        try
+        {
+            sandbox.Service.Reanalyze(script);
+            sandbox.Service.Reanalyze(program);
+            Assert.False(script.IsTrusted);
+            Assert.True(program.IsTrusted);
+
+            settings.TrustedItems.Add(script.Id);
+            sandbox.Service.Reanalyze(script);
+            Assert.True(script.IsTrusted);
+        }
+        finally
+        {
+            settings.TrustedItems.RemoveAll(t => t == powershell || t == app || t == script.Id);
+        }
+    }
+
+    [Theory]
+    [InlineData(@"%LOCALAPPDATA%\Vendor\app.exe", true)]
+    [InlineData(@"""%appdata%\Vendor\app.exe"" --tray", true)]
+    [InlineData(@"%UserProfile%\app.exe", true)]
+    [InlineData(@"%ProgramFiles%\Vendor\app.exe", false)]
+    [InlineData(@"%windir%\system32\app.exe", false)]
+    [InlineData(@"C:\Users\Someone\AppData\Local\app.exe", false)]
+    [InlineData(null, false)]
+    public void UserSpecificVariables_AreRecognised(string? raw, bool expected)
+        => Assert.Equal(expected, StartupTargets.HasUserVariable(raw));
+
+    [Fact]
+    public void ComLocalServerWithSwitches_ResolvesTheExecutable()
+    {
+        var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        Assert.Equal(cmd, StartupTargets.ComServerFile("LocalServer32", $"{cmd} -Embedding"), ignoreCase: true);
+        Assert.Equal(cmd, StartupTargets.ComServerFile("LocalServer32", $"\"{cmd}\" /automation"), ignoreCase: true);
+        Assert.Equal(Path.Combine(Environment.SystemDirectory, "shell32.dll"),
+            StartupTargets.ComServerFile("InprocServer32", @"%SystemRoot%\System32\shell32.dll"), ignoreCase: true);
+        Assert.Null(StartupTargets.ComServerFile("InprocServer32", "   "));
+    }
+
+    [Fact]
     public void TrustedItems_AreNotSuspicious()
     {
         var item = Item("Weird", risk: 70, signature: Unsigned);

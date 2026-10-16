@@ -576,12 +576,30 @@ public sealed class StartupViewModel : PageViewModel
 
     private async Task DeleteBrokenAsync()
     {
-        var broken = _items.Where(i => i.IsBroken && i.CanDelete).ToList();
-        if (broken.Count == 0)
+        // The list may be minutes old: re-check every file so a program reinstalled meanwhile is never removed as "broken".
+        var candidates = _items.Where(i => i.IsBroken && i.CanDelete).ToList();
+        var broken = candidates.Where(StillBroken).ToList();
+        try
         {
-            ShowMessage("Битых записей нет.");
-            return;
+            if (broken.Count == 0)
+            {
+                ShowMessage(candidates.Count == 0
+                    ? "Битых записей нет."
+                    : "Файлы этих записей снова на месте — удалять нечего. Список обновлён.");
+                return;
+            }
+            await DeleteBrokenCoreAsync(broken);
         }
+        finally
+        {
+            // Some files came back (program reinstalled?): show their real state once the deletion has finished.
+            if (broken.Count < candidates.Count)
+                await LoadAsync();
+        }
+    }
+
+    private async Task DeleteBrokenCoreAsync(IReadOnlyList<StartupItem> broken)
+    {
         var allowed = Admin.IsElevated ? broken : broken.Where(i => !i.RequiresAdmin || i.IsTask).ToList();
         var skipped = broken.Count - allowed.Count;
         if (allowed.Count == 0)
@@ -603,7 +621,8 @@ public sealed class StartupViewModel : PageViewModel
         if (skipped > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"{Format.Count(skipped, "запись", "записи", "записей")} для всех пользователей будут пропущены — " +
+            sb.AppendLine($"{Format.Count(skipped, "запись", "записи", "записей")} для всех пользователей " +
+                          $"{Format.Plural(skipped, "будет пропущена", "будут пропущены", "будут пропущены")} — " +
                           "для них нужны права администратора.");
         }
         if (!Dialogs.Confirm("Удалить битые записи?", sb.ToString().TrimEnd()))
@@ -625,6 +644,10 @@ public sealed class StartupViewModel : PageViewModel
             : $"Удалено {result.Done.Count}, не удалось: {result.Failed.Count}.", result.Failed.Count > 0);
         Dialogs.Info("Битые записи", summary);
     }
+
+    /// <summary>True only if the target file is still definitely missing right now.</summary>
+    private static bool StillBroken(StartupItem item)
+        => StartupNative.TargetExists(item.TargetFile, item.Is32Bit) == false;
 
     private void RemoveItems(IEnumerable<StartupItem> removed)
     {
@@ -708,27 +731,32 @@ public sealed class StartupViewModel : PageViewModel
         if (item is null)
             return;
         var settings = AppServices.Settings;
+        // Interpreters (powershell.exe, rundll32.exe…) are trusted per entry, never as a file: see StartupService.TrustKey.
+        var key = StartupService.TrustKey(item);
+        var byFile = !string.Equals(key, item.Id, StringComparison.Ordinal);
         if (item.IsTrusted)
         {
             settings.TrustedItems.RemoveAll(t =>
-                string.Equals(t, item.TargetFile, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(t, item.Id, StringComparison.OrdinalIgnoreCase));
+                string.Equals(t, item.Id, StringComparison.OrdinalIgnoreCase) ||
+                (byFile && string.Equals(t, item.TargetFile, StringComparison.OrdinalIgnoreCase)));
             ShowMessage($"«{item.DisplayName}» больше не в списке доверенных.");
             Log.Info($"Автозагрузка: «{item.DisplayName}» убран из доверенных");
         }
         else
         {
-            settings.TrustedItems.Add(string.IsNullOrWhiteSpace(item.TargetFile) ? item.Id : item.TargetFile);
+            settings.TrustedItems.Add(key);
             ShowMessage($"«{item.DisplayName}» отмечен как доверенный — предупреждения для него больше не показываются.");
             Log.Info($"Автозагрузка: «{item.DisplayName}» добавлен в доверенные");
         }
         settings.Save();
 
-        // The same file may be used by several entries.
+        // The same program file may be used by several entries.
         foreach (var other in _items.Where(i => ReferenceEquals(i, item) ||
-                                                (item.TargetFile is not null &&
-                                                 string.Equals(i.TargetFile, item.TargetFile, StringComparison.OrdinalIgnoreCase))))
+                                                (byFile && string.Equals(i.TargetFile, item.TargetFile, StringComparison.OrdinalIgnoreCase))))
+        {
             _service.Reanalyze(other);
+            other.NotifyStateChanged();
+        }
         AfterItemChanged(item);
     }
 

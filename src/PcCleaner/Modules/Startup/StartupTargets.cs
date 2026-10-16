@@ -18,6 +18,24 @@ internal static class StartupTargets
         "rundll32.exe", "rundll32", "regsvr32.exe", "regsvr32",
     };
 
+    /// <summary>
+    /// Interpreters and generic hosts: what they run is decided by the arguments, so trusting the file itself would silence
+    /// warnings for every script, DLL or command launched through it (in this and other modules).
+    /// </summary>
+    private static readonly HashSet<string> GenericHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "powershell.exe", "pwsh.exe", "powershell_ise.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+        "rundll32.exe", "regsvr32.exe", "svchost.exe", "dllhost.exe", "conhost.exe", "msiexec.exe", "explorer.exe",
+        "schtasks.exe", "sc.exe", "reg.exe", "regedit.exe", "wmic.exe", "forfiles.exe", "certutil.exe", "bitsadmin.exe",
+        "msbuild.exe", "installutil.exe", "regasm.exe", "regsvcs.exe", "cmstp.exe", "hh.exe", "wsl.exe", "bash.exe",
+        "java.exe", "javaw.exe", "python.exe", "pythonw.exe", "py.exe", "pyw.exe", "node.exe", "autohotkey.exe",
+    };
+
+    /// <summary>Environment variables whose value differs from one user account to another.</summary>
+    private static readonly Regex UserVariable = new(
+        @"%(APPDATA|LOCALAPPDATA|USERPROFILE|HOMEPATH|HOMESHARE|TEMP|TMP|USERNAME|ONEDRIVE|ONEDRIVECONSUMER|ONEDRIVECOMMERCIAL)%",
+        RegexOptions.IgnoreCase);
+
     private static readonly Regex SidSuffix = new(@"^(?<base>.*?)[\s\-_]*S-1-5-21(-\d+){3,}$", RegexOptions.IgnoreCase);
     private static readonly Regex GuidSuffix = new(@"^(?<base>.+?)\s*\{?[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}?$", RegexOptions.IgnoreCase);
 
@@ -109,10 +127,7 @@ internal static class StartupTargets
             {
                 using var key = clsid.OpenSubKey(server);
                 if (key?.GetValue("") is string value && !string.IsNullOrWhiteSpace(value))
-                {
-                    value = Environment.ExpandEnvironmentVariables(value.Trim());
-                    return value.StartsWith('"') ? Resolve(value) : FindFile(value.Trim('"'));
-                }
+                    return ComServerFile(server, value);
             }
             // Out-of-process servers hosted by a service: CLSID → AppID → LocalService.
             if (clsid.GetValue("AppID") is string appId)
@@ -128,6 +143,28 @@ internal static class StartupTargets
         }
         return null;
     }
+
+    /// <summary>
+    /// File of a COM server registration. InprocServer32 holds a DLL path (may contain unquoted spaces);
+    /// LocalServer32 holds a command line that often carries switches ("C:\x\server.exe -Embedding").
+    /// </summary>
+    internal static string? ComServerFile(string serverKind, string value)
+    {
+        value = Environment.ExpandEnvironmentVariables(value.Trim());
+        if (value.Length == 0)
+            return null;
+        return value.StartsWith('"') || serverKind.Equals("LocalServer32", StringComparison.OrdinalIgnoreCase)
+            ? Resolve(value)
+            : FindFile(value.Trim('"'));
+    }
+
+    /// <summary>True for interpreters/hosts (powershell.exe, cmd.exe, rundll32.exe…) that run whatever the arguments say.</summary>
+    public static bool IsGenericHost(string? path)
+        => !string.IsNullOrWhiteSpace(path) && GenericHosts.Contains(Path.GetFileName(path.Trim().Trim('"')));
+
+    /// <summary>True if the (unexpanded) path uses variables such as %LOCALAPPDATA% that differ between user accounts.</summary>
+    public static bool HasUserVariable(string? rawPath)
+        => !string.IsNullOrEmpty(rawPath) && UserVariable.IsMatch(rawPath);
 
     /// <summary>ImagePath and the file that really runs for a service (ServiceDll for svchost-hosted ones).</summary>
     public static (string ImagePath, string? Target) ServiceTarget(string serviceName)
