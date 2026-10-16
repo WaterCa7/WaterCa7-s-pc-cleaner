@@ -219,12 +219,27 @@ public sealed class OptimizerService : IHealthContributor
         return ToHealthIssues(items);
     }
 
+    /// <summary>
+    /// Recommendations shown only on this page, never on the dashboard: another module reports the same symptom there.
+    /// High RAM load belongs to "Процессы", which reads the same memory counter and also names the biggest consumers —
+    /// reporting it from both modules would penalise one cause twice in the health score.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> PageOnlyIds = new HashSet<string>(StringComparer.Ordinal) { "RamLoad" };
+
+    /// <summary>
+    /// One-click fixes the dashboard may run in its "Исправить безопасное" batch. Turning off Xbox Game Bar recording is
+    /// NOT among them: it takes away clip and screenshot capture, so it is the user's choice (per-item button only).
+    /// </summary>
+    internal static bool IsBatchSafeFix(string? fixId) => fixId is TweakIds.GameMode or TweakIds.PowerPlan;
+
     internal IReadOnlyList<HealthIssue> ToHealthIssues(IEnumerable<Recommendation> items)
     {
         var issues = new List<HealthIssue>();
         foreach (var rec in items)
         {
             if (rec.Kind is RecommendationKind.Good or RecommendationKind.Navigate)
+                continue;
+            if (PageOnlyIds.Contains(rec.Id))
                 continue;
 
             Func<CancellationToken, Task<string>>? fix = null;
@@ -244,6 +259,9 @@ public sealed class OptimizerService : IHealthContributor
             var details = rec.Explanation;
             if (!string.IsNullOrWhiteSpace(rec.CurrentValue))
                 details += $"\nСейчас: {rec.CurrentValue}.";
+            // The consequence of the fix must be visible BEFORE it runs (the dashboard's confirmation shows these details).
+            if (fix is not null && !string.IsNullOrWhiteSpace(rec.AfterApplyNote))
+                details += $"\nВажно: {rec.AfterApplyNote}";
 
             issues.Add(new HealthIssue
             {
@@ -253,9 +271,8 @@ public sealed class OptimizerService : IHealthContributor
                 Severity = rec.Kind == RecommendationKind.Info ? IssueSeverity.Info : rec.Severity,
                 Gain = rec.Gain,
                 FixAsync = fix,
-                // Only HKCU-only reversible tweaks and the desktop power plan are safe for "fix everything".
-                AutoFixSafe = fix is not null && rec.IsSafe && !rec.NeedsAdmin &&
-                              rec.FixId is TweakIds.GameMode or TweakIds.GameDvr or TweakIds.PowerPlan,
+                // Only reversible tweaks that take nothing away from the user are safe for "fix everything".
+                AutoFixSafe = fix is not null && rec.IsSafe && !rec.NeedsAdmin && IsBatchSafeFix(rec.FixId),
                 TargetPageKey = "Optimizer",
             });
         }
