@@ -73,7 +73,7 @@ public class SecurityServiceSandboxTests
         var locations = new[]
         {
             sb.Env.UacPolicies, sb.Env.Winlogon, sb.Env.UserWinlogon, sb.Env.Ifeo, sb.Env.IfeoWow, sb.Env.InternetSettings,
-            sb.Env.ExplorerKey, sb.Env.SmartScreenPolicy, sb.Env.TerminalServer, sb.Env.DefenderPolicy,
+            sb.Env.ExplorerKey, sb.Env.SmartScreenPolicy, sb.Env.TerminalServer, sb.Env.DefenderPolicy, sb.Env.FirewallPolicy,
         };
         Assert.All(locations, l =>
         {
@@ -199,6 +199,159 @@ public class SecurityServiceSandboxTests
     }
 
     [Fact]
+    public async Task RestoreWinlogon_ValuesChangedAfterConfirmation_ChangesNothing()
+    {
+        using var sb = new SecuritySandbox();
+        var win = sb.Env.WindowsDir;
+        var defaultUserinit = SecurityRules.DefaultUserinit(win);
+        using (var key = sb.Create(sb.Env.Winlogon))
+        {
+            key.SetValue("Shell", @"C:\Users\Public\evil.exe");
+            key.SetValue("Userinit", defaultUserinit);
+        }
+        var report = await sb.Service.ScanAsync(null, CancellationToken.None);
+        // The user confirmed "Shell → explorer.exe" only; then something rewrites Userinit.
+        using (var key = sb.Env.Winlogon.Open(writable: true))
+            key!.SetValue("Userinit", defaultUserinit + @"C:\Users\Public\other.exe,");
+
+        var result = await sb.Service.RestoreWinlogonAsync(report.Winlogon, CancellationToken.None);
+
+        Assert.False(result.Success);
+        using var check = sb.Env.Winlogon.Open();
+        Assert.Equal(@"C:\Users\Public\evil.exe", check!.GetValue("Shell"));
+        Assert.Equal(defaultUserinit + @"C:\Users\Public\other.exe,", check.GetValue("Userinit"));
+    }
+
+    [Fact]
+    public async Task RestoreWinlogon_WithConfirmedValues_ChangesOnlyWrongValue()
+    {
+        using var sb = new SecuritySandbox();
+        var defaultUserinit = SecurityRules.DefaultUserinit(sb.Env.WindowsDir).ToUpperInvariant(); // default, other case
+        using (var key = sb.Create(sb.Env.Winlogon))
+        {
+            key.SetValue("Shell", @"C:\Users\Public\evil.exe");
+            key.SetValue("Userinit", defaultUserinit);
+        }
+        var report = await sb.Service.ScanAsync(null, CancellationToken.None);
+
+        var result = await sb.Service.RestoreWinlogonAsync(report.Winlogon, CancellationToken.None);
+
+        Assert.True(result.Success, result.Message);
+        using var check = sb.Env.Winlogon.Open();
+        Assert.Equal("explorer.exe", check!.GetValue("Shell"));
+        Assert.Equal(defaultUserinit, check.GetValue("Userinit")); // already default: untouched
+    }
+
+    [Fact]
+    public async Task Ifeo_SameDebuggerInBothViews_IsListedOnce()
+    {
+        // On real 64-bit Windows the WOW6432Node IFEO key is the same physical key, so one hijack appears in both views.
+        using var sb = new SecuritySandbox();
+        using (var key = sb.Create(sb.Env.Ifeo.Child("taskmgr.exe")))
+            key.SetValue("Debugger", @"C:\Users\Public\evil.exe");
+        using (var key = sb.Create(sb.Env.IfeoWow.Child("Taskmgr.exe")))
+            key.SetValue("Debugger", @"C:\Users\Public\evil.exe");
+        using (var key = sb.Create(sb.Env.IfeoWow.Child("game.exe")))
+            key.SetValue("Debugger", @"C:\Tools\wrapper.exe");
+
+        var report = await sb.Service.ScanAsync(null, CancellationToken.None);
+
+        Assert.Equal(2, report.Ifeo.Count);
+        var taskmgr = Assert.Single(report.Ifeo, e => e.ImageName.Equals("taskmgr.exe", StringComparison.OrdinalIgnoreCase));
+        Assert.False(taskmgr.IsWow64);
+        Assert.Single(report.Ifeo, e => e.ImageName == "game.exe" && e.IsWow64);
+
+        // In the sandbox the two keys are separate: removing one leaves the other, which the next scan shows again.
+        Assert.True((await sb.Service.RemoveIfeoDebuggerAsync(taskmgr, CancellationToken.None)).Success);
+        var after = await sb.Service.ScanAsync(null, CancellationToken.None);
+        Assert.Single(after.Ifeo, e => e.ImageName == "Taskmgr.exe" && e.IsWow64);
+    }
+
+    [Fact]
+    public void FirewallPolicy_IsReadFromPolicyKey()
+    {
+        using var sb = new SecuritySandbox();
+        using (var key = sb.Create(sb.Env.FirewallPolicy.Child("StandardProfile")))
+            key.SetValue("EnableFirewall", 0, RegistryValueKind.DWord);
+        using (var key = sb.Create(sb.Env.FirewallPolicy.Child("PublicProfile")))
+            key.SetValue("EnableFirewall", 1, RegistryValueKind.DWord);
+
+        var policy = sb.Service.ReadFirewallPolicy();
+
+        Assert.Equal(0, policy["Private"]);
+        Assert.Equal(1, policy["Public"]);
+        Assert.Null(policy["Domain"]);
+    }
+
+    [Fact]
+    public void BuildIssues_FirewallOffOnlyByPolicy_HasNoFix()
+    {
+        using var sb = new SecuritySandbox();
+        var checks = SecurityCheckIds.All.Select(id => new SecurityCheckResult(id, SecurityStatus.Ok, "ok", "")).ToList();
+        checks[checks.FindIndex(c => c.Id == SecurityCheckIds.Firewall)] =
+            new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Danger, "Выключен для частной сети", "d");
+        var profiles = new[]
+        {
+            new FirewallProfileState("Private", false, ByPolicy: true), new FirewallProfileState("Public", true),
+            new FirewallProfileState("Domain", true),
+        };
+        var byPolicy = new SecurityReport { FirewallProfiles = profiles, Checks = checks };
+        var issue = Assert.Single(sb.Service.BuildIssues(byPolicy));
+        Assert.Null(issue.FixAsync);
+        Assert.Contains("политик", issue.Details);
+
+        var local = new SecurityReport
+        {
+            FirewallProfiles = new[] { profiles[0] with { ByPolicy = false }, profiles[1], profiles[2] },
+            Checks = checks,
+        };
+        Assert.NotNull(Assert.Single(sb.Service.BuildIssues(local)).FixAsync);
+    }
+
+    [Fact]
+    public void BuildIssues_ThreatAllowedByUser_IsNotActiveThreat()
+    {
+        using var sb = new SecuritySandbox();
+        var report = new SecurityReport
+        {
+            Defender = new DefenderStatus { ServiceEnabled = true, AntivirusEnabled = true, RealTimeEnabled = true, SignatureAgeDays = 0 },
+            Threats = new[] { new ThreatDetection { Name = "HackTool:Win32/Keygen", StatusId = 5 } },
+            Checks = SecurityCheckIds.All.Select(id => new SecurityCheckResult(id, SecurityStatus.Ok, "ok", "")).ToList(),
+        };
+        Assert.Empty(sb.Service.BuildIssues(report));
+
+        var active = new SecurityReport
+        {
+            Defender = report.Defender,
+            Threats = new[] { new ThreatDetection { Name = "Trojan:Win32/Test", StatusId = 1 } },
+            Checks = report.Checks,
+        };
+        Assert.Equal(IssueSeverity.High, Assert.Single(sb.Service.BuildIssues(active)).Severity);
+    }
+
+    [Fact]
+    public async Task ViewModel_UnknownChecks_AreNotReportedAsFullyProtected()
+    {
+        using var sb = new SecuritySandbox();
+        using (var key = sb.Create(sb.Env.Winlogon))
+        {
+            key.SetValue("Shell", "explorer.exe");
+            key.SetValue("Userinit", SecurityRules.DefaultUserinit(sb.Env.WindowsDir));
+        }
+        var vm = new SecurityViewModel(sb.Service);
+
+        await vm.PreviewScanAsync(CancellationToken.None);
+
+        // In the sandbox antivirus, firewall and updates cannot be read (no WMI): they are "Нет данных".
+        Assert.Equal(0, vm.DangerCount);
+        Assert.Equal(0, vm.WarningCount);
+        Assert.True(vm.UnknownCount > 0);
+        Assert.Equal(SecurityStatus.Info, vm.OverallStatus);
+        Assert.DoesNotContain("хорошо защищён", vm.OverallText);
+        Assert.Contains("не удалось", vm.OverallText);
+    }
+
+    [Fact]
     public async Task EnableUac_SetsDefaults()
     {
         using var sb = new SecuritySandbox();
@@ -217,6 +370,100 @@ public class SecurityServiceSandboxTests
         using var check = sb.Env.UacPolicies.Open();
         Assert.Equal(1, check!.GetValue("EnableLUA"));
         Assert.Equal(5, check.GetValue("ConsentPromptBehaviorAdmin"));
+    }
+
+    [Fact]
+    public async Task EnableUac_KeepsStricterPromptSetting()
+    {
+        // Regression: "Включить UAC" used to lower "Всегда уведомлять" (2) to the default (5).
+        using var sb = new SecuritySandbox();
+        using (var key = sb.Create(sb.Env.UacPolicies))
+        {
+            key.SetValue("EnableLUA", 0, RegistryValueKind.DWord);
+            key.SetValue("ConsentPromptBehaviorAdmin", 2, RegistryValueKind.DWord);
+        }
+
+        var result = await sb.Service.EnableUacAsync(CancellationToken.None);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Contains("Перезагрузите", result.Message);
+        using var check = sb.Env.UacPolicies.Open();
+        Assert.Equal(1, check!.GetValue("EnableLUA"));
+        Assert.Equal(2, check.GetValue("ConsentPromptBehaviorAdmin"));
+    }
+
+    [Fact]
+    public async Task EnableUac_OnlyPromptsOff_ChangesOnlyPrompt_AndNothingWhenAlreadyOn()
+    {
+        using var sb = new SecuritySandbox();
+        using (var key = sb.Create(sb.Env.UacPolicies))
+        {
+            key.SetValue("EnableLUA", 1, RegistryValueKind.DWord);
+            key.SetValue("ConsentPromptBehaviorAdmin", 0, RegistryValueKind.DWord);
+        }
+
+        var result = await sb.Service.EnableUacAsync(CancellationToken.None);
+
+        Assert.True(result.Success, result.Message);
+        Assert.DoesNotContain("Перезагрузите", result.Message);
+        using (var check = sb.Env.UacPolicies.Open())
+        {
+            Assert.Equal(1, check!.GetValue("EnableLUA"));
+            Assert.Equal(5, check.GetValue("ConsentPromptBehaviorAdmin"));
+        }
+
+        var guid = sb.KeyPath[(sb.KeyPath.LastIndexOf('\\') + 1)..];
+        int OwnBackups() => Directory.GetFiles(AppPaths.BackupsDir, "*.reg").Count(f => f.Contains(guid, StringComparison.OrdinalIgnoreCase));
+        var backups = OwnBackups();
+        Assert.Equal(1, backups);
+        var again = await sb.Service.EnableUacAsync(CancellationToken.None);
+        Assert.True(again.Success, again.Message);
+        Assert.Contains("ничего не нужно", again.Message);
+        Assert.Equal(backups, OwnBackups()); // nothing to change: no backup, no write
+    }
+
+    [Theory]
+    [InlineData(@"file:_C:\Users\a\setup.exe", @"C:\Users\a\setup.exe")]
+    [InlineData(@"containerfile:_C:\Users\a\pack.zip", @"C:\Users\a\pack.zip")]
+    [InlineData(@"regkey:_HKLM\SOFTWARE\X", @"HKLM\SOFTWARE\X")]
+    [InlineData(@"C:\plain\path.exe", @"C:\plain\path.exe")]
+    public void CleanResource_StripsDefenderPrefix(string raw, string expected)
+        => Assert.Equal(expected, SecurityService.CleanResource(raw));
+
+    [Fact]
+    public void BuildIssues_InactiveThirdPartyAntivirus_IsNamed()
+    {
+        using var sb = new SecuritySandbox();
+        var report = new SecurityReport
+        {
+            Defender = new DefenderStatus { ServiceEnabled = true, AntivirusEnabled = false, RealTimeEnabled = false },
+            Antiviruses = new[] { SecurityRules.MakeProduct("Kaspersky Anti-Virus", 0x43100) },
+            Checks = SecurityCheckIds.All.Select(id => new SecurityCheckResult(id, SecurityStatus.Ok, "ok", "")).ToList(),
+        };
+        var issue = Assert.Single(sb.Service.BuildIssues(report));
+        Assert.Equal("Антивирус выключен", issue.Title);
+        Assert.Equal(IssueSeverity.Critical, issue.Severity);
+        Assert.Contains("Kaspersky Anti-Virus установлен", issue.Details);
+    }
+
+    [Fact]
+    public async Task BuildIssues_HostsAndExtensions_TextsFitTheDashboard()
+    {
+        using var sb = new SecuritySandbox();
+        File.WriteAllText(sb.Env.HostsPath, "1.2.3.4 www.sberbank.ru\r\n");
+        var ext = Path.Combine(sb.Env.BrowserRoots[0].Path, "Default", "Extensions", new string('a', 32), "1.0_0");
+        Directory.CreateDirectory(ext);
+        File.WriteAllText(Path.Combine(ext, "manifest.json"), """{ "name": "Search Manager Plus", "version": "1.0" }""");
+
+        var issues = sb.Service.BuildIssues(await sb.Service.ScanAsync(null, CancellationToken.None));
+
+        var hosts = issues.Single(i => i.Title == "Файл hosts подменяет адреса сайтов");
+        Assert.Contains("www.sberbank.ru", hosts.Details);
+        Assert.Contains("«Подробнее»", hosts.Details);
+        Assert.DoesNotContain("ниже", hosts.Details); // there is no list "below" on the dashboard
+        var extIssue = issues.Single(i => i.Title == "Подозрительные расширения в браузере");
+        Assert.Contains("Search Manager Plus", extIssue.Details);
+        Assert.DoesNotContain("«Как удалить»", extIssue.Details);
     }
 
     [Fact]

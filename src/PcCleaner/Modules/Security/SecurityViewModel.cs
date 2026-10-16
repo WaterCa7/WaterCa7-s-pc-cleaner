@@ -429,12 +429,18 @@ public sealed class SecurityViewModel : PageViewModel
         UnknownCount = checks.Count(c => c.Status == SecurityStatus.Unknown);
         Score = SecurityRules.Score(checks);
         ScoreLabel = Score >= 90 ? "Отлично" : Score >= 75 ? "Хорошо" : Score >= 50 ? "Есть проблемы" : "Плохо";
-        OverallStatus = DangerCount > 0 ? SecurityStatus.Danger : WarningCount > 0 ? SecurityStatus.Warning : SecurityStatus.Ok;
+        OverallStatus = DangerCount > 0 ? SecurityStatus.Danger
+            : WarningCount > 0 ? SecurityStatus.Warning
+            : UnknownCount > 0 ? SecurityStatus.Info
+            : SecurityStatus.Ok;
         OverallText = DangerCount > 0
             ? "Найдены серьёзные проблемы защиты. Начните с карточек, отмеченных красным."
             : WarningCount > 0
                 ? "Защита работает, но кое-что стоит поправить — посмотрите жёлтые карточки."
-                : "Всё в порядке: компьютер хорошо защищён.";
+                : UnknownCount > 0
+                    ? $"Явных проблем не найдено, но {Format.Count(UnknownCount, "проверку", "проверки", "проверок")} выполнить не удалось " +
+                      "(серые карточки) — их стоит посмотреть в «Безопасности Windows»."
+                    : "Всё в порядке: компьютер хорошо защищён.";
         LastScanText = $"Проверено в {report.ScannedAt:HH:mm}";
         HasData = true;
 
@@ -485,7 +491,8 @@ public sealed class SecurityViewModel : PageViewModel
                 if (realtimeOff)
                     actions.Add(new CardAction("Включить защиту", EnableRealtimeCommand, CardActionKind.Primary,
                         "Включить защиту в реальном времени Microsoft Defender (нужны права администратора)"));
-                if (report.MpCmdRunAvailable && d is not null)
+                // Scans and updates need a working Defender engine (on or in passive mode next to another antivirus).
+                if (report.MpCmdRunAvailable && d is not null && d.ServiceEnabled && (d.AntivirusEnabled || d.IsPassive))
                 {
                     actions.Add(new CardAction("Быстрая проверка", QuickScanCommand,
                         realtimeOff ? CardActionKind.Normal : CardActionKind.Primary,
@@ -504,7 +511,7 @@ public sealed class SecurityViewModel : PageViewModel
                 break;
             }
             case SecurityCheckIds.Firewall:
-                if (bad)
+                if (bad && !report.FirewallOffOnlyByPolicy)
                     actions.Add(new CardAction("Включить брандмауэр", EnableFirewallCommand, CardActionKind.Primary,
                         "Включить брандмауэр Windows для всех типов сетей (нужны права администратора)"));
                 actions.Add(new CardAction("Настройки", OpenFirewallSettingsCommand, CardActionKind.Normal,
@@ -695,11 +702,16 @@ public sealed class SecurityViewModel : PageViewModel
     {
         if (!Admin.RequireElevation("Включение UAC"))
             return;
-        var luaOff = _report?.Uac.EnableLua == 0;
+        var (luaOff, consentOff) = SecurityService.UacChangesNeeded(_report?.Uac.EnableLua, _report?.Uac.ConsentPromptBehaviorAdmin);
+        var changes = new List<string>();
+        if (luaOff)
+            changes.Add("• EnableLUA = 1 (UAC включён)");
+        if (consentOff)
+            changes.Add("• ConsentPromptBehaviorAdmin = 5 (спрашивать разрешение)");
+        if (changes.Count == 0)
+            return;
         if (!Dialogs.Confirm("Контроль учётных записей",
-                "Будут восстановлены стандартные настройки UAC:\n" +
-                "• EnableLUA = 1 (UAC включён)\n" +
-                "• ConsentPromptBehaviorAdmin = 5 (спрашивать разрешение)\n\n" +
+                "Будут восстановлены стандартные настройки UAC:\n" + string.Join("\n", changes) + "\n\n" +
                 "Перед изменением раздел реестра сохраняется в резервную копию — по ней можно вернуть всё как было." +
                 (luaOff ? "\n\nПосле включения UAC нужно перезагрузить компьютер." : "") + "\n\nПродолжить?"))
             return;
@@ -720,7 +732,7 @@ public sealed class SecurityViewModel : PageViewModel
         if (selected.Count > 12)
             shown.Add($"• … и ещё {selected.Count - 12}");
         if (!Dialogs.Confirm("Удалить строки из файла hosts",
-                $"Из файла hosts будут удалены {Format.Count(selected.Count, "строка", "строки", "строк")}:\n" +
+                $"Из файла hosts {SecurityRules.LinesToRemoveText(selected.Count)}:\n" +
                 string.Join("\n", shown) + "\n\n" +
                 "Строка удаляется целиком, со всеми сайтами в ней. Остальные строки не изменятся. " +
                 $"Перед изменением копия файла сохраняется в папку {AppPaths.BackupsDir}, после — очищается кэш DNS." +
@@ -774,7 +786,8 @@ public sealed class SecurityViewModel : PageViewModel
                 await RestorePoint.TryCreateAsync("Восстановление параметров входа (Winlogon)", ct);
                 ReportProgress(-1, "Восстанавливаем параметры входа…");
             }
-            return await _service.RestoreWinlogonAsync(ct);
+            // Pass the confirmed values: if they changed since the scan, nothing is modified.
+            return await _service.RestoreWinlogonAsync(w, ct);
         });
     }
 

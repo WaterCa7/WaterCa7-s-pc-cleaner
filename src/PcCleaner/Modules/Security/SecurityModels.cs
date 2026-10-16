@@ -151,14 +151,24 @@ public sealed class ThreatDetection
     public string? Process { get; init; }
 
     public bool IsResolved => SecurityRules.IsThreatResolved(StatusId);
+
+    /// <summary>The user chose "Разрешить на устройстве" — a deliberate decision, not an unhandled threat.</summary>
+    public bool IsAllowed => SecurityRules.IsThreatAllowed(StatusId);
+
+    /// <summary>Detected but neither neutralized nor allowed by the user.</summary>
+    public bool IsActive => !IsResolved && !IsAllowed;
+
     public string StatusText => SecurityRules.ThreatStatusText(StatusId);
     public string SeverityText => SecurityRules.ThreatSeverityText(SeverityId);
-    public SecurityStatus Risk => IsResolved ? SecurityStatus.Ok : SecurityStatus.Danger;
+    public SecurityStatus Risk => IsResolved ? SecurityStatus.Ok : IsAllowed ? SecurityStatus.Warning : SecurityStatus.Danger;
     public SecurityStatus SeverityRisk => SeverityId >= 4 ? SecurityStatus.Danger : SeverityId >= 2 ? SecurityStatus.Warning : SecurityStatus.Info;
     public string TimeText => Format.DateTime(Time);
 }
 
-public sealed record FirewallProfileState(string Name, bool? Enabled)
+/// <param name="Name">Domain / Private / Public.</param>
+/// <param name="Enabled">Effective state (a Group Policy value overrides the local setting).</param>
+/// <param name="ByPolicy">True if the state is forced by Group Policy (netsh cannot change it).</param>
+public sealed record FirewallProfileState(string Name, bool? Enabled, bool ByPolicy = false)
 {
     public string DisplayName => Name.ToLowerInvariant() switch
     {
@@ -259,4 +269,11 @@ public sealed class SecurityReport
 
     /// <summary>True if an enabled non-Microsoft antivirus protects the PC.</summary>
     public bool HasThirdPartyAntivirus => Antiviruses.Any(a => !a.IsMicrosoft && a.Enabled);
+
+    /// <summary>
+    /// True if every Windows Firewall profile that is off is forced off by Group Policy, so
+    /// "netsh advfirewall set allprofiles state on" cannot turn anything on.
+    /// </summary>
+    public bool FirewallOffOnlyByPolicy => FirewallProfiles.Any(p => p.Enabled == false) &&
+                                           FirewallProfiles.Where(p => p.Enabled == false).All(p => p.ByPolicy);
 }

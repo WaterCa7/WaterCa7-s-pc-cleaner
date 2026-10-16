@@ -56,6 +56,10 @@ public sealed class SecurityEnvironment
     public required RegLocation SmartScreenPolicy { get; init; }
     public required RegLocation TerminalServer { get; init; }
     public required RegLocation DefenderPolicy { get; init; }
+
+    /// <summary>HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall (Group Policy, read only).</summary>
+    public required RegLocation FirewallPolicy { get; init; }
+
     public required IReadOnlyList<BrowserRoot> BrowserRoots { get; init; }
     public required string WindowsDir { get; init; }
 
@@ -78,6 +82,7 @@ public sealed class SecurityEnvironment
             SmartScreenPolicy = new(RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\System"),
             TerminalServer = new(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Terminal Server"),
             DefenderPolicy = new(RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows Defender"),
+            FirewallPolicy = new(RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\WindowsFirewall"),
             BrowserRoots = BrowserExtensionScanner.DefaultRoots(),
             WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             IsRealSystem = true,
@@ -104,6 +109,7 @@ public sealed class SecurityEnvironment
             SmartScreenPolicy = Sub("SmartScreenPolicy"),
             TerminalServer = Sub("TerminalServer"),
             DefenderPolicy = Sub("DefenderPolicy"),
+            FirewallPolicy = Sub("FirewallPolicy"),
             BrowserRoots = new[]
             {
                 new BrowserRoot("Chrome", Path.Combine(tempDir, "Chrome", "User Data"), BrowserKind.Chromium),

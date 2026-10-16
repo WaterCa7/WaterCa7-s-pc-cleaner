@@ -143,6 +143,47 @@ public class BrowserExtensionTests
         Assert.Equal(SecurityStatus.Info, vendor.Risk);
     }
 
+    [Fact]
+    public void ScanChromium_UnexpectedJsonShapes_DoNotHideOtherExtensions()
+    {
+        var userData = Path.Combine(TestEnvironment.NewTempDir("chrome"), "User Data");
+        var profile = Path.Combine(userData, "Default");
+        var ext = Path.Combine(profile, "Extensions");
+        const string odd = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
+        const string fine = "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
+        const string arrayManifest = "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk";
+        // messages.json whose root is an array, a fractional "state" and a manifest that is not an object.
+        WriteExtension(ext, odd, "1.0_0", """{ "name": "__MSG_n__", "short_name": "Odd", "version": "1.0", "default_locale": "en" }""",
+            ("en", """[ "not", "an", "object" ]"""));
+        WriteExtension(ext, fine, "2.0_0", """{ "name": "Dark Reader", "version": "2.0" }""");
+        WriteExtension(ext, arrayManifest, "1.0_0", """[ 1, 2, 3 ]""");
+        File.WriteAllText(Path.Combine(profile, "Preferences"), $$"""
+            { "extensions": { "settings": {
+                "{{odd}}": { "location": 1.5, "state": 1.5 },
+                "{{fine}}": { "location": 1, "state": 1, "disable_reasons": 1.5 }
+            } } }
+            """);
+        File.WriteAllText(Path.Combine(userData, "Local State"), """{ "profile": [ 1 ] }""");
+
+        var (list, browsers) = BrowserExtensionScanner.Scan(new[] { new BrowserRoot("Chrome", userData, BrowserKind.Chromium) });
+
+        Assert.Equal(1, browsers);
+        Assert.Equal(2, list.Count);
+        Assert.Equal("Odd", list.Single(e => e.Id == odd).Name);
+        Assert.Equal("Dark Reader", list.Single(e => e.Id == fine).Name);
+    }
+
+    [Fact]
+    public void ParseFirefox_NonObjectEntriesAreSkipped()
+    {
+        var json = Encoding.UTF8.GetBytes("""
+            { "addons": [ 42, "x", { "id": "a@b", "type": "extension", "location": "app-profile", "defaultLocale": { "name": "Tab Tool" } } ] }
+            """);
+        var e = Assert.Single(BrowserExtensionScanner.ParseFirefoxExtensions(json, "Firefox", "p"));
+        Assert.Equal("Tab Tool", e.Name);
+        Assert.Empty(BrowserExtensionScanner.ParseFirefoxExtensions(Encoding.UTF8.GetBytes("[ 1 ]"), "Firefox", "p"));
+    }
+
     [Theory]
     [InlineData("Search Manager Plus", true)]
     [InlineData("Поиск Яндекса", true)]

@@ -128,7 +128,8 @@ public static class BrowserExtensionScanner
                 browsers++;
                 result.AddRange(root.Kind == BrowserKind.Firefox ? ScanFirefox(root) : ScanChromium(root, ct));
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
+                                           or InvalidOperationException or JsonException)
             {
                 Log.Warn($"Не удалось прочитать расширения {root.Browser}: {ex.Message}");
             }
@@ -271,7 +272,7 @@ public static class BrowserExtensionScanner
                 name = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(versionDir) ?? versionDir);
             return new ManifestInfo(name.Trim(), version, isTheme);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             return null;
         }
@@ -310,7 +311,7 @@ public static class BrowserExtensionScanner
                         return msg;
                 }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
             {
                 // try the next locale
             }
@@ -343,7 +344,7 @@ public static class BrowserExtensionScanner
                 }
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             // names are optional
         }
@@ -370,19 +371,21 @@ public static class BrowserExtensionScanner
                     if (p.Value.ValueKind != JsonValueKind.Object)
                         continue;
                     var v = p.Value;
-                    int? location = v.TryGetProperty("location", out var loc) && loc.ValueKind == JsonValueKind.Number
-                        ? loc.GetInt32()
+                    int? location = v.TryGetProperty("location", out var loc) && loc.ValueKind == JsonValueKind.Number &&
+                                    loc.TryGetInt32(out var locValue)
+                        ? locValue
                         : null;
                     var byDefault = v.TryGetProperty("was_installed_by_default", out var def) &&
                                     def.ValueKind == JsonValueKind.True;
                     bool? enabled = null;
                     var hasReasons = v.TryGetProperty("disable_reasons", out var dr) &&
-                                     ((dr.ValueKind == JsonValueKind.Number && dr.GetInt64() != 0) ||
+                                     ((dr.ValueKind == JsonValueKind.Number && (!dr.TryGetInt64(out var reasons) || reasons != 0)) ||
                                       (dr.ValueKind == JsonValueKind.Array && dr.GetArrayLength() > 0));
                     if (hasReasons)
                         enabled = false;
-                    else if (v.TryGetProperty("state", out var st) && st.ValueKind == JsonValueKind.Number)
-                        enabled = st.GetInt32() != 0;
+                    else if (v.TryGetProperty("state", out var st) && st.ValueKind == JsonValueKind.Number &&
+                             st.TryGetInt32(out var stateValue))
+                        enabled = stateValue != 0;
                     else if (location is not null)
                         enabled = true;
 
@@ -397,7 +400,7 @@ public static class BrowserExtensionScanner
                     }
                 }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
             {
                 // preferences are optional
             }
@@ -449,7 +452,7 @@ public static class BrowserExtensionScanner
                 return list;
             foreach (var a in addons.EnumerateArray())
             {
-                if (GetString(a, "type") != "extension")
+                if (a.ValueKind != JsonValueKind.Object || GetString(a, "type") != "extension")
                     continue;
                 var location = GetString(a, "location") ?? "";
                 if (FirefoxBuiltInLocations.Contains(location))
@@ -485,7 +488,7 @@ public static class BrowserExtensionScanner
                 });
             }
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             Log.Warn($"Не удалось разобрать extensions.json ({browser}): {ex.Message}");
         }

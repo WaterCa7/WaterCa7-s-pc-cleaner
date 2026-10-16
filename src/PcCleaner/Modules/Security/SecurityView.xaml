@@ -270,7 +270,7 @@
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}">
                                     <Run Text="Действующие строки файла" />
-                                    <Run Text="{Binding HostsPath, Mode=OneWay}" Foreground="{StaticResource TextBrush}" /><Run Text=". Отметьте лишние строки и нажмите «Удалить» — перед изменением файл копируется в резервную папку. Опасные строки уже отмечены." />
+                                    <Run Text="{Binding HostsPath, Mode=OneWay}" Foreground="{StaticResource TextBrush}" /><Run Text=". Отметьте лишние строки и нажмите «Удалить выбранные» — перед изменением файл копируется в резервную папку. Опасные строки уже отмечены." />
                                 </TextBlock>
                                 <WrapPanel Margin="0,10,0,10">
                                     <Button Style="{StaticResource DangerButton}" Command="{Binding RemoveHostsLinesCommand}" Margin="0,0,8,0">
@@ -549,10 +549,17 @@
                                 <DataGrid Style="{StaticResource DetailsGrid}" ItemsSource="{Binding IfeoEntries}" Margin="0,10,0,0">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Программа" Binding="{Binding ImageName}" Width="1*" />
-                                        <DataGridTemplateColumn Header="Запускается вместо неё" Width="1.4*" SortMemberPath="Debugger">
+                                        <DataGridTemplateColumn Header="Что запускается" Width="1.4*" SortMemberPath="Debugger">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <TextBlock Style="{StaticResource CellText}" Text="{Binding Debugger}" ToolTip="{Binding KeyPath}" />
+                                                    <TextBlock Style="{StaticResource CellText}" Text="{Binding Debugger}">
+                                                        <TextBlock.ToolTip>
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Debugger}" FontWeight="SemiBold" />
+                                                                <TextBlock Text="{Binding KeyPath, StringFormat=Раздел реестра: {0}}" />
+                                                            </StackPanel>
+                                                        </TextBlock.ToolTip>
+                                                    </TextBlock>
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>

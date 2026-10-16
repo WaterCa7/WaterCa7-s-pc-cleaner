@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Security;
@@ -37,6 +38,9 @@ public static class SecurityRules
     /// <summary>Defender ThreatStatusID: 2 cleaned, 3 quarantined, 4 removed, 6 blocked (= neutralized).</summary>
     public static bool IsThreatResolved(int statusId) => statusId is 2 or 3 or 4 or 6;
 
+    /// <summary>Defender ThreatStatusID 5: the user allowed the item on this device.</summary>
+    public static bool IsThreatAllowed(int statusId) => statusId == 5;
+
     public static string ThreatStatusText(int statusId) => statusId switch
     {
         1 => "Обнаружена",
@@ -62,17 +66,34 @@ public static class SecurityRules
         _ => "Неизвестный",
     };
 
+    /// <summary>
+    /// Microsoft's own products in Security Center ("Windows Defender", "Microsoft Defender Antivirus", …).
+    /// Whole words only: "Bitdefender" is a third-party antivirus, not Microsoft Defender.
+    /// </summary>
+    private static readonly Regex MicrosoftProductName = new(
+        @"\bMicrosoft\b|\bWindows\s+(Defender|Firewall|Security)\b|Защитник\s+Windows|Брандмауэр\s+(Защитника\s+)?Windows|Безопасность\s+Windows",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     public static bool IsMicrosoftProduct(string? name)
-        => !string.IsNullOrEmpty(name) &&
-           (name.Contains("Defender", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Windows Firewall", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Брандмауэр Windows", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Microsoft", StringComparison.OrdinalIgnoreCase));
+        => !string.IsNullOrWhiteSpace(name) && MicrosoftProductName.IsMatch(name);
 
     public static SecurityProduct MakeProduct(string name, long productState)
     {
         var st = AvProductState.Decode(productState);
         return new SecurityProduct(name, st.Raw, st.Enabled, st.UpToDate, IsMicrosoftProduct(name));
+    }
+
+    /// <summary>
+    /// "Kaspersky установлен, но его защита не работает (срок лицензии истёк)" for an installed but inactive
+    /// third-party antivirus, or null if there is none.
+    /// </summary>
+    public static string? InactiveThirdPartyText(IEnumerable<SecurityProduct> products)
+    {
+        var inactive = products.Where(p => !p.IsMicrosoft && !p.Enabled).ToList();
+        if (inactive.Count == 0)
+            return null;
+        var p = inactive[0];
+        return $"{p.Name} установлен, но его защита не работает ({AvProductState.Decode(p.ProductState).StateText})";
     }
 
     /// <summary>Defender exclusions that cover too much (whole drives, user folders, temp, executable types).</summary>
@@ -113,7 +134,8 @@ public static class SecurityRules
         string state;
 
         var third = products.Where(p => !p.IsMicrosoft && p.Enabled).ToList();
-        var activeThreats = threats.Where(t => !t.IsResolved).ToList();
+        var inactiveThird = InactiveThirdPartyText(products);
+        var activeThreats = threats.Where(t => t.IsActive).ToList();
 
         if (third.Count > 0)
         {
@@ -154,7 +176,9 @@ public static class SecurityRules
             {
                 status = SecurityStatus.Danger;
                 state = "Антивирус Microsoft Defender выключен";
-                lines.Add("Другого антивируса не найдено — компьютер не защищён от вирусов.");
+                lines.Add(inactiveThird is null
+                    ? "Другого антивируса не найдено — компьютер не защищён от вирусов."
+                    : inactiveThird + " — компьютер не защищён от вирусов.");
             }
             else if (!d.RealTimeEnabled)
             {
@@ -163,6 +187,8 @@ public static class SecurityRules
                 lines.Add(d.PolicyDisablesRealtime
                     ? "Отключена групповой политикой — частый признак «активатора» или вируса."
                     : "Файлы не проверяются при запуске. Включите защиту — это безопасно.");
+                if (inactiveThird is not null)
+                    lines.Add(inactiveThird + ".");
             }
             else if (d.SignatureAgeDays is > SignatureMaxAgeDays)
             {
@@ -212,6 +238,13 @@ public static class SecurityRules
             state = $"Есть необезвреженные угрозы: {activeThreats.Count}";
             lines.Insert(0, $"Последняя: {activeThreats[0].Name}. Откройте «Журнал защиты» и выберите действие.");
         }
+        else
+        {
+            var allowed = threats.Where(t => t.IsAllowed).ToList();
+            if (allowed.Count > 0)
+                lines.Add($"Вы разрешили в Defender: {allowed[0].Name}" + (allowed.Count > 1 ? $" и ещё {allowed.Count - 1}" : "") +
+                          ". Если не уверены в этом файле, отмените разрешение в «Журнале защиты».");
+        }
 
         return new SecurityCheckResult(SecurityCheckIds.Antivirus, status, state, string.Join("\n", lines));
     }
@@ -224,6 +257,31 @@ public static class SecurityRules
         null => null,
         bool b => b,
         _ => long.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), out var n) ? n != 0 : null,
+    };
+
+    /// <summary>
+    /// Group Policy (HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall\&lt;profile&gt;\EnableFirewall) overrides the local
+    /// setting that MSFT_NetFirewallProfile reports. <paramref name="policy"/> maps "Domain"/"Private"/"Public" to the
+    /// policy value (null = not configured).
+    /// </summary>
+    public static List<FirewallProfileState> ApplyFirewallPolicy(IEnumerable<FirewallProfileState> profiles,
+        IReadOnlyDictionary<string, int?> policy)
+    {
+        return profiles.Select(p =>
+        {
+            if (!policy.TryGetValue(p.Name, out var v) || v is null)
+                return p;
+            return p with { Enabled = v.Value != 0, ByPolicy = true };
+        }).ToList();
+    }
+
+    /// <summary>Registry subkey of the firewall policy for a profile name.</summary>
+    public static string FirewallPolicySubKey(string profile) => profile.ToLowerInvariant() switch
+    {
+        "domain" => "DomainProfile",
+        "private" => "StandardProfile",
+        "public" => "PublicProfile",
+        _ => profile,
     };
 
     public static SecurityCheckResult EvaluateFirewall(IReadOnlyList<FirewallProfileState> profiles,
@@ -246,7 +304,12 @@ public static class SecurityRules
 
         var off = profiles.Where(p => p.Enabled == false).ToList();
         var summary = string.Join(" · ", profiles.Select(p =>
-            $"{Capitalize(p.ShortName)}: {(p.Enabled == false ? "выкл." : "вкл.")}"));
+            $"{Capitalize(p.ShortName)}: {(p.Enabled == false ? "выкл." : p.Enabled == true ? "вкл." : "?")}" +
+            (p.ByPolicy ? " (политика)" : "")));
+        var policyNote = off.Any(p => p.ByPolicy)
+            ? "\nВыключение задано групповой политикой: на рабочем компьютере так настраивает администратор, на домашнем — " +
+              "«активаторы» и вирусы. Включить брандмауэр поверх политики нельзя."
+            : "";
         if (off.Any(p => !p.Name.Equals("Domain", StringComparison.OrdinalIgnoreCase)))
         {
             var state = off.Count >= 3 || off.Count == profiles.Count
@@ -255,13 +318,13 @@ public static class SecurityRules
                     ? $"Выключен для {off[0].Genitive} сети"
                     : $"Выключен для {string.Join(", ", off.Take(off.Count - 1).Select(p => p.Genitive))} и {off[^1].Genitive} сетей";
             return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Danger, state,
-                summary + "\n" + why);
+                summary + "\n" + why + policyNote);
         }
         if (off.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Warning,
                 "Выключен для доменной сети",
-                summary + "\nДоменный профиль работает только в корпоративных сетях, но лучше держать его включённым.");
+                summary + "\nДоменный профиль работает только в корпоративных сетях, но лучше держать его включённым." + policyNote);
         }
         return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Ok,
             "Включён для всех типов сетей", summary + "\nЧужие подключения из сети блокируются.");
@@ -295,6 +358,14 @@ public static class SecurityRules
     }
 
     // ===================== Hosts =====================
+
+    /// <summary>"Удалена 1 строка", "Удалены 3 строки", "Удалено 5 строк".</summary>
+    public static string LinesRemovedText(int n)
+        => $"{Format.Plural(n, "Удалена", "Удалены", "Удалено")} {Format.Count(n, "строка", "строки", "строк")}";
+
+    /// <summary>"будет удалена 1 строка", "будут удалены 3 строки", "будут удалены 5 строк".</summary>
+    public static string LinesToRemoveText(int n)
+        => $"{Format.Plural(n, "будет удалена", "будут удалены", "будут удалены")} {Format.Count(n, "строка", "строки", "строк")}";
 
     public static SecurityCheckResult EvaluateHosts(HostsReport hosts)
     {
@@ -405,7 +476,7 @@ public static class SecurityRules
     private static readonly HashSet<string> SensitiveImages = new(StringComparer.OrdinalIgnoreCase)
     {
         "taskmgr.exe", "msconfig.exe", "regedit.exe", "regedt32.exe", "cmd.exe", "powershell.exe", "pwsh.exe",
-        "powershell_ise.exe", "mmc.exe", "explorer.exe", "rstrui.exe", "sethc.exe", "utilman.exe", "osk.exe",
+        "powershell_ise.exe", "mmc.exe", "explorer.exe", "rstrui.exe", "systemreset.exe", "sethc.exe", "utilman.exe", "osk.exe",
         "magnify.exe", "narrator.exe", "displayswitch.exe", "atbroker.exe", "msmpeng.exe", "mpcmdrun.exe",
         "msascui.exe", "msseces.exe", "nissrv.exe", "securityhealthsystray.exe", "securityhealthservice.exe",
         "securityhealthhost.exe", "smartscreen.exe", "mrt.exe", "wuauclt.exe", "usoclient.exe", "control.exe",
@@ -416,13 +487,14 @@ public static class SecurityRules
 
     private static readonly string[] SecurityImageKeywords =
     {
-        "kaspersky", "avast", "eset", "ekrn", "egui", "nod32", "drweb", "cureit", "mbam", "malwarebytes", "adwcleaner",
+        "kaspersky", "avast", "ekrn", "egui", "nod32", "drweb", "cureit", "mbam", "malwarebytes", "adwcleaner",
         "hitman", "zemana", "spybot", "norton", "mcafee", "bdagent", "bitdefender", "avira", "sophos", "comodo",
         "tdsskiller", "rkill", "combofix", "hijackthis", "superantispyware", "emsisoft", "antivirus", "antimalware",
         "msmp", "defender", "avz",
     };
 
-    private static readonly string[] SecurityImagePrefixes = { "avp", "kav", "kis", "avg", "a2", "360" };
+    // "eset" is a prefix, not a keyword: "systemreset.exe" or "reset.exe" are not ESET.
+    private static readonly string[] SecurityImagePrefixes = { "avp", "kav", "kis", "avg", "a2", "360", "eset" };
 
     public static bool IsSecuritySensitiveImage(string imageName)
     {
@@ -777,6 +849,11 @@ public static class SecurityRules
     public static SecurityCheckResult EvaluateExtensions(IReadOnlyList<BrowserExtension> list, int browsers)
     {
         const string why = "Удаляются расширения в самом браузере — нажмите «Как удалить».";
+        if (browsers < 0)
+        {
+            return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Unknown,
+                "Не удалось прочитать расширения", "Папки профилей браузеров недоступны. Проверьте расширения в самом браузере.");
+        }
         if (browsers == 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Ok, "Браузеры не найдены",

@@ -81,11 +81,14 @@ public sealed class SecurityService : IHealthContributor
         var ifeoTask = Run("перехват запуска", ReadIfeo, (new List<IfeoEntry>(), false, false));
         var dnsTask = Run("DNS", ReadDns, (new List<DnsServerInfo>(), false));
         var updatesTask = Run("обновления", ReadUpdates, new UpdatesState(null, 0, null, null));
+        // Fallback -1 = "could not read" (shown as "Нет данных", not as "browsers not found").
         var extTask = Run("расширения браузеров", () => BrowserExtensionScanner.Scan(Env.BrowserRoots, ct),
-            (new List<BrowserExtension>(), 0));
+            (new List<BrowserExtension>(), -1));
         var mpTask = Run("Microsoft Defender", () => Env.IsRealSystem && FileTools.FindMpCmdRun() is not null, false);
 
-        await Task.WhenAll(defenderTask, firewallTask, registryTask, hostsTask, ifeoTask, dnsTask, updatesTask, extTask, mpTask);
+        // WaitAsync: "Отмена" returns at once even if a WMI provider hangs (the stuck query finishes in the background).
+        await Task.WhenAll(defenderTask, firewallTask, registryTask, hostsTask, ifeoTask, dnsTask, updatesTask, extTask, mpTask)
+            .WaitAsync(ct);
 
         var defender = defenderTask.Result;
         var reg = registryTask.Result;
@@ -133,7 +136,7 @@ public sealed class SecurityService : IHealthContributor
             SmartScreen = reg.SmartScreen,
             Rdp = reg.Rdp,
             Extensions = extensions,
-            BrowsersFound = browsers,
+            BrowsersFound = Math.Max(0, browsers),
             MpCmdRunAvailable = mpTask.Result,
             Checks = checks,
         };
@@ -264,12 +267,12 @@ public sealed class SecurityService : IHealthContributor
         return new DefenderData { Status = status, Antiviruses = av, Firewalls = fw, Threats = threats };
     }
 
-    /// <summary>"file:_C:\x\y.exe" → "C:\x\y.exe".</summary>
+    /// <summary>"file:_C:\x\y.exe" / "containerfile:_C:\x.zip" → the path without the Defender resource type prefix.</summary>
     internal static string CleanResource(string resource)
     {
         var r = resource.Trim();
         var idx = r.IndexOf(":_", StringComparison.Ordinal);
-        return idx > 0 && idx < 12 ? r[(idx + 2)..] : r;
+        return idx > 0 && idx <= 24 && r[..idx].All(char.IsLetter) ? r[(idx + 2)..] : r;
     }
 
     private List<FirewallProfileState> ReadFirewallProfiles()
@@ -277,11 +280,25 @@ public sealed class SecurityService : IHealthContributor
         if (!Env.IsRealSystem)
             return new List<FirewallProfileState>();
         var order = new[] { "Private", "Public", "Domain" };
-        return Wmi.Query("SELECT Name, Enabled FROM MSFT_NetFirewallProfile", Wmi.StandardCimv2, WmiTimeout)
+        // MSFT_NetFirewallProfile reports the local (persistent) setting; a Group Policy value overrides it.
+        var local = Wmi.Query("SELECT Name, Enabled FROM MSFT_NetFirewallProfile", Wmi.StandardCimv2, WmiTimeout)
             .Select(r => new FirewallProfileState(r.Str("Name") ?? "?",
                 SecurityRules.ParseGpoBoolean(r.TryGetValue("Enabled", out var v) ? v : null)))
             .OrderBy(p => Array.FindIndex(order, o => o.Equals(p.Name, StringComparison.OrdinalIgnoreCase)) is var i && i >= 0 ? i : 9)
             .ToList();
+        return SecurityRules.ApplyFirewallPolicy(local, ReadFirewallPolicy());
+    }
+
+    /// <summary>EnableFirewall policy values per profile ("Domain"/"Private"/"Public" → 0/1 or null).</summary>
+    internal Dictionary<string, int?> ReadFirewallPolicy()
+    {
+        var result = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in new[] { "Domain", "Private", "Public" })
+        {
+            var loc = Env.FirewallPolicy.Child(SecurityRules.FirewallPolicySubKey(name));
+            result[name] = SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(loc, "EnableFirewall").Value);
+        }
+        return result;
     }
 
     private RegistryData ReadRegistryChecks()
@@ -362,6 +379,12 @@ public sealed class SecurityService : IHealthContributor
                     readable = false;
             }
         }
+        // On 64-bit Windows the WOW6432Node IFEO key is shared with the 64-bit one (it is the same physical key),
+        // so every Debugger value shows up in both views. Keep one entry per image + debugger.
+        var primary = entries.Where(e => !e.IsWow64)
+            .Select(e => (e.ImageName.ToLowerInvariant(), e.Debugger))
+            .ToHashSet();
+        entries.RemoveAll(e => e.IsWow64 && primary.Contains((e.ImageName.ToLowerInvariant(), e.Debugger)));
         if (partial)
             Log.Info("Безопасность: часть разделов IFEO доступна только администратору");
         return (entries, partial, readable);
@@ -438,6 +461,8 @@ public sealed class SecurityService : IHealthContributor
                 full ? TimeSpan.FromHours(24) : TimeSpan.FromHours(3), ct);
             if (r.TimedOut)
             {
+                // Killing MpCmdRun does not stop the scan inside the Defender service: cancel it there too.
+                await CancelDefenderScanAsync(mp);
                 Log.Warn($"Проверка Defender ({kind}) не завершилась вовремя");
                 return SecurityActionResult.Fail("Проверка идёт слишком долго и была остановлена. Попробуйте ещё раз позже.");
             }
@@ -454,14 +479,7 @@ public sealed class SecurityService : IHealthContributor
         }
         catch (OperationCanceledException)
         {
-            try
-            {
-                await ProcessRunner.RunAsync(mp, "-Cancel", TimeSpan.FromSeconds(30), CancellationToken.None);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Log.Warn($"Не удалось остановить проверку Defender: {ex.Message}");
-            }
+            await CancelDefenderScanAsync(mp);
             Log.Info($"Проверка Defender ({kind}) отменена пользователем");
             return new SecurityActionResult(false, "Проверка отменена.", Cancelled: true);
         }
@@ -470,6 +488,18 @@ public sealed class SecurityService : IHealthContributor
         {
             Log.Action("Результат проверки Microsoft Defender: " + res.Message);
             return res;
+        }
+    }
+
+    private static async Task CancelDefenderScanAsync(string mpCmdRun)
+    {
+        try
+        {
+            await ProcessRunner.RunAsync(mpCmdRun, "-Cancel", TimeSpan.FromSeconds(30), CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warn($"Не удалось остановить проверку Defender: {ex.Message}");
         }
     }
 
@@ -503,17 +533,27 @@ public sealed class SecurityService : IHealthContributor
             return SecurityActionResult.Fail(NeedAdminMessage);
         var r = await ProcessRunner.PowerShellAsync("Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction Stop; 'OK'",
             TimeSpan.FromMinutes(2), ct);
-        await Task.Delay(1500, ct);
-        var row = Wmi.Query("SELECT RealTimeProtectionEnabled, IsTamperProtected FROM MSFT_MpComputerStatus", Wmi.Defender, WmiTimeout)
-            .FirstOrDefault();
-        if (row?.Bool("RealTimeProtectionEnabled") == true)
+        // The caller may be on the UI thread (page or dashboard): WMI and registry reads go to the thread pool.
+        var (enabled, policy) = await Task.Run(async () =>
+        {
+            bool? on = null;
+            for (var attempt = 0; attempt < 3 && on != true; attempt++)
+            {
+                await Task.Delay(1500, ct);
+                var row = Wmi.Query("SELECT RealTimeProtectionEnabled FROM MSFT_MpComputerStatus", Wmi.Defender, WmiTimeout)
+                    .FirstOrDefault();
+                on = row?.Bool("RealTimeProtectionEnabled");
+            }
+            var byPolicy = SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(
+                Env.DefenderPolicy.Child("Real-Time Protection"), "DisableRealtimeMonitoring").Value) == 1;
+            return (on == true, byPolicy);
+        }, ct);
+        if (enabled)
         {
             Log.Action("Включена защита в реальном времени Microsoft Defender");
             return SecurityActionResult.Ok("Защита в реальном времени включена.");
         }
         Log.Warn($"Не удалось включить защиту в реальном времени: {FirstLine(r.StdErr)}");
-        var policy = SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(
-            Env.DefenderPolicy.Child("Real-Time Protection"), "DisableRealtimeMonitoring").Value) == 1;
         return SecurityActionResult.Fail(policy
             ? "Защиту не удалось включить: она отключена групповой политикой. Если компьютер не рабочий, политику оставил «активатор» или вирус."
             : "Windows не дала включить защиту (возможно, мешает «Защита от подделки» или другой антивирус). " +
@@ -533,43 +573,73 @@ public sealed class SecurityService : IHealthContributor
             return SecurityActionResult.Fail($"Не удалось включить брандмауэр: {FirstLine(r.StdOut + r.StdErr)}");
         }
         Log.Action("Брандмауэр Windows включён для всех профилей (netsh advfirewall set allprofiles state on)");
-        var stillOff = ReadFirewallProfiles().Where(p => p.Enabled == false).ToList();
+        // The caller may be on the UI thread: query WMI on the thread pool.
+        var stillOff = (await Task.Run(ReadFirewallProfiles, ct)).Where(p => p.Enabled == false).ToList();
         if (stillOff.Count > 0)
         {
             return SecurityActionResult.Fail("Команда выполнена, но брандмауэр всё ещё выключен для: " +
                                              string.Join(", ", stillOff.Select(p => p.DisplayName)) +
-                                             ". Вероятно, его отключает групповая политика или другая программа.");
+                                             (stillOff.Any(p => p.ByPolicy)
+                                                 ? ". Его отключает групповая политика — её меняет администратор компьютера " +
+                                                   "(или удалите её, если компьютер не рабочий)."
+                                                 : ". Вероятно, его отключает другая программа."));
         }
         return SecurityActionResult.Ok("Брандмауэр включён для всех типов сетей. Выключить его снова можно в " +
                                        "«Безопасность Windows» → «Брандмауэр и защита сети».");
     }
 
-    /// <summary>Sets EnableLUA=1 and ConsentPromptBehaviorAdmin=5 (Windows defaults).</summary>
+    /// <summary>Values that <see cref="EnableUacAsync"/> changes: EnableLUA → 1 if it is 0; the prompt → 5 if it is 0.</summary>
+    /// <remarks>A stricter prompt setting the user chose ("Всегда уведомлять", 1–4) is kept.</remarks>
+    public static (bool FixLua, bool FixConsent) UacChangesNeeded(int? enableLua, int? consent)
+        => (enableLua == 0, consent == 0);
+
+    /// <summary>Turns UAC back on: EnableLUA=1 and ConsentPromptBehaviorAdmin=5 (Windows defaults) where they are off.</summary>
     public async Task<SecurityActionResult> EnableUacAsync(CancellationToken ct)
     {
         var loc = Env.UacPolicies;
         if (loc.NeedsAdmin && !Admin.IsElevated)
             return SecurityActionResult.Fail(NeedAdminMessage);
+        var (fixLua, fixConsent) = UacChangesNeeded(
+            SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(loc, "EnableLUA").Value),
+            SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(loc, "ConsentPromptBehaviorAdmin").Value));
+        if (!fixLua && !fixConsent)
+            return SecurityActionResult.Ok("UAC уже включён и запрашивает разрешение — менять ничего не нужно.");
         var backup = await RegistryBackup.ExportAsync(loc.FullPath, "Перед включением UAC", ct);
         if (backup is null)
             return SecurityActionResult.Fail(BackupFailedMessage);
+        var done = new List<string>();
         try
         {
             using var key = loc.Open(writable: true);
             if (key is null)
                 return SecurityActionResult.Fail("Раздел реестра с настройками UAC не найден.");
             var luaBefore = SecurityEnvironment.AsInt(key.GetValue("EnableLUA"));
-            key.SetValue("EnableLUA", 1, RegistryValueKind.DWord);
-            key.SetValue("ConsentPromptBehaviorAdmin", 5, RegistryValueKind.DWord);
-            Log.Action($"UAC: EnableLUA=1, ConsentPromptBehaviorAdmin=5 ({loc.FullPath}). Резервная копия: {Path.GetFileName(backup)}");
-            return SecurityActionResult.Ok(luaBefore == 0
+            var consentBefore = SecurityEnvironment.AsInt(key.GetValue("ConsentPromptBehaviorAdmin"));
+            (fixLua, fixConsent) = UacChangesNeeded(luaBefore, consentBefore);
+            if (fixLua)
+            {
+                key.SetValue("EnableLUA", 1, RegistryValueKind.DWord);
+                done.Add($"EnableLUA: {luaBefore} → 1");
+            }
+            if (fixConsent)
+            {
+                key.SetValue("ConsentPromptBehaviorAdmin", 5, RegistryValueKind.DWord);
+                done.Add($"ConsentPromptBehaviorAdmin: {consentBefore} → 5");
+            }
+            if (done.Count == 0)
+                return SecurityActionResult.Ok("UAC уже включён и запрашивает разрешение — менять ничего не нужно.");
+            Log.Action($"UAC: {string.Join(", ", done)} ({loc.FullPath}). Резервная копия: {Path.GetFileName(backup)}");
+            return SecurityActionResult.Ok(fixLua
                 ? $"UAC включён. Перезагрузите компьютер, чтобы изменение вступило в силу.\n\nРезервная копия реестра: {backup}"
                 : $"Запросы UAC снова включены: перед изменением системы Windows будет спрашивать разрешение.\n\nРезервная копия реестра: {backup}");
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
             Log.Warn($"Не удалось изменить настройки UAC: {ex.Message}");
-            return SecurityActionResult.Fail($"Не удалось изменить настройки UAC: {ex.Message}");
+            if (done.Count > 0)
+                Log.Action($"UAC (частично): {string.Join(", ", done)} ({loc.FullPath}). Резервная копия: {Path.GetFileName(backup)}");
+            return SecurityActionResult.Fail($"Не удалось изменить настройки UAC: {ex.Message}" +
+                                             (done.Count > 0 ? $"\n\nУспели измениться: {string.Join(", ", done)}. Резервная копия: {backup}" : ""));
         }
     }
 
@@ -592,7 +662,7 @@ public sealed class SecurityService : IHealthContributor
                     Log.Action("Очищен кэш DNS (ipconfig /flushdns)");
             }
             return SecurityActionResult.Ok(
-                $"Удалено {Format.Count(lines.Count, "строка", "строки", "строк")}. Сайты снова открываются по настоящим адресам.\n\n" +
+                $"{SecurityRules.LinesRemovedText(lines.Count)} из файла hosts. Сайты снова открываются по настоящим адресам.\n\n" +
                 $"Копия прежнего файла: {backup}");
         }
         catch (HostsChangedException ex)
@@ -613,12 +683,25 @@ public sealed class SecurityService : IHealthContributor
     }
 
     /// <summary>Restores Shell=explorer.exe and Userinit=...\userinit.exe, (and removes a per-user Shell override).</summary>
-    public async Task<SecurityActionResult> RestoreWinlogonAsync(CancellationToken ct)
+    public Task<SecurityActionResult> RestoreWinlogonAsync(CancellationToken ct) => RestoreWinlogonAsync(null, ct);
+
+    /// <summary>
+    /// Same as <see cref="RestoreWinlogonAsync(CancellationToken)"/>; with <paramref name="expected"/> (the values the user
+    /// confirmed) nothing is changed if the current values differ, so only what the confirmation listed can change.
+    /// </summary>
+    public async Task<SecurityActionResult> RestoreWinlogonAsync(WinlogonState? expected, CancellationToken ct)
     {
         var win = Env.WindowsDir;
         var shell = SecurityEnvironment.ReadValue(Env.Winlogon, "Shell").Value?.ToString();
         var userinit = SecurityEnvironment.ReadValue(Env.Winlogon, "Userinit").Value?.ToString();
         var userShell = SecurityEnvironment.ReadValue(Env.UserWinlogon, "Shell").Value?.ToString();
+        if (expected is not null &&
+            (!string.Equals(shell, expected.Shell, StringComparison.Ordinal) ||
+             !string.Equals(userinit, expected.Userinit, StringComparison.Ordinal) ||
+             !string.Equals(userShell, expected.UserShell, StringComparison.Ordinal)))
+        {
+            return SecurityActionResult.Fail("Значения изменились после проверки, поэтому ничего не изменено. Нажмите «Проверить снова».");
+        }
         var fixShell = !SecurityRules.IsShellDefault(shell, win);
         var fixUserinit = !SecurityRules.IsUserinitDefault(userinit, win);
         var fixUserShell = !string.IsNullOrWhiteSpace(userShell) && !SecurityRules.IsShellDefault(userShell, win);
@@ -627,19 +710,31 @@ public sealed class SecurityService : IHealthContributor
         if ((fixShell || fixUserinit) && Env.Winlogon.NeedsAdmin && !Admin.IsElevated)
             return SecurityActionResult.Fail(NeedAdminMessage);
 
-        var done = new List<string>();
+        // Take every backup first: if one fails, nothing has been changed yet.
         var backups = new List<string>();
+        if (fixShell || fixUserinit)
+        {
+            var backup = await RegistryBackup.ExportAsync(Env.Winlogon.FullPath, "Перед восстановлением Winlogon", ct);
+            if (backup is null)
+                return SecurityActionResult.Fail(BackupFailedMessage);
+            backups.Add(backup);
+        }
+        if (fixUserShell)
+        {
+            var backup = await RegistryBackup.ExportAsync(Env.UserWinlogon.FullPath, "Перед восстановлением Winlogon (пользователь)", ct);
+            if (backup is null)
+                return SecurityActionResult.Fail(BackupFailedMessage);
+            backups.Add(backup);
+        }
+
+        var done = new List<string>();
         try
         {
             if (fixShell || fixUserinit)
             {
-                var backup = await RegistryBackup.ExportAsync(Env.Winlogon.FullPath, "Перед восстановлением Winlogon", ct);
-                if (backup is null)
-                    return SecurityActionResult.Fail(BackupFailedMessage);
-                backups.Add(backup);
                 using var key = Env.Winlogon.Open(writable: true);
                 if (key is null)
-                    return SecurityActionResult.Fail("Раздел Winlogon не найден.");
+                    return SecurityActionResult.Fail("Раздел Winlogon не найден. Ничего не изменено.");
                 if (fixShell)
                 {
                     key.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
@@ -654,20 +749,25 @@ public sealed class SecurityService : IHealthContributor
             }
             if (fixUserShell)
             {
-                var backup = await RegistryBackup.ExportAsync(Env.UserWinlogon.FullPath, "Перед восстановлением Winlogon (пользователь)", ct);
-                if (backup is null)
-                    return SecurityActionResult.Fail(done.Count == 0 ? BackupFailedMessage
-                        : "Часть значений восстановлена, но для пользовательского раздела не удалось сохранить резервную копию: " + string.Join("; ", done));
-                backups.Add(backup);
                 using var key = Env.UserWinlogon.Open(writable: true);
-                key?.DeleteValue("Shell", throwOnMissingValue: false);
-                done.Add($"удалён пользовательский Shell «{userShell}»");
+                if (key is not null)
+                {
+                    key.DeleteValue("Shell", throwOnMissingValue: false);
+                    done.Add($"удалён пользовательский Shell «{userShell}»");
+                }
             }
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
             Log.Warn($"Не удалось восстановить Winlogon: {ex.Message}");
-            return SecurityActionResult.Fail($"Не удалось восстановить значения: {ex.Message}");
+            if (done.Count > 0)
+            {
+                Log.Action("Winlogon восстановлен частично: " + string.Join("; ", done) + ". Резервные копии: " +
+                           string.Join(", ", backups.Select(Path.GetFileName)));
+            }
+            return SecurityActionResult.Fail($"Не удалось восстановить значения: {ex.Message}" +
+                                             (done.Count > 0 ? "\n\nУспели измениться: " + string.Join("; ", done) : "") +
+                                             "\n\nРезервная копия: " + string.Join(", ", backups));
         }
 
         Log.Action("Winlogon восстановлен: " + string.Join("; ", done) + ". Резервные копии: " +
@@ -798,10 +898,10 @@ public sealed class SecurityService : IHealthContributor
         {
             if (d.PolicyDisablesAntivirus || !d.ServiceEnabled || !d.AntivirusEnabled)
             {
+                var other = SecurityRules.InactiveThirdPartyText(report.Antiviruses);
                 issues.Add(Issue("Антивирус выключен",
-                    d.PolicyDisablesAntivirus
-                        ? "Microsoft Defender отключён групповой политикой, а другого антивируса нет. Компьютер не защищён от вирусов."
-                        : "Microsoft Defender выключен, а другого антивируса нет. Компьютер не защищён от вирусов.",
+                    (d.PolicyDisablesAntivirus ? "Microsoft Defender отключён групповой политикой, " : "Microsoft Defender выключен, ") +
+                    (other is null ? "а другого антивируса нет." : $"а {other}.") + " Компьютер не защищён от вирусов.",
                     IssueSeverity.Critical));
             }
             else if (!d.RealTimeEnabled)
@@ -835,7 +935,7 @@ public sealed class SecurityService : IHealthContributor
             issues.Add(Issue("Антивирусные базы устарели",
                 "Обновите базы в настройках вашего антивируса.", IssueSeverity.Medium));
         }
-        var active = report.Threats.Where(t => !t.IsResolved).ToList();
+        var active = report.Threats.Where(t => t.IsActive).ToList();
         if (active.Count > 0)
         {
             issues.Add(Issue($"Есть необезвреженные угрозы: {active.Count}",
@@ -848,9 +948,11 @@ public sealed class SecurityService : IHealthContributor
         if (fw is { Status: SecurityStatus.Danger or SecurityStatus.Warning })
         {
             issues.Add(Issue(fw.Status == SecurityStatus.Danger ? "Брандмауэр Windows выключен" : "Брандмауэр выключен для доменной сети",
-                fw.State + ". Без брандмауэра компьютер открыт для атак из сети.",
+                fw.State + ". Без брандмауэра компьютер открыт для атак из сети." +
+                (report.FirewallOffOnlyByPolicy ? " Выключение задано групповой политикой — исправить его здесь нельзя." : ""),
                 fw.Status == SecurityStatus.Danger ? IssueSeverity.High : IssueSeverity.Low,
-                Wrap(EnableFirewallAsync), gain: "Защита от атак из сети"));
+                // netsh cannot override Group Policy: no fix when only the policy keeps it off.
+                report.FirewallOffOnlyByPolicy ? null : Wrap(EnableFirewallAsync), gain: "Защита от атак из сети"));
         }
 
         // UAC
@@ -871,7 +973,13 @@ public sealed class SecurityService : IHealthContributor
         // Hosts
         var hosts = report.Check(SecurityCheckIds.Hosts);
         if (hosts is { Status: SecurityStatus.Danger })
-            issues.Add(Issue("Файл hosts подменяет адреса сайтов", hosts.State + ". " + hosts.Details, IssueSeverity.High));
+        {
+            var site = report.Hosts.Entries.Where(e => e.Risk == SecurityStatus.Danger).SelectMany(e => e.Hostnames).FirstOrDefault();
+            issues.Add(Issue("Файл hosts подменяет адреса сайтов",
+                hosts.State + (site is null ? "" : $", например {site}") +
+                ". Так вирусы уводят на поддельные страницы. Нажмите «Подробнее», чтобы проверить и удалить эти строки.",
+                IssueSeverity.High));
+        }
         else if (hosts is { Status: SecurityStatus.Warning })
             issues.Add(Issue("В файле hosts есть записи, которые стоит проверить", hosts.Details, IssueSeverity.Low));
 
@@ -900,7 +1008,13 @@ public sealed class SecurityService : IHealthContributor
         // Extensions
         var ext = report.Check(SecurityCheckIds.Extensions);
         if (ext is { Status: SecurityStatus.Warning })
-            issues.Add(Issue("Подозрительные расширения в браузере", ext.State + ". " + ext.Details, IssueSeverity.Low));
+        {
+            var first = report.Extensions.FirstOrDefault(e => e.Risk == SecurityStatus.Warning);
+            issues.Add(Issue("Подозрительные расширения в браузере",
+                ext.State + (first is null ? "" : $", например «{first.Name}» ({first.Browser})") +
+                ". Удалить расширение можно только в самом браузере — нажмите «Подробнее», там есть инструкция.",
+                IssueSeverity.Low));
+        }
 
         // SmartScreen / RDP
         var ss = report.Check(SecurityCheckIds.SmartScreen);

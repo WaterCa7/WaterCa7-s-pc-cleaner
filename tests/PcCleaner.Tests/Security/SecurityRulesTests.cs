@@ -33,6 +33,18 @@ public class AvProductStateTests
         Assert.True(SecurityRules.MakeProduct("Windows Defender", 397568).IsMicrosoft);
         Assert.False(SecurityRules.MakeProduct("Kaspersky Internet Security", 266240).IsMicrosoft);
     }
+
+    [Theory]
+    [InlineData("Windows Defender", true)]
+    [InlineData("Microsoft Defender Antivirus", true)]
+    [InlineData("Защитник Windows", true)]
+    [InlineData("Брандмауэр Защитника Windows", true)]
+    [InlineData("Bitdefender Antivirus Free", false)] // regression: "defender" inside "Bitdefender"
+    [InlineData("Bitdefender Firewall", false)]
+    [InlineData("ESET Security", false)]
+    [InlineData("", false)]
+    public void IsMicrosoftProduct_WholeWordsOnly(string name, bool expected)
+        => Assert.Equal(expected, SecurityRules.IsMicrosoftProduct(name));
 }
 
 public class WinlogonRulesTests
@@ -88,6 +100,10 @@ public class IfeoRulesTests
     [InlineData("myapp.exe", @"C:\Windows\system32\vsjitdebugger.exe", SecurityStatus.Warning)]
     [InlineData("taskmgr.exe", @"""C:\Tools\procexp64.exe""", SecurityStatus.Warning)]
     [InlineData("game.exe", @"C:\Tools\wrapper.exe", SecurityStatus.Warning)]
+    [InlineData("ekrn.exe", "x.exe", SecurityStatus.Danger)]
+    [InlineData("esets_svc.exe", "x.exe", SecurityStatus.Danger)]
+    [InlineData("systemreset.exe", "x.exe", SecurityStatus.Danger)]
+    [InlineData("passwordreset.exe", @"C:\Tools\wrapper.exe", SecurityStatus.Warning)] // regression: "eset" inside "reset"
     public void Classify(string image, string debugger, SecurityStatus expected)
         => Assert.Equal(expected, SecurityRules.ClassifyIfeo(image, debugger).Risk);
 
@@ -171,6 +187,26 @@ public class ProxyUacFirewallRulesTests
         Assert.Equal(SecurityStatus.Unknown, SecurityRules.EvaluateFirewall(Array.Empty<FirewallProfileState>(), none).Status);
     }
 
+    [Fact]
+    public void Firewall_GroupPolicyOverridesLocalSetting()
+    {
+        var local = new[] { new FirewallProfileState("Private", true), new FirewallProfileState("Public", true), new FirewallProfileState("Domain", false) };
+        var policy = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase) { ["Private"] = 0, ["Public"] = null, ["Domain"] = 1 };
+
+        var effective = SecurityRules.ApplyFirewallPolicy(local, policy);
+
+        Assert.Equal(new FirewallProfileState("Private", false, ByPolicy: true), effective[0]);
+        Assert.Equal(new FirewallProfileState("Public", true), effective[1]);
+        Assert.Equal(new FirewallProfileState("Domain", true, ByPolicy: true), effective[2]);
+        var r = SecurityRules.EvaluateFirewall(effective, Array.Empty<SecurityProduct>());
+        Assert.Equal(SecurityStatus.Danger, r.Status);
+        Assert.Equal("Выключен для частной сети", r.State);
+        Assert.Contains("групповой политикой", r.Details);
+        Assert.Equal("StandardProfile", SecurityRules.FirewallPolicySubKey("Private"));
+        Assert.True(new SecurityReport { FirewallProfiles = effective }.FirewallOffOnlyByPolicy);
+        Assert.False(new SecurityReport { FirewallProfiles = local }.FirewallOffOnlyByPolicy);
+    }
+
     [Theory]
     [InlineData((ushort)0, false)]
     [InlineData((ushort)1, true)]
@@ -224,12 +260,46 @@ public class AntivirusRulesTests
     }
 
     [Fact]
+    public void Bitdefender_IsThirdPartyAntivirus()
+    {
+        // Regression: "Bitdefender" was taken for Microsoft Defender, so a protected PC was reported as unprotected.
+        var products = new[] { SecurityRules.MakeProduct("Windows Defender", 393472), SecurityRules.MakeProduct("Bitdefender Antivirus Free", 266240) };
+        var r = SecurityRules.EvaluateAntivirus(Defender(rt: false, av: false), products, Array.Empty<ThreatDetection>());
+        Assert.Equal(SecurityStatus.Ok, r.Status);
+        Assert.Contains("Bitdefender", r.State);
+        Assert.True(new SecurityReport { Antiviruses = products }.HasThirdPartyAntivirus);
+    }
+
+    [Fact]
+    public void InactiveThirdPartyAntivirus_IsNamed_NotDescribedAsMissing()
+    {
+        var products = new[] { SecurityRules.MakeProduct("Kaspersky Anti-Virus", 0x43100) }; // licence expired
+        var r = SecurityRules.EvaluateAntivirus(Defender(rt: false, av: false), products, Array.Empty<ThreatDetection>());
+        Assert.Equal(SecurityStatus.Danger, r.Status);
+        Assert.Contains("Kaspersky Anti-Virus установлен, но его защита не работает (срок лицензии истёк)", r.Details);
+        Assert.DoesNotContain("Другого антивируса не найдено", r.Details);
+        Assert.Null(SecurityRules.InactiveThirdPartyText(new[] { SecurityRules.MakeProduct("Windows Defender", 393472) }));
+    }
+
+    [Fact]
     public void ActiveThreat_IsDanger_ResolvedIsNot()
     {
         var active = new[] { new ThreatDetection { Name = "Trojan:Win32/Test", StatusId = 1 } };
         Assert.Equal(SecurityStatus.Danger, SecurityRules.EvaluateAntivirus(Defender(), Array.Empty<SecurityProduct>(), active).Status);
         var removed = new[] { new ThreatDetection { Name = "Trojan:Win32/Test", StatusId = 4 } };
         Assert.Equal(SecurityStatus.Ok, SecurityRules.EvaluateAntivirus(Defender(), Array.Empty<SecurityProduct>(), removed).Status);
+    }
+
+    [Fact]
+    public void ThreatAllowedByUser_IsNotDanger()
+    {
+        var allowed = new ThreatDetection { Name = "HackTool:Win32/Keygen", StatusId = 5 };
+        Assert.False(allowed.IsActive);
+        Assert.Equal(SecurityStatus.Warning, allowed.Risk);
+        var r = SecurityRules.EvaluateAntivirus(Defender(), Array.Empty<SecurityProduct>(), new[] { allowed });
+        Assert.Equal(SecurityStatus.Ok, r.Status);
+        Assert.Contains("Keygen", r.Details);
+        Assert.True(new ThreatDetection { StatusId = 0 }.IsActive);
     }
 
     [Theory]
@@ -317,6 +387,24 @@ public class DnsAndUpdatesRulesTests
             SecurityRules.EvaluateUpdates(new UpdatesState(now.AddDays(-3), 10, "KB1", true), now).Status);
         Assert.Equal(SecurityStatus.Unknown,
             SecurityRules.EvaluateUpdates(new UpdatesState(null, 0, null, null), now).Status);
+    }
+
+    [Theory]
+    [InlineData(1, "Удалена 1 строка", "будет удалена 1 строка")]
+    [InlineData(3, "Удалены 3 строки", "будут удалены 3 строки")]
+    [InlineData(5, "Удалено 5 строк", "будут удалены 5 строк")]
+    [InlineData(21, "Удалена 21 строка", "будет удалена 21 строка")]
+    public void HostsLineCountTexts(int n, string removed, string toRemove)
+    {
+        Assert.Equal(removed, SecurityRules.LinesRemovedText(n));
+        Assert.Equal(toRemove, SecurityRules.LinesToRemoveText(n));
+    }
+
+    [Fact]
+    public void Extensions_UnreadableIsUnknown_NotMissingBrowsers()
+    {
+        Assert.Equal(SecurityStatus.Unknown, SecurityRules.EvaluateExtensions(new List<BrowserExtension>(), -1).Status);
+        Assert.Equal("Браузеры не найдены", SecurityRules.EvaluateExtensions(new List<BrowserExtension>(), 0).State);
     }
 
     [Fact]
