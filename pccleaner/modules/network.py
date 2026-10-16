@@ -28,6 +28,9 @@ RISKY_LISTEN = {
     27017: "MongoDB",
 }
 
+# Эти порты слушает любая Windows по умолчанию — не пугаем ими пользователя.
+WINDOWS_DEFAULT_PORTS = {135, 139, 445}
+
 # Удалённые порты, характерные для вредоносного ПО и майнеров.
 SUSPICIOUS_REMOTE = {
     4444: "Metasploit/бэкдоры", 1337: "бэкдоры", 31337: "бэкдоры", 6667: "IRC-ботнеты",
@@ -248,6 +251,12 @@ def scan(sample_seconds: float = 2.0, latency: bool = True) -> ModuleResult:
     for x in s["listening"]:
         if x["port"] in RISKY_LISTEN and x["ip"] in ("0.0.0.0", "::") and x["port"] not in seen:
             seen.add(x["port"])
+            if IS_WINDOWS and x["port"] in WINDOWS_DEFAULT_PORTS:
+                res.add("Сеть", f"Открыт стандартный порт Windows {x['port']}", severity="info",
+                        detail=RISKY_LISTEN[x["port"]] + ". Есть на любой Windows.",
+                        recommendation="Ничего делать не нужно, но не пробрасывайте его на роутере и выбирайте "
+                                       "профиль сети «Общедоступная» в кафе/гостиницах.")
+                continue
             res.add("Сеть", f"Открыт порт {x['port']} ({x['process']})", severity="medium",
                     detail=RISKY_LISTEN[x["port"]],
                     recommendation="Если служба не нужна — отключите её; иначе ограничьте доступ брандмауэром "

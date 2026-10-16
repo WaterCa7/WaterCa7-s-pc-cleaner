@@ -26,6 +26,8 @@ $r.board = Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer,Product
 $r.system = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer,Model
 $r.os    = Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,@{n='LastBoot';e={$_.LastBootUpTime.ToString('yyyy-MM-dd HH:mm')}}
 $r.fwtype = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control').PEFirmwareType
+if (-not $r.fwtype) { $r.fwtype = @{UEFI=2; Legacy=1}[$env:firmware_type] }
+if (-not $r.fwtype -and (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State')) { $r.fwtype = 2 }
 $r.secureboot = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State').UEFISecureBootEnabled
 $r.tpm   = Get-CimInstance -Namespace root\cimv2\security\microsofttpm -ClassName Win32_Tpm | Select-Object IsEnabled_InitialValue,IsActivated_InitialValue,SpecVersion
 $r.fastboot = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power').HiberbootEnabled
@@ -175,7 +177,8 @@ def scan() -> ModuleResult:
         kind = DDR_TYPES.get(sticks[0].get("SMBIOSMemoryType"), "")
         speeds = [x.get("ConfiguredClockSpeed") or x.get("Speed") or 0 for x in sticks]
         s["Модули RAM"] = ", ".join(
-            f"{human_size(int(x.get('Capacity') or 0))} {kind} {sp} МГц" for x, sp in zip(sticks, speeds))
+            " ".join(filter(None, [human_size(int(x.get("Capacity") or 0)), kind, f"{sp} МГц" if sp else ""]))
+            for x, sp in zip(sticks, speeds))
         if kind in JEDEC_DEFAULTS and speeds and max(speeds) in JEDEC_DEFAULTS[kind]:
             res.add("Железо", f"Память {kind} работает на базовой частоте {max(speeds)} МГц", severity="medium",
                     detail="Большинство модулей рассчитаны на большую частоту через профиль XMP/EXPO.",

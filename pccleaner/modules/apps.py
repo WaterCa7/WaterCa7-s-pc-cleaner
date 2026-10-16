@@ -170,13 +170,18 @@ def leftover_dirs(installed: list[dict]) -> list[dict]:
     """Папки в AppData/Program Files, которым не соответствует ни одна установленная программа."""
     if not IS_WINDOWS:
         return []
-    names = " ".join((a["name"] + " " + a["publisher"]).lower() for a in installed)
+    names = " ".join((a["name"] + " " + a["publisher"] + " " + a["location"]).lower() for a in installed)
     ignore = {"microsoft", "windows", "packages", "temp", "programs", "common files",
               "windowsapps", "internet explorer", "windows defender", "windows nt",
               "modifiableswindowsapps", "crashdumps", "d3dscache", "connecteddevicesplatform",
               "comms", "publishers", "virtualstore", "history", "uninstall information",
               "reference assemblies", "msbuild", "dotnet", "package cache", "nvidia corporation",
-              "intel", "amd", "google", "mozilla", "nvidia", "squirreltemp", "fontcache"}
+              "intel", "amd", "google", "mozilla", "nvidia", "squirreltemp", "fontcache",
+              "windowspowershell", "wsl", "powershell", "microsoft.net", "windows kits",
+              "windows sidebar", "windows mail", "windows media player", "windows photo viewer",
+              "windows portable devices", "windows security", "microsoft update health tools",
+              "application verifier", "iis", "iis express", "msecache", "dell", "hp", "lenovo",
+              "asus", "msi", "realtek", "packagemanagement", "github", "pip", "programs"}
     roots = [os.environ.get(v, "") for v in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA", "APPDATA")]
     out = []
     for r in filter(None, roots):
@@ -185,7 +190,7 @@ def leftover_dirs(installed: list[dict]) -> list[dict]:
             continue
         for d in root.iterdir():
             n = d.name.lower()
-            if not d.is_dir() or n in ignore or n.startswith((".", "{")):
+            if not d.is_dir() or n in ignore or n.startswith((".", "{", "microsoft", "windows")):
                 continue
             token = re.split(r"[\s_\-.]+", n)[0]
             if len(token) >= 3 and token not in names:

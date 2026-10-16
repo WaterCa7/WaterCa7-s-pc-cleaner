@@ -16,7 +16,10 @@ WINDOWS_SYSTEM_PROCS = {
     "svchost.exe", "csrss.exe", "lsass.exe", "winlogon.exe", "services.exe",
     "smss.exe", "wininit.exe", "explorer.exe", "taskhostw.exe", "dwm.exe",
     "spoolsv.exe", "conhost.exe", "rundll32.exe", "lsm.exe", "ctfmon.exe",
+    "sihost.exe", "lsaiso.exe", "fontdrvhost.exe", "dllhost.exe", "taskhost.exe",
 }
+# Процессы, которые не нужно проверять вовсе (псевдопроцессы ядра).
+IGNORED_PROCS = {"system idle process", "idle", "system", "registry", "memory compression", "secure system"}
 WINDOWS_SYSTEM_DIRS = ("\\windows\\system32\\", "\\windows\\syswow64\\", "\\windows\\")
 
 # Каталоги, откуда легальный софт обычно не запускается постоянно.
@@ -80,8 +83,12 @@ def suspicion_reasons(name: str, exe: str, cpu: float = 0.0) -> list[str]:
         if not any(d in lexe for d in WINDOWS_SYSTEM_DIRS):
             reasons.append(f"системное имя «{name}», но запущен не из Windows: {exe}")
 
-    for target in LOOKALIKE_TARGETS:
-        if stem != target and 0 < _levenshtein(stem, target) <= 2 and len(stem) >= 5:
+    if lname in IGNORED_PROCS:
+        return reasons
+    in_windir = IS_WINDOWS and any(d in lexe for d in WINDOWS_SYSTEM_DIRS)
+    known = lname in WINDOWS_SYSTEM_PROCS or stem in LOOKALIKE_TARGETS
+    for target in LOOKALIKE_TARGETS if not (known or in_windir) else ():
+        if 0 < _levenshtein(stem, target) <= 2 and len(stem) >= 5:
             reasons.append(f"имя похоже на системный процесс «{target}» (подделка?)")
             break
 
@@ -95,7 +102,8 @@ def suspicion_reasons(name: str, exe: str, cpu: float = 0.0) -> list[str]:
     if len(parts) >= 3 and parts[-1] in EXEC_EXTS and parts[-2] in DOC_EXTS:
         reasons.append("двойное расширение (маскировка под документ)")
 
-    if len(stem) >= 12 and re.fullmatch(r"[a-z0-9]+", stem) and _entropy(stem) > 3.6:
+    if (len(stem) >= 10 and re.fullmatch(r"[a-z0-9]+", stem) and re.search(r"\d.*\d", stem)
+            and not re.search(r"[aeiou]{2}", stem) and _entropy(stem) > 3.2):
         reasons.append("случайное на вид имя файла")
 
     for key, label in KNOWN_RISKY.items():
@@ -154,6 +162,8 @@ def scan(sample_seconds: float = 1.0, top: int = 10) -> ModuleResult:
         by_name.setdefault(r["name"], []).append(r)
 
     for r in rows:
+        if r["pid"] == 0:
+            continue
         reasons = suspicion_reasons(r["name"], r["exe"], r["cpu"])
         if reasons:
             sev = "high" if len(reasons) >= 2 or "подделка" in " ".join(reasons) else "medium"

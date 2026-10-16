@@ -31,9 +31,15 @@ def test_suspicion_reasons_flags(name, exe, needle):
     assert any(needle in r for r in processes.suspicion_reasons(name, exe))
 
 
-@pytest.mark.parametrize("name", ["svchost.exe", "chrome.exe", "python3", "explorer.exe", "code"])
+@pytest.mark.parametrize("name", ["svchost.exe", "chrome.exe", "python3", "explorer.exe", "code",
+                                  "sihost.exe", "csrss.exe", "WindowsAzureGuestAgent.exe",
+                                  "ServiceFabricLocalClusterManager.exe", "msedgewebview2.exe"])
 def test_suspicion_reasons_clean(name):
     assert processes.suspicion_reasons(name, "") == []
+
+
+def test_idle_process_not_flagged():
+    assert processes.suspicion_reasons("System Idle Process", "", cpu=99) == []
 
 
 def test_high_cpu_flag():
