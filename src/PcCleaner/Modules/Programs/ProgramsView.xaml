@@ -6,8 +6,899 @@
              xmlns:local="clr-namespace:PcCleaner.Modules.Programs"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:ProgramsViewModel}"
-             d:DesignWidth="1000" d:DesignHeight="700">
-    <Border Style="{StaticResource Card}" VerticalAlignment="Top">
-        <TextBlock Style="{StaticResource Muted}" Text="Раздел в разработке" />
-    </Border>
+             d:DesignWidth="1000" d:DesignHeight="700"
+             SizeChanged="View_SizeChanged">
+
+    <UserControl.Resources>
+        <!-- Filter "chip" -->
+        <Style x:Key="FilterChip" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource LineBrush}"
+                                BorderThickness="1" CornerRadius="15" Padding="12,5">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource MutedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Colored status badge (full text) -->
+        <DataTemplate x:Key="BadgeTemplate" DataType="{x:Type local:ProgramBadge}">
+            <Border x:Name="Bd" Style="{StaticResource Badge}" Margin="0,0,6,6" ToolTip="{Binding ToolTip}">
+                <TextBlock x:Name="Tx" Text="{Binding Text}" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Danger">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource DangerBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Warning">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Info">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource InfoBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Success">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Neutral">
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource MutedBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Compact badge for grid rows -->
+        <DataTemplate x:Key="ShortBadgeTemplate" DataType="{x:Type local:ProgramBadge}">
+            <Border x:Name="Bd" Style="{StaticResource Badge}" ToolTip="{Binding ToolTip}" Padding="7,1">
+                <TextBlock x:Name="Tx" Text="{Binding ShortText}" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Danger">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource DangerBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Warning">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Info">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource InfoBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Success">
+                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Neutral">
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource MutedBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <Style x:Key="TrimmedCell" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="MutedCell" TargetType="TextBlock" BasedOn="{StaticResource TrimmedCell}">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        </Style>
+        <Style x:Key="RightCell" TargetType="TextBlock" BasedOn="{StaticResource TrimmedCell}">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="Margin" Value="0,0,12,7" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+        <Style x:Key="FieldValue" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,0,0,7" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+        <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="SmallGhost" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="0,0,4,4" />
+            <Setter Property="Padding" Value="6,5" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ===================== Summary cards ===================== -->
+        <UniformGrid Rows="1" Columns="4">
+            <!-- Total -->
+            <Border Style="{StaticResource Card}" Padding="14,12" Margin="0,0,10,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="CardIcon0" Width="38" Height="38" CornerRadius="19" Margin="0,0,12,0" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Top">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE71D;" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource Muted}" Text="Всего программ" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                        <TextBlock Style="{StaticResource BigNumber}" FontSize="24" Text="{Binding TotalCountText}" />
+                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="{Binding TotalSizeText}" TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap" ToolTip="Сумма размеров по данным установщиков и размеров папок программ" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- PUPs -->
+            <Border Style="{StaticResource Card}" Padding="14,12" Margin="0,0,10,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="CardIcon1" Width="38" Height="38" CornerRadius="19" Margin="0,0,12,0" VerticalAlignment="Top">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasPups}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="&#xE7BA;" HorizontalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasPups}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource Muted}" Text="Нежелательных" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                   ToolTip="Рекламные программы, браузеры «в нагрузку», навязчивые «оптимизаторы»" />
+                        <TextBlock Style="{StaticResource BigNumber}" FontSize="24" Text="{Binding PupCountText}" />
+                        <Grid>
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="{Binding PupHint}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                       Visibility="{Binding PupCount, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                            <Button Style="{StaticResource LinkButton}" Content="Показать" FontSize="12" HorizontalAlignment="Left"
+                                    Command="{Binding ShowFilterCommand}" CommandParameter="Unwanted"
+                                    Visibility="{Binding PupCount, Converter={StaticResource HasValueToVis}}" />
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Broken -->
+            <Border Style="{StaticResource Card}" Padding="14,12" Margin="0,0,10,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="CardIcon2" Width="38" Height="38" CornerRadius="19" Margin="0,0,12,0" VerticalAlignment="Top">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasBroken}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="&#xE9F9;" HorizontalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasBroken}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource Muted}" Text="Битых записей" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                   ToolTip="Программа уже удалена, а строка в списке «Установленные приложения» осталась" />
+                        <TextBlock Style="{StaticResource BigNumber}" FontSize="24" Text="{Binding BrokenCountText}" />
+                        <Grid>
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="список в порядке" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                       Visibility="{Binding BrokenCount, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding BrokenCount, Converter={StaticResource HasValueToVis}}">
+                                <Button Style="{StaticResource LinkButton}" Content="Показать" FontSize="12"
+                                        Command="{Binding ShowFilterCommand}" CommandParameter="Broken" />
+                                <TextBlock Text="·" Foreground="{StaticResource MutedBrush}" Margin="6,0" FontSize="12" VerticalAlignment="Center" />
+                                <Button Style="{StaticResource LinkButton}" Content="Очистить" FontSize="12" Command="{Binding CleanBrokenCommand}"
+                                        ToolTip="Убрать все битые записи из списка (с резервной копией реестра)" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Preinstalled Store apps -->
+            <Border Style="{StaticResource Card}" Padding="14,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="CardIcon3" Width="38" Height="38" CornerRadius="19" Margin="0,0,12,0" Background="{StaticResource InfoSoftBrush}" VerticalAlignment="Top">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE719;" Foreground="{StaticResource InfoBrush}" HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource Muted}" Text="Предустановленных" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                   ToolTip="Приложения, которые поставляются с Windows или ноутбуком и которые можно безопасно удалить" />
+                        <TextBlock Style="{StaticResource BigNumber}" FontSize="24" Text="{Binding BloatCountText}" />
+                        <Grid>
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="{Binding BloatHint}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                       Visibility="{Binding BloatCount, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding BloatCount, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="можно удалить ·" TextWrapping="NoWrap" VerticalAlignment="Center" />
+                                <Button Style="{StaticResource LinkButton}" Content="Показать" FontSize="12" Margin="6,0,0,0"
+                                        Command="{Binding ShowRemovableAppsCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </UniformGrid>
+
+        <!-- ===================== Tabs ===================== -->
+        <TabControl Grid.Row="1" Margin="0,14,0,0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+
+            <!-- ======== Classic programs ======== -->
+            <TabItem Header="{Binding ProgramsTabHeader}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar: search, filters, refresh -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="230" Margin="0,0,10,6" VerticalAlignment="Top">
+                            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,6,8,6"
+                                     ToolTip="Поиск по названию, издателю, версии или папке" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                                       Margin="10,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                            <TextBlock Text="Поиск программ" Foreground="{StaticResource MutedBrush}" Margin="31,0,0,0" VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                        </Grid>
+                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Filters}" VerticalAlignment="Top" Focusable="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <RadioButton Style="{StaticResource FilterChip}" GroupName="ProgramsFilter"
+                                                 IsChecked="{Binding IsSelected, Mode=TwoWay}" ToolTip="{Binding ToolTip}">
+                                        <TextBlock Text="{Binding Label}" FontSize="12.5" />
+                                    </RadioButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Grid.Column="2" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="6,0,0,6" Padding="12,6"
+                                ToolTip="Заново прочитать список установленных программ">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" />
+                                <TextBlock Text="Обновить" Margin="7,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <Border Grid.Row="1" Style="{StaticResource InnerCard}" Background="{StaticResource WarningSoftBrush}" Margin="0,0,0,10" Padding="12,8"
+                            Visibility="{Binding HasUnreadableEntries, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Text="{Binding UnreadableEntriesText}" />
+                    </Border>
+
+                    <!-- Grid + details -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="380" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="0.5*" MinWidth="250" MaxWidth="340" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource Card}" Padding="4,4,4,4">
+                            <Grid>
+                                <DataGrid x:Name="ProgramsGrid" ItemsSource="{Binding ProgramsView}"
+                                          SelectedItem="{Binding SelectedProgram, Mode=TwoWay}"
+                                          SelectionMode="Single" RowHeight="38"
+                                          PreviewMouseRightButtonDown="Grid_PreviewMouseRightButtonDown"
+                                          SizeChanged="ProgramsGrid_SizeChanged"
+                                          SelectionChanged="Grid_SelectionChanged">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Удалить программу…" Command="{Binding UninstallCommand}"
+                                                      Visibility="{Binding SelectedProgram.CanUninstall, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                            <MenuItem Header="Тихое удаление…" Command="{Binding QuietUninstallCommand}"
+                                                      Visibility="{Binding SelectedProgram.CanQuietUninstall, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                            <MenuItem Header="Убрать запись из списка…" Command="{Binding DeleteEntryCommand}"
+                                                      Visibility="{Binding SelectedProgram.IsBroken, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                            <Separator />
+                                            <MenuItem Header="Открыть папку установки" Command="{Binding OpenFolderCommand}" />
+                                            <MenuItem Header="Найти в интернете" Command="{Binding SearchWebCommand}" />
+                                            <MenuItem Header="Проверить на VirusTotal" Command="{Binding VirusTotalCommand}" />
+                                            <MenuItem Header="Скопировать название" Command="{Binding CopyNameCommand}" />
+                                            <Separator />
+                                            <MenuItem Header="{Binding TrustButtonText}" Command="{Binding ToggleTrustCommand}" />
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Программа" Width="2*" MinWidth="150" SortMemberPath="DisplayName" CanUserSort="True">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="22" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Image Source="{Binding Icon}" Width="20" Height="20" RenderOptions.BitmapScalingMode="HighQuality"
+                                                               Visibility="{Binding HasIcon, Converter={StaticResource BoolToVis}}" />
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xECAA;" FontSize="16" Foreground="{StaticResource MutedBrush}"
+                                                                   HorizontalAlignment="Center"
+                                                                   Visibility="{Binding HasIcon, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Margin="9,0,0,0" Style="{StaticResource TrimmedCell}"
+                                                                   ToolTip="{Binding DisplayName}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn x:Name="PublisherColumn" Header="Издатель" Width="1.2*" MinWidth="90"
+                                                            Binding="{Binding PublisherText}" SortMemberPath="Publisher"
+                                                            ElementStyle="{StaticResource MutedCell}" />
+                                        <DataGridTemplateColumn Header="Статус" Width="130" MinWidth="130" SortMemberPath="PrimaryBadge.ShortText" CanUserSort="True">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Grid HorizontalAlignment="Left" Visibility="{Binding PrimaryBadge, Converter={StaticResource HasValueToVis}}">
+                                                        <ContentPresenter Content="{Binding PrimaryBadge}" ContentTemplate="{StaticResource ShortBadgeTemplate}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Размер" Width="80" MinWidth="80" Binding="{Binding SizeText}" SortMemberPath="SizeBytes"
+                                                            ElementStyle="{StaticResource RightCell}" />
+                                        <DataGridTextColumn x:Name="DateColumn" Header="Установлена" Width="96" MinWidth="96" Binding="{Binding DateText}"
+                                                            SortMemberPath="InstallDate" ElementStyle="{StaticResource MutedCell}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <!-- Empty state -->
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="380"
+                                            Visibility="{Binding IsProgramsEmpty, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding ProgramsEmptyGlyph}" FontSize="30" HorizontalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ProgramsEmptyIsGood}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Style="{StaticResource H3}" Text="{Binding ProgramsEmptyTitle}" Margin="0,10,0,4"
+                                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Text="{Binding ProgramsEmptyText}" TextAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Details panel -->
+                        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0">
+                            <Grid>
+                                <!-- Nothing selected -->
+                                <StackPanel VerticalAlignment="Center" Margin="22"
+                                            Visibility="{Binding HasSelectedProgram, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE71D;" FontSize="30" Foreground="{StaticResource MutedBrush}"
+                                               HorizontalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="Выберите программу" Margin="0,10,0,4" HorizontalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
+                                               Text="Здесь появятся подробности: что это за программа, безопасно ли её удалять и что с ней можно сделать." />
+                                    <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" Margin="0,12,0,0" FontSize="11.5"
+                                               Text="Программы удаляются только их собственным деинсталлятором — так же, как через «Параметры Windows»." />
+                                </StackPanel>
+
+                                <Grid x:Name="ProgramDetailsGrid" Visibility="{Binding HasSelectedProgram, Converter={StaticResource BoolToVis}}">
+                                    <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="ProgramDetailsStack" Margin="16,16,16,8">
+                                            <!-- Header -->
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="44" Height="44" CornerRadius="10" Background="{StaticResource Surface2Brush}" VerticalAlignment="Top">
+                                                    <Grid>
+                                                        <Image Source="{Binding SelectedProgram.Icon}" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality"
+                                                               Visibility="{Binding SelectedProgram.HasIcon, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xECAA;" FontSize="22" Foreground="{StaticResource MutedBrush}"
+                                                                   HorizontalAlignment="Center"
+                                                                   Visibility="{Binding SelectedProgram.HasIcon, Converter={StaticResource BoolToVis}, ConverterParameter=Invert, FallbackValue=Collapsed}" />
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource H3}" FontSize="15" Text="{Binding SelectedProgram.DisplayName}" TextWrapping="Wrap" />
+                                                    <TextBlock Style="{StaticResource Muted}" Text="{Binding SelectedProgram.PublisherText}" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <ItemsControl ItemsSource="{Binding SelectedProgram.Badges}" ItemTemplate="{StaticResource BadgeTemplate}"
+                                                          Margin="0,12,0,0" Focusable="False">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                            </ItemsControl>
+
+                                            <!-- Explanations -->
+                                            <Border Style="{StaticResource InnerCard}" Background="{StaticResource DangerSoftBrush}" Margin="0,6,0,0"
+                                                    Visibility="{Binding SelectedProgram.IsPup, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Похоже на нежелательную программу" FontWeight="SemiBold" Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Margin="0,4,0,0"
+                                                               Text="{Binding SelectedProgram.PupReason}" />
+                                                    <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0"
+                                                               Text="Если вы не ставили её сознательно — удалите. Если она нужна, нажмите «Доверять»." />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Style="{StaticResource InnerCard}" Background="{StaticResource WarningSoftBrush}" Margin="0,6,0,0"
+                                                    Visibility="{Binding SelectedProgram.IsBroken, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Программа уже удалена" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}" />
+                                                    <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Margin="0,4,0,0"
+                                                               Text="Нет ни её деинсталлятора, ни папки установки — в списке осталась только «битая» запись. Её можно спокойно убрать." />
+                                                    <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,6,0,0"
+                                                               Visibility="{Binding NeedsAdminForEntry, Converter={StaticResource BoolToVis}}"
+                                                               Text="Запись относится ко всем пользователям — для её удаления понадобятся права администратора." />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Style="{StaticResource InnerCard}" Background="{StaticResource WarningSoftBrush}" Margin="0,6,0,0"
+                                                    Visibility="{Binding SelectedProgram.HasCautionHint, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Text="{Binding SelectedProgram.CautionHint}" />
+                                            </Border>
+                                            <Border Style="{StaticResource InnerCard}" Background="{StaticResource InfoSoftBrush}" Margin="0,6,0,0"
+                                                    Visibility="{Binding SelectedProgram.IsRecent, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}"
+                                                           Text="Установлена или обновлена недавно. Не помните, как она появилась? Такие программы часто ставятся «в нагрузку» к другим установщикам — проверьте, нужна ли она." />
+                                            </Border>
+                                            <Border Style="{StaticResource InnerCard}" Background="{StaticResource AccentSoftBrush}" Margin="0,6,0,0"
+                                                    Visibility="{Binding SelectedProgram.IsRuntime, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}"
+                                                           Text="Это библиотека Microsoft, которую используют другие программы и игры. Удалять её не нужно, даже если версий несколько: каждая нужна своим программам." />
+                                            </Border>
+
+                                            <!-- Fields -->
+                                            <Grid Margin="0,14,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Style="{StaticResource FieldLabel}" Text="Версия" />
+                                                <TextBlock Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedProgram.VersionText}" />
+                                                <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Размер" />
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedProgram.SizeDetailsText}" />
+                                                <TextBlock Grid.Row="2" Style="{StaticResource FieldLabel}" Text="Установлена" />
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedProgram.DateDetailsText}" />
+                                                <TextBlock Grid.Row="3" Style="{StaticResource FieldLabel}" Text="Для кого" />
+                                                <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedProgram.ScopeText}" />
+                                                <TextBlock Grid.Row="4" Style="{StaticResource FieldLabel}" Text="Удаление" />
+                                                <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedProgram.InstallerTypeText}"
+                                                           ToolTip="{Binding SelectedProgram.UninstallCommandText}" />
+                                                <TextBlock Grid.Row="5" Style="{StaticResource FieldLabel}" Text="Папка" />
+                                                <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedProgram.InstallLocationText}"
+                                                           ToolTip="{Binding SelectedProgram.InstallLocationText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Row="6" Style="{StaticResource FieldLabel}" Text="Реестр" />
+                                                <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedProgram.RegistryKeyPath}"
+                                                           ToolTip="{Binding SelectedProgram.RegistryKeyPath}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                           Foreground="{StaticResource MutedBrush}" FontSize="11.5" />
+                                            </Grid>
+
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                    <!-- Actions (always visible) -->
+                                    <Border x:Name="ProgramActions" Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
+                                        <StackPanel>
+                                            <Button Style="{StaticResource DangerButton}" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                                                    Command="{Binding UninstallCommand}"
+                                                    Visibility="{Binding SelectedProgram.CanUninstall, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
+                                                    ToolTip="Запустить собственный деинсталлятор программы">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
+                                                    <TextBlock Text="Удалить программу" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource ActionButton}" Command="{Binding QuietUninstallCommand}"
+                                                    Visibility="{Binding SelectedProgram.CanQuietUninstall, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
+                                                    ToolTip="Удаление без окон и вопросов — команда, которую оставил установщик программы">
+                                                <TextBlock Text="Тихое удаление" />
+                                            </Button>
+                                            <Button Style="{StaticResource DangerButton}" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                                                    Command="{Binding DeleteEntryCommand}"
+                                                    Visibility="{Binding SelectedProgram.IsBroken, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
+                                                    ToolTip="Удалить только строку в реестре (будет сохранена резервная копия)">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE894;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
+                                                    <TextBlock Text="Убрать запись из списка" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <UniformGrid Columns="2" Margin="-4,0,-4,0">
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding OpenFolderCommand}" ToolTip="Открыть папку установки в проводнике">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" />
+                                                        <TextBlock Grid.Column="1" Text="Папка" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding SearchWebCommand}" ToolTip="Поискать в интернете, что это за программа и нужна ли она">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" />
+                                                        <TextBlock Grid.Column="1" Text="В интернете" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding ToggleTrustCommand}" ToolTip="Доверенные программы не помечаются как нежелательные">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding TrustButtonText}" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding VirusTotalCommand}" ToolTip="Открыть отчёт VirusTotal по хешу файла программы (сам файл не загружается)">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" />
+                                                        <TextBlock Grid.Column="1" Text="VirusTotal" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Button>
+                                            </UniformGrid>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ======== Microsoft Store apps ======== -->
+            <TabItem Header="{Binding StoreTabHeader}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="230" Margin="0,0,10,6" VerticalAlignment="Top">
+                            <TextBox Text="{Binding StoreSearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,6,8,6"
+                                     ToolTip="Поиск по названию или издателю" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                                       Margin="10,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                            <TextBlock Text="Поиск приложений" Foreground="{StaticResource MutedBrush}" Margin="31,0,0,0" VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Visibility="{Binding StoreSearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                        </Grid>
+                        <ItemsControl Grid.Column="1" ItemsSource="{Binding StoreFilters}" VerticalAlignment="Top" Focusable="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <RadioButton Style="{StaticResource FilterChip}" GroupName="StoreFilter"
+                                                 IsChecked="{Binding IsSelected, Mode=TwoWay}" ToolTip="{Binding ToolTip}">
+                                        <TextBlock Text="{Binding Label}" FontSize="12.5" />
+                                    </RadioButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Grid.Column="2" Style="{StaticResource DangerButton}" Command="{Binding RemoveAllBloatCommand}" VerticalAlignment="Top"
+                                Margin="6,0,0,6" Padding="12,6"
+                                Visibility="{Binding BloatCount, Converter={StaticResource HasValueToVis}}"
+                                ToolTip="Удалить все предустановленные приложения, которые можно удалить (с подтверждением)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
+                                <TextBlock Text="Удалить лишние" Margin="7,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="3" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="6,0,0,6" Padding="12,6"
+                                ToolTip="Заново прочитать список приложений">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" />
+                                <TextBlock Text="Обновить" Margin="7,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <Border Grid.Row="1" Style="{StaticResource InnerCard}" Background="{StaticResource WarningSoftBrush}" Margin="0,0,0,10"
+                            Visibility="{Binding HasStoreError, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Text="{Binding StoreError}" />
+                    </Border>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="380" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="0.5*" MinWidth="250" MaxWidth="340" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource Card}" Padding="4">
+                            <Grid>
+                                <DataGrid x:Name="StoreGrid" ItemsSource="{Binding StoreAppsView}"
+                                          SelectedItem="{Binding SelectedStoreApp, Mode=TwoWay}"
+                                          SelectionMode="Single" RowHeight="38"
+                                          PreviewMouseRightButtonDown="Grid_PreviewMouseRightButtonDown"
+                                          SizeChanged="StoreGrid_SizeChanged"
+                                          SelectionChanged="Grid_SelectionChanged">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Удалить приложение…" Command="{Binding RemoveStoreAppCommand}"
+                                                      Visibility="{Binding SelectedStoreApp.CanRemove, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                            <Separator Visibility="{Binding SelectedStoreApp.CanRemove, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                            <MenuItem Header="Открыть в Microsoft Store" Command="{Binding OpenStorePageCommand}" />
+                                            <MenuItem Header="Найти в интернете" Command="{Binding StoreSearchWebCommand}" />
+                                            <MenuItem Header="Открыть папку приложения" Command="{Binding OpenStoreFolderCommand}" />
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Приложение" Width="2*" MinWidth="150" SortMemberPath="DisplayName" CanUserSort="True">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="22" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Image Source="{Binding Icon}" Width="20" Height="20" RenderOptions.BitmapScalingMode="HighQuality"
+                                                               Visibility="{Binding HasIcon, Converter={StaticResource BoolToVis}}" />
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE719;" FontSize="15" Foreground="{StaticResource MutedBrush}"
+                                                                   HorizontalAlignment="Center"
+                                                                   Visibility="{Binding HasIcon, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Margin="9,0,0,0" Style="{StaticResource TrimmedCell}"
+                                                                   ToolTip="{Binding Name}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn x:Name="StorePublisherColumn" Header="Издатель" Width="1.2*" MinWidth="90"
+                                                            Binding="{Binding PublisherDisplay}" ElementStyle="{StaticResource MutedCell}" />
+                                        <DataGridTemplateColumn Header="Статус" Width="130" MinWidth="130" SortMemberPath="Kind" CanUserSort="True">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Grid HorizontalAlignment="Left" Visibility="{Binding Badge, Converter={StaticResource HasValueToVis}}">
+                                                        <ContentPresenter Content="{Binding Badge}" ContentTemplate="{StaticResource ShortBadgeTemplate}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Размер" Width="80" MinWidth="80" Binding="{Binding SizeText}" SortMemberPath="SizeBytes"
+                                                            ElementStyle="{StaticResource RightCell}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="380"
+                                            Visibility="{Binding IsStoreEmpty, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding StoreEmptyGlyph}" FontSize="30" HorizontalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding StoreEmptyIsGood}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Style="{StaticResource H3}" Text="{Binding StoreEmptyTitle}" Margin="0,10,0,4"
+                                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Text="{Binding StoreEmptyText}" TextAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Store app details -->
+                        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0">
+                            <Grid>
+                                <StackPanel VerticalAlignment="Center" Margin="22"
+                                            Visibility="{Binding HasSelectedStoreApp, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE719;" FontSize="30" Foreground="{StaticResource MutedBrush}"
+                                               HorizontalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="Выберите приложение" Margin="0,10,0,4" HorizontalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
+                                               Text="Приложения удаляются только для вашей учётной записи. Те, что установлены из Microsoft Store, можно в любой момент вернуть оттуда же." />
+                                </StackPanel>
+
+                                <Grid x:Name="StoreDetailsGrid" Visibility="{Binding HasSelectedStoreApp, Converter={StaticResource BoolToVis}}">
+                                    <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="StoreDetailsStack" Margin="16,16,16,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="44" Height="44" CornerRadius="10" Background="{StaticResource Surface2Brush}" VerticalAlignment="Top">
+                                                    <Grid>
+                                                        <Image Source="{Binding SelectedStoreApp.Icon}" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality"
+                                                               Visibility="{Binding SelectedStoreApp.HasIcon, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE719;" FontSize="20" Foreground="{StaticResource MutedBrush}"
+                                                                   HorizontalAlignment="Center"
+                                                                   Visibility="{Binding SelectedStoreApp.HasIcon, Converter={StaticResource BoolToVis}, ConverterParameter=Invert, FallbackValue=Collapsed}" />
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource H3}" FontSize="15" Text="{Binding SelectedStoreApp.DisplayName}" TextWrapping="Wrap" />
+                                                    <TextBlock Style="{StaticResource Muted}" Text="{Binding SelectedStoreApp.PublisherDisplay}" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid HorizontalAlignment="Left" Margin="0,12,0,0" Visibility="{Binding SelectedStoreApp.Badge, Converter={StaticResource HasValueToVis}}">
+                                                <ContentPresenter Content="{Binding SelectedStoreApp.Badge}" ContentTemplate="{StaticResource BadgeTemplate}" />
+                                            </Grid>
+
+                                            <Border Style="{StaticResource InnerCard}" Margin="0,6,0,0"
+                                                    Visibility="{Binding SelectedStoreApp.HasDescription, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Что это" FontWeight="SemiBold" FontSize="12.5" />
+                                                    <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Margin="0,4,0,0"
+                                                               Text="{Binding SelectedStoreApp.Description}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Style="{StaticResource InnerCard}" Margin="0,6,0,0"
+                                                    Visibility="{Binding SelectedStoreApp.IsProtected, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Почему не стоит удалять" FontWeight="SemiBold" FontSize="12.5" />
+                                                    <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Margin="0,4,0,0"
+                                                               Text="{Binding SelectedStoreApp.ProtectReason}" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Grid Margin="0,14,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Style="{StaticResource FieldLabel}" Text="Версия" />
+                                                <TextBlock Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedStoreApp.VersionText}" />
+                                                <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Размер" />
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedStoreApp.SizeText}" />
+                                                <TextBlock Grid.Row="2" Style="{StaticResource FieldLabel}" Text="Источник" />
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedStoreApp.SourceText}" />
+                                                <TextBlock Grid.Row="3" Style="{StaticResource FieldLabel}" Text="Пакет" />
+                                                <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedStoreApp.Name}"
+                                                           ToolTip="{Binding SelectedStoreApp.PackageFullName}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                           Foreground="{StaticResource MutedBrush}" FontSize="11.5" />
+                                                <TextBlock Grid.Row="4" Style="{StaticResource FieldLabel}" Text="Папка" />
+                                                <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource FieldValue}" Text="{Binding SelectedStoreApp.InstallLocation}"
+                                                           ToolTip="{Binding SelectedStoreApp.InstallLocation}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                           Foreground="{StaticResource MutedBrush}" FontSize="11.5" />
+                                            </Grid>
+
+
+                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,4,0,0"
+                                                       Visibility="{Binding SelectedStoreApp.CanRemove, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <Run Text="Удаление касается только вашей учётной записи." />
+                                                <Run Text="{Binding SelectedStoreApp.UndoText, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                    <Border x:Name="StoreActions" Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
+                                        <StackPanel>
+                                            <Button Style="{StaticResource DangerButton}" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                                                    Command="{Binding RemoveStoreAppCommand}"
+                                                    Visibility="{Binding SelectedStoreApp.CanRemove, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
+                                                    ToolTip="Удалить приложение для вашей учётной записи (вернуть можно из Microsoft Store)">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
+                                                    <TextBlock Text="Удалить приложение" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <UniformGrid Columns="2" Margin="-4,0,-4,0">
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding OpenStorePageCommand}" ToolTip="Открыть страницу приложения в Microsoft Store">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE719;" FontSize="13" />
+                                                        <TextBlock Grid.Column="1" Text="Магазин" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding StoreSearchWebCommand}" ToolTip="Поискать в интернете, что это за приложение">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" />
+                                                        <TextBlock Grid.Column="1" Text="В интернете" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding OpenStoreFolderCommand}" ToolTip="Открыть папку приложения в проводнике">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" />
+                                                        <TextBlock Grid.Column="1" Text="Папка" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Button>
+                                            </UniformGrid>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
 </UserControl>
