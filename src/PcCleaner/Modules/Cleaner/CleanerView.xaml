@@ -7,7 +7,530 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:CleanerViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700">
-    <Border Style="{StaticResource Card}" VerticalAlignment="Top">
-        <TextBlock Style="{StaticResource Muted}" Text="Раздел в разработке" />
-    </Border>
+
+    <UserControl.Resources>
+        <!-- Chevron that expands the details of a category row -->
+        <Style x:Key="ExpandToggle" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="ToolTip" Value="Подробнее: папки и самые большие файлы" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Width="30" Height="30" CornerRadius="6" Background="Transparent">
+                            <TextBlock x:Name="Glyph" Style="{StaticResource Icon}" FontSize="12" Text="&#xE70D;"
+                                       Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Glyph" Property="Text" Value="&#xE70E;" />
+                                <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                                <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="BadgeText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="BadgeIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Margin" Value="0,0,5,0" />
+        </Style>
+
+        <Style x:Key="SectionCaption" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+
+        <!-- Rows of the "largest files" list: no selection highlight, compact -->
+        <Style x:Key="FileItem" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="8,4">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SelectionBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== One category row ===== -->
+        <DataTemplate x:Key="CategoryTemplate" DataType="{x:Type local:CategoryItemViewModel}">
+            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0">
+                <StackPanel>
+                    <Grid Margin="16,10,10,10" MinHeight="40">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="30" />
+                            <ColumnDefinition Width="42" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SizeCol" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="FilesCol" />
+                            <ColumnDefinition Width="38" />
+                        </Grid.ColumnDefinitions>
+
+                        <CheckBox VerticalAlignment="Center" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                  AutomationProperties.Name="{Binding Name}"
+                                  Visibility="{Binding CanClean, Converter={StaticResource BoolToVis}}"
+                                  ToolTip="Отметьте, чтобы очистить эту категорию" />
+                        <Border Width="20" Height="20" VerticalAlignment="Center" HorizontalAlignment="Left" Background="Transparent"
+                                Visibility="{Binding NeedsAdmin, Converter={StaticResource BoolToVis}}"
+                                ToolTip="{Binding AdminTip}">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" FontSize="14"
+                                       Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" />
+                        </Border>
+
+                        <Border Grid.Column="1" Width="32" Height="32" CornerRadius="8" Background="{StaticResource Surface2Brush}"
+                                VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,1,0,0">
+                            <TextBlock Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="15"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
+                        </Border>
+
+                        <!-- Clicking the text area toggles the details -->
+                        <StackPanel Grid.Column="2" Background="Transparent" Cursor="Hand" Margin="0,0,12,0"
+                                    VerticalAlignment="Center">
+                            <StackPanel.InputBindings>
+                                <MouseBinding Gesture="LeftClick" Command="{Binding ToggleExpandCommand}" />
+                            </StackPanel.InputBindings>
+                            <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Hint}" ToolTipService.ShowDuration="20000" />
+                            <TextBlock Style="{StaticResource Muted}" Text="{Binding Description}" Margin="0,2,0,0" />
+                            <WrapPanel Margin="0,0,0,0">
+                                <Border Style="{StaticResource Badge}" Background="{StaticResource InfoSoftBrush}" Margin="0,6,6,0"
+                                        ToolTip="{Binding AdminTip}"
+                                        Visibility="{Binding ShowAdminBadge, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource BadgeIcon}" Text="&#xE72E;" Foreground="{StaticResource InfoBrush}" />
+                                        <TextBlock Style="{StaticResource BadgeText}" Text="{Binding AdminBadgeText}"
+                                                   Foreground="{StaticResource InfoBrush}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Badge}" Background="{StaticResource WarningSoftBrush}" Margin="0,6,6,0"
+                                        ToolTip="{Binding RunningTip}"
+                                        Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource BadgeIcon}" Text="&#xE7BA;" Foreground="{StaticResource WarningBrush}" />
+                                        <TextBlock Style="{StaticResource BadgeText}" Text="{Binding RunningText}"
+                                                   Foreground="{StaticResource WarningBrush}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Badge}" Background="{StaticResource WarningSoftBrush}" Margin="0,6,6,0"
+                                        ToolTip="{Binding Warning}"
+                                        Visibility="{Binding NotRecommended, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource BadgeIcon}" Text="&#xE946;" Foreground="{StaticResource WarningBrush}" />
+                                        <TextBlock Style="{StaticResource BadgeText}" Text="Не рекомендуется"
+                                                   Foreground="{StaticResource WarningBrush}" />
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="3" Text="{Binding SizeText}" MinWidth="80" TextAlignment="Right"
+                                   VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Margin="0,0,14,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSizeMuted}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                            <Setter Property="FontWeight" Value="Normal" />
+                                            <Setter Property="FontSize" Value="13" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Grid.Column="4" Text="{Binding FilesText}" MinWidth="96" MaxWidth="150" TextAlignment="Right"
+                                   VerticalAlignment="Center" Style="{StaticResource Muted}" TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding FilesText}" />
+                        <ToggleButton Grid.Column="5" Style="{StaticResource ExpandToggle}" HorizontalAlignment="Right"
+                                      AutomationProperties.Name="Подробнее"
+                                      IsChecked="{Binding IsExpanded, Mode=TwoWay}" />
+                    </Grid>
+
+                    <!-- ===== Details ===== -->
+                    <Border Style="{StaticResource InnerCard}" Margin="88,0,16,14" Padding="14,12"
+                            Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <Border Background="{StaticResource WarningSoftBrush}" CornerRadius="6" Padding="10,8" Margin="0,0,0,10"
+                                    Visibility="{Binding Warning, Converter={StaticResource HasValueToVis}}">
+                                <DockPanel>
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13" VerticalAlignment="Top"
+                                               Foreground="{StaticResource WarningBrush}" Margin="0,1,8,0" />
+                                    <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" FontSize="12.5" />
+                                </DockPanel>
+                            </Border>
+
+                            <TextBlock Style="{StaticResource Muted}" Text="{Binding DetailsNote}" Margin="0,0,0,10"
+                                       Visibility="{Binding DetailsNote, Converter={StaticResource HasValueToVis}}" />
+
+                            <StackPanel Visibility="{Binding HasFolders, Converter={StaticResource BoolToVis}}" Margin="0,0,0,10">
+                                <TextBlock Style="{StaticResource SectionCaption}" Text="Где лежат файлы" />
+                                <ItemsControl ItemsSource="{Binding VisibleFolders}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type local:FolderLinkViewModel}">
+                                            <DockPanel Margin="0,2">
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Открыть папку"
+                                                        Command="{Binding OpenCommand}" Margin="12,0,0,0" FontSize="12.5" />
+                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE8B7;" FontSize="12"
+                                                           Foreground="{StaticResource MutedBrush}" Margin="0,0,8,0" />
+                                                <TextBlock Text="{Binding Path}" FontSize="12.5" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Path}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Style="{StaticResource Muted}" FontSize="12" Text="{Binding SubfoldersText}" Margin="20,3,0,0"
+                                           Visibility="{Binding SubfoldersText, Converter={StaticResource HasValueToVis}}" />
+                                <TextBlock Style="{StaticResource Muted}" FontSize="12" Text="{Binding MoreFoldersText}" Margin="20,3,0,0"
+                                           Visibility="{Binding MoreFoldersText, Converter={StaticResource HasValueToVis}}" />
+                            </StackPanel>
+
+                            <Button Style="{StaticResource LinkButton}" Content="Открыть корзину" HorizontalAlignment="Left"
+                                    Command="{Binding OpenRecycleBinCommand}" Margin="0,0,0,8"
+                                    Visibility="{Binding IsRecycleBin, Converter={StaticResource BoolToVis}}" />
+
+                            <StackPanel Visibility="{Binding HasLargestFiles, Converter={StaticResource BoolToVis}}">
+                                <DockPanel Margin="0,0,0,2">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"
+                                               Text="Правый щелчок — действия с файлом" VerticalAlignment="Bottom" Margin="0,0,0,6" />
+                                    <TextBlock Style="{StaticResource SectionCaption}" Text="{Binding LargestCaption}" />
+                                </DockPanel>
+                                <ListBox ItemsSource="{Binding LargestFiles}" MaxHeight="290" ItemContainerStyle="{StaticResource FileItem}" Margin="-8,0,-4,0"
+                                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type local:LargeFileViewModel}">
+                                            <Grid Background="Transparent" ToolTip="{Binding ToolTipText}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Показать в Проводнике" Command="{Binding ShowInExplorerCommand}" />
+                                                        <MenuItem Header="Копировать путь" Command="{Binding CopyPathCommand}" />
+                                                        <Separator />
+                                                        <MenuItem Header="Не удалять этот файл (добавить в исключения)"
+                                                                  Command="{Binding ExcludeFileCommand}" />
+                                                        <MenuItem Header="Не удалять эту папку (добавить в исключения)"
+                                                                  Command="{Binding ExcludeFolderCommand}" />
+                                                    </ContextMenu>
+                                                </Grid.ContextMenu>
+                                                <StackPanel Margin="0,0,12,0">
+                                                    <TextBlock Text="{Binding FileName}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Folder}" FontSize="11.5" Foreground="{StaticResource MutedBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{Binding SizeText}" FontSize="12.5" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource Muted}" Text="{Binding DetailsEmptyText}"
+                                       Visibility="{Binding HasLargestFiles, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="0,0,8,4" Grid.IsSharedSizeScope="True">
+
+            <!-- ===== Summary ===== -->
+            <Border Style="{StaticResource Card}" Padding="20,18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Width="60" Height="60" CornerRadius="30" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="26" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="18,0,16,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Muted}" Text="Можно освободить" FontSize="13" />
+                        <TextBlock Style="{StaticResource BigNumber}" Text="{Binding TotalText}" Margin="0,0,0,2" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{Binding SummaryText}" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{Binding ScannedAtText}" FontSize="11.5" Margin="0,2,0,0"
+                                   Visibility="{Binding ScannedAtText, Converter={StaticResource HasValueToVis}}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- "Анализ" is the main action until something has been scanned, then "Очистить выбранное" is. -->
+                        <Button Style="{StaticResource AccentButton}" Command="{Binding AnalyzeCommand}" Padding="16,9"
+                                Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"
+                                ToolTip="Найти временные файлы, кэш и другой мусор (ничего не удаляется)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="14" Margin="0,0,8,0"
+                                           Foreground="{StaticResource AccentTextBrush}" />
+                                <TextBlock Text="Анализ" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding AnalyzeCommand}" Padding="16,9"
+                                Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Проверить ещё раз (ничего не удаляется)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="14" Margin="0,0,8,0" />
+                                <TextBlock Text="Анализ" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource AccentButton}" Command="{Binding CleanCommand}" Padding="16,9" Margin="10,0,0,0"
+                                Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Удалить файлы в отмеченных категориях (перед удалением появится подтверждение)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" Margin="0,0,8,0"
+                                           Foreground="{StaticResource AccentTextBrush}" />
+                                <TextBlock Text="Очистить выбранное" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding CleanCommand}" Padding="16,9" Margin="10,0,0,0"
+                                Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"
+                                ToolTip="Сначала выполните анализ">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" Margin="0,0,8,0" />
+                                <TextBlock Text="Очистить выбранное" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Not elevated: explain what an administrator would also be able to clean -->
+                    <Border Grid.Row="1" Grid.ColumnSpan="3" Margin="0,16,0,0" Style="{StaticResource InnerCard}" Padding="12,10"
+                            Visibility="{Binding ShowAdminHint, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="16" Foreground="{StaticResource InfoBrush}"
+                                       Margin="2,0,12,0" />
+                            <TextBlock Grid.Column="1" Text="{Binding AdminHintText}" TextWrapping="Wrap" FontSize="12.5"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Content="Перезапустить как администратор" Margin="12,0,0,0" Padding="12,6"
+                                    FontSize="12.5" Command="{Binding RestartAsAdminCommand}" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ===== Result of the last cleaning ===== -->
+            <Border Style="{StaticResource Card}" Margin="0,12,0,0" BorderBrush="{StaticResource AccentBrush}"
+                    Visibility="{Binding LastResult, Converter={StaticResource HasValueToVis}}">
+                <Grid DataContext="{Binding LastResult}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="40" Height="40" CornerRadius="20" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Top">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="18" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,8,0">
+                        <TextBlock Style="{StaticResource H3}" FontSize="16" Text="{Binding Headline}" TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{Binding Summary}" Margin="0,3,0,0" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{Binding Hint}" Margin="0,3,0,0" Foreground="{StaticResource WarningBrush}"
+                                   Visibility="{Binding Hint, Converter={StaticResource HasValueToVis}}" />
+                        <ItemsControl ItemsSource="{Binding Lines}" Margin="0,10,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type local:CleanResultLine}">
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock FontSize="12.5" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding Name, Mode=OneWay}" />
+                                            <Run Text="{Binding Note, Mode=OneWay, StringFormat='· {0}'}" Foreground="{StaticResource MutedBrush}" />
+                                        </TextBlock>
+                                        <TextBlock Grid.Column="1" Text="{Binding FreedText}" FontSize="12.5" FontWeight="SemiBold"
+                                                   Margin="12,0,0,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" VerticalAlignment="Top" ToolTip="Скрыть"
+                            AutomationProperties.Name="Скрыть результат"
+                            Command="{Binding DataContext.DismissResultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="12" Foreground="{StaticResource MutedBrush}" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ===== Toolbar ===== -->
+            <DockPanel Margin="0,14,0,8">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button Style="{StaticResource GhostButton}" Command="{Binding SelectRecommendedCommand}"
+                            ToolTip="Отметить безопасные категории, которые мы рекомендуем очищать">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE73A;" FontSize="13" Margin="0,0,7,0"
+                                       Foreground="{StaticResource AccentBrush}" />
+                            <TextBlock Text="Выбрать рекомендуемое" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Command="{Binding UnselectAllCommand}" Margin="4,0,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE739;" FontSize="13" Margin="0,0,7,0"
+                                       Foreground="{StaticResource MutedBrush}" />
+                            <TextBlock Text="Снять все" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <TextBlock Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" TextAlignment="Right"
+                           VerticalAlignment="Center" Margin="12,0,4,0"
+                           Text="Удаляются только временные файлы и кэш — документы и личные данные не затрагиваются"
+                           ToolTip="Удаляются только временные файлы и кэш — документы, пароли, история и cookie браузеров не затрагиваются. Файлы, занятые программами, и свежие временные файлы пропускаются." />
+            </DockPanel>
+
+            <!-- ===== Loading placeholder ===== -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                    Visibility="{Binding IsCatalogLoaded, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
+                    <TextBlock Style="{StaticResource Muted}" Text="Собираем список папок с временными файлами и кэшем…" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Groups of categories ===== -->
+            <ItemsControl ItemsSource="{Binding Groups}" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:CategoryGroupViewModel}">
+                        <Border Style="{StaticResource Card}" Padding="0" Margin="0,0,0,12">
+                            <StackPanel>
+                                <Grid Margin="16,14,20,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="18" VerticalAlignment="Top"
+                                               Foreground="{StaticResource AccentBrush}" Margin="2,1,14,0" />
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Style="{StaticResource H3}" FontSize="15" Text="{Binding Name}" />
+                                        <TextBlock Style="{StaticResource Muted}" Text="{Binding Note}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding TotalText}" FontSize="15" FontWeight="SemiBold"
+                                               VerticalAlignment="Top" Margin="16,0,0,0" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CategoryTemplate}" Focusable="False" />
+                                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="16,12"
+                                        Visibility="{Binding HasItems, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                                    <TextBlock Style="{StaticResource Muted}" Text="{Binding EmptyText}" />
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- ===== Deep cleaning ===== -->
+            <Border Style="{StaticResource Card}" Padding="16,14,16,16">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE90F;" FontSize="18" VerticalAlignment="Top"
+                                   Foreground="{StaticResource AccentBrush}" Margin="2,1,14,0" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Style="{StaticResource H3}" FontSize="15" Text="Глубокая очистка" />
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
+                                       Text="Встроенные инструменты Windows: работают дольше обычной очистки, но иногда освобождают несколько гигабайт." />
+                        </StackPanel>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource InnerCard}" Padding="14">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Command="{Binding RunDismCommand}" Padding="14,7"
+                                            ToolTip="Перед запуском появится подтверждение со всеми подробностями">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE768;" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Запустить очистку" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource H3}" Text="Очистка компонентов Windows (DISM)" TextWrapping="Wrap" />
+                                    <Border Style="{StaticResource Badge}" Background="{StaticResource InfoSoftBrush}" Margin="0,6,0,0"
+                                            Visibility="{Binding IsElevated, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource BadgeIcon}" Text="&#xE72E;" Foreground="{StaticResource InfoBrush}" />
+                                            <TextBlock Style="{StaticResource BadgeText}" Text="Нужны права администратора"
+                                                       Foreground="{StaticResource InfoBrush}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0"
+                                               Text="Удаляет старые версии системных файлов, которые остались после обновлений Windows. Это безопасно, но занимает 5–30 минут, а уже установленные обновления после этого нельзя будет откатить." />
+                                    <TextBlock Text="{Binding DismStatus}" TextWrapping="Wrap" FontSize="12.5" Margin="0,8,0,0"
+                                               Foreground="{StaticResource AccentBrush}"
+                                               Visibility="{Binding DismStatus, Converter={StaticResource HasValueToVis}}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource InnerCard}" Padding="14">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Command="{Binding LaunchDiskCleanupCommand}" Padding="14,7"
+                                            ToolTip="Откроется окно «Очистка диска» Windows — в нём вы сами выберете, что удалить">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Открыть" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource H3}" Text="Мастер очистки диска Windows" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0"
+                                               Text="Открывает встроенную утилиту «Очистка диска». Кнопка «Очистить системные файлы» в ней удаляет, например, остатки предыдущей версии Windows после большого обновления." />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>
