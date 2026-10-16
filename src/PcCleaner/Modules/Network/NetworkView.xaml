@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="PcCleaner.Modules.Network.NetworkView"
+<UserControl x:Class="PcCleaner.Modules.Network.NetworkView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -7,7 +7,1171 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:NetworkViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700">
-    <Border Style="{StaticResource Card}" VerticalAlignment="Top">
-        <TextBlock Style="{StaticResource Muted}" Text="Раздел в разработке" />
-    </Border>
+    <UserControl.Resources>
+        <local:NetToneBrushConverter x:Key="ToneBrush" Mode="Brush" />
+        <local:NetToneBrushConverter x:Key="ToneSoft" Mode="Soft" />
+        <local:NetToneBrushConverter x:Key="ToneText" Mode="Text" />
+        <local:NetToneBrushConverter x:Key="ToneAccent" Mode="Accent" />
+        <local:NetToneBrushConverter x:Key="ToneAccentSoft" Mode="AccentSoft" />
+        <local:NetToneGlyphConverter x:Key="ToneGlyph" />
+        <local:PluralConverter x:Key="Plural" />
+
+        <!-- Summary cards -->
+        <Style x:Key="CardLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="CardNumber" TargetType="TextBlock" BasedOn="{StaticResource BigNumber}">
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="Margin" Value="0,1,0,0" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="CardHint" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="CardIcon" TargetType="Border">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+
+        <!-- Section header icon -->
+        <Style x:Key="SectionIcon" TargetType="Border">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="SectionGlyph" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="BadgeText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+        <Style x:Key="FieldValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,1,0,0" />
+        </Style>
+
+        <!-- Tinted hint strip: set Background/BorderBrush -->
+        <Style x:Key="Strip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Margin" Value="0,10,0,0" />
+            <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+        </Style>
+
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="CellMuted" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+        </Style>
+
+        <Style x:Key="RowIconButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        </Style>
+        <Style x:Key="RowIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+        </Style>
+
+        <Style x:Key="ChevronButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Width="18" Height="18">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface3Brush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MenuIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        </Style>
+
+        <Style x:Key="NetGrid" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+            <Setter Property="MaxHeight" Value="440" />
+            <Setter Property="SelectionMode" Value="Single" />
+            <Setter Property="CanUserReorderColumns" Value="False" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="VirtualizingPanel.IsVirtualizingWhenGrouping" Value="True" />
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+            <EventSetter Event="PreviewMouseWheel" Handler="Grid_PreviewMouseWheel" />
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="Grid_PreviewMouseRightButtonDown" />
+        </Style>
+
+        <Style x:Key="EmptyState" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,26,0,26" />
+        </Style>
+
+        <!-- Live traffic of an adapter -->
+        <DataTemplate x:Key="AdapterTemplate" DataType="{x:Type local:AdapterItem}">
+            <Border Style="{StaticResource InnerCard}" Margin="0,10,0,0" Padding="14,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Width="38" Height="38" CornerRadius="9" VerticalAlignment="Top" ToolTip="{Binding KindToolTip}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsVirtual}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource Surface3Brush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Glyph}" FontSize="17" HorizontalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsVirtual}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,12,0">
+                        <WrapPanel>
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource H3}" Margin="0,0,10,2" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Border Style="{StaticResource Badge}" Margin="0,0,6,2" ToolTip="{Binding KindToolTip}">
+                                <TextBlock Text="{Binding KindText}" Style="{StaticResource BadgeText}" FontWeight="Normal"
+                                           Foreground="{StaticResource TextBrush}" />
+                            </Border>
+                            <Border Margin="0,0,6,2" ToolTip="{Binding SpeedToolTip}"
+                                    Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVis}}">
+                                <Border.Style>
+                                    <Style TargetType="Border" BasedOn="{StaticResource Badge}">
+                                        <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSlowLink}" Value="True">
+                                                <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding SpeedText}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource BadgeText}">
+                                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSlowLink}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Border>
+                            <Border Style="{StaticResource Badge}" Margin="0,0,6,2" Background="{StaticResource InfoSoftBrush}"
+                                    Visibility="{Binding IsPrimary, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="Через это подключение компьютер выходит в интернет">
+                                <TextBlock Text="Основное" Style="{StaticResource BadgeText}" Foreground="{StaticResource InfoBrush}" />
+                            </Border>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12" TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}" />
+                        <ItemsControl ItemsSource="{Binding Fields}" Margin="0,8,0,0" Focusable="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type local:AdapterField}">
+                                    <StackPanel Margin="0,0,24,6" Background="Transparent" ToolTip="{Binding ToolTip}">
+                                        <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" />
+                                        <TextBlock Text="{Binding Value}" Style="{StaticResource FieldValue}" MaxWidth="320" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" MinWidth="128" VerticalAlignment="Top"
+                                ToolTip="Сколько данных компьютер принимает (↓) и отправляет (↑) через это подключение прямо сейчас">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE896;" FontSize="13" Foreground="{StaticResource AccentBrush}" />
+                            <TextBlock Text="{Binding ReceiveRate}" FontSize="15" FontWeight="SemiBold" Margin="7,0,0,0" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,3,0,0">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE898;" FontSize="13" Foreground="{StaticResource InfoBrush}" />
+                            <TextBlock Text="{Binding SendRate}" FontSize="15" FontWeight="SemiBold" Margin="7,0,0,0" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Totals}" Style="{StaticResource Muted}" FontSize="11" HorizontalAlignment="Right"
+                                   TextWrapping="NoWrap" Margin="0,5,0,0"
+                                   ToolTip="Сколько данных прошло через подключение с момента его включения" />
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource Strip}" Background="{StaticResource WarningSoftBrush}"
+                            Visibility="{Binding IsSlowLink, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13"
+                                       Foreground="{StaticResource WarningBrush}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                            <TextBlock Text="{Binding SlowLinkText}" TextWrapping="Wrap" FontSize="12.5" />
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel x:Name="PageRoot" Margin="0,0,8,8">
+
+            <!-- ================= Summary cards ================= -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+
+                <!-- Internet -->
+                <Border Style="{StaticResource Card}" Padding="14,12"
+                        ToolTip="Есть ли доступ в интернет и как быстро отвечают серверы (задержка, или «пинг»). До 50 мс — отлично, до 100 мс — нормально.">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardLabel}" Text="Интернет" />
+                            <TextBlock Style="{StaticResource CardNumber}" Text="{Binding InternetValue}"
+                                       Foreground="{Binding InternetTone, Converter={StaticResource ToneText}}" />
+                            <TextBlock Style="{StaticResource CardHint}" Text="{Binding InternetHint}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <Border x:Name="CardIcon0" Grid.Column="1" Style="{StaticResource CardIcon}"
+                                Background="{Binding InternetTone, Converter={StaticResource ToneAccentSoft}}">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" HorizontalAlignment="Center"
+                                       Foreground="{Binding InternetTone, Converter={StaticResource ToneAccent}}" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Connection -->
+                <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,12"
+                        ToolTip="Как компьютер подключён к сети и с какой скоростью связан с роутером.">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardLabel}" Text="Подключение" />
+                            <TextBlock Style="{StaticResource CardNumber}" Text="{Binding ConnectionValue}"
+                                       Foreground="{Binding ConnectionTone, Converter={StaticResource ToneText}}" />
+                            <TextBlock Style="{StaticResource CardHint}" Text="{Binding ConnectionHint}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <Border x:Name="CardIcon1" Grid.Column="1" Style="{StaticResource CardIcon}"
+                                Background="{Binding ConnectionTone, Converter={StaticResource ToneAccentSoft}}">
+                            <TextBlock Style="{StaticResource Icon}" Text="{Binding ConnectionGlyph}" HorizontalAlignment="Center"
+                                       Foreground="{Binding ConnectionTone, Converter={StaticResource ToneAccent}}" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Wi-Fi -->
+                <Border Grid.Column="4" Style="{StaticResource Card}" Padding="14,12"
+                        ToolTip="Уровень сигнала Wi-Fi. Ниже 50% скорость заметно падает.">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardLabel}" Text="Wi-Fi" />
+                            <TextBlock Style="{StaticResource CardNumber}" Text="{Binding WifiValue}"
+                                       Foreground="{Binding WifiTone, Converter={StaticResource ToneText}}" />
+                            <TextBlock Style="{StaticResource CardHint}" Text="{Binding WifiHint}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <Border x:Name="CardIcon2" Grid.Column="1" Style="{StaticResource CardIcon}"
+                                Background="{Binding WifiTone, Converter={StaticResource ToneAccentSoft}}">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE701;" HorizontalAlignment="Center"
+                                       Foreground="{Binding WifiTone, Converter={StaticResource ToneAccent}}" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Connections / ports -->
+                <Border Grid.Column="6" Style="{StaticResource Card}" Padding="14,12" Cursor="Hand"
+                        ToolTip="Сколько соединений с другими компьютерами открыли программы и сколько портов ждут подключений из сети. Нажмите, чтобы открыть список.">
+                    <Border.InputBindings>
+                        <MouseBinding Gesture="LeftClick" Command="{Binding ShowSocketsCommand}" CommandParameter="connections:" />
+                    </Border.InputBindings>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardLabel}" Text="Соединения" />
+                            <TextBlock Style="{StaticResource CardNumber}" Text="{Binding SocketsValue}"
+                                       Foreground="{Binding SocketsTone, Converter={StaticResource ToneText}}" />
+                            <TextBlock Style="{StaticResource CardHint}" Text="{Binding SocketsHint}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <Border x:Name="CardIcon3" Grid.Column="1" Style="{StaticResource CardIcon}"
+                                Background="{Binding SocketsTone, Converter={StaticResource ToneAccentSoft}}">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE71B;" HorizontalAlignment="Center"
+                                       Foreground="{Binding SocketsTone, Converter={StaticResource ToneAccent}}" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- ================= Result of the last action ================= -->
+            <Border Margin="0,12,0,0" CornerRadius="8" Padding="14,10" BorderThickness="1"
+                    Background="{Binding MessageTone, Converter={StaticResource ToneSoft}}"
+                    BorderBrush="{Binding MessageTone, Converter={StaticResource ToneBrush}}"
+                    Visibility="{Binding Message, Converter={StaticResource HasValueToVis}}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding DismissMessageCommand}"
+                            ToolTip="Скрыть" VerticalAlignment="Top" Margin="8,-4,-6,0">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="11" />
+                    </Button>
+                    <TextBlock Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,1,10,0"
+                               Text="{Binding MessageTone, Converter={StaticResource ToneGlyph}}"
+                               Foreground="{Binding MessageTone, Converter={StaticResource ToneBrush}}" />
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+
+            <!-- ================= Status and findings ================= -->
+            <Border Style="{StaticResource Card}" Margin="0,12,0,0" Padding="18,16">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="46" Height="46" VerticalAlignment="Center">
+                            <Ellipse Fill="{Binding StatusTone, Converter={StaticResource ToneSoft}}" />
+                            <TextBlock Style="{StaticResource Icon}" FontSize="20" HorizontalAlignment="Center"
+                                       Text="{Binding StatusTone, Converter={StaticResource ToneGlyph}}"
+                                       Foreground="{Binding StatusTone, Converter={StaticResource ToneBrush}}" />
+                        </Grid>
+                        <StackPanel Grid.Column="1" Margin="14,0,16,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding StatusTitle}" Style="{StaticResource H3}" FontSize="16" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" FontSize="13" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="176">
+                            <Button Style="{StaticResource AccentButton}" Command="{Binding RecheckCommand}" HorizontalAlignment="Stretch"
+                                    ToolTip="Повторить все проверки (только чтение, ничего не меняется)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" Foreground="{StaticResource AccentTextBrush}" />
+                                    <TextBlock Text="Проверить снова" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Text="{Binding LastCheckText}" Style="{StaticResource Muted}" FontSize="11.5" HorizontalAlignment="Center"
+                                       Margin="0,6,0,0" Visibility="{Binding LastCheckText, Converter={StaticResource HasValueToVis}}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Findings}" Margin="0,12,0,0" Focusable="False"
+                                  Visibility="{Binding HasFindings, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:FindingItem}">
+                                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="78" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource Badge}" VerticalAlignment="Top" Margin="0,1,0,0"
+                                                Background="{Binding Severity, Converter={StaticResource ToneSoft}}">
+                                            <TextBlock Text="{Binding Severity, Converter={StaticResource SeverityToText}}" Style="{StaticResource BadgeText}"
+                                                       Foreground="{Binding Severity, Converter={StaticResource ToneBrush}}" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13.5" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Details}" Style="{StaticResource Muted}" Margin="0,3,0,0" LineHeight="18" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="{Binding ActionText}" Command="{Binding ActionCommand}"
+                                                CommandParameter="{Binding ActionParameter}" Padding="12,5" FontSize="12.5" VerticalAlignment="Top"
+                                                Visibility="{Binding HasAction, Converter={StaticResource BoolToVis}}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ================= Adapters ================= -->
+            <Border Style="{StaticResource Card}" Margin="0,12,0,0" Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5" VerticalAlignment="Center"
+                                   TextWrapping="NoWrap" Text="Скорость обновляется каждую секунду" Margin="12,0,0,0" />
+                        <TextBlock Style="{StaticResource H2}" Text="Сетевые подключения" Margin="0" />
+                    </DockPanel>
+                    <ItemsControl ItemsSource="{Binding Adapters}" ItemTemplate="{StaticResource AdapterTemplate}" Focusable="False" />
+                    <StackPanel Visibility="{Binding Adapters.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}"
+                                HorizontalAlignment="Center" Margin="0,20,0,12">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE839;" FontSize="30" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource DangerBrush}" />
+                        <TextBlock Style="{StaticResource H3}" Text="Нет активных сетевых подключений" HorizontalAlignment="Center" Margin="0,10,0,4" />
+                        <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" MaxWidth="440"
+                                   Text="Проверьте, что кабель вставлен до щелчка, или подключитесь к Wi-Fi через значок сети на панели задач." />
+                        <Button Content="Параметры сети" Command="{Binding OpenNetworkSettingsCommand}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ================= Latency, DNS, Wi-Fi, tools ================= -->
+            <local:NetworkCardGrid MinColumnWidth="330" MaxColumns="2" Spacing="12" Margin="0,12,0,0"
+                                   Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
+
+                <!-- Latency -->
+                <Border Style="{StaticResource Card}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource SectionIcon}">
+                                <TextBlock Style="{StaticResource SectionGlyph}" Text="&#xE916;" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="Задержка (пинг)" Margin="10,0,8,0" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Border Grid.Column="2" Style="{StaticResource Badge}" Background="{Binding LatencyTone, Converter={StaticResource ToneSoft}}">
+                                <TextBlock Text="{Binding LatencyBadge}" Style="{StaticResource BadgeText}"
+                                           Foreground="{Binding LatencyTone, Converter={StaticResource ToneBrush}}" />
+                            </Border>
+                        </Grid>
+                        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE946;" FontSize="12"
+                                       Foreground="{StaticResource MutedBrush}" VerticalAlignment="Top" Margin="0,2,8,0" />
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="{Binding LatencyFootnote}" />
+                        </DockPanel>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource Muted}"
+                                       Text="Сколько времени нужно, чтобы связаться с сервером. До 50 мс — отлично, до 100 мс — нормально, больше — заметно в играх и видеозвонках." />
+                            <Border Style="{StaticResource Strip}" Visibility="{Binding LatencyNote, Converter={StaticResource HasValueToVis}}">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE705;" FontSize="13"
+                                               Foreground="{StaticResource InfoBrush}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                                    <TextBlock Text="{Binding LatencyNote}" TextWrapping="Wrap" FontSize="12.5" />
+                                </DockPanel>
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding LatencyItems}" Margin="0,6,0,0" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:LatencyItem}">
+                                        <Grid Margin="0,8,0,0" Background="Transparent" ToolTip="{Binding ToolTip}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="126" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="92" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Host}" Style="{StaticResource Muted}" FontSize="11" TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <ProgressBar Grid.Column="1" Maximum="100" Value="{Binding BarValue, Mode=OneWay}" VerticalAlignment="Center"
+                                                         IsIndeterminate="{Binding IsPending, Mode=OneWay}"
+                                                         Foreground="{Binding Tone, Converter={StaticResource ToneBrush}}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding ValueText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                       FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{Binding Tone, Converter={StaticResource ToneText}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- DNS -->
+                <Border Style="{StaticResource Card}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource SectionIcon}">
+                                <TextBlock Style="{StaticResource SectionGlyph}" Text="&#xE8CE;" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="DNS" Margin="10,0,8,0" VerticalAlignment="Center" />
+                            <Border Grid.Column="2" Style="{StaticResource Badge}" Background="{Binding DnsTone, Converter={StaticResource ToneSoft}}">
+                                <TextBlock Text="{Binding DnsBadge}" Style="{StaticResource BadgeText}"
+                                           Foreground="{Binding DnsTone, Converter={StaticResource ToneBrush}}" />
+                            </Border>
+                        </Grid>
+                        <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                            <Button Content="Как сменить DNS" Command="{Binding HowToChangeDnsCommand}" Margin="0,4,8,0" Padding="12,6" FontSize="12.5"
+                                    ToolTip="Пошаговая инструкция: какие DNS выбрать и где их указать" />
+                            <Button Content="Параметры адаптера" Command="{Binding OpenAdapterSettingsCommand}" Margin="0,4,0,0" Padding="12,6"
+                                    FontSize="12.5" ToolTip="Открыть «Параметры» → «Сеть и Интернет» → «Дополнительные сетевые параметры»" />
+                        </WrapPanel>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource Muted}"
+                                       Text="DNS переводит адреса сайтов (например, ya.ru) в IP-адреса. Если он медленный, каждый сайт начинает открываться с задержкой." />
+                            <ItemsControl ItemsSource="{Binding DnsServers}" Margin="0,4,0,0" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:DnsServerItem}">
+                                        <Grid Margin="0,8,0,0" Background="Transparent" ToolTip="{Binding ToolTip}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" MinWidth="112" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Address}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"
+                                                       Margin="0,0,10,0" />
+                                            <Border Grid.Column="1" Style="{StaticResource Badge}" Background="{Binding Tone, Converter={StaticResource ToneSoft}}">
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource BadgeText}" FontWeight="Normal"
+                                                           Foreground="{Binding Tone, Converter={StaticResource ToneText}}" />
+                                            </Border>
+                                            <TextBlock Grid.Column="2" Text="{Binding AdapterName}" Style="{StaticResource Muted}" FontSize="11.5"
+                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="DNS-серверы не заданы."
+                                       Visibility="{Binding DnsServers.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                            <TextBlock Text="{Binding DnsTimeText}" FontSize="12.5" Margin="0,12,0,0" TextWrapping="Wrap"
+                                       ToolTip="Сколько времени DNS ищет адреса нескольких известных сайтов (example.com, wikipedia.org, github.com…)" />
+                            <Border Style="{StaticResource Strip}" Background="{StaticResource WarningSoftBrush}"
+                                    Visibility="{Binding DnsAdvice, Converter={StaticResource HasValueToVis}}">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13"
+                                               Foreground="{StaticResource WarningBrush}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                                    <TextBlock Text="{Binding DnsAdvice}" TextWrapping="Wrap" FontSize="12.5" />
+                                </DockPanel>
+                            </Border>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Wi-Fi -->
+                <Border Style="{StaticResource Card}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource SectionIcon}">
+                                <TextBlock Style="{StaticResource SectionGlyph}" Text="&#xE701;" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="Wi-Fi" Margin="10,0,8,0" VerticalAlignment="Center" />
+                            <Border Grid.Column="2" Style="{StaticResource Badge}" Background="{Binding WifiTone, Converter={StaticResource ToneSoft}}"
+                                    Visibility="{Binding HasWifi, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding WifiQuality}" Style="{StaticResource BadgeText}"
+                                           Foreground="{Binding WifiTone, Converter={StaticResource ToneBrush}}" />
+                            </Border>
+                        </Grid>
+
+                        <Button DockPanel.Dock="Bottom" Content="Параметры Wi-Fi" Command="{Binding OpenWifiSettingsCommand}" HorizontalAlignment="Left"
+                                Margin="0,10,0,0" Padding="12,6" FontSize="12.5" ToolTip="Открыть «Параметры» → «Сеть и Интернет» → «Wi-Fi»"
+                                Visibility="{Binding HasWifi, Converter={StaticResource BoolToVis}}" />
+
+                        <!-- Connected -->
+                        <StackPanel Margin="0,12,0,0" Visibility="{Binding HasWifi, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Bottom">
+                                    <TextBlock Text="Сеть" Style="{StaticResource FieldLabel}" />
+                                    <TextBlock Text="{Binding WifiSsid}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding WifiSsid}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding WifiValue}" Style="{StaticResource BigNumber}" FontSize="24"
+                                           VerticalAlignment="Bottom" Foreground="{Binding WifiTone, Converter={StaticResource ToneText}}"
+                                           ToolTip="Уровень сигнала Wi-Fi" />
+                            </Grid>
+                            <ProgressBar Margin="0,8,0,0" Maximum="100" Value="{Binding WifiPercent, Mode=OneWay}"
+                                         Foreground="{Binding WifiTone, Converter={StaticResource ToneBrush}}" />
+                            <ItemsControl ItemsSource="{Binding WifiFields}" Margin="0,10,0,0" Focusable="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:AdapterField}">
+                                        <StackPanel Margin="0,4,12,4" Background="Transparent" ToolTip="{Binding ToolTip}">
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" />
+                                            <TextBlock Text="{Binding Value}" Style="{StaticResource FieldValue}" TextWrapping="NoWrap"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Style="{StaticResource Strip}" Background="{StaticResource WarningSoftBrush}"
+                                    Visibility="{Binding WifiNote, Converter={StaticResource HasValueToVis}}">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13"
+                                               Foreground="{StaticResource WarningBrush}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                                    <TextBlock Text="{Binding WifiNote}" TextWrapping="Wrap" FontSize="12.5" />
+                                </DockPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Not connected / cable / hidden by Windows -->
+                        <StackPanel Margin="0,22,0,10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Visibility="{Binding HasWifi, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE839;" FontSize="28" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource MutedBrush}" />
+                            <TextBlock Style="{StaticResource H3}" Text="{Binding WifiEmptyTitle}" HorizontalAlignment="Center" Margin="0,10,0,4"
+                                       TextAlignment="Center" TextWrapping="Wrap" />
+                            <TextBlock Style="{StaticResource Muted}" Text="{Binding WifiEmptyText}" TextAlignment="Center" MaxWidth="380" />
+                            <Button Content="Параметры расположения" Command="{Binding OpenLocationSettingsCommand}" HorizontalAlignment="Center"
+                                    Margin="0,10,0,0" Padding="12,6" FontSize="12.5"
+                                    Visibility="{Binding WifiLocationBlocked, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Tools -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource SectionIcon}">
+                                <TextBlock Style="{StaticResource SectionGlyph}" Text="&#xE90F;" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="Инструменты" Margin="10,0,8,0" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Очистить кэш DNS" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
+                                           Text="Помогает, если сайт не открывается после смены DNS или переезда сайта. Безопасно." />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Очистить" Command="{Binding FlushDnsCommand}" VerticalAlignment="Center"
+                                    Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="Выполнить ipconfig /flushdns (с подтверждением)" />
+                        </Grid>
+
+                        <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,12,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <WrapPanel>
+                                        <TextBlock Text="Сбросить сетевые настройки" FontWeight="SemiBold" FontSize="13" Margin="0,0,8,2" />
+                                        <Border Style="{StaticResource Badge}" Background="{StaticResource WarningSoftBrush}" Margin="0,0,0,2"
+                                                Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"
+                                                ToolTip="Сброс меняет общие настройки Windows, поэтому нужен запуск от имени администратора">
+                                            <TextBlock Text="Нужны права администратора" Style="{StaticResource BadgeText}" FontSize="11"
+                                                       Foreground="{StaticResource WarningBrush}" />
+                                        </Border>
+                                    </WrapPanel>
+                                    <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
+                                               Text="Крайняя мера, если интернета нет, а перезагрузка роутера не помогла. Потом нужна перезагрузка компьютера." />
+                                </StackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource DangerButton}" Content="Сбросить…" Command="{Binding ResetNetworkCommand}"
+                                        VerticalAlignment="Center" Padding="12,6" FontSize="12.5" MinWidth="104"
+                                        ToolTip="netsh winsock reset и netsh int ip reset (с подтверждением и точкой восстановления)" />
+                            </Grid>
+                        </Border>
+
+                        <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,12,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Text="Параметры сети" FontWeight="SemiBold" FontSize="13" />
+                                    <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
+                                               Text="Состояние подключения, тип сети (общедоступная или частная), использование трафика." />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Открыть" Command="{Binding OpenNetworkSettingsCommand}" VerticalAlignment="Center"
+                                        Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="«Параметры» → «Сеть и Интернет»" />
+                            </Grid>
+                        </Border>
+
+                        <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,12,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Text="Сетевые подключения" FontWeight="SemiBold" FontSize="13" />
+                                    <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
+                                               Text="Классическое окно со всеми адаптерами: включить, отключить, открыть свойства." />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Открыть" Command="{Binding OpenConnectionsCommand}" VerticalAlignment="Center"
+                                        Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="Панель управления → «Сетевые подключения» (ncpa.cpl)" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </local:NetworkCardGrid>
+
+            <!-- ================= Connections and ports ================= -->
+            <Border x:Name="SocketsCard" Style="{StaticResource Card}" Margin="0,12,0,0"
+                    Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource H2}" Text="Соединения и открытые порты" Margin="0" />
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0"
+                                       Text="Какие программы сейчас обмениваются данными с другими компьютерами и какие порты ждут подключений. Это только просмотр — ничего не блокируется." />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
+                            <TextBlock Text="{Binding SocketsUpdatedText}" Style="{StaticResource Muted}" FontSize="11.5" VerticalAlignment="Center"
+                                       TextWrapping="NoWrap" Margin="0,0,10,0" />
+                            <Button Command="{Binding RefreshSocketsCommand}" Padding="12,6" FontSize="12.5"
+                                    ToolTip="Перечитать список соединений и портов">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="12" />
+                                    <TextBlock Text="Обновить" Margin="7,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Toolbar -->
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="260" VerticalAlignment="Top">
+                            <TextBox x:Name="SearchBox" Padding="30,7,28,7" VerticalContentAlignment="Center"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=200}"
+                                     ToolTip="Ищет по программе, адресу, имени узла, порту и PID" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                                       Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                            <TextBlock Text="Поиск: программа, адрес, порт" Foreground="{StaticResource MutedBrush}" FontSize="12.5"
+                                       Margin="31,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
+                                       Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                            <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                                    Padding="5" Click="OnClearSearch" ToolTip="Очистить поиск"
+                                    Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="10" />
+                            </Button>
+                        </Grid>
+                        <WrapPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                            <CheckBox Content="Показывать соединения внутри компьютера" IsChecked="{Binding ShowLocalConnections}" Margin="0,4,0,4"
+                                      ToolTip="Программы часто общаются друг с другом через адрес 127.0.0.1 — это не выход в сеть, поэтому по умолчанию такие соединения скрыты.">
+                                <CheckBox.Style>
+                                    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SocketsTab}" Value="1">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </CheckBox.Style>
+                            </CheckBox>
+                            <CheckBox Content="Только доступные из сети" IsChecked="{Binding OnlyNetworkPorts}" Margin="0,4,0,4"
+                                      ToolTip="Скрыть порты, к которым могут подключиться только программы на этом компьютере (127.0.0.1, ::1).">
+                                <CheckBox.Style>
+                                    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SocketsTab}" Value="0">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </CheckBox.Style>
+                            </CheckBox>
+                        </WrapPanel>
+                    </Grid>
+
+                    <TabControl SelectedIndex="{Binding SocketsTab, Mode=TwoWay}" Margin="0,12,0,0">
+
+                        <!-- Connections -->
+                        <TabItem Header="{Binding ConnectionsTabHeader}">
+                            <Grid>
+                                <DataGrid x:Name="ConnectionsGrid" Style="{StaticResource NetGrid}" ItemsSource="{Binding ConnectionRows}"
+                                          Sorting="OnConnectionsSorting" SizeChanged="OnConnectionsGridSizeChanged"
+                                          Visibility="{Binding VisibleConnections, Converter={StaticResource HasValueToVis}}">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Программа и адрес" Width="1.6*" MinWidth="170" SortMemberPath="Address">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type local:ConnectionListItem}">
+                                                    <Grid Background="Transparent" ToolTip="{Binding ToolTip}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="22" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Style="{StaticResource ChevronButton}" Command="{Binding DataContext.ToggleGroupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}" HorizontalAlignment="Left"
+                                                                Visibility="{Binding IsGroup, Converter={StaticResource BoolToVis}}"
+                                                                ToolTip="Показать или скрыть соединения программы">
+                                                            <TextBlock FontSize="10">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                                        <Setter Property="Text" Value="&#xE76C;" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                                <Setter Property="Text" Value="&#xE70D;" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Button>
+                                                        <TextBlock Grid.Column="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Margin" Value="14,0,0,0" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsGroup}" Value="True">
+                                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                                            <Setter Property="Margin" Value="2,0,0,0" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                            <Run Text="{Binding PrimaryText, Mode=OneWay}" />
+                                                            <Run Text="{Binding SecondaryText, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" FontSize="11.5"
+                                                                 FontWeight="Normal" />
+                                                        </TextBlock>
+                                                        <Border Grid.Column="2" Style="{StaticResource Badge}" Margin="6,0,0,0" Background="{StaticResource DangerSoftBrush}"
+                                                                Visibility="{Binding IsSuspicious, Converter={StaticResource BoolToVis}}"
+                                                                ToolTip="Соединение с портом, который часто используют вирусы, майнеры или Tor">
+                                                            <TextBlock Text="Опасный порт" Style="{StaticResource BadgeText}" Foreground="{StaticResource DangerBrush}" />
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="Соединений" Width="96" SortMemberPath="Count">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type local:ConnectionListItem}">
+                                                    <Grid Background="Transparent" ToolTip="{Binding CountToolTip}"
+                                                          Visibility="{Binding HasCount, Converter={StaticResource BoolToVis}}">
+                                                        <Border Style="{StaticResource Badge}" Padding="7,1" HorizontalAlignment="Left"
+                                                                Visibility="{Binding IsGroup, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="{Binding CountText}" Style="{StaticResource BadgeText}" Foreground="{StaticResource TextBrush}" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding CountText}" Style="{StaticResource CellMuted}" Margin="8,0,0,0"
+                                                                   Visibility="{Binding IsChild, Converter={StaticResource BoolToVis}}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="Узел" Width="1*" MinWidth="110" SortMemberPath="Host">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type local:ConnectionListItem}">
+                                                    <TextBlock Text="{Binding HostText}" Style="{StaticResource CellMuted}" ToolTip="{Binding HostText}" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn x:Name="ConnServiceColumn" Header="Служба" Width="100" SortMemberPath="Service">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type local:ConnectionListItem}">
+                                                    <TextBlock Text="{Binding Service}" Style="{StaticResource CellMuted}" ToolTip="{Binding Service}" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="Состояние" Width="108" SortMemberPath="State">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type local:ConnectionListItem}">
+                                                    <TextBlock Text="{Binding StateText}" Style="{StaticResource CellMuted}" ToolTip="{Binding StateToolTip}" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Width="122" CanUserSort="False" CanUserResize="False">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Показать в разделе «Процессы»"
+                                                                Command="{Binding DataContext.ShowInProcessesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <TextBlock Style="{StaticResource RowIcon}" Text="&#xE71D;" />
+                                                        </Button>
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Проверить IP на AbuseIPDB (откроется в браузере)"
+                                                                Command="{Binding DataContext.CheckIpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <TextBlock Style="{StaticResource RowIcon}" Text="&#xEA18;" />
+                                                        </Button>
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Найти в интернете"
+                                                                Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <TextBlock Style="{StaticResource RowIcon}" Text="&#xE721;" />
+                                                        </Button>
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Скопировать"
+                                                                Command="{Binding DataContext.CopyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <TextBlock Style="{StaticResource RowIcon}" Text="&#xE8C8;" />
+                                                        </Button>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Command="{Binding PlacementTarget.DataContext.ShowInProcessesCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Header>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE71D;" />
+                                                        <TextBlock Text="Показать в разделе «Процессы»" />
+                                                    </StackPanel>
+                                                </MenuItem.Header>
+                                            </MenuItem>
+                                            <MenuItem Command="{Binding PlacementTarget.DataContext.CheckIpCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Header>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Style="{StaticResource MenuIcon}" Text="&#xEA18;" />
+                                                        <TextBlock Text="Проверить IP (AbuseIPDB)" />
+                                                    </StackPanel>
+                                                </MenuItem.Header>
+                                            </MenuItem>
+                                            <MenuItem Command="{Binding PlacementTarget.DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Header>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE721;" />
+                                                        <TextBlock Text="Найти в интернете" />
+                                                    </StackPanel>
+                                                </MenuItem.Header>
+                                            </MenuItem>
+                                            <MenuItem Command="{Binding PlacementTarget.DataContext.CopyCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Header>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8C8;" />
+                                                        <TextBlock Text="Скопировать" />
+                                                    </StackPanel>
+                                                </MenuItem.Header>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                </DataGrid>
+                                <StackPanel Style="{StaticResource EmptyState}"
+                                            Visibility="{Binding VisibleConnections, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE71B;" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
+                                    <TextBlock Text="{Binding ConnectionsEmptyText}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </TabItem>
+
+                        <!-- Listening ports -->
+                        <TabItem Header="{Binding PortsTabHeader}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                           Text="Порт — это «дверь», через которую программа принимает подключения. Адреса 0.0.0.0 и :: значат, что порт доступен из сети; 127.0.0.1 и ::1 — только программам на этом компьютере." />
+                                <Grid>
+                                    <DataGrid x:Name="PortsGrid" Style="{StaticResource NetGrid}" ItemsSource="{Binding PortsView}"
+                                              SizeChanged="OnPortsGridSizeChanged"
+                                              Visibility="{Binding VisiblePorts, Converter={StaticResource HasValueToVis}}">
+                                        <DataGrid.Columns>
+                                            <DataGridTemplateColumn Header="Порт" Width="94" SortMemberPath="Port">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Style="{StaticResource CellText}">
+                                                            <Run Text="{Binding Port, Mode=OneWay}" FontWeight="SemiBold" />
+                                                            <Run Text="{Binding ProtocolText, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" FontSize="11.5" />
+                                                        </TextBlock>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="Программа" Width="1.3*" MinWidth="110" SortMemberPath="ProcessDisplay">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Style="{StaticResource CellText}" ToolTip="{Binding ToolTip}">
+                                                            <Run Text="{Binding ProcessDisplay, Mode=OneWay}" />
+                                                            <Run Text="{Binding ProcessName, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" FontSize="11.5" />
+                                                        </TextBlock>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="Доступ" Width="124" SortMemberPath="IsNetwork">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" ToolTip="{Binding AccessToolTip}" Background="Transparent">
+                                                            <TextBlock FontSize="12" Margin="0,0,7,0">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                                        <Setter Property="Text" Value="&#xE72E;" />
+                                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsNetwork}" Value="True">
+                                                                                <Setter Property="Text" Value="&#xE774;" />
+                                                                                <Setter Property="Foreground" Value="{StaticResource InfoBrush}" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            <TextBlock Text="{Binding AccessText}" Style="{StaticResource CellText}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn x:Name="PortServiceColumn" Header="Что это" Width="1.4*" MinWidth="110"
+                                                                    SortMemberPath="ServiceText">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding ServiceText}" Style="{StaticResource CellMuted}" ToolTip="{Binding Explanation}" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="Оценка" Width="104" SortMemberPath="KindRank">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Border Style="{StaticResource Badge}" Background="{Binding Tone, Converter={StaticResource ToneSoft}}"
+                                                                ToolTip="{Binding Explanation}">
+                                                            <TextBlock Text="{Binding KindText}" Style="{StaticResource BadgeText}"
+                                                                       Foreground="{Binding Tone, Converter={StaticResource ToneBrush}}" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Width="94" CanUserSort="False" CanUserResize="False">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="Показать в разделе «Процессы»"
+                                                                    Command="{Binding DataContext.ShowInProcessesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Style="{StaticResource RowIcon}" Text="&#xE71D;" />
+                                                            </Button>
+                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="Найти порт в интернете"
+                                                                    Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Style="{StaticResource RowIcon}" Text="&#xE721;" />
+                                                            </Button>
+                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="Скопировать"
+                                                                    Command="{Binding DataContext.CopyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Style="{StaticResource RowIcon}" Text="&#xE8C8;" />
+                                                            </Button>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                        <DataGrid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Command="{Binding PlacementTarget.DataContext.ShowInProcessesCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                    <MenuItem.Header>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE71D;" />
+                                                            <TextBlock Text="Показать в разделе «Процессы»" />
+                                                        </StackPanel>
+                                                    </MenuItem.Header>
+                                                </MenuItem>
+                                                <MenuItem Command="{Binding PlacementTarget.DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                    <MenuItem.Header>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE721;" />
+                                                            <TextBlock Text="Найти в интернете" />
+                                                        </StackPanel>
+                                                    </MenuItem.Header>
+                                                </MenuItem>
+                                                <MenuItem Command="{Binding PlacementTarget.DataContext.CopyCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                    <MenuItem.Header>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8C8;" />
+                                                            <TextBlock Text="Скопировать" />
+                                                        </StackPanel>
+                                                    </MenuItem.Header>
+                                                </MenuItem>
+                                            </ContextMenu>
+                                        </DataGrid.ContextMenu>
+                                    </DataGrid>
+                                    <StackPanel Style="{StaticResource EmptyState}"
+                                                Visibility="{Binding VisiblePorts, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" Foreground="{StaticResource SuccessBrush}" Margin="0,0,10,0" />
+                                        <TextBlock Text="{Binding PortsEmptyText}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,8,0,0" Text="{Binding PortsHiddenNote}"
+                                           Visibility="{Binding PortsHiddenNote, Converter={StaticResource HasValueToVis}}" />
+                            </StackPanel>
+                        </TabItem>
+                    </TabControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>
