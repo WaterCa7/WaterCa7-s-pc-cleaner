@@ -658,7 +658,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
                     <Grid Margin="8,2">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="12,9">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="12,8">
                             <ContentPresenter />
                         </Border>
                         <Border x:Name="Pill" Width="3" Height="18" CornerRadius="2" Background="{StaticResource AccentBrush}"

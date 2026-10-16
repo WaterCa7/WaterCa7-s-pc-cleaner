@@ -32,20 +32,22 @@
                     </StackPanel>
                 </StackPanel>
 
-                <Border DockPanel.Dock="Bottom" Margin="14,8,14,16" Style="{StaticResource InnerCard}">
+                <Border DockPanel.Dock="Bottom" Margin="14,6,14,14" Style="{StaticResource InnerCard}" Padding="12,10">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal">
+                        <DockPanel ToolTipService.InitialShowDelay="300">
+                            <DockPanel.ToolTip>
+                                <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                                           Text="Без прав администратора программа всё проверяет, но часть действий недоступна: системные папки, службы, раздел реестра HKLM, брандмауэр и другие настройки Windows." />
+                            </DockPanel.ToolTip>
                             <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{Binding IsAdmin, Converter={StaticResource SeverityToBrush}}" />
-                            <TextBlock Text="{Binding AdminText}" Margin="8,0,0,0" FontSize="12.5" FontWeight="SemiBold" />
-                        </StackPanel>
-                        <StackPanel Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
-                            <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,8" FontSize="11.5"
-                                       Text="Часть функций (системные папки, службы, HKLM) доступна только администратору." />
-                            <Button Content="Запустить как админ" Command="{Binding RestartAsAdminCommand}"
-                                    Padding="10,6" FontSize="12" HorizontalAlignment="Stretch" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding VersionText}" Style="{StaticResource Muted}" FontSize="11" Margin="0,8,0,0" />
+                            <TextBlock Text="{Binding AdminText}" Margin="8,0,6,0" FontSize="12.5" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <Button Content="Запустить как админ" Command="{Binding RestartAsAdminCommand}" Margin="0,8,0,0"
+                                Padding="10,5" FontSize="12" HorizontalAlignment="Stretch"
+                                ToolTip="Перезапустить программу с правами администратора — откроется окно контроля учётных записей"
+                                Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
                     </StackPanel>
                 </Border>
 
@@ -101,7 +103,7 @@
 
             <Border Grid.Row="3" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="32,7">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Text="Сделано для WaterCa7" Style="{StaticResource Muted}" FontSize="11.5" />
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"><Run Text="{Binding VersionText, Mode=OneWay}" /><Run Text=" · Сделано для WaterCa7" /></TextBlock>
                     <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" FontSize="11.5" TextTrimming="CharacterEllipsis"
                                TextWrapping="NoWrap" />
                 </DockPanel>
