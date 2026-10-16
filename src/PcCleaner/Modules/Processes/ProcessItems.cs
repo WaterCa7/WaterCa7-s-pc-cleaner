@@ -13,6 +13,8 @@ public enum ProcessStatusKind
     Low,
     Medium,
     High,
+    /// <summary>WaterCa7s PC Cleaner itself or a helper it started: not judged.</summary>
+    Own,
 }
 
 /// <summary>
@@ -38,6 +40,7 @@ public abstract class ProcessItem : ObservableObject
     private bool _isDefenderScanning;
     private string? _searchText;
     private string? _quarantineBlockReason = "";
+    private ProcessOwnRole _ownRole;
 
     internal KillVerdict Verdict { get; private set; }
 
@@ -235,7 +238,33 @@ public abstract class ProcessItem : ObservableObject
     public bool IsSuspicious => Suspicion?.IsSuspicious == true;
 
     /// <summary>Analysed and nothing found (shown as a green note in the details).</summary>
-    public bool IsVerifiedClean => Suspicion is { Score: 0 } && !IsTrusted && (Path is not null || IsPseudo);
+    public bool IsVerifiedClean => Suspicion is { Score: 0 } && !IsTrusted && !IsOwn && (Path is not null || IsPseudo);
+
+    /// <summary>The cleaner itself or a helper it started (for a program: all of its processes are).</summary>
+    public ProcessOwnRole OwnRole
+    {
+        get => _ownRole;
+        internal set
+        {
+            if (!Set(ref _ownRole, value))
+                return;
+            OnPropertyChanged(nameof(IsOwn));
+            OnPropertyChanged(nameof(IsVerifiedClean));
+            OnOwnNoteChanged();
+            OnStatusChanged();
+            OnTextChanged();
+        }
+    }
+
+    public bool IsOwn => OwnRole != ProcessOwnRole.None;
+
+    /// <summary>Explanation in the details panel for the cleaner's own helpers (null when there is nothing to say).</summary>
+    public virtual string? OwnNote => OwnRole == ProcessOwnRole.Helper
+        ? "Это служебный процесс WaterCa7s PC Cleaner: программа запустила его сама, чтобы проверить систему. " +
+          "Свои процессы программа не оценивает — они завершаются сами, когда проверка закончится."
+        : null;
+
+    protected void OnOwnNoteChanged() => OnPropertyChanged(nameof(OwnNote));
 
     public bool IsTrusted
     {
@@ -272,6 +301,8 @@ public abstract class ProcessItem : ObservableObject
     {
         get
         {
+            if (IsOwn)
+                return ProcessStatusKind.Own;
             if (IsTrusted)
                 return ProcessStatusKind.Trusted;
             if (Suspicion is { } s && s.Level > SuspicionLevel.None)
@@ -297,11 +328,15 @@ public abstract class ProcessItem : ObservableObject
         ProcessStatusKind.Trusted => "Доверенный",
         ProcessStatusKind.Pending => "Проверка…",
         ProcessStatusKind.NoAccess => "нет доступа",
+        ProcessStatusKind.Own => OwnRole == ProcessOwnRole.Self ? "Эта программа" : "Служебный",
         _ => "",
     };
 
     public string StatusToolTip => StatusKind switch
     {
+        ProcessStatusKind.Own => OwnRole == ProcessOwnRole.Self
+            ? "Это сам WaterCa7s PC Cleaner. Свои процессы программа не оценивает."
+            : "Служебный процесс WaterCa7s PC Cleaner: программа запустила его сама для проверки системы и не оценивает его.",
         ProcessStatusKind.High => "Несколько серьёзных признаков вредоносной программы. Откройте подробности справа.",
         ProcessStatusKind.Medium => "Есть признаки, из-за которых программу стоит проверить. Подробности — справа.",
         ProcessStatusKind.Low => "Мелкое замечание (например, нет цифровой подписи). Обычно это не опасно.",
@@ -320,6 +355,7 @@ public abstract class ProcessItem : ObservableObject
         ProcessStatusKind.NoAccess => 20,
         ProcessStatusKind.Pending => 10,
         ProcessStatusKind.Trusted => 5,
+        ProcessStatusKind.Own => 2,
         _ => 0,
     };
 
@@ -586,11 +622,15 @@ public sealed class ProcessRow : ProcessItem
 
     private string ServicesShort => Services.Count == 1 ? Services[0] : $"{Services[0]} и ещё {Services.Count - 1}";
 
+    /// <summary>Kept the processor at 80%+ over several refreshes (see <see cref="CpuStreaks"/>).</summary>
+    internal bool SustainedHighCpu { get; set; }
+
     /// <summary>Recomputes the suspicion only when its inputs changed (the analysis touches the disk).</summary>
     internal void Evaluate(Func<ProcessRow, SuspicionResult?> analyze, int trustVersion)
     {
         // IsTrusted is part of the inputs: other pages (Автозагрузка, Программы) can change the shared trusted list.
-        var inputs = (Path, Signature, CommandLine, Description, Company, trustVersion, DetailsLoaded, IsTrusted);
+        var inputs = (Path, Signature, CommandLine, Description, Company, trustVersion, DetailsLoaded, IsTrusted,
+            (OwnRole, SustainedHighCpu));
         if (Equals(_suspicionInputs, inputs))
             return;
         _suspicionInputs = inputs;
@@ -599,7 +639,7 @@ public sealed class ProcessRow : ProcessItem
 
     internal override string BuildSearchText()
         => string.Join(" ", ExeName, Description, Company, Signature?.Publisher, Path, Pid.ToString(), CommandLine,
-            string.Join(" ", Services));
+            string.Join(" ", Services), IsOwn ? OwnProcesses.HelperLabel : null);
 }
 
 /// <summary>All processes of one program (same executable).</summary>
@@ -670,8 +710,47 @@ public sealed class ProcessGroup : ProcessItem
 
     public override bool IsMicrosoftSystem => _instances.Count > 0 && _instances.All(r => r.IsMicrosoftSystem);
 
+    /// <summary>How many of the program's processes are the cleaner's own helpers.</summary>
+    public int OwnCount => _instances.Count(r => r.IsOwn);
+
+    /// <summary>A program whose processes are partly the cleaner's helpers (e.g. powershell.exe) explains which ones.</summary>
+    public override string? OwnNote
+    {
+        get
+        {
+            if (IsOwn)
+                return base.OwnNote;
+            var own = OwnCount;
+            if (own == 0)
+                return null;
+            return own == 1
+                ? "Один из процессов — служебный процесс WaterCa7s PC Cleaner: программа запустила его сама, чтобы проверить систему, " +
+                  "и не оценивает его."
+                : $"{own} из {Count} процессов — служебные процессы WaterCa7s PC Cleaner: программа запустила их сама, " +
+                  "чтобы проверить систему, и не оценивает их.";
+        }
+    }
+
+    /// <summary>Recomputes what depends on the instances' own-process roles.</summary>
+    internal void SetOwnRoleFromInstances()
+    {
+        var role = _instances.Count > 0 && _instances.All(r => r.IsOwn)
+            ? _instances.Any(r => r.OwnRole == ProcessOwnRole.Self) ? ProcessOwnRole.Self : ProcessOwnRole.Helper
+            : ProcessOwnRole.None;
+        OwnRole = role;
+        var note = OwnNote;
+        if (note != _lastOwnNote)
+        {
+            _lastOwnNote = note;
+            OnOwnNoteChanged();
+        }
+    }
+
+    private string? _lastOwnNote;
+
     internal string OwnSearchText => _ownSearchText ??=
-        string.Join(" ", ExeName, Description, Company, Signature?.Publisher, Path).ToLowerInvariant();
+        string.Join(" ", ExeName, Description, Company, Signature?.Publisher, Path, IsOwn ? OwnProcesses.HelperLabel : null)
+            .ToLowerInvariant();
 
     internal override string BuildSearchText()
     {
@@ -679,7 +758,8 @@ public sealed class ProcessGroup : ProcessItem
         // Command lines too, so "--type=renderer" or a script name finds the program in the (default) grouped view.
         return string.Join(" ", OwnSearchText, string.Join(" ", _instances.Select(r => r.Pid)),
             string.Join(" ", _instances.SelectMany(r => r.Services).Distinct()),
-            string.Join(" ", _instances.Select(r => r.CommandLine).Where(c => !string.IsNullOrEmpty(c)).Distinct()));
+            string.Join(" ", _instances.Select(r => r.CommandLine).Where(c => !string.IsNullOrEmpty(c)).Distinct()),
+            _instances.Any(r => r.IsOwn) ? OwnProcesses.HelperLabel : null);
     }
 
     /// <summary>Replaces the instance list (oldest first) and refreshes the totals.</summary>

@@ -41,7 +41,10 @@ public sealed class ProcessesService : IHealthContributor
         Func<string, FileMeta?>? fileMeta = null,
         Func<long>? clock = null,
         int? logicalCpus = null,
-        Func<string, bool>? canMoveFile = null)
+        Func<string, bool>? canMoveFile = null,
+        int? selfPid = null,
+        Func<MemoryStatus>? memory = null,
+        TimeSpan? analysisInterval = null)
     {
         _source = source;
         _details = details;
@@ -50,6 +53,9 @@ public sealed class ProcessesService : IHealthContributor
         _canMoveFile = canMoveFile ?? FileMoveProbe.CanMove;
         Clock = clock ?? Stopwatch.GetTimestamp;
         LogicalCpus = logicalCpus ?? Environment.ProcessorCount;
+        SelfPid = selfPid ?? Environment.ProcessId;
+        Memory = memory ?? SystemStats.Memory;
+        AnalysisInterval = analysisInterval ?? TimeSpan.FromSeconds(1.5);
     }
 
     public string ModuleName => "Процессы";
@@ -58,6 +64,14 @@ public sealed class ProcessesService : IHealthContributor
     internal Func<long> Clock { get; }
 
     internal int LogicalCpus { get; }
+
+    /// <summary>PID of WaterCa7s PC Cleaner itself (a fake one in tests): it and its helpers are never judged.</summary>
+    internal int SelfPid { get; }
+
+    internal Func<MemoryStatus> Memory { get; }
+
+    /// <summary>Pause between the CPU measurements of the dashboard analysis.</summary>
+    internal TimeSpan AnalysisInterval { get; }
 
     // ---------------------------------------------------------------- snapshots
 
@@ -271,43 +285,22 @@ public sealed class ProcessesService : IHealthContributor
         }
     }
 
-    /// <summary>Text of the Core heuristic reason for web addresses in a command line.</summary>
-    internal const string UrlReason = "Командная строка содержит интернет-адрес";
-
-    private static readonly string[] MicrosoftSoftwareRoots =
-    {
-        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Microsoft"),
-    };
-
     /// <summary>
-    /// Heuristic verdict for a process: <see cref="Suspicion.Analyze"/> adapted to running processes, plus a check of the
-    /// file's description/company against known potentially unwanted programs. Respects the user's trusted list.
+    /// Heuristic verdict for a process: <see cref="Suspicion.Analyze"/> (which already knows that Microsoft files in
+    /// Microsoft's folders are genuine and that signed programs may pass web addresses), plus two process-only checks:
+    /// the file's description/company against known potentially unwanted programs, and a sustained full processor load
+    /// of an unusual file (possible hidden miner). Respects the user's trusted list.
     /// </summary>
-    internal static SuspicionResult Evaluate(string? path, SignatureInfo? signature, string? commandLine, FileMeta? meta)
+    /// <param name="sustainedHighCpu">The process kept the processor busy over several measurements (see <see cref="CpuStreaks"/>).</param>
+    internal static SuspicionResult Evaluate(string? path, SignatureInfo? signature, string? commandLine, FileMeta? meta,
+        bool sustainedHighCpu = false)
     {
+        // Core skips trusted paths too, but the extra checks below must not bring the warning back.
         if (path is not null && AppServices.Settings.IsTrusted(path))
             return SuspicionResult.Clean;
 
         var result = Suspicion.Analyze(path, signature, commandLine);
-        var analyzedPath = path;
-        var analyzedCommandLine = commandLine;
-
-        // Signed programs routinely pass web addresses on their command line (browsers opening a link, crash reporters,
-        // updaters). Only a script interpreter with a URL is a real signal, and that is reported separately.
-        if (signature?.IsValid == true && result.Reasons.Contains(UrlReason) &&
-            !result.Reasons.Any(r => r.StartsWith("Скрытый", StringComparison.Ordinal) ||
-                                     r.StartsWith("Запуск через скриптовый", StringComparison.Ordinal)))
-            analyzedCommandLine = null;
-
-        // Genuine Microsoft binaries outside C:\Windows (Defender in ProgramData, Office, Edge...) are not imitations
-        // of system files. A copy of a Microsoft file in Temp/AppData is still analysed with its location.
-        if (signature?.IsMicrosoft == true && path is not null && MicrosoftSoftwareRoots.Any(r => Suspicion.IsUnder(path, r)))
-            analyzedPath = null;
-
-        if (!ReferenceEquals(analyzedPath, path) || !ReferenceEquals(analyzedCommandLine, commandLine))
-            result = Suspicion.Analyze(analyzedPath, signature, analyzedCommandLine);
+        result = MinerHeuristic.Apply(result, sustainedHighCpu, path, signature);
 
         if (signature?.IsMicrosoft == true || meta is null)
             return result;
@@ -461,31 +454,43 @@ public sealed class ProcessesService : IHealthContributor
         return new QuarantineOutcome(false, $"Процесс завершён, но файл переместить не удалось: {last?.Message}{hint}", report);
     }
 
-    /// <summary>Adds/removes a path from the user's trusted list (shared by all modules).</summary>
+    /// <summary>Adds/removes a path from the user's trusted list (shared by all modules, thread-safe, logged by AppSettings).</summary>
     internal static void SetTrusted(string path, bool trusted)
     {
-        var settings = AppServices.Settings;
-        // A new list is assigned instead of mutating the old one: background analyses may be reading it right now.
-        var list = settings.TrustedItems.Where(t => !string.Equals(t, path, StringComparison.OrdinalIgnoreCase)).ToList();
         if (trusted)
-            list.Add(path);
-        settings.TrustedItems = list;
-        settings.Save();
-        Log.Action(trusted ? $"Добавлено в доверенные: {path}" : $"Удалено из доверенных: {path}");
+            AppServices.Settings.AddTrusted(path);
+        else
+            AppServices.Settings.RemoveTrusted(path);
     }
+
+    /// <summary>Parent PID from the snapshot, or from WMI when the process list did not provide one.</summary>
+    internal static int ParentOf(ProcessSample sample) => sample.Raw.ParentPid != 0 ? sample.Raw.ParentPid : sample.Info.ParentPid;
 
     // ---------------------------------------------------------------- dashboard analysis
 
+    /// <summary>Number of CPU measurements taken by the dashboard analysis (a miner must stay busy in all of them).</summary>
+    internal const int AnalysisMeasurements = MinerHeuristic.RequiredSamples;
+
     /// <summary>
-    /// Read-only analysis for the dashboard: suspicious processes, low free memory, and programs that keep the CPU busy
-    /// over a 2-second sample.
+    /// Read-only analysis for the dashboard: suspicious processes (including a sustained full load of an unusual file),
+    /// low free memory, memory hogs and programs that keep the CPU busy. CPU is measured <see cref="AnalysisMeasurements"/>
+    /// times, <see cref="AnalysisInterval"/> apart (about 3 seconds in total).
     /// </summary>
     public async Task<IReadOnlyList<HealthIssue>> AnalyzeAsync(CancellationToken ct)
     {
         var sampler = new CpuSampler();
+        var streaks = new CpuStreaks();
+        var cpuTotals = new Dictionary<ProcessKey, double>();
         await Task.Run(() => TakeSnapshot(sampler), ct).ConfigureAwait(false);
-        await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false);
-        var samples = await Task.Run(() => TakeSnapshot(sampler), ct).ConfigureAwait(false);
+        List<ProcessSample> samples = new();
+        for (var i = 0; i < AnalysisMeasurements; i++)
+        {
+            await Task.Delay(AnalysisInterval, ct).ConfigureAwait(false);
+            samples = await Task.Run(() => TakeSnapshot(sampler), ct).ConfigureAwait(false);
+            streaks.Update(samples.Select(s => (s.Key, s.CpuPercent)));
+            foreach (var s in samples)
+                cpuTotals[s.Key] = cpuTotals.GetValueOrDefault(s.Key) + s.CpuPercent;
+        }
 
         await LoadDetailsAsync(samples.Select(s => s.Info).ToList(), ct).ConfigureAwait(false);
 
@@ -496,9 +501,13 @@ public sealed class ProcessesService : IHealthContributor
         var evaluated = samples.Select(s =>
         {
             var signature = TryGetSignature(s.Info.Path);
-            return new ProcessIssues.Evaluated(s, Evaluate(s.Info.Path, signature, s.Info.CommandLine, s.Info.Meta));
+            // Average load over the whole analysis, not just the last moment.
+            var averaged = s with { CpuPercent = cpuTotals.GetValueOrDefault(s.Key) / AnalysisMeasurements };
+            var suspicion = Evaluate(s.Info.Path, signature, s.Info.CommandLine, s.Info.Meta, streaks.IsSustained(s.Key));
+            return new ProcessIssues.Evaluated(averaged, suspicion);
         }).ToList();
-        return ProcessIssues.Build(evaluated, SystemStats.Memory(), Environment.ProcessId);
+        var seconds = AnalysisInterval.TotalSeconds * AnalysisMeasurements;
+        return ProcessIssues.Build(evaluated, Memory(), SelfPid, seconds);
     }
 }
 
@@ -509,19 +518,40 @@ internal static class ProcessIssues
 
     public const double HighCpuPercent = 50;
     public const uint LowMemoryLoadPercent = 85;
+
+    /// <summary>One program (fewer than <see cref="ManyCopies"/> processes) holding more than this share of RAM.</summary>
+    public const double MemoryHogShare = 0.25;
+
+    /// <summary>So many processes of one executable (browser tabs, Electron apps)...</summary>
+    public const int ManyCopies = 25;
+
+    /// <summary>...holding more than this share of RAM together.</summary>
+    public const double ManyCopiesShare = 0.20;
+
     private const string Module = "Процессы";
     private const string PageKey = "Processes";
 
-    public static List<HealthIssue> Build(IReadOnlyList<Evaluated> items, MemoryStatus memory, int selfPid)
+    private static readonly HashSet<string> Browsers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "chrome.exe", "msedge.exe", "firefox.exe", "opera.exe", "brave.exe", "vivaldi.exe", "browser.exe", "yandex.exe",
+        "chromium.exe", "librewolf.exe", "waterfox.exe", "floorp.exe", "thorium.exe", "arc.exe",
+    };
+
+    /// <param name="cpuSeconds">How long the CPU was measured (only for the wording of the high-load finding).</param>
+    public static List<HealthIssue> Build(IReadOnlyList<Evaluated> items, MemoryStatus memory, int selfPid, double cpuSeconds = 3)
     {
         var issues = new List<HealthIssue>();
         var keys = ProcessGrouping.AssignKeys(items, e => e.Sample.Info.Name, e => e.Sample.Info.Path);
+
+        // The cleaner and the helpers it starts for its own checks (powershell.exe, reg.exe...) are not the user's problem.
+        var own = OwnProcesses.Find(items, selfPid, e => e.Sample.Pid, e => ProcessesService.ParentOf(e.Sample),
+            e => e.Sample.Raw.CreateTime, e => e.Sample.Info.Name, e => e.Sample.Info.Path);
         var programs = items.GroupBy(e => keys[e]).ToList();
 
         // 1. Suspicious programs (one issue per executable, not per instance).
         foreach (var program in programs)
         {
-            var suspicious = program.Where(e => e.Suspicion.IsSuspicious && e.Sample.Pid != selfPid).ToList();
+            var suspicious = program.Where(e => e.Suspicion.IsSuspicious && !own.Contains(e)).ToList();
             if (suspicious.Count == 0)
                 continue;
             var worst = suspicious.MaxBy(e => e.Suspicion.Score)!;
@@ -568,42 +598,128 @@ internal static class ProcessIssues
             });
         }
 
-        // 3. Programs keeping the processor busy.
+        // 3. Programs keeping the processor busy (our own helpers don't count).
         foreach (var program in programs)
         {
-            if (program.Any(e => e.Sample.Pid == selfPid))
-                continue; // our own scan is not the user's problem
-            var cpu = Math.Min(100, program.Sum(e => e.Sample.CpuPercent));
+            var theirs = program.Where(e => !own.Contains(e)).ToList();
+            if (theirs.Count == 0)
+                continue;
+            var cpu = Math.Min(100, theirs.Sum(e => e.Sample.CpuPercent));
             if (cpu <= HighCpuPercent)
                 continue;
-            var name = DisplayName(program);
+            var name = DisplayName(theirs);
             // System, Defender, svchost... can't be terminated from the Processes page: don't suggest it.
-            var isProtected = program.Any(e =>
-                ProcessGuard.Check(e.Sample.Pid, e.Sample.Info.FileName, e.Sample.Info.Path, selfPid).Verdict == KillVerdict.Blocked);
-            var advice = isProtected
+            var advice = IsProtected(theirs, selfPid)
                 ? "Это системный процесс Windows, завершать его нельзя. Обычно такая нагрузка спадает сама " +
                   "(например, после проверки Защитником или установки обновлений); если она держится часами — перезагрузите компьютер."
                 : "Если сейчас не идёт игра, обработка видео или архивация — возможно, программа зависла " +
                   "или без нужды работает в фоне. Её можно завершить в разделе «Процессы».";
+            var seconds = Math.Max(1, (int)Math.Round(cpuSeconds));
             issues.Add(new HealthIssue
             {
                 Module = Module,
                 Title = $"Высокая нагрузка на процессор: {name}",
-                Details = $"За 2 секунды «{name}» занял {Format.Percent(cpu)} мощности процессора. " + advice,
+                Details = $"За {seconds} {Format.Plural(seconds, "секунду", "секунды", "секунд")} «{name}» " +
+                          $"в среднем занимал {Format.Percent(cpu)} мощности процессора. " + advice,
                 Severity = IssueSeverity.Low,
                 TargetPageKey = PageKey,
             });
         }
 
+        // 4. Memory hogs: one heavy program, or a swarm of copies of one executable (browser tabs).
+        if (memory.TotalBytes > 0)
+        {
+            foreach (var program in programs)
+            {
+                var theirs = program.Where(e => !own.Contains(e)).ToList();
+                if (theirs.Count == 0 || IsProtected(theirs, selfPid))
+                    continue; // Windows itself: nothing the user can close
+                var bytes = theirs.Sum(e => e.Sample.MemoryBytes);
+                var share = (double)bytes / memory.TotalBytes;
+                var issue = theirs.Count >= ManyCopies
+                    ? share > ManyCopiesShare ? ManyCopiesIssue(theirs, bytes, share, memory) : null
+                    : share > MemoryHogShare ? MemoryHogIssue(theirs, bytes, share, memory) : null;
+                if (issue is not null)
+                    issues.Add(issue);
+            }
+        }
+
         return issues.OrderByDescending(i => i.Severity).ToList();
     }
 
+    private static HealthIssue MemoryHogIssue(List<Evaluated> program, long bytes, double share, MemoryStatus memory)
+    {
+        var percent = PercentText(share);
+        var copies = program.Count > 1 ? $" ({Format.Count(program.Count, "процесс", "процесса", "процессов")})" : "";
+        return new HealthIssue
+        {
+            Module = Module,
+            Title = $"{ShortName(program)} занимает {Format.Bytes(bytes)} памяти ({percent} от всей)",
+            Details = $"«{DisplayName(program)}»{copies} занимает {Format.Bytes(bytes)} из {Format.Bytes(memory.TotalBytes)} " +
+                      "оперативной памяти — другим программам остаётся меньше, и компьютер может начать тормозить.\n" +
+                      "• Если программа сейчас не нужна — закройте её.\n" +
+                      "• Если нужна, но занимает всё больше памяти, — перезапустите её: так она вернёт память, " +
+                      "которую со временем перестала освобождать.",
+            Severity = IssueSeverity.Low,
+            TargetPageKey = PageKey,
+        };
+    }
+
+    private static HealthIssue ManyCopiesIssue(List<Evaluated> program, long bytes, double share, MemoryStatus memory)
+    {
+        var n = program.Count;
+        var fileName = program[0].Sample.Info.FileName;
+        var isBrowser = Browsers.Contains(fileName);
+        var details = $"{Format.Count(n, "копия", "копии", "копий")} «{DisplayName(program)}» вместе " +
+                      $"{Format.Plural(n, "занимает", "занимают", "занимают")} {Format.Bytes(bytes)} " +
+                      $"из {Format.Bytes(memory.TotalBytes)} оперативной памяти ({PercentText(share)}).\n";
+        details += isBrowser
+            ? "Браузер запускает отдельный процесс для каждой вкладки и расширения.\n" +
+              "• Закройте вкладки, которые сейчас не нужны.\n" +
+              "• Включите в настройках браузера экономию памяти (раздел «Производительность»): неактивные вкладки будут " +
+              "«засыпать» и отдавать память.\n" +
+              "• Отключите расширения, которыми не пользуетесь."
+            : "Многие программы (например, мессенджеры и лаунчеры игр на основе браузера) запускают отдельный процесс " +
+              "для каждого окна, вкладки или задачи.\n" +
+              "• Закройте лишние окна и вкладки этой программы.\n" +
+              "• Если она давно запущена — перезапустите её.";
+        return new HealthIssue
+        {
+            Module = Module,
+            Title = $"{Format.Count(n, "копия", "копии", "копий")} {fileName} {Format.Plural(n, "занимает", "занимают", "занимают")} " +
+                    Format.Bytes(bytes),
+            Details = details,
+            Severity = IssueSeverity.Low,
+            TargetPageKey = PageKey,
+        };
+    }
+
+    private static bool IsProtected(IEnumerable<Evaluated> program, int selfPid)
+        => program.Any(e => ProcessGuard.Check(e.Sample.Pid, e.Sample.Info.FileName, e.Sample.Info.Path, selfPid).Verdict ==
+                            KillVerdict.Blocked);
+
+    /// <summary>"27%" (whole percents read better in a title).</summary>
+    private static string PercentText(double share) => $"{Math.Round(share * 100):0}%";
+
+    private static string? Description(ProcessStaticInfo info)
+    {
+        var description = info.Meta?.Description ?? KnownWindowsProcesses.Describe(info.Name);
+        return string.IsNullOrWhiteSpace(description) || string.Equals(description, info.FileName, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : description;
+    }
+
+    /// <summary>"Google Chrome (chrome.exe)" or just the file name.</summary>
     private static string DisplayName(IEnumerable<Evaluated> program)
     {
         var info = program.First().Sample.Info;
-        var description = info.Meta?.Description ?? KnownWindowsProcesses.Describe(info.Name);
-        return string.IsNullOrWhiteSpace(description) || string.Equals(description, info.FileName, StringComparison.OrdinalIgnoreCase)
-            ? info.FileName
-            : $"{description} ({info.FileName})";
+        return Description(info) is { } description ? $"{description} ({info.FileName})" : info.FileName;
+    }
+
+    /// <summary>"Google Chrome" or the file name.</summary>
+    private static string ShortName(IEnumerable<Evaluated> program)
+    {
+        var info = program.First().Sample.Info;
+        return Description(info) ?? info.FileName;
     }
 }

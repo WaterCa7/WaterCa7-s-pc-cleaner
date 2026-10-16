@@ -12,6 +12,7 @@ public sealed class ProcessesViewModel : PageViewModel
 
     private readonly ProcessesService _service;
     private readonly CpuSampler _sampler = new();
+    private readonly CpuStreaks _streaks = new();
     private readonly object _stateLock = new();
     private readonly Dictionary<ProcessKey, ProcessRow> _rows = new();
     private readonly Dictionary<string, ProcessGroup> _groups = new();
@@ -53,6 +54,7 @@ public sealed class ProcessesViewModel : PageViewModel
     private int _processCount;
     private int _programCount;
     private int _suspiciousCount;
+    private int _suspiciousProgramCount;
     private int _inaccessibleCount;
     private int _visibleCount;
 
@@ -257,6 +259,7 @@ public sealed class ProcessesViewModel : PageViewModel
         ? $"в {Format.Number(ProgramCount)} {Format.Plural(ProgramCount, "программе", "программах", "программах")}"
         : "загрузка…";
 
+    /// <summary>Suspicious processes (the big number on the card, like the "Процессы" card).</summary>
     public int SuspiciousCount
     {
         get => _suspiciousCount;
@@ -265,8 +268,18 @@ public sealed class ProcessesViewModel : PageViewModel
             if (!Set(ref _suspiciousCount, value))
                 return;
             OnPropertyChanged(nameof(HasSuspicious));
-            OnPropertyChanged(nameof(SuspiciousCountText));
-            OnPropertyChanged(nameof(SuspiciousHint));
+            OnSuspiciousTextChanged();
+        }
+    }
+
+    /// <summary>Programs they belong to — the rows the grouped list shows with "Только подозрительные".</summary>
+    public int SuspiciousProgramCount
+    {
+        get => _suspiciousProgramCount;
+        private set
+        {
+            if (Set(ref _suspiciousProgramCount, value))
+                OnSuspiciousTextChanged();
         }
     }
 
@@ -274,6 +287,7 @@ public sealed class ProcessesViewModel : PageViewModel
 
     public string SuspiciousCountText => HasLoaded ? Format.Number(SuspiciousCount) : "—";
 
+    /// <summary>"в 1 программе" under the number (mirrors "в 119 программах" on the "Процессы" card).</summary>
     public string SuspiciousHint
     {
         get
@@ -281,9 +295,35 @@ public sealed class ProcessesViewModel : PageViewModel
             if (!HasLoaded)
                 return "загрузка…";
             if (SuspiciousCount > 0)
-                return "стоит проверить";
+                return $"в {Format.Number(SuspiciousProgramCount)} {Format.Plural(SuspiciousProgramCount, "программе", "программах", "программах")}";
             return IsCheckingSignatures ? "идёт проверка подписей…" : "ничего подозрительного";
         }
+    }
+
+    /// <summary>"2 процесса в 1 программе" — the card's tooltip and the summary used by tests.</summary>
+    public string SuspiciousSummary
+    {
+        get
+        {
+            if (!HasLoaded)
+                return "Подозрительные процессы ещё проверяются.";
+            const string signs = "Признаки нежелательных программ: нет цифровой подписи, необычное расположение, " +
+                                 "маскировка под системные файлы, скрытый запуск скриптов.";
+            if (SuspiciousCount == 0)
+                return (IsCheckingSignatures
+                    ? "Пока ничего подозрительного, но проверка цифровых подписей ещё идёт."
+                    : "Ни один из запущенных процессов не вызывает подозрений.") + "\n\n" + signs;
+            return $"{Format.Count(SuspiciousCount, "подозрительный процесс", "подозрительных процесса", "подозрительных процессов")} " +
+                   $"в {Format.Number(SuspiciousProgramCount)} {Format.Plural(SuspiciousProgramCount, "программе", "программах", "программах")}. " +
+                   "В списке с группировкой процессы одной программы собраны в одну строку.\n\n" + signs;
+        }
+    }
+
+    private void OnSuspiciousTextChanged()
+    {
+        OnPropertyChanged(nameof(SuspiciousCountText));
+        OnPropertyChanged(nameof(SuspiciousHint));
+        OnPropertyChanged(nameof(SuspiciousSummary));
     }
 
     public bool IsCheckingSignatures => _signaturesDone < _signaturesRequested;
@@ -304,7 +344,7 @@ public sealed class ProcessesViewModel : PageViewModel
 
     public string AdminHintText =>
         $"Сведения о {Format.Number(InaccessibleCount)} {Format.Plural(InaccessibleCount, "процессе", "процессах", "процессах")} " +
-        "(в основном это службы Windows) доступны только администратору.";
+        "(в основном службах Windows) видны только администратору.";
 
     public int VisibleCount
     {
@@ -483,11 +523,16 @@ public sealed class ProcessesViewModel : PageViewModel
 
             lock (_stateLock)
             {
+                // A fresh baseline means a long pause since the last measurement: "consecutive" load starts over.
+                if (needBaseline)
+                    _streaks.BreakStreaks();
+                _streaks.Update(samples.Select(s => (s.Key, s.CpuPercent)));
                 SnapshotDiff.Apply(_rows, samples, s => new ProcessRow(s.Info), (row, s) =>
                 {
                     row.Cpu = s.CpuPercent;
                     row.Memory = s.MemoryBytes;
-                    row.ParentPid = s.Raw.ParentPid != 0 ? s.Raw.ParentPid : s.Info.ParentPid;
+                    row.ParentPid = ProcessesService.ParentOf(s);
+                    row.SustainedHighCpu = _streaks.IsSustained(s.Key);
                 });
                 HasLoaded = true;
                 RebuildAll();
@@ -628,7 +673,7 @@ public sealed class ProcessesViewModel : PageViewModel
         {
             lock (_stateLock)
                 RebuildAll();
-            OnPropertyChanged(nameof(SuspiciousHint));
+            OnSuspiciousTextChanged();
             OnPropertyChanged(nameof(IsCheckingSignatures));
             RelayCommand.Refresh();
         }
@@ -653,9 +698,15 @@ public sealed class ProcessesViewModel : PageViewModel
         foreach (var row in _rows.Values)
             byPid.TryAdd(row.Pid, row);
 
+        // The cleaner and the helpers it starts for its checks (powershell.exe, reg.exe, netsh.exe...) are never judged.
+        var selfPid = _service.SelfPid;
+        var own = OwnProcesses.Find(_rows.Values, selfPid, r => r.Pid, r => r.ParentPid, r => r.CreateTime, r => r.Info.Name,
+            r => r.Info.Path);
+
         foreach (var row in _rows.Values)
         {
             var info = row.Info;
+            row.OwnRole = OwnProcesses.RoleOf(row, selfPid, r => r.Pid, own);
             row.Path = info.Path;
             row.AccessDenied = info.Path is null && !KnownWindowsProcesses.IsPseudo(info.Name);
             row.Description = info.Meta?.Description ?? (info.Path is null ? KnownWindowsProcesses.Describe(info.Name) : null);
@@ -667,9 +718,10 @@ public sealed class ProcessesViewModel : PageViewModel
             row.IsTrusted = info.Path is not null && AppServices.Settings.IsTrusted(info.Path);
             row.Evaluate(AnalyzeRow, _trustVersion);
 
-            var (verdict, reason) = ProcessGuard.Check(row.Pid, row.ExeName, row.Path);
+            var (verdict, reason) = ProcessGuard.Check(row.Pid, row.ExeName, row.Path, selfPid);
             row.SetProtection(verdict, reason);
-            row.SetQuarantineBlockReason(QuarantineRules.BlockReason(row.Path, row.Signature, row.Suspicion, verdict, row.IsTrusted));
+            row.SetQuarantineBlockReason(QuarantineRules.BlockReason(row.Path, row.Signature, row.Suspicion, verdict, row.IsTrusted,
+                isOwnHelper: row.OwnRole == ProcessOwnRole.Helper));
             row.ParentText = ParentText(row, byPid);
             ApplyDefenderState(row);
         }
@@ -677,11 +729,11 @@ public sealed class ProcessesViewModel : PageViewModel
 
     private static SuspicionResult? AnalyzeRow(ProcessRow row)
     {
-        if (row.Pid == Environment.ProcessId)
-            return SuspicionResult.Clean; // the cleaner does not judge itself
+        if (row.IsOwn)
+            return SuspicionResult.Clean; // the cleaner does not judge itself or the tools it runs
         if (row.Path is not null && row.Signature is null)
             return null; // wait for the signature, otherwise signed programs would flash as "suspicious"
-        return ProcessesService.Evaluate(row.Path, row.Signature, row.CommandLine, row.Info.Meta);
+        return ProcessesService.Evaluate(row.Path, row.Signature, row.CommandLine, row.Info.Meta, row.SustainedHighCpu);
     }
 
     private static string ParentText(ProcessRow row, Dictionary<int, ProcessRow> byPid)
@@ -727,6 +779,7 @@ public sealed class ProcessesViewModel : PageViewModel
         g.Company = source.Company;
         g.Signature = _service.TryGetSignature(g.Path);
         g.IsTrusted = g.Path is not null && AppServices.Settings.IsTrusted(g.Path);
+        g.SetOwnRoleFromInstances();
         g.Suspicion = g.Instances.Any(r => r.Path is not null && r.Suspicion is null)
             ? null
             : ProcessGrouping.Combine(g.Instances.Select(r => r.Suspicion));
@@ -734,7 +787,8 @@ public sealed class ProcessesViewModel : PageViewModel
         var worst = ProcessGuard.Worst(g.Instances.Select(r => r.Verdict));
         var reason = g.Instances.FirstOrDefault(r => r.Verdict == worst)?.ProtectionReason;
         g.SetProtection(worst, reason);
-        g.SetQuarantineBlockReason(QuarantineRules.BlockReason(g.Path, g.Signature, g.Suspicion, worst, g.IsTrusted));
+        g.SetQuarantineBlockReason(QuarantineRules.BlockReason(g.Path, g.Signature, g.Suspicion, worst, g.IsTrusted,
+            isOwnHelper: g.OwnRole == ProcessOwnRole.Helper));
         ApplyDefenderState(g);
         g.InvalidateSearchText();
     }
@@ -827,11 +881,11 @@ public sealed class ProcessesViewModel : PageViewModel
         ProcessCount = _rows.Count;
         ProgramCount = _groups.Count;
         SuspiciousCount = _rows.Values.Count(r => r.IsSuspicious);
+        SuspiciousProgramCount = _groups.Values.Count(g => g.Instances.Any(r => r.IsSuspicious));
         InaccessibleCount = _rows.Values.Count(r => r.AccessDenied);
         OnPropertyChanged(nameof(ProcessCountText));
         OnPropertyChanged(nameof(ProgramCountText));
-        OnPropertyChanged(nameof(SuspiciousCountText));
-        OnPropertyChanged(nameof(SuspiciousHint));
+        OnSuspiciousTextChanged();
         UpdateEmptyState();
     }
 

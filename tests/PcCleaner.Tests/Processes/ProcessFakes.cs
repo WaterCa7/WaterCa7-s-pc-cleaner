@@ -13,10 +13,21 @@ internal sealed class FakeProcessSource : IProcessSource
 
     public Dictionary<int, string?> Paths { get; } = new();
 
+    /// <summary>CPU time (100 ns units) added to a process on every Enumerate — a program that keeps working.</summary>
+    public Dictionary<int, long> CpuPerEnumerate { get; } = new();
+
     public IReadOnlyList<RawProcess> Enumerate()
     {
         lock (_lock)
+        {
+            foreach (var (pid, cpu) in CpuPerEnumerate)
+            {
+                var i = _processes.FindIndex(p => p.Pid == pid);
+                if (i >= 0)
+                    _processes[i] = _processes[i] with { CpuTime = _processes[i].CpuTime + cpu };
+            }
             return _processes.ToList();
+        }
     }
 
     public string? QueryImagePath(int pid, long createTime) => Paths.TryGetValue(pid, out var p) ? p : null;
@@ -114,13 +125,15 @@ internal static class ProcessTestData
         };
     }
 
-    public static (ProcessesService Service, FakeProcessSource Source, FakeDetails Details, FakeClock Clock) CreateService()
+    public static (ProcessesService Service, FakeProcessSource Source, FakeDetails Details, FakeClock Clock) CreateService(
+        int? selfPid = null, Func<MemoryStatus>? memory = null, TimeSpan? analysisInterval = null, Func<long>? clock = null)
     {
         var source = new FakeProcessSource();
         var details = new FakeDetails();
-        var clock = new FakeClock();
-        var service = new ProcessesService(source, details, SignatureFor, MetaFor, () => clock.Now, logicalCpus: 4);
-        return (service, source, details, clock);
+        var fakeClock = new FakeClock();
+        var service = new ProcessesService(source, details, SignatureFor, MetaFor, clock ?? (() => fakeClock.Now), logicalCpus: 4,
+            selfPid: selfPid, memory: memory, analysisInterval: analysisInterval);
+        return (service, source, details, fakeClock);
     }
 
     /// <summary>A typical machine: Chrome with 3 processes, 2 svchost (one inaccessible), one unsigned exe in Temp.</summary>

@@ -320,7 +320,7 @@ public class ProcessesViewModelTests
         Assert.Equal(1, vm.SuspiciousCount);
 
         var settings = AppServices.Settings;
-        settings.TrustedItems = settings.TrustedItems.Append(path).ToList(); // e.g. "Доверять" on the Startup page
+        settings.AddTrusted(path); // e.g. "Доверять" on the Startup page
         try
         {
             clock.Advance(TimeSpan.FromSeconds(2));
@@ -332,7 +332,7 @@ public class ProcessesViewModelTests
         }
         finally
         {
-            settings.TrustedItems = settings.TrustedItems.Where(t => t != path).ToList();
+            settings.RemoveTrusted(path);
         }
     }
 

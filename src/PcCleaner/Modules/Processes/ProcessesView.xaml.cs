@@ -132,20 +132,90 @@ public partial class ProcessesView : UserControl
         }
     }
 
-    /// <summary>On narrow windows the publisher column gives its space to the name (it is still in the details panel).</summary>
+    /// <summary>
+    /// On narrow windows the publisher column gives its space to the name (it is still in the details panel), and the
+    /// number columns get slimmer so the "Оценка" badge is never cut off by the scroll bar.
+    /// </summary>
     private void OnGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var visibility = e.NewSize.Width < 600 ? Visibility.Collapsed : Visibility.Visible;
+        var width = e.NewSize.Width;
+        var visibility = width < 600 ? Visibility.Collapsed : Visibility.Visible;
         if (PublisherColumn.Visibility != visibility)
             PublisherColumn.Visibility = visibility;
+        var slim = width < 470;
+        SetWidth(CpuColumn, slim ? 54 : 62);
+        SetWidth(MemoryColumn, slim ? 76 : 84);
+
+        static void SetWidth(DataGridColumn column, double value)
+        {
+            if (Math.Abs(column.Width.DisplayValue - value) > 0.5 || !column.Width.IsAbsolute)
+                column.Width = new DataGridLength(value);
+        }
     }
 
-    /// <summary>Three action buttons per row when there is room for their captions, otherwise two.</summary>
+    /// <summary>Below this height the secondary actions shrink to one row of icon buttons (their tooltips name them).</summary>
+    private const double IconActionsBelowHeight = 470;
+
+    /// <summary>Below this width the summary cards drop their decorative icons, so "37%  18,1 из 47,9 ГБ" fits.</summary>
+    private const double CardIconsBelowWidth = 920;
+
+    /// <summary>Below this width the filters get short captions, so the toolbar stays on one line.</summary>
+    private const double ShortFiltersBelowWidth = 980;
+
+    /// <summary>
+    /// Tall panel: captioned buttons, three per row (two when narrow). Short panel (small window): one row of icon-only
+    /// buttons, which roughly doubles the room for the details above.
+    /// </summary>
     private void OnDetailsSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var columns = e.NewSize.Width < 330 ? 2 : 3;
+        var iconsOnly = e.NewSize.Height < IconActionsBelowHeight;
+        var narrow = e.NewSize.Width < 330;
+
+        // Narrow panel: "Завершить" takes only what its caption needs, so "Завершить дерево" keeps its whole caption.
+        ActionBar.Padding = narrow ? new Thickness(6, 7, 6, 8) : new Thickness(9, 8, 9, 9);
+        var first = narrow ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        if (KillActions.ColumnDefinitions[0].Width != first)
+            KillActions.ColumnDefinitions[0].Width = first;
+        foreach (var kill in KillActions.Children.OfType<Button>())
+            kill.FontSize = narrow ? 12 : 12.5;
+
+        var buttons = SecondaryActions.Children.OfType<Button>().ToList();
+        var columns = iconsOnly ? buttons.Count : narrow ? 2 : 3;
         if (SecondaryActions.Columns != columns)
             SecondaryActions.Columns = columns;
+        foreach (var button in buttons)
+        {
+            if (button.Content is not DockPanel { Children.Count: 2 } panel ||
+                panel.Children[0] is not TextBlock icon || panel.Children[1] is not TextBlock caption)
+                continue;
+            caption.Visibility = iconsOnly ? Visibility.Collapsed : Visibility.Visible;
+            icon.Margin = iconsOnly ? new Thickness(0) : new Thickness(0, 0, 6, 0);
+            icon.FontSize = iconsOnly ? 14 : 13;
+        }
+    }
+
+    private void OnSummarySizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var visibility = e.NewSize.Width < CardIconsBelowWidth ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var icon in new[] { CpuIcon, MemoryIcon, ProcessIcon, SuspiciousIcon })
+        {
+            if (icon.Visibility != visibility)
+                icon.Visibility = visibility;
+        }
+    }
+
+    /// <summary>Short captions on narrow windows (the tooltips keep the full explanation).</summary>
+    private void OnToolbarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.WidthChanged)
+            return;
+        var compact = e.NewSize.Width < ShortFiltersBelowWidth;
+        GroupCheck.Content = compact ? "Группировать" : "Группировать по программам";
+        HideMicrosoftCheck.Content = compact ? "Скрыть системные" : "Скрыть системные процессы Microsoft";
+        SearchPanel.Width = compact ? 196 : 228;
+        var gap = new Thickness(0, 8, compact ? 14 : 18, 8);
+        GroupCheck.Margin = gap;
+        SuspiciousCheck.Margin = gap;
     }
 
     private void OnClearSearch(object sender, RoutedEventArgs e)
