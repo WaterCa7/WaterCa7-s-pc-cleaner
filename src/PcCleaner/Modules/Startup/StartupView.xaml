@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="PcCleaner.Modules.Startup.StartupView"
+<UserControl x:Class="PcCleaner.Modules.Startup.StartupView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -6,8 +6,765 @@
              xmlns:local="clr-namespace:PcCleaner.Modules.Startup"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:StartupViewModel}"
-             d:DesignWidth="1000" d:DesignHeight="700">
-    <Border Style="{StaticResource Card}" VerticalAlignment="Top">
-        <TextBlock Style="{StaticResource Muted}" Text="Раздел в разработке" />
-    </Border>
+             d:DesignWidth="1020" d:DesignHeight="640">
+    <UserControl.Resources>
+
+        <!-- Summary card that doubles as a quick filter (click again to reset). -->
+        <Style x:Key="StatCard" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="Bd" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource LineBrush}"
+                                BorderThickness="1" CornerRadius="10" Padding="12,10">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface2Brush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface2Brush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StatIcon" TargetType="Border">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="StatNumber" TargetType="TextBlock" BasedOn="{StaticResource BigNumber}">
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="LineHeight" Value="28" />
+        </Style>
+
+        <Style x:Key="StatCaption" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- Segmented source filter -->
+        <Style x:Key="SegmentItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="11,5">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface3Brush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Status badge: colors follow StartupItem.State -->
+        <Style x:Key="StateBadge" TargetType="Border" BasedOn="{StaticResource Badge}">
+            <Setter Property="Background" Value="{StaticResource Surface3Brush}" />
+            <Setter Property="TextElement.Foreground" Value="{StaticResource MutedBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding State}" Value="Enabled">
+                    <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource SuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Broken">
+                    <Setter Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource DangerBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Pending">
+                    <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource InfoBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Risk badge: colors follow the heuristic level -->
+        <Style x:Key="RiskBadge" TargetType="Border" BasedOn="{StaticResource Badge}">
+            <Setter Property="Background" Value="{StaticResource Surface3Brush}" />
+            <Setter Property="TextElement.Foreground" Value="{StaticResource MutedBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RiskLevel}" Value="Low">
+                    <Setter Property="Background" Value="{StaticResource InfoSoftBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource InfoBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RiskLevel}" Value="Medium">
+                    <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RiskLevel}" Value="High">
+                    <Setter Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource DangerBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsTrusted}" Value="True">
+                    <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource SuccessBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="BadgeText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="5,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <Style x:Key="BadgeIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+            <Setter Property="FontSize" Value="10" />
+        </Style>
+
+        <!-- Selectable read-only value in the details panel -->
+        <Style x:Key="ValueText" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="FontSize" Value="12.5" />
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,10,0,2" />
+        </Style>
+
+        <!-- Compact tool button in the details panel -->
+        <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding" Value="6,6" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        </Style>
+
+        <!-- Label of a tool button: trimmed instead of clipped when the details panel is narrow -->
+        <Style x:Key="ToolLabel" TargetType="TextBlock">
+            <Setter Property="Margin" Value="5,0,0,0" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Link that wraps on narrow widths (the theme's LinkButton is single-line) -->
+        <Style x:Key="WrapLinkButton" TargetType="Button" BasedOn="{StaticResource LinkButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="T" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" TextWrapping="Wrap" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="T" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== Summary cards (click = quick filter) ===== -->
+        <UniformGrid x:Name="Cards" Rows="1" Columns="4" Margin="-5,0,-5,0">
+            <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsEnabledFilter, Mode=OneWay}"
+                      Command="{Binding SetStatusFilterCommand}" CommandParameter="Enabled"
+                      ToolTip="Показать только включённые записи (повторный щелчок — показать все)">
+                <DockPanel>
+                    <Border Style="{StaticResource StatIcon}" Background="{StaticResource AccentSoftBrush}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE768;" Foreground="{StaticResource SuccessBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource StatNumber}" Text="{Binding EnabledCount}" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="Включено" />
+                    </StackPanel>
+                </DockPanel>
+            </CheckBox>
+            <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsDisabledFilter, Mode=OneWay}"
+                      Command="{Binding SetStatusFilterCommand}" CommandParameter="Disabled"
+                      ToolTip="Показать только отключённые записи (повторный щелчок — показать все)">
+                <DockPanel>
+                    <Border Style="{StaticResource StatIcon}" Background="{StaticResource Surface3Brush}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE769;" Foreground="{StaticResource MutedBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource StatNumber}" Text="{Binding DisabledCount}" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="Отключено" />
+                    </StackPanel>
+                </DockPanel>
+            </CheckBox>
+            <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsSuspiciousFilter, Mode=OneWay}"
+                      Command="{Binding SetStatusFilterCommand}" CommandParameter="Suspicious"
+                      ToolTip="Показать записи, которые выглядят необычно (повторный щелчок — показать все)">
+                <DockPanel>
+                    <Border Style="{StaticResource StatIcon}" Background="{StaticResource WarningSoftBrush}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" Foreground="{StaticResource WarningBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource StatNumber}" Text="{Binding SuspiciousCount}" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="Подозрительных" />
+                    </StackPanel>
+                </DockPanel>
+            </CheckBox>
+            <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsBrokenFilter, Mode=OneWay}"
+                      Command="{Binding SetStatusFilterCommand}" CommandParameter="Broken"
+                      ToolTip="Показать записи, файл которых не найден (повторный щелчок — показать все)">
+                <DockPanel>
+                    <Border Style="{StaticResource StatIcon}" Background="{StaticResource DangerSoftBrush}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8E5;" Foreground="{StaticResource DangerBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource StatNumber}" Text="{Binding BrokenCount}" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="Битых записей" />
+                    </StackPanel>
+                </DockPanel>
+            </CheckBox>
+        </UniformGrid>
+
+        <!-- ===== Source filter, search, refresh ===== -->
+        <Grid Grid.Row="1" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Background="{StaticResource SurfaceBrush}" CornerRadius="8" Padding="3" VerticalAlignment="Center">
+                <ListBox ItemsSource="{Binding SourceFilters}" SelectedItem="{Binding SelectedSource, Mode=TwoWay}"
+                         ItemContainerStyle="{StaticResource SegmentItem}" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Title}" FontSize="12.5" VerticalAlignment="Center"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                <Border Background="{StaticResource Surface2Brush}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Count}" FontSize="11" Foreground="{StaticResource MutedBrush}" />
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <Grid Grid.Column="1" Margin="10,0" MinWidth="120" VerticalAlignment="Center">
+                <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="15,0,4,0" Height="34" VerticalContentAlignment="Center"
+                         ToolTip="Поиск по названию, издателю, команде или пути" />
+                <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                           Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                <TextBlock Text="Поиск…" Foreground="{StaticResource MutedBrush}" FontSize="12.5" Margin="31,0,0,0"
+                           VerticalAlignment="Center" IsHitTestVisible="False"
+                           Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+            </Grid>
+
+            <Button Grid.Column="2" Command="{Binding RefreshCommand}" Padding="10,0" Height="34" VerticalAlignment="Center" ToolTip="Обновить список">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" />
+                    <TextBlock x:Name="RefreshText" Text="Обновить" Margin="7,0,0,0" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <!-- ===== Visibility toggles, counter, bulk action ===== -->
+        <DockPanel Grid.Row="2" Margin="0,10,0,0" LastChildFill="True">
+            <Button DockPanel.Dock="Right" Style="{StaticResource DangerButton}" Padding="12,0" Height="32" VerticalAlignment="Center"
+                    Command="{Binding DeleteBrokenCommand}"
+                    Visibility="{Binding DeletableBrokenCount, Converter={StaticResource HasValueToVis}}"
+                    ToolTip="Удалить записи, файлы которых больше не существуют (с резервной копией)">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
+                    <TextBlock Text="{Binding DeleteBrokenText}" Margin="7,0,0,0" />
+                </StackPanel>
+            </Button>
+            <TextBlock DockPanel.Dock="Right" Text="{Binding ShownText}" Style="{StaticResource Muted}" TextWrapping="NoWrap"
+                       VerticalAlignment="Center" Margin="12,0" />
+            <WrapPanel VerticalAlignment="Center">
+                <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ShowWindowsTasks}" Margin="0,3,18,3"
+                          ToolTip="Встроенные задания Windows (папка \Microsoft\ с подписью Microsoft). Обычно их трогать не нужно.">
+                    <TextBlock Text="{Binding WindowsTasksText}" FontSize="12.5" />
+                </CheckBox>
+                <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ShowMicrosoftServices}" Margin="0,3,18,3"
+                          ToolTip="Системные службы Windows с подписью Microsoft. Программа их только показывает и не меняет.">
+                    <TextBlock Text="{Binding MicrosoftServicesText}" FontSize="12.5" />
+                </CheckBox>
+            </WrapPanel>
+        </DockPanel>
+
+        <!-- ===== Result of the last action ===== -->
+        <Border Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource InnerCard}" Padding="12,8"
+                Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="6,2" Command="{Binding DismissMessageCommand}"
+                        ToolTip="Скрыть" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="11" />
+                </Button>
+                <TextBlock DockPanel.Dock="Left" Margin="0,0,10,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                            <Setter Property="Text" Value="&#xE930;" />
+                            <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding MessageIsError}" Value="True">
+                                    <Setter Property="Text" Value="&#xE7BA;" />
+                                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12.5" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <!-- ===== List + details ===== -->
+        <Grid Grid.Row="4" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="300" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition x:Name="DetailsColumn" Width="300" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Card}" Padding="4,2,4,4">
+                <Grid>
+                    <DataGrid x:Name="ItemsGrid" ItemsSource="{Binding ItemsView}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                              SelectionMode="Single" RowHeight="50" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <DataGrid.CellStyle>
+                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                <Setter Property="Padding" Value="8,0" />
+                            </Style>
+                        </DataGrid.CellStyle>
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                                <Setter Property="Padding" Value="8,8" />
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
+
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="{Binding SelectedItem.ToggleActionText, FallbackValue=Отключить или включить}" Command="{Binding ToggleCommand}" />
+                                <MenuItem Header="Открыть расположение файла" Command="{Binding OpenLocationCommand}" />
+                                <MenuItem Header="Скопировать команду" Command="{Binding CopyCommandCommand}" />
+                                <Separator />
+                                <MenuItem Header="Найти в интернете" Command="{Binding SearchWebCommand}" />
+                                <MenuItem Header="Проверить на VirusTotal" Command="{Binding VirusTotalCommand}" />
+                                <MenuItem Header="Проверить Защитником Windows" Command="{Binding DefenderCommand}" />
+                                <MenuItem Header="{Binding SelectedItem.TrustActionText, FallbackValue=Доверять}" Command="{Binding TrustCommand}" />
+                                <MenuItem Header="Открыть в планировщике заданий" Command="{Binding OpenTaskSchedulerCommand}"
+                                          Visibility="{Binding SelectedItem.IsTask, Converter={StaticResource BoolToVis}}" />
+                                <MenuItem Header="Открыть список служб Windows" Command="{Binding OpenServicesCommand}"
+                                          Visibility="{Binding SelectedItem.IsService, Converter={StaticResource BoolToVis}}" />
+                                <Separator />
+                                <MenuItem Header="Удалить из автозагрузки…" Command="{Binding DeleteCommand}" />
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Вкл." Width="66" SortMemberPath="IsEnabled" CanUserResize="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                  Command="{Binding DataContext.ToggleCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  CommandParameter="{Binding}" ToolTip="{Binding ToggleTooltip}"
+                                                  ToolTipService.ShowOnDisabled="True" HorizontalAlignment="Left" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Программа" Width="1.4*" MinWidth="140" SortMemberPath="DisplayName">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="{Binding KindGlyph}" FontSize="15"
+                                                       Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" ToolTip="{Binding SourceText}" />
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding DisplayName}" />
+                                                <DockPanel Margin="0,2,0,0">
+                                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="10"
+                                                               Foreground="{StaticResource SuccessBrush}" Margin="0,0,4,0"
+                                                               Visibility="{Binding IsSigned, Converter={StaticResource BoolToVis}}"
+                                                               ToolTip="{Binding SignatureText}" />
+                                                    <TextBlock Text="{Binding PublisherText}" Style="{StaticResource Muted}" FontSize="11.5"
+                                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding SignatureText}" />
+                                                </DockPanel>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn x:Name="CommandColumn" Header="Команда" Width="1*" MinWidth="110" SortMemberPath="Command">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Command}" Style="{StaticResource Muted}" FontSize="12" TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Command}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn x:Name="SourceColumn" Header="Источник" Width="104" SortMemberPath="SourceShort">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel VerticalAlignment="Center" ToolTip="{Binding SourceText}">
+                                            <TextBlock Text="{Binding SourceShort}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding SourceDetail}" Style="{StaticResource Muted}" FontSize="11.5"
+                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Состояние" Width="122" SortMemberPath="StateSortKey">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource StateBadge}" ToolTip="{Binding StateTooltip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource BadgeIcon}" Text="{Binding StateGlyph}" />
+                                                <TextBlock Style="{StaticResource BadgeText}" Text="{Binding StateText}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Риск" Width="124" SortMemberPath="RiskScore">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource RiskBadge}" ToolTip="{Binding RiskTooltip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource BadgeIcon}" Text="{Binding RiskGlyph}" />
+                                                <TextBlock Style="{StaticResource BadgeText}" Text="{Binding RiskText}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Empty state -->
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360" Margin="16"
+                                Visibility="{Binding IsEmptyStateVisible, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Icon}" Text="{Binding EmptyGlyph}" FontSize="30" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Style="{StaticResource H3}" Text="{Binding EmptyTitle}" HorizontalAlignment="Center" Margin="0,10,0,4" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{Binding EmptyText}" TextAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ===== Details panel ===== -->
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0">
+                <Grid>
+                    <!-- Nothing selected: how-to hints -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                        <StackPanel Margin="16">
+                            <TextBlock Style="{StaticResource H3}" Text="Как навести порядок" />
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                       Text="Выберите запись в списке, чтобы узнать, что это за программа и безопасно ли её отключать." />
+
+                            <DockPanel Margin="0,14,0,0">
+                                <Border DockPanel.Dock="Left" Style="{StaticResource StatIcon}" Width="30" Height="30" CornerRadius="15"
+                                        Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Top">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE769;" FontSize="13" Foreground="{StaticResource SuccessBrush}"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel Margin="10,0,0,0">
+                                    <TextBlock Text="Отключать безопасно" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
+                                               Text="Отключённая программа просто не стартует вместе с Windows. Её можно открыть вручную или снова включить здесь — как в Диспетчере задач." />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,12,0,0">
+                                <Border DockPanel.Dock="Left" Style="{StaticResource StatIcon}" Width="30" Height="30" CornerRadius="15"
+                                        Background="{StaticResource InfoSoftBrush}" VerticalAlignment="Top">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource InfoBrush}"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel Margin="10,0,0,0">
+                                    <TextBlock Text="Удалять обычно не нужно" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
+                                               Text="Удаление пригодится для битых записей (файл не найден) и для того, что вы точно не устанавливали. Перед удалением создаётся резервная копия." />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,12,0,0">
+                                <Border DockPanel.Dock="Left" Style="{StaticResource StatIcon}" Width="30" Height="30" CornerRadius="15"
+                                        Background="{StaticResource WarningSoftBrush}" VerticalAlignment="Top">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13" Foreground="{StaticResource WarningBrush}"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel Margin="10,0,0,0">
+                                    <TextBlock Text="«Подозрительно» — ещё не вирус" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
+                                               Text="Так помечены записи, которые выглядят необычно. Проверьте файл на VirusTotal или Защитником Windows — кнопки есть в карточке записи." />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,12,0,0">
+                                <Border DockPanel.Dock="Left" Style="{StaticResource StatIcon}" Width="30" Height="30" CornerRadius="15"
+                                        Background="{StaticResource Surface3Brush}" VerticalAlignment="Top">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE713;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel Margin="10,0,0,0">
+                                    <TextBlock Text="Службы — аккуратно" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
+                                               Text="Службу можно только перевести в ручной режим: она запустится, когда понадобится программе. Службы Windows здесь не меняются." />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <Border Style="{StaticResource InnerCard}" Margin="0,16,0,0"
+                                    Visibility="{Binding IsElevated, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" FontSize="14" Foreground="{StaticResource WarningBrush}" />
+                                        <TextBlock Text="Ограниченный режим" FontWeight="SemiBold" Margin="8,0,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,8"
+                                               Text="Без прав администратора часть заданий планировщика может быть скрыта, а записи для всех пользователей и службы можно только просматривать." />
+                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить с правами администратора"
+                                            Command="{Binding RestartAsAdminCommand}" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Selected entry -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" DataContext="{Binding SelectedItem}"
+                                  Visibility="{Binding DataContext.HasSelection, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Margin="16">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Left" Width="40" Height="40" CornerRadius="10" Background="{StaticResource Surface2Brush}"
+                                        VerticalAlignment="Top">
+                                    <TextBlock Style="{StaticResource Icon}" Text="{Binding KindGlyph}" FontSize="18" HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource H3}" Text="{Binding DisplayName}" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource Muted}" Text="{Binding PublisherText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <WrapPanel Margin="0,12,0,0">
+                                <Border Style="{StaticResource StateBadge}" Margin="0,0,6,6" ToolTip="{Binding StateTooltip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource BadgeIcon}" Text="{Binding StateGlyph}" />
+                                        <TextBlock Style="{StaticResource BadgeText}" Text="{Binding StateText}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource RiskBadge}" Margin="0,0,6,6" ToolTip="{Binding RiskTooltip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource BadgeIcon}" Text="{Binding RiskGlyph}" />
+                                        <TextBlock Style="{StaticResource BadgeText}" Text="{Binding RiskText}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Badge}" Margin="0,0,6,6" TextElement.Foreground="{StaticResource MutedBrush}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource BadgeIcon}" Text="&#xE77B;" />
+                                        <TextBlock Style="{StaticResource BadgeText}" Text="{Binding ScopeText}" />
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
+
+                            <TextBlock Style="{StaticResource Muted}" Text="{Binding Explanation}" Margin="0,6,0,0" />
+
+                            <!-- Why it looks suspicious -->
+                            <Border Style="{StaticResource InnerCard}" Margin="0,12,0,0" Background="{StaticResource WarningSoftBrush}"
+                                    Visibility="{Binding HasReasons, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Что настораживает" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}" />
+                                    <ItemsControl ItemsSource="{Binding Reasons}" Margin="0,6,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <DockPanel Margin="0,2">
+                                                    <TextBlock DockPanel.Dock="Left" Text="•" Foreground="{StaticResource WarningBrush}" Margin="0,0,6,0" />
+                                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12.5" />
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Advice -->
+                            <DockPanel Margin="0,12,0,0">
+                                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE82F;" FontSize="14"
+                                           Foreground="{StaticResource InfoBrush}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                                <TextBlock Text="{Binding Advice}" TextWrapping="Wrap" FontSize="12.5" />
+                            </DockPanel>
+
+                            <!-- Main action -->
+                            <Button Style="{StaticResource AccentButton}" Margin="0,14,0,0" HorizontalAlignment="Stretch"
+                                    Command="{Binding DataContext.ToggleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Visibility="{Binding CanToggle, Converter={StaticResource BoolToVis}}" ToolTip="{Binding ToggleTooltip}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE7E8;" FontSize="13" Foreground="{StaticResource AccentTextBrush}" />
+                                    <TextBlock Text="{Binding ToggleActionText}" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Style="{StaticResource Muted}" Text="{Binding ToggleBlockedReason}" Margin="0,12,0,0"
+                                       Visibility="{Binding ToggleBlockedReason, Converter={StaticResource HasValueToVis}}" />
+
+                            <!-- Tools -->
+                            <UniformGrid Columns="2" Margin="0,10,-6,0">
+                                <Button Style="{StaticResource ToolButton}" ToolTip="Открыть папку с файлом программы"
+                                        Command="{Binding DataContext.OpenLocationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Папка" />
+                                    </DockPanel>
+                                </Button>
+                                <Button Style="{StaticResource ToolButton}" ToolTip="Найти в интернете, что это за программа"
+                                        Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Поиск" />
+                                    </DockPanel>
+                                </Button>
+                                <Button Style="{StaticResource ToolButton}"
+                                        ToolTip="Открыть отчёт VirusTotal по контрольной сумме файла (сам файл не отправляется)"
+                                        Command="{Binding DataContext.VirusTotalCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="VirusTotal" />
+                                    </DockPanel>
+                                </Button>
+                                <Button Style="{StaticResource ToolButton}" ToolTip="Проверить файл Защитником Windows"
+                                        Command="{Binding DataContext.DefenderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Защитник" />
+                                    </DockPanel>
+                                </Button>
+                                <Button Style="{StaticResource ToolButton}"
+                                        ToolTip="Доверенные записи не помечаются как подозрительные"
+                                        Command="{Binding DataContext.TrustCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="{Binding TrustActionText}" />
+                                    </DockPanel>
+                                </Button>
+                                <Button Style="{StaticResource ToolButton}" ToolTip="Скопировать команду запуска"
+                                        Command="{Binding DataContext.CopyCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <DockPanel HorizontalAlignment="Center">
+                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE8C8;" FontSize="13" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Копировать" />
+                                    </DockPanel>
+                                </Button>
+                            </UniformGrid>
+                            <Button Style="{StaticResource ToolButton}" Margin="0,0,0,6"
+                                    ToolTip="Открыть «Планировщик заданий» (путь задания будет скопирован в буфер обмена)"
+                                    Visibility="{Binding IsTask, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.OpenTaskSchedulerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <DockPanel HorizontalAlignment="Center">
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE787;" FontSize="13" />
+                                    <TextBlock Style="{StaticResource ToolLabel}" Text="Открыть в планировщике" />
+                                </DockPanel>
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Margin="0,0,0,6" ToolTip="Открыть список служб Windows"
+                                    Visibility="{Binding IsService, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.OpenServicesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <DockPanel HorizontalAlignment="Center">
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE713;" FontSize="13" />
+                                    <TextBlock Style="{StaticResource ToolLabel}" Text="Открыть список служб" />
+                                </DockPanel>
+                            </Button>
+
+                            <!-- Facts -->
+                            <TextBlock Style="{StaticResource H3}" Text="Подробности" Margin="0,10,0,0" />
+
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Команда запуска" />
+                            <TextBox Style="{StaticResource ValueText}" Text="{Binding Command, Mode=OneWay}" />
+
+                            <StackPanel Visibility="{Binding TargetFile, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Файл" />
+                                <TextBox Style="{StaticResource ValueText}" Text="{Binding TargetFile, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Цифровая подпись" />
+                            <TextBox Style="{StaticResource ValueText}" Text="{Binding SignatureText, Mode=OneWay}" />
+
+                            <StackPanel Visibility="{Binding FileDescription, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Описание файла" />
+                                <TextBox Style="{StaticResource ValueText}" Text="{Binding FileDescription, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Где записано" />
+                            <TextBox Style="{StaticResource ValueText}" Text="{Binding LocationText, Mode=OneWay}" />
+
+                            <StackPanel Visibility="{Binding DisabledTimeText, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Отключено" />
+                                <TextBox Style="{StaticResource ValueText}" Text="{Binding DisabledTimeText, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding TaskAuthor, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Автор задания" />
+                                <TextBox Style="{StaticResource ValueText}" Text="{Binding TaskAuthor, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding ServiceStatusText, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Служба сейчас" />
+                                <TextBox Style="{StaticResource ValueText}" Text="{Binding ServiceStatusText, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding Description, Converter={StaticResource HasValueToVis}}">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Описание" />
+                                <TextBox Style="{StaticResource ValueText}" Text="{Binding Description, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,12,0,0"
+                                       Visibility="{Binding RequiresAdmin, Converter={StaticResource BoolToVis}}"
+                                       Text="Изменение этой записи затрагивает весь компьютер и может потребовать прав администратора." />
+
+                            <!-- Destructive action -->
+                            <Button Style="{StaticResource DangerButton}" Margin="0,14,0,0" HorizontalAlignment="Stretch"
+                                    Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="Удалить запись автозапуска (с резервной копией). Сама программа не удаляется.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
+                                    <TextBlock Text="Удалить из автозагрузки…" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
 </UserControl>
