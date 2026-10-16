@@ -79,6 +79,41 @@ public class SuspicionTests
     [InlineData("OneDriveSetup", false)]
     public void LooksRandom_Heuristic(string name, bool expected) => Assert.Equal(expected, Suspicion.LooksRandom(name));
 
+    [Theory]
+    [InlineData("svch0st.exe", "svchost.exe")]
+    [InlineData("scvhost.exe", "svchost.exe")]
+    [InlineData("lsasss.exe", "lsass.exe")]
+    [InlineData("expl0rer.exe", "explorer.exe")]
+    [InlineData("svchost.exe", null)]
+    [InlineData("iexplore.exe", null)]
+    [InlineData("chrome.exe", null)]
+    [InlineData("steam.exe", null)]
+    [InlineData("taskhost.exe", null)]
+    public void LookalikeOf_DetectsTyposquatting(string name, string? expected)
+        => Assert.Equal(expected, Suspicion.LookalikeOf(name));
+
+    [Fact]
+    public void Lookalike_InAppData_IsHighRisk()
+    {
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "svch0st.exe");
+        Assert.Equal(SuspicionLevel.High, Suspicion.Analyze(path, new SignatureInfo(SignatureStatus.Unsigned, null)).Level);
+    }
+
+    [Fact]
+    public void Miner_IsSuspiciousEvenWhenSigned()
+    {
+        var r = Suspicion.Analyze(@"C:\Tools\xmrig.exe", new SignatureInfo(SignatureStatus.Valid, "Some Vendor"));
+        Assert.True(r.IsSuspicious);
+    }
+
+    [Fact]
+    public void SignedRemoteAccessTool_IsOnlyANotice()
+    {
+        var r = Suspicion.Analyze(@"C:\Program Files (x86)\AnyDesk\AnyDesk.exe", new SignatureInfo(SignatureStatus.Valid, "philandro Software GmbH"));
+        Assert.Equal(SuspicionLevel.Low, r.Level);
+        Assert.Contains(r.Reasons, x => x.Contains("AnyDesk"));
+    }
+
     [Fact]
     public void KnownPup_IsMatched()
     {

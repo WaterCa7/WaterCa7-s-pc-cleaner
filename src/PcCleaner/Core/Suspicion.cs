@@ -177,11 +177,29 @@ public static class Suspicion
             reasons.Add(pup);
         }
 
+        // 7. Look-alike of a system binary name (svch0st.exe, scvhost.exe, lsasss.exe).
+        var lookalike = LookalikeOf(fileName);
+        var isLookalike = lookalike is not null && !(signature?.IsMicrosoft ?? false);
+        if (isLookalike)
+        {
+            score += 55;
+            reasons.Add($"Имя похоже на системный процесс «{lookalike}» — возможная подделка");
+        }
+
+        // 8. Miners, remote-access and password tools: legit for some people, alarming if you didn't install them.
+        var tool = KnownPups.MatchRiskyTool(fileName);
+        if (tool is not null)
+        {
+            score += tool.Value.Score;
+            reasons.Add(tool.Value.Reason);
+        }
+
         // Trust: a valid signature from Microsoft or a known vendor reduces the score,
-        // but never hides masquerading or scripted launches (the interpreter itself is always signed).
+        // but never hides masquerading, risky tools or scripted launches (the interpreter itself is always signed).
         if (signature is { IsValid: true })
         {
-            var hardSignals = reasons.Any(r => r.StartsWith("Имя системного файла") || r.StartsWith("Скрытый") ||
+            var hardSignals = isLookalike || tool is not null ||
+                              reasons.Any(r => r.StartsWith("Имя системного файла") || r.StartsWith("Скрытый") ||
                                                r.StartsWith("Запуск через скриптовый") || r.StartsWith("Командная строка"));
             if (!hardSignals)
             {
@@ -262,6 +280,49 @@ public static class Suspicion
             string.Equals(dir.TrimEnd('\\'), programData.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
             return "Файл лежит прямо в корне AppData/ProgramData";
         return null;
+    }
+
+    private static readonly string[] LookalikeTargets = { "svchost", "csrss", "lsass", "winlogon", "explorer", "services", "smss", "wininit", "taskhostw" };
+
+    /// <summary>Legit names that happen to be close to a system name.</summary>
+    private static readonly HashSet<string> LookalikeExceptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "iexplore", "explore", "explorer++", "service", "servicehost", "lsasrv", "taskhost", "taskhostex",
+    };
+
+    /// <summary>Returns the system name that fileName imitates (edit distance 1–2), or null.</summary>
+    public static string? LookalikeOf(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+        var stem = Path.GetFileNameWithoutExtension(fileName).ToLowerInvariant();
+        if (stem.Length < 5 || LookalikeExceptions.Contains(stem) || SystemBinaryNames.Contains(fileName))
+            return null;
+        foreach (var target in LookalikeTargets)
+        {
+            if (stem == target)
+                return null;
+            var d = Levenshtein(stem, target);
+            if (d is >= 1 and <= 2 && Math.Abs(stem.Length - target.Length) <= 2)
+                return target + ".exe";
+        }
+        return null;
+    }
+
+    internal static int Levenshtein(string a, string b)
+    {
+        var prev = new int[b.Length + 1];
+        var cur = new int[b.Length + 1];
+        for (var j = 0; j <= b.Length; j++)
+            prev[j] = j;
+        for (var i = 1; i <= a.Length; i++)
+        {
+            cur[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+                cur[j] = Math.Min(Math.Min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            (prev, cur) = (cur, prev);
+        }
+        return prev[b.Length];
     }
 
     public static bool IsUnder(string path, string folder)

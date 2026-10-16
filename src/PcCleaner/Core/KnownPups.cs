@@ -72,6 +72,42 @@ public static class KnownPups
         new("AutoKMS", "Активатор Windows — частый переносчик вирусов"),
     };
 
+    private sealed record RiskyTool(string Pattern, string Reason, int Score);
+
+    /// <summary>
+    /// Tools that are legitimate for some users but are a red flag if the user did not install them:
+    /// crypto miners, remote-access tools, tunnels, password stealers.
+    /// </summary>
+    private static readonly RiskyTool[] RiskyTools =
+    {
+        new("xmrig", "Криптомайнер XMRig — если вы его не ставили, это вирус-майнер", 55),
+        new("nicehash", "Майнер NiceHash — убедитесь, что вы его устанавливали", 30),
+        new("nbminer", "Криптомайнер — если вы его не ставили, это вирус-майнер", 55),
+        new("t-rex", "Криптомайнер T-Rex — если вы его не ставили, это вирус-майнер", 55),
+        new("phoenixminer", "Криптомайнер — если вы его не ставили, это вирус-майнер", 55),
+        new("lolminer", "Криптомайнер — если вы его не ставили, это вирус-майнер", 55),
+        new("gminer", "Криптомайнер — если вы его не ставили, это вирус-майнер", 55),
+        new("mimikatz", "Инструмент кражи паролей Mimikatz", 70),
+        new("anydesk", "Программа удалённого доступа AnyDesk — убедитесь, что вы её устанавливали", 15),
+        new("teamviewer", "Программа удалённого доступа TeamViewer — убедитесь, что вы её устанавливали", 15),
+        new("rustdesk", "Программа удалённого доступа RustDesk — убедитесь, что вы её устанавливали", 15),
+        new("ammyy", "Программа удалённого доступа Ammyy Admin — часто используется мошенниками", 30),
+        new("radmin", "Программа удалённого доступа Radmin — убедитесь, что вы её устанавливали", 15),
+        new("ngrok", "Туннель ngrok открывает доступ к компьютеру из интернета", 25),
+        new("psexec", "PsExec — удалённое выполнение команд", 20),
+    };
+
+    /// <summary>Returns (reason, score) for a risky tool name, otherwise null.</summary>
+    public static (string Reason, int Score)? MatchRiskyTool(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+        foreach (var t in RiskyTools)
+            if (fileName.Contains(t.Pattern, StringComparison.OrdinalIgnoreCase))
+                return (t.Reason, t.Score);
+        return null;
+    }
+
     /// <summary>Returns the reason if the name or publisher matches a known PUP, otherwise null.</summary>
     public static string? Match(string? name, string? publisher)
     {
