@@ -3,6 +3,7 @@ using PcCleaner.Core;
 using PcCleaner.Modules.Cleaner;
 using PcCleaner.Modules.Dashboard;
 using PcCleaner.Modules.Disk;
+using PcCleaner.Modules.Network;
 using PcCleaner.Modules.Optimizer;
 using PcCleaner.Modules.Processes;
 using PcCleaner.Modules.Programs;
@@ -30,6 +31,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
             new ProgramsViewModel(AppServices.Programs),
             new DiskViewModel(AppServices.Disk),
             new OptimizerViewModel(AppServices.Optimizer),
+            new NetworkViewModel(AppServices.Network),
             new SecurityViewModel(AppServices.Security),
             new SettingsViewModel(),
         };

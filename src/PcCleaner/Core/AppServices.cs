@@ -1,5 +1,6 @@
 using PcCleaner.Modules.Cleaner;
 using PcCleaner.Modules.Disk;
+using PcCleaner.Modules.Network;
 using PcCleaner.Modules.Optimizer;
 using PcCleaner.Modules.Processes;
 using PcCleaner.Modules.Programs;
@@ -37,10 +38,11 @@ public static class AppServices
     public static DiskService Disk { get; } = new();
     public static OptimizerService Optimizer { get; } = new();
     public static SecurityService Security { get; } = new();
+    public static NetworkService Network { get; } = new();
 
     /// <summary>All module analyses, used by the dashboard smart-scan.</summary>
     public static IReadOnlyList<IHealthContributor> HealthContributors => new IHealthContributor[]
     {
-        Cleaner, Startup, Processes, Programs, Disk, Optimizer, Security,
+        Cleaner, Startup, Processes, Programs, Disk, Optimizer, Network, Security,
     };
 }

@@ -10,6 +10,7 @@
              xmlns:disk="clr-namespace:PcCleaner.Modules.Disk"
              xmlns:optimizer="clr-namespace:PcCleaner.Modules.Optimizer"
              xmlns:security="clr-namespace:PcCleaner.Modules.Security"
+             xmlns:network="clr-namespace:PcCleaner.Modules.Network"
              xmlns:settings="clr-namespace:PcCleaner.Modules.Settings"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
@@ -34,6 +35,7 @@
             <DataTemplate DataType="{x:Type programs:ProgramsViewModel}"><programs:ProgramsView /></DataTemplate>
             <DataTemplate DataType="{x:Type disk:DiskViewModel}"><disk:DiskView /></DataTemplate>
             <DataTemplate DataType="{x:Type optimizer:OptimizerViewModel}"><optimizer:OptimizerView /></DataTemplate>
+            <DataTemplate DataType="{x:Type network:NetworkViewModel}"><network:NetworkView /></DataTemplate>
             <DataTemplate DataType="{x:Type security:SecurityViewModel}"><security:SecurityView /></DataTemplate>
             <DataTemplate DataType="{x:Type settings:SettingsViewModel}"><settings:SettingsView /></DataTemplate>
         </ResourceDictionary>
