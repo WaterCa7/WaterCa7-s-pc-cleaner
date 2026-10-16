@@ -85,7 +85,36 @@ public sealed class AppSettings
         Save();
     }
 
+    /// <summary>Thread-safe check (background scans call it while the UI may change the list).</summary>
     public bool IsTrusted(string? pathOrName)
-        => !string.IsNullOrWhiteSpace(pathOrName)
-           && TrustedItems.Any(t => string.Equals(t, pathOrName, StringComparison.OrdinalIgnoreCase));
+    {
+        if (string.IsNullOrWhiteSpace(pathOrName))
+            return false;
+        string[] snapshot;
+        lock (TrustedLock)
+            snapshot = TrustedItems.ToArray();
+        return snapshot.Any(t => string.Equals(t, pathOrName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Adds an item to the trusted list (copy-on-write, thread-safe) and saves.</summary>
+    public void AddTrusted(string pathOrName)
+    {
+        if (string.IsNullOrWhiteSpace(pathOrName) || IsTrusted(pathOrName))
+            return;
+        lock (TrustedLock)
+            TrustedItems = new List<string>(TrustedItems) { pathOrName };
+        Save();
+        Log.Action($"Добавлено в доверенные: {pathOrName}");
+    }
+
+    /// <summary>Removes an item from the trusted list (copy-on-write, thread-safe) and saves.</summary>
+    public void RemoveTrusted(string pathOrName)
+    {
+        lock (TrustedLock)
+            TrustedItems = TrustedItems.Where(t => !string.Equals(t, pathOrName, StringComparison.OrdinalIgnoreCase)).ToList();
+        Save();
+        Log.Action($"Удалено из доверенных: {pathOrName}");
+    }
+
+    private static readonly object TrustedLock = new();
 }

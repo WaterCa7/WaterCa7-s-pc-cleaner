@@ -115,6 +115,58 @@ public class SuspicionTests
     }
 
     [Fact]
+    public void GenuineDefenderOutsideWindows_IsClean()
+    {
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            @"Microsoft\Windows Defender\Platform\4.18.24090.11-0\MsMpEng.exe");
+        var r = Suspicion.Analyze(path, new SignatureInfo(SignatureStatus.Valid, "Microsoft Windows Publisher"));
+        Assert.Equal(SuspicionLevel.None, r.Level);
+    }
+
+    [Fact]
+    public void FakeDefenderOutsideWindows_IsHighRisk()
+    {
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Defender", "MsMpEng.exe");
+        Assert.Equal(SuspicionLevel.High, Suspicion.Analyze(path, new SignatureInfo(SignatureStatus.Unsigned, null)).Level);
+    }
+
+    [Fact]
+    public void SignedBrowserWithUrlArgument_IsNotFlagged()
+    {
+        var r = Suspicion.Analyze(@"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            new SignatureInfo(SignatureStatus.Valid, "Google LLC"), "chrome.exe --app=https://example.com");
+        Assert.False(r.IsSuspicious);
+    }
+
+    [Fact]
+    public void PerUserAppInLocalAppData_IsNotFlaggedAsProgram()
+    {
+        var install = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Discord");
+        var r = Suspicion.AnalyzeProgram("Discord", "Discord Inc.", install);
+        Assert.Equal(SuspicionLevel.None, r.Level);
+    }
+
+    [Fact]
+    public void ProgramInTemp_HasInstallWording()
+    {
+        var r = Suspicion.AnalyzeProgram("Something", "Vendor", Path.Combine(Path.GetTempPath(), "something"));
+        Assert.Contains(r.Reasons, x => x.StartsWith("Установлена во временную папку"));
+    }
+
+    [Fact]
+    public void TrustedList_AddRemove_IsThreadSafe()
+    {
+        var settings = AppServices.Settings;
+        var name = "trusted-" + Guid.NewGuid().ToString("N");
+        var t = Task.Run(() => { for (var i = 0; i < 2000; i++) settings.IsTrusted("x" + i); });
+        settings.AddTrusted(name);
+        t.Wait();
+        Assert.True(settings.IsTrusted(name));
+        settings.RemoveTrusted(name);
+        Assert.False(settings.IsTrusted(name));
+    }
+
+    [Fact]
     public void KnownPup_IsMatched()
     {
         Assert.NotNull(KnownPups.Match("Amigo", null));

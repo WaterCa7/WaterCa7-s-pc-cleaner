@@ -54,6 +54,13 @@ public class CommandLineTests
     }
 
     [Fact]
+    public void Rundll32_SwitchesAreSkipped_AndBareDllResolved()
+    {
+        var target = CommandLine.TargetFile("rundll32.exe /d shell32.dll,Control_RunDLL");
+        Assert.Equal(Path.Combine(Sys, "shell32.dll"), target, ignoreCase: true);
+    }
+
+    [Fact]
     public void ServiceImagePath_SystemRootPrefix()
     {
         var (exe, _) = CommandLine.Split(@"\SystemRoot\System32\svchost.exe -k netsvcs");

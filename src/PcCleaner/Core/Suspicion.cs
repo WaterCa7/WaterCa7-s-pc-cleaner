@@ -84,7 +84,10 @@ public static class Suspicion
         var dir = string.IsNullOrWhiteSpace(path) ? "" : (Path.GetDirectoryName(path) ?? "");
 
         // 1. Imitation of a system binary outside of the Windows folder.
-        if (fileName.Length > 0 && SystemBinaryNames.Contains(fileName) && !IsUnder(path!, Win))
+        // Genuine Microsoft binaries also live outside Windows (Defender's MsMpEng.exe in ProgramData\Microsoft\Windows Defender\Platform),
+        // so a valid Microsoft signature clears this rule.
+        if (fileName.Length > 0 && SystemBinaryNames.Contains(fileName) && !IsUnder(path!, Win) &&
+            !(signature?.IsMicrosoft ?? false))
         {
             score += 70;
             reasons.Add($"Имя системного файла «{fileName}», но расположен не в папке Windows");
@@ -198,9 +201,10 @@ public static class Suspicion
         // but never hides masquerading, risky tools or scripted launches (the interpreter itself is always signed).
         if (signature is { IsValid: true })
         {
+            // A URL in the command line is normal for signed browsers and updaters; it only matters for script hosts.
             var hardSignals = isLookalike || tool is not null ||
                               reasons.Any(r => r.StartsWith("Имя системного файла") || r.StartsWith("Скрытый") ||
-                                               r.StartsWith("Запуск через скриптовый") || r.StartsWith("Командная строка"));
+                                               r.StartsWith("Запуск через скриптовый"));
             if (!hardSignals)
             {
                 if (signature.IsMicrosoft)
@@ -234,19 +238,35 @@ public static class Suspicion
         }
         if (!string.IsNullOrWhiteSpace(installLocation))
         {
-            var location = DescribeRiskyLocation(installLocation);
+            var location = DescribeRiskyLocation(installLocation, isInstallFolder: true);
             if (location is not null)
             {
                 score += 20;
-                reasons.Add(location.Replace("Запускается", "Установлена"));
+                reasons.Add(location);
             }
         }
         score = Math.Clamp(score, 0, 100);
         return score == 0 ? SuspicionResult.Clean : new SuspicionResult(score, reasons);
     }
 
-    /// <summary>Returns a reason string if the path is in a place where legitimate software rarely lives.</summary>
-    public static string? DescribeRiskyLocation(string path)
+    /// <summary>
+    /// Returns a reason string if the path is in a place where legitimate software rarely lives.
+    /// For install folders (isInstallFolder) the "directly in AppData" rule is skipped: per-user apps such as
+    /// Discord legitimately install into %LOCALAPPDATA%\Name.
+    /// </summary>
+    public static string? DescribeRiskyLocation(string path, bool isInstallFolder = false)
+    {
+        var reason = DescribeRiskyLocationCore(path, isInstallFolder);
+        if (reason is null || !isInstallFolder)
+            return reason;
+        return reason
+            .Replace("Запускается из временной папки (Temp)", "Установлена во временную папку (Temp)")
+            .Replace("Запускается из папки «Загрузки»", "Установлена в папку «Загрузки»")
+            .Replace("Запускается из корзины", "Находится в корзине")
+            .Replace("Запускается из общей папки пользователей (Public)", "Установлена в общую папку пользователей (Public)");
+    }
+
+    private static string? DescribeRiskyLocationCore(string path, bool isInstallFolder)
     {
         string full;
         try
@@ -274,6 +294,8 @@ public static class Suspicion
         if (IsUnder(full, publicDir))
             return "Запускается из общей папки пользователей (Public)";
 
+        if (isInstallFolder)
+            return null;
         var dir = Path.GetDirectoryName(full) ?? "";
         if (string.Equals(dir.TrimEnd('\\'), roaming.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dir.TrimEnd('\\'), localAppData.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ||

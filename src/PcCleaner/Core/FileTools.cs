@@ -85,14 +85,16 @@ public static class FileTools
     /// </summary>
     public static bool SendToRecycleBin(string path)
     {
+        // FOF_WANTNUKEWARNING: if the item cannot go to the Recycle Bin (too big, no bin on that drive),
+        // Windows asks instead of silently deleting it for good.
         var op = new SHFILEOPSTRUCT
         {
             wFunc = FO_DELETE,
             pFrom = path + "\0\0",
-            fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT,
+            fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOF_WANTNUKEWARNING,
         };
         var rc = SHFileOperation(ref op);
-        var ok = rc == 0 && !op.fAnyOperationsAborted;
+        var ok = rc == 0 && !op.fAnyOperationsAborted && !File.Exists(path) && !Directory.Exists(path);
         if (ok)
             Log.Action($"Перемещено в корзину: {path}");
         else
@@ -118,6 +120,7 @@ public static class FileTools
     private const ushort FOF_NOCONFIRMATION = 0x0010;
     private const ushort FOF_ALLOWUNDO = 0x0040;
     private const ushort FOF_NOERRORUI = 0x0400;
+    private const ushort FOF_WANTNUKEWARNING = 0x4000;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct SHFILEOPSTRUCT

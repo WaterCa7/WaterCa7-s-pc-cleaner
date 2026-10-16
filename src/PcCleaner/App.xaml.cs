@@ -11,11 +11,16 @@ public partial class App : Application
     internal static string? ScreenshotDir { get; private set; }
     internal static string[]? ScreenshotPages { get; private set; }
     internal static bool ScreenshotScan { get; private set; } = true;
+    internal static (int Width, int Height)? ScreenshotSize { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         ParseArgs(e.Args);
+
+        // Verification runs must never touch the user's real settings, logs, backups or quarantine.
+        if (ScreenshotDir is not null)
+            AppPaths.DataDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "WaterCa7sPcCleaner-verify");
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += (_, args) =>
@@ -48,6 +53,13 @@ public partial class App : Application
             window.WindowStartupLocation = WindowStartupLocation.Manual;
             window.Left = -20000;
             window.Top = -20000;
+            if (ScreenshotSize is { } size)
+            {
+                window.MinWidth = 0;
+                window.MinHeight = 0;
+                window.Width = size.Width;
+                window.Height = size.Height;
+            }
             window.Loaded += async (_, _) =>
             {
                 var exitCode = await ScreenshotRunner.RunAsync(window, vm, ScreenshotDir, ScreenshotPages, ScreenshotScan);
@@ -72,6 +84,11 @@ public partial class App : Application
                     break;
                 case "--no-scan":
                     ScreenshotScan = false;
+                    break;
+                case "--size" when i + 1 < args.Length:
+                    var parts = args[++i].ToLowerInvariant().Split('x');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h) && w > 200 && h > 200)
+                        ScreenshotSize = (w, h);
                     break;
             }
         }

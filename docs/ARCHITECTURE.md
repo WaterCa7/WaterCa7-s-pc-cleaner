@@ -56,6 +56,8 @@ tests/PcCleaner.Tests/  xUnit-тесты (Core/ и <Key>/)
 - `AppServices.Settings` (`AppSettings`, JSON в `%LOCALAPPDATA%\WaterCa7sPcCleaner`), `ModuleData` для состояния модулей.
 - `Ui.Post/Invoke` — выполнение в UI-потоке (в тестах — напрямую).
 - `Format.Bytes/Percent/Number/Duration/Date/Plural/Count` — русское форматирование.
+- `SystemStats.CpuUsagePercent()`, `SystemStats.Memory()`, `SystemStats.Uptime` — живые метрики без WMI.
+- `AppServices.Settings.AddTrusted/RemoveTrusted/IsTrusted` — список доверенных (потокобезопасно, не менять `TrustedItems` напрямую).
 
 ## Тема (ключи ресурсов)
 
@@ -83,10 +85,8 @@ ComboBox, TextBox, CheckBox, RadioButton, ProgressBar, ScrollBar, ToolTip, Conte
 ## Режим проверки (скриншоты)
 
 ```
-WaterCa7sPcCleaner.exe --screenshots <папка> [--page Cleaner,Startup] [--no-scan]
+WaterCa7sPcCleaner.exe --screenshots <папка> [--page Cleaner,Startup] [--no-scan] [--size 1040x660]
 ```
-Окно открывается за пределами экрана, все диалоги отклоняются, для каждой страницы выполняется
+Окно открывается за пределами экрана, данные приложения берутся из временной папки (настоящие настройки,
+журналы и резервные копии не затрагиваются), все диалоги отклоняются, для каждой страницы выполняется
 `PreviewScanAsync` (только чтение), сохраняется `NN-Key.png` и `log.txt`. Код выхода 1 — если в журнале были ошибки.
-
-- `SystemStats.CpuUsagePercent()`, `SystemStats.Memory()`, `SystemStats.Uptime` � ����� ������� ��� WMI.
-

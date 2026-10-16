@@ -22,11 +22,20 @@ public static class RegistryBackup
             safeName = safeName[^80..];
         var file = Path.Combine(AppPaths.BackupsDir, $"{DateTime.Now:yyyyMMdd-HHmmss-fff}_{safeName}.reg");
 
+        using (var existing = OpenKey(fullKeyPath))
+        {
+            if (existing is null)
+            {
+                Log.Warn($"Резервная копия не создана: раздел реестра не найден или нет доступа — {fullKeyPath}");
+                return null;
+            }
+        }
+
         var result = await ProcessRunner.RunAsync("reg.exe", $"export \"{fullKeyPath}\" \"{file}\" /y",
             TimeSpan.FromSeconds(30), ct);
         if (!result.Success || !File.Exists(file))
         {
-            Log.Error($"Не удалось сохранить резервную копию {fullKeyPath}: {result.StdErr.Trim()}");
+            Log.Warn($"Не удалось сохранить резервную копию {fullKeyPath}: {result.StdErr.Trim()}");
             return null;
         }
 
@@ -54,7 +63,7 @@ public static class RegistryBackup
             Log.Action($"Восстановлено из резервной копии: {Path.GetFileName(regFile)}");
             return true;
         }
-        Log.Error($"Не удалось восстановить {Path.GetFileName(regFile)}: {result.StdErr.Trim()}");
+        Log.Warn($"Не удалось восстановить {Path.GetFileName(regFile)}: {result.StdErr.Trim()}");
         return false;
     }
 

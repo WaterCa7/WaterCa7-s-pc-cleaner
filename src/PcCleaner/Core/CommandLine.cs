@@ -69,9 +69,19 @@ public static class CommandLine
             return null;
         if (Hosts.Contains(Path.GetFileName(exe)) && args.Length > 0)
         {
-            var m = Regex.Match(args, "^\\s*(?:/s\\s+)?\"?([^\",]+?\\.(?:dll|ocx|cpl))\"?", RegexOptions.IgnoreCase);
+            // Skip any switches (/s, /d, /i:..., -n) before the library path.
+            var m = Regex.Match(args, "^\\s*(?:[/-][\\w:]*\\s+)*\"?([^\",]+?\\.(?:dll|ocx|cpl|ax))\"?", RegexOptions.IgnoreCase);
             if (m.Success)
-                return Normalize(m.Groups[1].Value);
+            {
+                var dll = Normalize(m.Groups[1].Value);
+                if (!Path.IsPathRooted(dll))
+                {
+                    var wow = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "SysWOW64", dll);
+                    if (File.Exists(wow))
+                        return wow;
+                }
+                return dll;
+            }
         }
         return exe;
     }

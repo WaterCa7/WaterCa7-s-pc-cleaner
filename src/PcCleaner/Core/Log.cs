@@ -32,6 +32,7 @@ public sealed record LogEntry(DateTime Time, LogLevel Level, string Message)
 public static class Log
 {
     private static readonly object FileLock = new();
+    private static readonly object EntriesLock = new();
     private const int MaxEntries = 2000;
 
     public static ObservableCollection<LogEntry> Entries { get; } = new();
@@ -54,9 +55,13 @@ public static class Log
         var entry = new LogEntry(DateTime.Now, level, message);
         Ui.Post(() =>
         {
-            Entries.Add(entry);
-            while (Entries.Count > MaxEntries)
-                Entries.RemoveAt(0);
+            // Without a dispatcher (unit tests) this runs on the calling thread, so serialize the collection changes.
+            lock (EntriesLock)
+            {
+                Entries.Add(entry);
+                while (Entries.Count > MaxEntries)
+                    Entries.RemoveAt(0);
+            }
             EntryAdded?.Invoke(entry);
         });
 

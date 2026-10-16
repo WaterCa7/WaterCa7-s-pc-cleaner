@@ -115,9 +115,15 @@ public static class ProcessRunner
         {
             Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
         }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            Log.Info($"Открытие отменено пользователем: {target}");
+        }
         catch (Exception ex)
         {
-            Log.Error($"Не удалось открыть {target}", ex);
+            // Environment problems (no default browser, missing file) are not app bugs.
+            Log.Warn($"Не удалось открыть {target}: {ex.Message}");
+            Dialogs.Error("Не удалось открыть", $"{target}\n\n{ex.Message}");
         }
     }
 
@@ -135,7 +141,7 @@ public static class ProcessRunner
         }
         catch (Exception ex)
         {
-            Log.Error($"Не удалось открыть проводник для {path}", ex);
+            Log.Warn($"Не удалось открыть проводник для {path}: {ex.Message}");
         }
     }
 }
