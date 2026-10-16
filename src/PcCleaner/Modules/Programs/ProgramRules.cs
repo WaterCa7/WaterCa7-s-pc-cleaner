@@ -1,0 +1,344 @@
+﻿using System.Globalization;
+using System.IO;
+using System.Text.RegularExpressions;
+using PcCleaner.Core;
+
+namespace PcCleaner.Modules.Programs;
+
+/// <summary>
+/// Pure rules for Uninstall entries: filtering, date parsing, uninstall command building and flags.
+/// No registry or UI access, so everything here is unit-tested.
+/// </summary>
+public static class ProgramRules
+{
+    public const int RecentDays = 14;
+
+    public const long LargeProgramBytes = 1L << 30; // 1 GB
+
+    private static readonly Regex GuidRegex = new(
+        @"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}", RegexOptions.Compiled);
+
+    private static readonly Regex MsiSwitchWithGuid = new(
+        @"(?:^|\s)[/-](?:i|x|uninstall|package|f)\s*""?(\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\})",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly string[] SkippedReleaseTypes =
+    {
+        "Update", "Hotfix", "Security Update", "Update Rollup", "Service Pack",
+    };
+
+    private static readonly Regex RuntimeName = new(
+        @"^Microsoft Visual C\+\+ .*(Redistributable|Runtime)|" +
+        @"^Microsoft \.NET|^Microsoft ASP\.NET Core|^Microsoft Windows Desktop Runtime|\.NET Framework|^\.NET |" +
+        @"DirectX|^Microsoft Edge WebView2|^Microsoft XNA Framework|^Microsoft Visual Studio 20\d\d Tools for Office Runtime|" +
+        @"^Windows App Runtime|^Microsoft Windows App Runtime|^Windows Desktop Runtime",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex DriverName = new(
+        @"^(Пакет драйверов Windows|Windows Driver Package)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly string[] InstallDateFormats =
+    {
+        "yyyyMMdd", "yyyy-MM-dd", "yyyy/MM/dd", "dd.MM.yyyy", "M/d/yyyy", "MM/dd/yyyy", "yyyy.MM.dd",
+    };
+
+    /// <summary>
+    /// True if the entry should be shown: has a name, is not a hidden system component and not a patch/update.
+    /// </summary>
+    public static bool ShouldInclude(UninstallEntryValues v)
+    {
+        if (string.IsNullOrWhiteSpace(v.DisplayName))
+            return false;
+        if (v.SystemComponent)
+            return false;
+        if (!string.IsNullOrWhiteSpace(v.ParentKeyName))
+            return false;
+        if (!string.IsNullOrWhiteSpace(v.ReleaseType) &&
+            SkippedReleaseTypes.Any(t => string.Equals(t, v.ReleaseType.Trim(), StringComparison.OrdinalIgnoreCase)))
+            return false;
+        return true;
+    }
+
+    /// <summary>Parses InstallDate (normally yyyyMMdd). Returns null for empty or invalid values.</summary>
+    public static DateTime? ParseInstallDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var s = value.Trim();
+        if (DateTime.TryParseExact(s, InstallDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) &&
+            d.Year is >= 1990 and <= 2100)
+            return d.Date;
+        return null;
+    }
+
+    /// <summary>EstimatedSize is in KB (REG_DWORD). Returns bytes, 0 if unknown.</summary>
+    public static long EstimatedSizeToBytes(long? kb)
+        => kb is > 0 and < int.MaxValue ? kb.Value * 1024L : 0;
+
+    public static bool IsGuid(string? s) => s is not null && s.Length == 38 && GuidRegex.IsMatch(s);
+
+    /// <summary>True for "MsiExec.exe /X{...}" and similar.</summary>
+    public static bool IsMsiexecCommand(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine))
+            return false;
+        var (exe, _) = CommandLine.Split(commandLine);
+        if (exe is null)
+            return false;
+        var name = Path.GetFileName(exe);
+        return string.Equals(name, "msiexec.exe", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, "msiexec", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Extracts {GUID} from "MsiExec.exe /I{GUID}" / "/X {GUID}" / "/uninstall {GUID}". Upper-case with braces.</summary>
+    public static string? ExtractProductCode(string? commandLine)
+    {
+        if (!IsMsiexecCommand(commandLine))
+            return null;
+        var m = MsiSwitchWithGuid.Match(commandLine!);
+        return m.Success ? m.Groups[1].Value.ToUpperInvariant() : null;
+    }
+
+    public static string MsiExecPath => Path.Combine(Environment.SystemDirectory, "msiexec.exe");
+
+    /// <summary>
+    /// Builds the standard (interactive) uninstall launch. MSI packages always become "msiexec.exe /x {GUID}"
+    /// (never the repair/modify "/I"), other programs run their own UninstallString.
+    /// </summary>
+    public static UninstallLaunch? BuildLaunch(string? uninstallString, bool windowsInstaller, string? keyName)
+    {
+        var isMsiCommand = IsMsiexecCommand(uninstallString);
+        var productCode = ExtractProductCode(uninstallString);
+        if (productCode is null && (windowsInstaller || isMsiCommand) && IsGuid(keyName))
+            productCode = keyName!.ToUpperInvariant();
+
+        if ((isMsiCommand || windowsInstaller) && productCode is not null)
+            return new UninstallLaunch(MsiExecPath, $"/x {productCode}", Environment.SystemDirectory, true, productCode);
+
+        return BuildRawLaunch(uninstallString);
+    }
+
+    /// <summary>Launch for QuietUninstallString (or any command) as written by the installer.</summary>
+    public static UninstallLaunch? BuildQuietLaunch(string? quietUninstallString)
+    {
+        if (string.IsNullOrWhiteSpace(quietUninstallString))
+            return null;
+        var launch = BuildRawLaunch(quietUninstallString);
+        if (launch is null)
+            return null;
+        if (IsMsiexecCommand(quietUninstallString))
+            return launch with { FileName = MsiExecPath, IsMsi = true, ProductCode = ExtractProductCode(quietUninstallString) };
+        return launch;
+    }
+
+    private static UninstallLaunch? BuildRawLaunch(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine))
+            return null;
+        var (exe, args) = CommandLine.Split(commandLine);
+        if (string.IsNullOrWhiteSpace(exe))
+            return null;
+        string? dir = null;
+        try
+        {
+            if (Path.IsPathRooted(exe))
+                dir = Path.GetDirectoryName(exe);
+        }
+        catch (ArgumentException)
+        {
+            // invalid characters: leave working directory unset
+        }
+        var isMsi = string.Equals(Path.GetFileName(exe), "msiexec.exe", StringComparison.OrdinalIgnoreCase);
+        return new UninstallLaunch(exe, args, dir, isMsi, isMsi ? ExtractProductCode(commandLine) : null);
+    }
+
+    /// <summary>
+    /// "Битая запись": the uninstaller file (for rundll32-style commands, the DLL) is missing AND the install folder
+    /// is empty or missing. MSI entries are never considered broken here. Missing drives (unplugged disks) are not broken.
+    /// </summary>
+    public static bool IsBroken(UninstallEntryValues v, Func<string, bool>? fileExists = null, Func<string, bool>? dirExists = null)
+    {
+        fileExists ??= File.Exists;
+        dirExists ??= Directory.Exists;
+        if (string.IsNullOrWhiteSpace(v.UninstallString))
+            return false;
+        if (IsMsiexecCommand(v.UninstallString))
+            return false;
+        if (v.WindowsInstaller && IsGuid(v.KeyName))
+            return false;
+
+        string? target;
+        try
+        {
+            target = CommandLine.TargetFile(v.UninstallString);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(target) || !IsLocalRootedPath(target))
+            return false;
+
+        var root = SafeRoot(target);
+        if (root is null || !dirExists(root))
+            return false; // the disk is not connected right now - do not call it broken
+
+        if (fileExists(target))
+            return false;
+
+        var location = NormalizeFolder(v.InstallLocation);
+        if (location is not null && (IsNetworkPath(location) || dirExists(location)))
+            return false; // network folders are not checked (could hang) - never call them broken
+        return true;
+    }
+
+    /// <summary>UNC paths (\\server\share) are never probed: an offline server can block for a long time.</summary>
+    public static bool IsNetworkPath(string? path)
+        => path is not null && (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal));
+
+    /// <summary>Recently installed (or updated): within <see cref="RecentDays"/> days, not in the future.</summary>
+    public static bool IsRecent(DateTime? installDate, DateTime now)
+        => installDate is { } d && d.Date >= now.Date.AddDays(-RecentDays) && d.Date <= now.Date.AddDays(1);
+
+    /// <summary>Microsoft runtimes other programs depend on (Visual C++, .NET, DirectX, WebView2...).</summary>
+    public static bool IsRuntime(string? displayName, string? publisher)
+    {
+        if (string.IsNullOrWhiteSpace(displayName) || !RuntimeName.IsMatch(displayName))
+            return false;
+        return string.IsNullOrWhiteSpace(publisher) ||
+               publisher.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) ||
+               publisher.Contains("Майкрософт", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Plain-language note when a program lives where normal programs do not (Temp, Downloads, Recycle Bin, Public).
+    /// Folders directly in AppData are normal for per-user apps and are not reported.
+    /// </summary>
+    public static string? DescribeInstallLocationRisk(string? installLocation)
+    {
+        var folder = NormalizeFolder(installLocation);
+        if (folder is null)
+            return null;
+        // DescribeRiskyLocation looks at the parent folder of a file, so describe a file inside the install folder.
+        var reason = Suspicion.DescribeRiskyLocation(Path.Combine(folder, "app.exe"));
+        if (reason is null)
+            return null;
+        if (reason.Contains("Temp", StringComparison.OrdinalIgnoreCase))
+            return "Программа установлена во временную папку (Temp) — обычные программы так не делают.";
+        if (reason.Contains("Загрузки", StringComparison.OrdinalIgnoreCase))
+            return "Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.";
+        if (reason.Contains("корзин", StringComparison.OrdinalIgnoreCase))
+            return "Папка программы находится в корзине.";
+        if (reason.Contains("Public", StringComparison.OrdinalIgnoreCase))
+            return "Программа установлена в общую папку пользователей (Public) — это необычно.";
+        return null;
+    }
+
+    public static bool IsDriverPackage(string? displayName)
+        => !string.IsNullOrWhiteSpace(displayName) && DriverName.IsMatch(displayName);
+
+    /// <summary>Trims quotes/spaces, expands variables. Returns null if empty.</summary>
+    public static string? NormalizeFolder(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder))
+            return null;
+        var s = Environment.ExpandEnvironmentVariables(folder.Trim().Trim('"').Trim());
+        if (s.Length == 0)
+            return null;
+        if (s.Length > 3)
+            s = s.TrimEnd('\\', '/');
+        return s;
+    }
+
+    /// <summary>Parses DisplayIcon like "\"C:\x\app.exe\",0" or "C:\x\app.ico". Returns (path, index).</summary>
+    public static (string? Path, int Index) ParseIconPath(string? displayIcon)
+    {
+        if (string.IsNullOrWhiteSpace(displayIcon))
+            return (null, 0);
+        var s = displayIcon.Trim();
+        var index = 0;
+        var comma = s.LastIndexOf(',');
+        if (comma > 0 && int.TryParse(s[(comma + 1)..].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var idx))
+        {
+            index = idx;
+            s = s[..comma];
+        }
+        s = Environment.ExpandEnvironmentVariables(s.Trim().Trim('"').Trim());
+        return (s.Length == 0 ? null : s, index);
+    }
+
+    /// <summary>
+    /// Folders that must never be measured as "the program's size" (a broken InstallLocation like C:\ or Program Files
+    /// would otherwise count the whole disk).
+    /// </summary>
+    public static bool IsTooBroadToMeasure(string folder)
+    {
+        string full;
+        try
+        {
+            full = Path.GetFullPath(folder).TrimEnd('\\');
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+        var root = Path.GetPathRoot(full)?.TrimEnd('\\');
+        if (string.IsNullOrEmpty(root) || string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var broad = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+            Path.GetTempPath(),
+        };
+        foreach (var b in broad)
+        {
+            if (string.IsNullOrWhiteSpace(b))
+                continue;
+            var bt = b.TrimEnd('\\');
+            // Equal to a broad folder, or an ancestor of one (e.g. C:\Users).
+            if (string.Equals(full, bt, StringComparison.OrdinalIgnoreCase) || Suspicion.IsUnder(bt, full))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Dedup key: same name + version from different registry views is one program.</summary>
+    public static string DedupKey(string displayName, string? version)
+        => displayName.Trim().ToUpperInvariant() + "|" + (version ?? "").Trim().ToUpperInvariant();
+
+    private static bool IsLocalRootedPath(string path)
+    {
+        try
+        {
+            return Path.IsPathFullyQualified(path) && !path.StartsWith(@"\\", StringComparison.Ordinal);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static string? SafeRoot(string path)
+    {
+        try
+        {
+            return Path.GetPathRoot(path);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+}
