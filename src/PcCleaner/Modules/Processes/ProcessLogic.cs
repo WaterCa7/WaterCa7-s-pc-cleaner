@@ -583,6 +583,117 @@ internal static class ProcessTree
     }
 }
 
+/// <summary>How a process relates to the cleaner itself.</summary>
+public enum ProcessOwnRole
+{
+    None,
+    /// <summary>WaterCa7s PC Cleaner itself.</summary>
+    Self,
+    /// <summary>A helper the cleaner started for its checks (powershell.exe, reg.exe, netsh.exe...) or one of its children.</summary>
+    Helper,
+}
+
+/// <summary>
+/// The cleaner runs powershell.exe, reg.exe, netsh.exe and other tools for its checks. Those helpers (and the cleaner
+/// itself) must never be reported as suspicious or as resource hogs: they are our own work, not the user's problem.
+/// </summary>
+internal static class OwnProcesses
+{
+    public const string HelperLabel = "служебный процесс WaterCa7s PC Cleaner";
+
+    /// <summary>
+    /// The cleaner and every process it started, directly or through another helper (powershell.exe → conhost.exe).
+    /// A child counts only if it started after its parent, so a stale parent PID reused by Windows never drags in
+    /// unrelated programs. If the cleaner itself is not in the list, its direct children are the roots.
+    /// </summary>
+    public static HashSet<T> Find<T>(IReadOnlyCollection<T> all, int selfPid, Func<T, int> pid, Func<T, int> parentPid,
+        Func<T, long> createTime) where T : notnull
+    {
+        var roots = all.Where(p => pid(p) == selfPid).ToList();
+        if (roots.Count == 0)
+            roots = all.Where(p => parentPid(p) == selfPid).ToList();
+        return roots.Count == 0
+            ? new HashSet<T>()
+            : new HashSet<T>(ProcessTree.Collect(all, roots, pid, parentPid, createTime));
+    }
+
+    public static ProcessOwnRole RoleOf<T>(T item, int selfPid, Func<T, int> pid, HashSet<T> own) where T : notnull
+        => pid(item) == selfPid ? ProcessOwnRole.Self : own.Contains(item) ? ProcessOwnRole.Helper : ProcessOwnRole.None;
+}
+
+/// <summary>
+/// Hidden crypto miners keep the processor fully loaded all the time. Heavy load alone means nothing (games, video
+/// editing, archivers, compilers), so it only counts for a file that is already unusual: not validly signed, started from
+/// a risky folder, or a known miner / remote-access tool.
+/// </summary>
+internal static class MinerHeuristic
+{
+    /// <summary>Share of the whole processor (all cores), like the "ЦП" column.</summary>
+    public const double SustainedCpuPercent = 80;
+
+    /// <summary>Consecutive measurements at or above <see cref="SustainedCpuPercent"/> before the load counts as sustained.</summary>
+    public const int RequiredSamples = 2;
+
+    public const int Score = 35;
+
+    public const string Reason = "Очень высокая загрузка процессора — возможен скрытый майнер";
+
+    public static bool IsCandidate(string? path, SignatureInfo? signature)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false; // no access to the file: nothing to back the suspicion up
+        if (signature is { Status: SignatureStatus.Unsigned or SignatureStatus.Untrusted or SignatureStatus.Invalid })
+            return true;
+        if (KnownPups.MatchRiskyTool(PathUtil.FileNameOrNull(path)) is not null)
+            return true;
+        // Windows unpacks its own Microsoft-signed tools into Temp (DismHost.exe and friends) and they can be busy for a while.
+        return signature?.IsMicrosoft != true && Suspicion.DescribeRiskyLocation(path) is not null;
+    }
+
+    /// <summary>Adds the miner reason when the load was sustained and the file is a candidate.</summary>
+    public static SuspicionResult Apply(SuspicionResult result, bool sustainedHighCpu, string? path, SignatureInfo? signature)
+    {
+        if (!sustainedHighCpu || !IsCandidate(path, signature) || result.Reasons.Contains(Reason))
+            return result;
+        return new SuspicionResult(Math.Clamp(result.Score + Score, 0, 100), result.Reasons.Append(Reason).ToList());
+    }
+}
+
+/// <summary>
+/// Remembers which processes kept the processor at or above <see cref="MinerHeuristic.SustainedCpuPercent"/> for
+/// <see cref="MinerHeuristic.RequiredSamples"/> consecutive measurements. Once reached, the mark stays for the life of
+/// the process: a miner that pauses when someone looks (many do) must not lose its warning a refresh later.
+/// </summary>
+internal sealed class CpuStreaks
+{
+    private Dictionary<ProcessKey, int> _streaks = new();
+    private HashSet<ProcessKey> _sustained = new();
+
+    /// <summary>Breaks every running streak (e.g. after a long pause between measurements). Sustained marks are kept.</summary>
+    public void BreakStreaks() => _streaks = new Dictionary<ProcessKey, int>();
+
+    /// <summary>Feeds one measurement of all running processes; processes that are gone are forgotten.</summary>
+    public void Update(IEnumerable<(ProcessKey Key, double Cpu)> measurement)
+    {
+        var streaks = new Dictionary<ProcessKey, int>();
+        var alive = new HashSet<ProcessKey>();
+        foreach (var (key, cpu) in measurement)
+        {
+            alive.Add(key);
+            if (cpu < MinerHeuristic.SustainedCpuPercent)
+                continue;
+            var n = (_streaks.TryGetValue(key, out var previous) ? previous : 0) + 1;
+            streaks[key] = n;
+            if (n >= MinerHeuristic.RequiredSamples)
+                _sustained.Add(key);
+        }
+        _streaks = streaks;
+        _sustained.IntersectWith(alive);
+    }
+
+    public bool IsSustained(ProcessKey key) => _sustained.Contains(key);
+}
+
 /// <summary>When a file may be moved to quarantine from the Processes page.</summary>
 internal static class QuarantineRules
 {
@@ -590,7 +701,7 @@ internal static class QuarantineRules
 
     /// <summary>Null if allowed, otherwise a short explanation for the tooltip.</summary>
     public static string? BlockReason(string? path, SignatureInfo? signature, SuspicionResult? suspicion, KillVerdict verdict,
-        bool trusted, string? selfPath = null)
+        bool trusted, string? selfPath = null, bool isOwnHelper = false)
     {
         if (path is null)
             return "Нет доступа к файлу процесса.";
@@ -600,6 +711,8 @@ internal static class QuarantineRules
             return "Это защищённый процесс — его нельзя трогать.";
         if (string.Equals(path, selfPath ?? Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
             return ProcessGuard.SelfText;
+        if (isOwnHelper)
+            return "Это служебный процесс WaterCa7s PC Cleaner — он завершится сам, когда проверка закончится.";
         if (signature is null)
             return "Подождите: ещё проверяется цифровая подпись.";
         if (signature.IsMicrosoft)

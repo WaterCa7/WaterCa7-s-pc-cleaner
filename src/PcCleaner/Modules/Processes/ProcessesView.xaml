@@ -122,6 +122,17 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <Style x:Key="InlineLink" TargetType="Hyperlink">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="TextDecorations" Value="{x:Null}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="TextDecorations" Value="Underline" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Context menu entry: icon + text -->
         <Style x:Key="MenuIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
             <Setter Property="FontSize" Value="13" />
@@ -139,7 +150,8 @@
         </Grid.RowDefinitions>
 
         <!-- ================= Summary cards ================= -->
-        <Grid Margin="0,0,0,12">
+        <!-- On narrow windows the decorative icons give their room to the numbers (see OnSummarySizeChanged). -->
+        <Grid x:Name="SummaryCards" Margin="0,0,0,12" SizeChanged="OnSummarySizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition />
                 <ColumnDefinition Width="12" />
@@ -164,7 +176,7 @@
                         <ProgressBar Margin="0,8,0,0" Height="4" Maximum="100" Value="{Binding CpuPercent, Mode=OneWay}"
                                      Foreground="{Binding CpuPercent, Converter={StaticResource PercentToBrush}}" />
                     </StackPanel>
-                    <Border Grid.Column="1" Style="{StaticResource CardIcon}">
+                    <Border x:Name="CpuIcon" Grid.Column="1" Style="{StaticResource CardIcon}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE950;" Foreground="{StaticResource AccentBrush}"
                                    HorizontalAlignment="Center" />
                     </Border>
@@ -189,7 +201,7 @@
                         <ProgressBar Margin="0,8,0,0" Height="4" Maximum="100" Value="{Binding MemoryPercent, Mode=OneWay}"
                                      Foreground="{Binding MemoryPercent, Converter={StaticResource PercentToBrush}}" />
                     </StackPanel>
-                    <Border Grid.Column="1" Style="{StaticResource CardIcon}">
+                    <Border x:Name="MemoryIcon" Grid.Column="1" Style="{StaticResource CardIcon}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE964;" Foreground="{StaticResource AccentBrush}"
                                    HorizontalAlignment="Center" />
                     </Border>
@@ -209,7 +221,7 @@
                         <TextBlock Style="{StaticResource CardNumber}" Text="{Binding ProcessCountText}" />
                         <TextBlock Style="{StaticResource CardHint}" Text="{Binding ProgramCountText}" Margin="0,3,0,0" />
                     </StackPanel>
-                    <Border Grid.Column="1" Style="{StaticResource CardIcon}">
+                    <Border x:Name="ProcessIcon" Grid.Column="1" Style="{StaticResource CardIcon}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE71D;" Foreground="{StaticResource AccentBrush}"
                                    HorizontalAlignment="Center" />
                     </Border>
@@ -217,8 +229,8 @@
             </Border>
 
             <!-- Suspicious -->
-            <Border Grid.Column="6" Style="{StaticResource Card}" Padding="14,12"
-                    ToolTip="Процессы с признаками нежелательных программ: нет подписи, необычное расположение, маскировка под системные файлы.">
+            <!-- Same shape as "Процессы": processes in the number, programs (= rows of the grouped list) underneath. -->
+            <Border Grid.Column="6" Style="{StaticResource Card}" Padding="14,12" ToolTip="{Binding SuspiciousSummary}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -226,26 +238,28 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardLabel}" Text="Подозрительные" />
-                        <TextBlock Text="{Binding SuspiciousCountText}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource CardNumber}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasSuspicious}" Value="True">
-                                            <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <Grid Margin="0,3,0,0">
-                            <TextBlock Style="{StaticResource CardHint}" Text="{Binding SuspiciousHint}"
-                                       Visibility="{Binding HasSuspicious, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
-                            <Button Style="{StaticResource LinkButton}" Content="Показать в списке" FontSize="11.5" HorizontalAlignment="Left"
-                                    Command="{Binding ShowSuspiciousCommand}" ToolTip="Включить фильтр «Только подозрительные»"
+                        <!-- The link sits next to the number (like "18,1 из 47,9 ГБ" on the memory card): it fits even on narrow cards -->
+                        <DockPanel>
+                            <TextBlock Text="{Binding SuspiciousCountText}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource CardNumber}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasSuspicious}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <Button Style="{StaticResource LinkButton}" Content="Показать" FontSize="11.5" Margin="10,0,0,6"
+                                    VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                                    Command="{Binding ShowSuspiciousCommand}"
+                                    ToolTip="Показать в списке только подозрительные (фильтр «Только подозрительные»)"
                                     Visibility="{Binding HasSuspicious, Converter={StaticResource BoolToVis}}" />
-                        </Grid>
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource CardHint}" Text="{Binding SuspiciousHint}" Margin="0,3,0,0" />
                     </StackPanel>
-                    <Border Grid.Column="1">
+                    <Border x:Name="SuspiciousIcon" Grid.Column="1">
                         <Border.Style>
                             <Style TargetType="Border" BasedOn="{StaticResource CardIcon}">
                                 <Style.Triggers>
@@ -270,16 +284,16 @@
         </Grid>
 
         <!-- ================= Toolbar ================= -->
-        <Grid Grid.Row="1" Margin="0,0,0,10">
+        <!-- Narrow windows get shorter captions so the toolbar stays on one line (see OnToolbarSizeChanged). -->
+        <Grid Grid.Row="1" Margin="0,0,0,10" SizeChanged="OnToolbarSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Grid Width="228" Height="34" VerticalAlignment="Top">
-                <!-- The theme's TextBox template applies Padding twice (content host margin + ScrollViewer), hence half values. -->
-                <TextBox x:Name="SearchBox" Padding="15,3.5,14,0" Height="34"
+            <Grid x:Name="SearchPanel" Width="228" Height="34" VerticalAlignment="Top">
+                <TextBox x:Name="SearchBox" Padding="30,0,28,0" Height="34" VerticalContentAlignment="Center"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
                          ToolTip="Ищет по имени, описанию, издателю, пути к файлу, PID и названиям служб" />
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
@@ -295,12 +309,12 @@
             </Grid>
 
             <WrapPanel Grid.Column="1" Margin="16,0,4,0" VerticalAlignment="Top">
-                <CheckBox Content="Группировать по программам" IsChecked="{Binding GroupByProgram}" Margin="0,8,18,8"
+                <CheckBox x:Name="GroupCheck" Content="Группировать по программам" IsChecked="{Binding GroupByProgram}" Margin="0,8,18,8"
                           ToolTip="Объединяет все процессы одной программы (например, вкладки браузера) в одну строку. Стрелка слева раскрывает группу." />
-                <CheckBox Content="Только подозрительные" IsChecked="{Binding SuspiciousOnly}" Margin="0,8,18,8"
+                <CheckBox x:Name="SuspiciousCheck" Content="Только подозрительные" IsChecked="{Binding SuspiciousOnly}" Margin="0,8,18,8"
                           ToolTip="Показать только процессы с оценкой «Подозрительно» или «Высокий риск»." />
-                <CheckBox Content="Скрыть системные процессы Microsoft" IsChecked="{Binding HideMicrosoft}" Margin="0,8,0,8"
-                          ToolTip="Скрывает компоненты Windows с подписью Microsoft (svchost, службы, драйверы). Программы вроде Edge или OneDrive, а также всё подозрительное остаются в списке." />
+                <CheckBox x:Name="HideMicrosoftCheck" Content="Скрыть системные процессы Microsoft" IsChecked="{Binding HideMicrosoft}" Margin="0,8,0,8"
+                          ToolTip="Скрыть системные процессы Microsoft: компоненты Windows с подписью Microsoft (svchost, службы, драйверы). Программы вроде Edge или OneDrive, а также всё подозрительное остаются в списке." />
             </WrapPanel>
 
             <Button Grid.Column="2" Style="{StaticResource GhostButton}" VerticalAlignment="Top" Width="34" Height="34" Padding="0"
@@ -463,14 +477,14 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTextColumn Binding="{Binding CpuText}" SortMemberPath="Cpu" Width="62"
+                            <DataGridTextColumn x:Name="CpuColumn" Binding="{Binding CpuText}" SortMemberPath="Cpu" Width="62"
                                                 ElementStyle="{StaticResource CellText}">
                                 <DataGridTextColumn.Header>
                                     <TextBlock Text="ЦП" ToolTip="Доля всей мощности процессора за последние 2 секунды (как в Диспетчере задач)." />
                                 </DataGridTextColumn.Header>
                             </DataGridTextColumn>
 
-                            <DataGridTextColumn Binding="{Binding MemoryText}" SortMemberPath="Memory" Width="84"
+                            <DataGridTextColumn x:Name="MemoryColumn" Binding="{Binding MemoryText}" SortMemberPath="Memory" Width="84"
                                                 ElementStyle="{StaticResource CellText}">
                                 <DataGridTextColumn.Header>
                                     <TextBlock Text="Память"
@@ -517,15 +531,15 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" FontSize="14" Foreground="{StaticResource InfoBrush}"
                                        VerticalAlignment="Top" Margin="0,1,9,0" />
-                            <TextBlock Grid.Column="1" Text="{Binding AdminHintText}" FontSize="12" TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextBrush}" />
-                            <Button Grid.Column="2" Style="{StaticResource LinkButton}" Content="Перезапустить" FontSize="12"
-                                    Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding RestartAsAdminCommand}"
-                                    ToolTip="Перезапустить WaterCa7s PC Cleaner от имени администратора" />
+                            <!-- The link flows right after the text: one line less on narrow windows -->
+                            <TextBlock Grid.Column="1" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}">
+                                <Run Text="{Binding AdminHintText, Mode=OneWay}" />
+                                <Hyperlink Style="{StaticResource InlineLink}" Command="{Binding RestartAsAdminCommand}"
+                                           ToolTip="Перезапустить WaterCa7s PC Cleaner от имени администратора">Перезапустить</Hyperlink>
+                            </TextBlock>
                         </Grid>
                     </Border>
                 </Grid>
@@ -550,10 +564,17 @@
                     <DockPanel DataContext="{Binding SelectedItem}"
                                Visibility="{Binding DataContext.HasSelection, ElementName=Root, Converter={StaticResource BoolToVis}}">
 
-                        <!-- Actions (always visible) -->
-                        <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="9,8,9,9">
+                        <!-- Actions (always visible). On short windows the secondary actions become one row of icon
+                             buttons with tooltips, so the details above keep most of the height (see OnDetailsSizeChanged). -->
+                        <Border x:Name="ActionBar" DockPanel.Dock="Bottom" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0"
+                                Padding="9,8,9,9">
                             <StackPanel>
-                                <UniformGrid Columns="2">
+                                <!-- Two equal columns; on a narrow panel the first one shrinks to its caption (OnDetailsSizeChanged) -->
+                                <Grid x:Name="KillActions">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
                                     <Button Style="{StaticResource ActionDangerButton}" Command="{Binding DataContext.KillCommand, ElementName=Root}"
                                             ToolTip="{Binding KillToolTip}">
                                         <!-- DockPanel (not StackPanel) so the caption trims instead of being cut off on narrow windows -->
@@ -562,14 +583,15 @@
                                             <TextBlock Text="Завершить" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
-                                    <Button Style="{StaticResource ActionDangerButton}" Command="{Binding DataContext.KillTreeCommand, ElementName=Root}"
+                                    <Button Grid.Column="1" Style="{StaticResource ActionDangerButton}"
+                                            Command="{Binding DataContext.KillTreeCommand, ElementName=Root}"
                                             ToolTip="{Binding KillTreeToolTip}">
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE81E;" FontSize="12" Margin="0,0,7,0" />
                                             <TextBlock Text="Завершить дерево" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
-                                </UniformGrid>
+                                </Grid>
                                 <UniformGrid x:Name="SecondaryActions" Columns="3">
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.OpenLocationCommand, ElementName=Root}"
                                             ToolTip="Открыть расположение файла: папка с программой откроется в Проводнике, файл будет выделен">
@@ -656,10 +678,16 @@
                                         </Style>
                                     </Border.Style>
                                     <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13" Margin="0,0,8,0" />
-                                            <TextBlock Text="Почему стоит обратить внимание" FontWeight="SemiBold" FontSize="12.5" />
-                                        </StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13" Margin="0,2,8,0"
+                                                       VerticalAlignment="Top" />
+                                            <TextBlock Grid.Column="1" Text="Почему стоит обратить внимание" FontWeight="SemiBold"
+                                                       FontSize="12.5" TextWrapping="Wrap" />
+                                        </Grid>
                                         <ItemsControl ItemsSource="{Binding Reasons}" Margin="0,6,0,0" Focusable="False">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -703,14 +731,33 @@
                                     </Grid>
                                 </Border>
 
+                                <!-- The cleaner's own helper (powershell.exe, reg.exe...) -->
+                                <Border Style="{StaticResource InnerCard}" Margin="0,10,0,0" Padding="11,9"
+                                        Visibility="{Binding OwnNote, Converter={StaticResource HasValueToVis}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE946;" FontSize="13" VerticalAlignment="Top"
+                                                   Margin="0,2,9,0" Foreground="{StaticResource AccentBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding OwnNote}" Style="{StaticResource FieldValue}" FontSize="12" />
+                                    </Grid>
+                                </Border>
+
                                 <!-- All good -->
-                                <Border Margin="0,10,0,0" Padding="11,8" CornerRadius="8" Background="{StaticResource AccentSoftBrush}"
+                                <Border Margin="0,10,0,0" Padding="11,8" CornerRadius="8" Background="{StaticResource SuccessSoftBrush}"
                                         Visibility="{Binding IsVerifiedClean, Converter={StaticResource BoolToVis}}">
-                                    <StackPanel Orientation="Horizontal">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE930;" FontSize="13" Foreground="{StaticResource SuccessBrush}"
-                                                   Margin="0,0,8,0" />
-                                        <TextBlock Text="Ничего подозрительного не найдено" FontSize="12.5" Foreground="{StaticResource SuccessBrush}" />
-                                    </StackPanel>
+                                                   Margin="0,1,8,0" VerticalAlignment="Top" />
+                                        <TextBlock Grid.Column="1" Text="Ничего подозрительного не найдено" FontSize="12.5" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource SuccessBrush}" />
+                                    </Grid>
                                 </Border>
                                 <Border Margin="0,10,0,0" Padding="11,8" CornerRadius="8" Background="{StaticResource AccentSoftBrush}"
                                         Visibility="{Binding IsTrusted, Converter={StaticResource BoolToVis}}">

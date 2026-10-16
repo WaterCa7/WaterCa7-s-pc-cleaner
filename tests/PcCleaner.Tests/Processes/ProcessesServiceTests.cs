@@ -74,6 +74,8 @@ public class ProcessEvaluationTests
         {
             Assert.True(AppServices.Settings.IsTrusted(path));
             Assert.Equal(0, ProcessesService.Evaluate(path, unsigned, null, null).Score);
+            // ...even when it keeps the processor fully loaded (the miner hint respects the user's choice too).
+            Assert.Equal(0, ProcessesService.Evaluate(path, unsigned, null, null, sustainedHighCpu: true).Score);
         }
         finally
         {
