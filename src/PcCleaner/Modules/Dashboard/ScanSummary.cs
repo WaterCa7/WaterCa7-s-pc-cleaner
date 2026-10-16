@@ -32,10 +32,49 @@ public sealed record ScanSummary
 
     public int FixableCount { get; init; }
 
+    /// <summary>Everything the remaining findings could free (fixable from the dashboard + manual review).</summary>
     public long ReclaimableBytes { get; init; }
+
+    /// <summary>
+    /// Part of <see cref="ReclaimableBytes"/> that only the user can free after reviewing it (findings without a fix,
+    /// e.g. old downloads or Windows.old). 0 in summaries saved by older versions.
+    /// </summary>
+    public long ManualReclaimableBytes { get; init; }
 
     /// <summary>Modules that failed or timed out (the score may be incomplete).</summary>
     public int FailedModules { get; init; }
+
+    /// <summary>
+    /// Score the scan itself measured. <see cref="Score"/> is re-estimated after fixes made in that session; the next
+    /// scan compares with this measured value, so "Проверить снова" right after fixing shows the real improvement
+    /// (not "Было 100 → стало 94" because a fix freed slightly less than estimated). Null in older summaries.
+    /// </summary>
+    public int? MeasuredScore { get; init; }
+
+    /// <summary>What the next scan is compared with: the measured score, or <see cref="Score"/> for older summaries.</summary>
+    [JsonIgnore]
+    public int BaselineScore => MeasuredScore ?? Score;
+
+    /// <summary>Score of the scan before this one (for "Было 52 → стало 78"); null on the first scan.</summary>
+    public int? PreviousScore { get; init; }
+
+    public DateTime? PreviousTime { get; init; }
+
+    /// <summary>Reclaimable space split into "fixable from the dashboard" and "after manual review".</summary>
+    [JsonIgnore]
+    public ReclaimableSplit Reclaimable
+    {
+        get
+        {
+            var total = Math.Max(0, ReclaimableBytes);
+            var manual = Math.Clamp(ManualReclaimableBytes, 0, total);
+            return new ReclaimableSplit(total - manual, manual);
+        }
+    }
+
+    /// <summary>Change against the previous scan; null on the first scan.</summary>
+    [JsonIgnore]
+    public ScoreDelta? Delta => ScoreDelta.Create(PreviousScore, Score, PreviousTime);
 
     public static ScanSummary? Load(AppSettings settings)
     {
@@ -47,7 +86,12 @@ public sealed record ScanSummary
             var summary = JsonSerializer.Deserialize<ScanSummary>(json);
             if (summary is null || summary.Time == default)
                 return null;
-            return summary with { Score = Math.Clamp(summary.Score, 0, 100) };
+            return summary with
+            {
+                Score = Math.Clamp(summary.Score, 0, 100),
+                MeasuredScore = summary.MeasuredScore is { } m ? Math.Clamp(m, 0, 100) : null,
+                PreviousScore = summary.PreviousScore is { } p ? Math.Clamp(p, 0, 100) : null,
+            };
         }
         catch (JsonException ex)
         {

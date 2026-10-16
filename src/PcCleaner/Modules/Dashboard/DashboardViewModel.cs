@@ -4,6 +4,7 @@ using System.IO;
 using System.Security;
 using System.Text;
 using System.Windows;
+using Microsoft.Win32;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Dashboard;
@@ -27,7 +28,7 @@ public sealed class DashboardViewModel : PageViewModel
     private readonly AppSettings? _settingsOverride;
 
     private bool _initialized;
-    private Task? _staticTask;
+    private Task<StaticSystemInfo?>? _staticTask;
     private CancellationTokenSource? _liveCts;
 
     private DashboardScanState _state = DashboardScanState.NotScanned;
@@ -42,6 +43,9 @@ public sealed class DashboardViewModel : PageViewModel
     private int _fixedCount;
     private string? _actionSummary;
     private string? _scanWarning;
+    private string? _reportStatus;
+    private string? _reportStatusToolTip;
+    private bool _reportStatusOk = true;
 
     // live tiles
     private double _cpuPercent;
@@ -83,15 +87,22 @@ public sealed class DashboardViewModel : PageViewModel
         RequestAdminCommand = new RelayCommand(() => Admin.RequireElevation("полная проверка компьютера"),
             () => !Admin.IsElevated && !IsBusy);
 
+        SaveReportCommand = new AsyncRelayCommand(SaveReportAsync, () => !IsBusy && HasReport);
+        CopyReportCommand = new AsyncRelayCommand(CopyReportAsync, () => !IsBusy && HasReport);
+
+        // The first link is drawn as a wide tile above the others: 1 + 6 tiles fill every row with 3 or 2 columns.
         QuickLinks = new[]
         {
-            new QuickLink("Cleaner", "Очистка", "Временные файлы, кэш и корзина", ""),
+            new QuickLink("Cleaner", "Очистка", "Временные файлы, кэш браузеров и программ, корзина — освободите место без риска", ""),
             new QuickLink("Startup", "Автозагрузка", "Что запускается вместе с Windows", ""),
             new QuickLink("Processes", "Процессы", "Что работает в фоне прямо сейчас", ""),
             new QuickLink("Programs", "Программы", "Установленные и нежелательные", ""),
             new QuickLink("Optimizer", "Ускорение", "Настройки Windows и железо", ""),
+            // U+2011 (non-breaking hyphen): a narrow tile must not wrap "Wi-" / "Fi".
+            new QuickLink("Network", "Сеть", "Скорость, задержки, Wi\u2011Fi и порты", ""),
             new QuickLink("Security", "Безопасность", "Антивирус, брандмауэр, hosts", ""),
         };
+        MoreLinks = QuickLinks.Skip(1).ToList();
     }
 
     public override string Title => "Главная";
@@ -113,6 +124,15 @@ public sealed class DashboardViewModel : PageViewModel
 
     internal Func<DateTime> Now { get; set; } = () => DateTime.Now;
 
+    /// <summary>Static facts about the computer (tests replace the registry/WMI read).</summary>
+    internal Func<StaticSystemInfo> ReadStaticInfo { get; set; } = SystemInfo.ReadStatic;
+
+    /// <summary>Asks where to save the report (default: SaveFileDialog). Returns null when the user cancels.</summary>
+    internal Func<string, string?> PickReportPath { get; set; } = ShowSaveReportDialog;
+
+    /// <summary>Puts text on the clipboard (tests replace it; the real clipboard can be locked by another program).</summary>
+    internal Action<string> SetClipboardText { get; set; } = Clipboard.SetText;
+
     internal IReadOnlyList<HealthIssue> CurrentIssues => _issues;
 
     // ===================== Commands =====================
@@ -125,7 +145,17 @@ public sealed class DashboardViewModel : PageViewModel
 
     public RelayCommand RequestAdminCommand { get; }
 
+    public AsyncRelayCommand SaveReportCommand { get; }
+
+    public AsyncRelayCommand CopyReportCommand { get; }
+
     public IReadOnlyList<QuickLink> QuickLinks { get; }
+
+    /// <summary>Wide tile above the grid ("Очистка").</summary>
+    public QuickLink FeaturedLink => QuickLinks[0];
+
+    /// <summary>The other six tiles: 3 × 2 or 2 × 3, every row full.</summary>
+    public IReadOnlyList<QuickLink> MoreLinks { get; }
 
     // ===================== Hero card =====================
 
@@ -143,6 +173,7 @@ public sealed class DashboardViewModel : PageViewModel
             OnPropertyChanged(nameof(ShowNoProblems));
             OnPropertyChanged(nameof(ShowScanningPlaceholder));
             OnPropertyChanged(nameof(IsCancelled));
+            OnPropertyChanged(nameof(HasReport));
             RaiseHero();
         }
     }
@@ -183,11 +214,72 @@ public sealed class DashboardViewModel : PageViewModel
     /// <summary>Last scan is older than a week — nudge the user (not while a new scan is running).</summary>
     public bool IsScanOld => !IsScanning && _summary is not null && Now() - _summary.Time > TimeSpan.FromDays(7);
 
+    /// <summary>Everything the remaining findings could free (see <see cref="Reclaimable"/> for the honest split).</summary>
     public long ReclaimableBytes => _summary?.ReclaimableBytes ?? 0;
+
+    /// <summary>Fixable right here vs. only after the user reviews it (old downloads, Windows.old...).</summary>
+    public ReclaimableSplit Reclaimable => _summary?.Reclaimable ?? default;
 
     public bool HasReclaimable => !IsScanning && ReclaimableBytes > 0;
 
-    public string ReclaimableText => "Можно освободить " + Format.Bytes(ReclaimableBytes);
+    /// <summary>One honest line: "Можно освободить 2 ГБ (ещё до 40 ГБ — после проверки вручную)".</summary>
+    public string ReclaimableText => Reclaimable.SummaryText ?? "";
+
+    public bool HasAutoReclaimable => !IsScanning && Reclaimable.AutoBytes > 0;
+
+    public string AutoReclaimableText => Reclaimable.AutoText ?? "";
+
+    public bool HasManualReclaimable => !IsScanning && Reclaimable.ManualBytes > 0;
+
+    public string ManualReclaimableText => Reclaimable.ManualText ?? "";
+
+    /// <summary>"Было 52 → стало 78 (+26)" against the scan before the last one; null on the first scan.</summary>
+    public ScoreDelta? ScoreDelta => _summary?.Delta;
+
+    public bool HasScoreDelta => !IsScanning && ScoreDelta is not null;
+
+    public string ScoreDeltaText => ScoreDelta?.Text ?? "";
+
+    public ScoreTrend ScoreTrend => ScoreDelta?.Trend ?? ScoreTrend.Same;
+
+    public string ScoreDeltaToolTip => ScoreDelta?.Explanation(Now()) ?? "";
+
+    /// <summary>The report can be saved/copied: a full scan finished in this session.</summary>
+    public bool HasReport => State == DashboardScanState.Completed && _summary is not null && _summaryFromThisSession;
+
+    /// <summary>Result of the last "Сохранить отчёт" / "Скопировать отчёт" (shown under the buttons).</summary>
+    public string? ReportStatus
+    {
+        get => _reportStatus;
+        private set
+        {
+            if (Set(ref _reportStatus, value))
+                OnPropertyChanged(nameof(HasReportStatus));
+        }
+    }
+
+    public bool HasReportStatus => !string.IsNullOrEmpty(ReportStatus);
+
+    /// <summary>False when the last report action failed (warning icon instead of a check mark).</summary>
+    public bool ReportStatusOk
+    {
+        get => _reportStatusOk;
+        private set => Set(ref _reportStatusOk, value);
+    }
+
+    /// <summary>Details of <see cref="ReportStatus"/> (e.g. the full path of the saved file).</summary>
+    public string? ReportStatusToolTip
+    {
+        get => _reportStatusToolTip;
+        private set => Set(ref _reportStatusToolTip, value);
+    }
+
+    private void SetReportStatus(string? text, bool ok = true, string? toolTip = null)
+    {
+        ReportStatusOk = ok;
+        ReportStatusToolTip = toolTip ?? text;
+        ReportStatus = text;
+    }
 
     public int RemainingIssueCount => _summary?.IssueCount ?? 0;
 
@@ -413,6 +505,10 @@ public sealed class DashboardViewModel : PageViewModel
 
     public string RamText => _info is null ? "…" : Format.Bytes(_info.InstalledRamBytes);
 
+    public string GpuLabel => _info?.Gpus.Count > 1 ? "Видеокарты" : "Видеокарта";
+
+    public string GpuText => _info is null ? "…" : _info.Gpus.Count == 0 ? "Нет данных" : string.Join("\n", _info.Gpus);
+
     public string AccessText => Admin.IsElevated ? "Администратор — доступны все проверки" : "Обычный пользователь — часть проверок ограничена";
 
     // ===================== Navigation lifecycle =====================
@@ -459,13 +555,14 @@ public sealed class DashboardViewModel : PageViewModel
         await Task.Delay(900, CancellationToken.None);
     }
 
-    private Task EnsureStaticInfoAsync() => _staticTask ??= LoadStaticAsync();
+    private Task<StaticSystemInfo?> EnsureStaticInfoAsync() => _staticTask ??= LoadStaticAsync();
 
-    private async Task LoadStaticAsync()
+    private async Task<StaticSystemInfo?> LoadStaticAsync()
     {
         try
         {
-            var info = await Task.Run(SystemInfo.ReadStatic);
+            var read = ReadStaticInfo;
+            var info = await Task.Run(read);
             Ui.Post(() =>
             {
                 _info = info;
@@ -476,11 +573,15 @@ public sealed class DashboardViewModel : PageViewModel
                 OnPropertyChanged(nameof(CpuName));
                 OnPropertyChanged(nameof(CpuDetail));
                 OnPropertyChanged(nameof(RamText));
+                OnPropertyChanged(nameof(GpuLabel));
+                OnPropertyChanged(nameof(GpuText));
             });
+            return info;
         }
         catch (Exception ex)
         {
             Log.Warn($"Главная: не удалось прочитать сведения о компьютере: {ex.Message}");
+            return null;
         }
     }
 
@@ -574,6 +675,7 @@ public sealed class DashboardViewModel : PageViewModel
     private void RaiseTimeTexts()
     {
         OnPropertyChanged(nameof(LastScanText));
+        OnPropertyChanged(nameof(ScoreDeltaToolTip));
         OnPropertyChanged(nameof(IsScanOld));
         OnPropertyChanged(nameof(PreviousResultText));
     }
@@ -587,8 +689,18 @@ public sealed class DashboardViewModel : PageViewModel
         OnPropertyChanged(nameof(VerdictText));
         OnPropertyChanged(nameof(VerdictDescription));
         OnPropertyChanged(nameof(ReclaimableBytes));
+        OnPropertyChanged(nameof(Reclaimable));
         OnPropertyChanged(nameof(HasReclaimable));
         OnPropertyChanged(nameof(ReclaimableText));
+        OnPropertyChanged(nameof(HasAutoReclaimable));
+        OnPropertyChanged(nameof(AutoReclaimableText));
+        OnPropertyChanged(nameof(HasManualReclaimable));
+        OnPropertyChanged(nameof(ManualReclaimableText));
+        OnPropertyChanged(nameof(ScoreDelta));
+        OnPropertyChanged(nameof(HasScoreDelta));
+        OnPropertyChanged(nameof(ScoreDeltaText));
+        OnPropertyChanged(nameof(ScoreTrend));
+        OnPropertyChanged(nameof(HasReport));
         OnPropertyChanged(nameof(RemainingIssueCount));
         OnPropertyChanged(nameof(HasIssueCount));
         OnPropertyChanged(nameof(IssueCountText));
@@ -633,6 +745,7 @@ public sealed class DashboardViewModel : PageViewModel
             FixedCount = 0;
             ActionSummary = null;
             ScanWarning = null;
+            SetReportStatus(null);
             State = DashboardScanState.Scanning;
             RaiseResults();
         });
@@ -680,7 +793,10 @@ public sealed class DashboardViewModel : PageViewModel
                 else
                 {
                     score = HealthScoring.ComputeScore(issues);
-                    _summary = MakeSummary(score.Value, Now(), failed.Count);
+                    // "Было → стало": compare with what the previous scan MEASURED. Its post-fix score is only an
+                    // estimate; comparing with it would show "worse" right after fixing if a fix freed a bit less.
+                    var previous = _summary;
+                    _summary = MakeSummary(score.Value, score.Value, Now(), failed.Count, previous?.BaselineScore, previous?.Time);
                     _summaryFromThisSession = true;
                     _lastScanPersisted = persist;
                     if (persist)
@@ -748,17 +864,26 @@ public sealed class DashboardViewModel : PageViewModel
         }
     }
 
-    private ScanSummary MakeSummary(int score, DateTime time, int failedModules) => new()
+    private ScanSummary MakeSummary(int score, int measuredScore, DateTime time, int failedModules, int? previousScore,
+        DateTime? previousTime)
     {
-        Score = score,
-        Time = time,
-        IssueCount = _issues.Count(i => !i.IsFixed),
-        TipCount = _issues.Count(i => !i.IsFixed && !HealthScoring.IsProblem(i)),
-        ImportantCount = _issues.Count(i => !i.IsFixed && i.Severity >= IssueSeverity.High),
-        FixableCount = _issues.Count(i => i.CanFix),
-        ReclaimableBytes = HealthScoring.TotalReclaimable(_issues),
-        FailedModules = failedModules,
-    };
+        var split = ReclaimableSplit.From(_issues);
+        return new ScanSummary
+        {
+            Score = score,
+            MeasuredScore = measuredScore,
+            Time = time,
+            IssueCount = _issues.Count(i => !i.IsFixed),
+            TipCount = _issues.Count(i => !i.IsFixed && !HealthScoring.IsProblem(i)),
+            ImportantCount = _issues.Count(i => !i.IsFixed && i.Severity >= IssueSeverity.High),
+            FixableCount = _issues.Count(i => i.CanFix),
+            ReclaimableBytes = split.TotalBytes,
+            ManualReclaimableBytes = split.ManualBytes,
+            FailedModules = failedModules,
+            PreviousScore = previousScore,
+            PreviousTime = previousScore is null ? null : previousTime,
+        };
+    }
 
     private void SaveSummary()
     {
@@ -1036,7 +1161,8 @@ public sealed class DashboardViewModel : PageViewModel
         FixedCount = _issues.Count(i => i.IsFixed);
         if (State == DashboardScanState.Completed && _summary is not null && _summaryFromThisSession)
         {
-            _summary = MakeSummary(HealthScoring.ComputeScore(_issues), _summary.Time, _summary.FailedModules);
+            _summary = MakeSummary(HealthScoring.ComputeScore(_issues), _summary.BaselineScore, _summary.Time,
+                _summary.FailedModules, _summary.PreviousScore, _summary.PreviousTime);
             if (_lastScanPersisted)
                 SaveSummary();
         }
@@ -1045,6 +1171,158 @@ public sealed class DashboardViewModel : PageViewModel
         BuildChips();
         RaiseHero();
         RaiseResults();
+    }
+
+    // ===================== Report =====================
+
+    /// <summary>Collects everything the report shows: score, computer, module results and findings with fix results.</summary>
+    internal async Task<DashboardReport?> BuildReportAsync()
+    {
+        var summary = _summary;
+        if (!HasReport || summary is null)
+            return null;
+        // Snapshot before awaiting: a new scan started meanwhile must not mix into this report.
+        var modules = _moduleRows.Select(ReportModule.From).ToList();
+        var groups = DashboardReport.GroupIssues(_issues);
+        var warning = ScanWarning;
+
+        var info = await EnsureStaticInfoAsync();
+        var drive = await Task.Run(SystemInfo.ReadSystemDrive);
+        return new DashboardReport
+        {
+            CreatedAt = Now(),
+            ScanTime = summary.Time,
+            Score = summary.Score,
+            Delta = summary.Delta,
+            Reclaimable = summary.Reclaimable,
+            Pc = new ReportPcInfo
+            {
+                ComputerName = info?.ComputerName ?? Environment.MachineName,
+                WindowsName = info?.WindowsName ?? "Windows",
+                WindowsVersion = info?.WindowsVersion ?? "",
+                CpuName = info?.CpuName ?? "",
+                LogicalProcessors = info?.LogicalProcessors ?? Environment.ProcessorCount,
+                RamBytes = info?.InstalledRamBytes ?? 0,
+                Gpus = info?.Gpus ?? Array.Empty<string>(),
+                SystemDrive = drive.Name,
+                SystemDriveFree = drive.Free,
+                SystemDriveTotal = drive.Total,
+                Uptime = SystemStats.Uptime,
+                IsAdmin = Admin.IsElevated,
+            },
+            Modules = modules,
+            Groups = groups,
+            Warning = warning,
+        };
+    }
+
+    /// <summary>
+    /// "Сохранить отчёт": file dialog (Documents, "Отчёт WaterCa7s PC Cleaner &lt;дата&gt;.html") → self-contained HTML →
+    /// journal → offer to open it. Returns the saved path, or null if nothing was saved.
+    /// </summary>
+    internal async Task<string?> SaveReportAsync()
+    {
+        if (IsBusy || !HasReport)
+            return null;
+
+        var path = PickReportPath(ReportBuilder.DefaultFileName(Now()));
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            Log.Info("Главная: сохранение отчёта отменено");
+            return null;
+        }
+
+        var report = await BuildReportAsync();
+        if (report is null)
+            return null;
+        var html = ReportBuilder.BuildHtml(report);
+        try
+        {
+            // BOM: old browsers and Notepad then never guess a wrong (non-UTF-8) encoding.
+            await Task.Run(() => File.WriteAllText(path, html, new UTF8Encoding(true)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException
+                                       or NotSupportedException or ArgumentException)
+        {
+            Log.Warn($"Главная: не удалось сохранить отчёт в «{path}»: {ex.Message}");
+            SetReportStatus("Отчёт не сохранён — выберите другую папку", ok: false);
+            Dialogs.Error("Не удалось сохранить отчёт",
+                $"{path}\n\n{ex.Message}\n\nПопробуйте сохранить отчёт в другую папку, например в «Документы».");
+            return null;
+        }
+
+        Log.Action($"Главная: отчёт о проверке сохранён — {path}");
+        SetReportStatus("Отчёт сохранён", toolTip: path);
+        ActionSummary = $"Отчёт о проверке сохранён: {path}";
+        if (!IsHtmlFile(path))
+        {
+            // The user typed another extension (.txt, .bat, ...): never hand such a file to the shell — it would not
+            // open in a browser and could even be run as a script (issue details contain program paths).
+            Dialogs.Info("Отчёт сохранён",
+                $"Отчёт о проверке сохранён в файл:\n{path}\n\nЭто веб-страница: чтобы открыть её в браузере, " +
+                "сохраните отчёт с расширением .html.");
+            return path;
+        }
+        if (Dialogs.Confirm("Отчёт сохранён",
+                $"Отчёт о проверке сохранён в файл:\n{path}\n\nЕго можно открыть в любом браузере, распечатать или отправить. " +
+                "Открыть отчёт в браузере?"))
+            ProcessRunner.ShellOpen(path);
+        return path;
+    }
+
+    /// <summary>"Скопировать отчёт": the plain-text version to the clipboard. Returns true on success.</summary>
+    internal async Task<bool> CopyReportAsync()
+    {
+        if (IsBusy || !HasReport)
+            return false;
+        var report = await BuildReportAsync();
+        if (report is null)
+            return false;
+
+        var text = ReportBuilder.BuildText(report);
+        try
+        {
+            SetClipboardText(text);
+        }
+        catch (Exception ex)
+        {
+            // Another program may hold the clipboard open (CLIPBRD_E_CANT_OPEN) — an environment problem, not a bug.
+            Log.Warn($"Главная: не удалось скопировать отчёт в буфер обмена: {ex.Message}");
+            SetReportStatus("Буфер обмена занят — попробуйте ещё раз", ok: false);
+            Dialogs.Error("Не удалось скопировать отчёт",
+                "Буфер обмена сейчас занят другой программой. Подождите пару секунд и нажмите «Скопировать отчёт» ещё раз " +
+                "или сохраните отчёт в файл.");
+            return false;
+        }
+
+        Log.Info("Главная: отчёт о проверке скопирован в буфер обмена");
+        SetReportStatus("Отчёт скопирован — вставьте его клавишами Ctrl+V");
+        return true;
+    }
+
+    /// <summary>Only .html / .htm files are offered to be opened in the browser.</summary>
+    internal static bool IsHtmlFile(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".htm", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ShowSaveReportDialog(string defaultFileName)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Сохранить отчёт о проверке",
+            FileName = defaultFileName,
+            DefaultExt = ".html",
+            AddExtension = true,
+            Filter = "Веб-страница HTML (*.html)|*.html",
+            OverwritePrompt = true,
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        var owner = Application.Current?.MainWindow;
+        var ok = owner is { IsVisible: true } ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+        return ok == true ? dialog.FileName : null;
     }
 
     // ===================== Misc actions =====================

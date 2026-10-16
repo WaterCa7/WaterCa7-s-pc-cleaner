@@ -14,7 +14,11 @@ public sealed record StaticSystemInfo(
     string ComputerName,
     string CpuName,
     int LogicalProcessors,
-    ulong InstalledRamBytes);
+    ulong InstalledRamBytes)
+{
+    /// <summary>Video adapters (Win32_VideoController), virtual ones dropped when a real one exists.</summary>
+    public IReadOnlyList<string> Gpus { get; init; } = Array.Empty<string>();
+}
 
 /// <summary>One sample of the live tiles.</summary>
 public sealed record LiveSnapshot(
@@ -25,7 +29,10 @@ public sealed record LiveSnapshot(
     long SystemDriveFree,
     TimeSpan Uptime);
 
-/// <summary>Read-only system information for the dashboard (registry reads and cheap Win32 calls only).</summary>
+/// <summary>
+/// Read-only system information for the dashboard: registry reads, cheap Win32 calls and one WMI query for the video
+/// adapters (<see cref="ReadStatic"/> may take a moment — always call it off the UI thread).
+/// </summary>
 public static class SystemInfo
 {
     private const string CurrentVersionKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
@@ -61,8 +68,50 @@ public static class SystemInfo
             SafeMachineName(),
             CleanCpuName(cpu),
             Environment.ProcessorCount,
-            InstalledRam());
+            InstalledRam())
+        {
+            Gpus = ReadGpus(),
+        };
     }
+
+    /// <summary>Names of the video adapters (read-only WMI query; empty when WMI is unavailable).</summary>
+    private static IReadOnlyList<string> ReadGpus()
+    {
+        try
+        {
+            var rows = Wmi.Query("SELECT Name FROM Win32_VideoController", Wmi.Cimv2, TimeSpan.FromSeconds(10));
+            return CleanGpuNames(rows.Select(r => r.Str("Name")));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Главная: не удалось получить сведения о видеокарте: {ex.Message}");
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// Trims, removes "(R)/(TM)" noise and duplicates; drops virtual/remote display adapters (Parsec, Remote Display,
+    /// Basic Display...) when at least one real adapter is present.
+    /// </summary>
+    public static IReadOnlyList<string> CleanGpuNames(IEnumerable<string?> names)
+    {
+        var list = new List<string>();
+        foreach (var raw in names)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
+            var name = Regex.Replace(raw.Replace('\0', ' '), @"\((R|TM)\)", "", RegexOptions.IgnoreCase);
+            name = Regex.Replace(name, @"\s+", " ").Trim();
+            if (name.Length > 0 && !list.Contains(name, StringComparer.OrdinalIgnoreCase))
+                list.Add(name);
+        }
+        var real = list.Where(n => !VirtualAdapter.IsMatch(n)).ToList();
+        return real.Count > 0 ? real : list;
+    }
+
+    private static readonly Regex VirtualAdapter = new(
+        @"Remote Display|Virtual Display|Basic Display|Basic Render|Indirect Display|Parsec|Virtual Monitor|Virtual Desktop|spacedesk|Citrix|Hyper-V Video",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// "Windows 10 Home" with build ≥ 22000 → "Windows 11 Домашняя" (ProductName was never updated for Windows 11).
@@ -169,25 +218,25 @@ public static class SystemInfo
             Log.Warn($"Главная: не удалось получить сведения о памяти: {ex.Message}");
         }
 
-        string? driveName = null;
-        long total = 0, free = 0;
+        var (driveName, total, free) = ReadSystemDrive();
+        return new LiveSnapshot(cpu, memory, driveName, total, free, SystemStats.Uptime);
+    }
+
+    /// <summary>Free/total space of the drive Windows is installed on ("C:"). Name is null when it cannot be read.</summary>
+    public static (string? Name, long Total, long Free) ReadSystemDrive()
+    {
         try
         {
             var root = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
             var drive = new DriveInfo(root);
             if (drive.IsReady)
-            {
-                driveName = drive.Name.TrimEnd('\\');
-                total = drive.TotalSize;
-                free = drive.AvailableFreeSpace;
-            }
+                return (drive.Name.TrimEnd('\\'), drive.TotalSize, drive.AvailableFreeSpace);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             Log.Warn($"Главная: не удалось прочитать сведения о системном диске: {ex.Message}");
         }
-
-        return new LiveSnapshot(cpu, memory, driveName, total, free, SystemStats.Uptime);
+        return (null, 0, 0);
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]

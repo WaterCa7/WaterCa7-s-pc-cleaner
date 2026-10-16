@@ -136,6 +136,12 @@ public static class HealthScoring
         return total;
     }
 
+    /// <summary>The module's gain text, or the reclaimable size when the module did not provide one.</summary>
+    public static string? GainText(HealthIssue issue)
+        => !string.IsNullOrWhiteSpace(issue.Gain)
+            ? issue.Gain.Trim()
+            : issue.ReclaimableBytes > 0 ? "Освободит " + Format.Bytes(issue.ReclaimableBytes) : null;
+
     /// <summary>Issues that lower the score (everything except <see cref="IssueSeverity.Info"/> tips).</summary>
     public static bool IsProblem(HealthIssue issue) => issue.Severity > IssueSeverity.Info;
 
