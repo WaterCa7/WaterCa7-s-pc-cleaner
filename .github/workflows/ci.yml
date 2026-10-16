@@ -12,7 +12,7 @@ jobs:
       - run: dotnet build WaterCa7sPcCleaner.sln -c Release
       - run: dotnet test WaterCa7sPcCleaner.sln -c Release --no-build
       - name: Publish single-file exe
-        run: dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+        run: dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
       - uses: actions/upload-artifact@v4
         with:
           name: WaterCa7sPcCleaner-win-x64

@@ -47,7 +47,7 @@
 ```bash
 dotnet build WaterCa7sPcCleaner.sln -c Release
 dotnet test WaterCa7sPcCleaner.sln -c Release
-dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
+dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
 Режим самопроверки без изменений в системе (делает скриншоты всех страниц):
