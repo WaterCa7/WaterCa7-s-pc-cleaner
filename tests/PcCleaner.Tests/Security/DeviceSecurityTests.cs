@@ -151,6 +151,46 @@ public class DeviceSecurityTests
     }
 
     [Fact]
+    public async Task Smb1_DisabledButRebootPending_SaysSo_AndOffersNothingAgain()
+    {
+        using var sb = new SecuritySandbox();
+        var vm = new SecurityViewModel(sb.Service);
+        // Before the reboot Windows may still list the feature as enabled — or already as disabled.
+        var stillEnabled = new Smb1State(FeatureState.Enabled, FeatureState.Enabled, FeatureState.Disabled, new Smb1Registry(true, null, null, 2));
+        var alreadyOff = new Smb1State(FeatureState.Disabled, FeatureState.Disabled, FeatureState.Disabled, new Smb1Registry(true, null, null, 2));
+        foreach (var state in new[] { stillEnabled, alreadyOff })
+        {
+            var check = SecurityRules.EvaluateSmb1(state, isAdmin: true, rebootPending: true);
+            Assert.Equal(SecurityStatus.Info, check.Status);
+            Assert.Equal("SMBv1 отключится после перезагрузки", check.State);
+            var report = new SecurityReport { Checks = With(AllOk(), check) };
+            Assert.Empty(sb.Service.BuildIssues(report));
+            var card = vm.BuildCards(report).Single(c => c.Id == SecurityCheckIds.Smb1);
+            Assert.DoesNotContain(card.Actions, a => a.Label == "Отключить SMBv1");
+        }
+
+        // The scan passes the service's flag on (it is set only after a successful Disable-WindowsOptionalFeature).
+        using (var key = sb.Create(sb.Env.Smb1ClientDriver))
+            key.SetValue("Start", 2, RegistryValueKind.DWord);
+        Assert.Equal(SecurityStatus.Warning, (await sb.Service.ScanAsync(null, CancellationToken.None)).Check(SecurityCheckIds.Smb1)!.Status);
+        sb.Service.Smb1RebootPending = true;
+        Assert.Equal(SecurityStatus.Info, (await sb.Service.ScanAsync(null, CancellationToken.None)).Check(SecurityCheckIds.Smb1)!.Status);
+    }
+
+    [Fact]
+    public void Smb1_IssueSaysRestorePointAndHowToUndo()
+    {
+        using var sb = new SecuritySandbox();
+        var report = new SecurityReport
+        {
+            Checks = With(AllOk(), new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Warning, "Включён клиент SMBv1", "x")),
+        };
+        var issue = Assert.Single(sb.Service.BuildIssues(report));
+        Assert.Contains("точку восстановления", issue.Details);
+        Assert.Contains("Включение или отключение компонентов Windows", issue.Details);
+    }
+
+    [Fact]
     public void Smb1_ServerIssue_IsHigh()
     {
         using var sb = new SecuritySandbox();
@@ -414,7 +454,7 @@ public class DeviceSecurityTests
 
         Assert.Equal(SecurityStatus.Info, check.Status);
         Assert.Equal("Целостность памяти выключена", check.State);
-        Assert.Contains("Изоляция ядра", check.Details);
+        Assert.Contains("«Безопасность устройства» → «Изоляция ядра»", check.Details);
         Assert.Contains("FPS", check.Details);
         var issue = Assert.Single(sb.Service.BuildIssues(new SecurityReport { DeviceGuard = d, Checks = With(AllOk(), check) }));
         Assert.Equal(IssueSeverity.Info, issue.Severity);
@@ -555,6 +595,41 @@ public class DeviceSecurityTests
         var calm = vm.BuildCards(resolved).Single(c => c.Id == SecurityCheckIds.Antivirus);
         Assert.DoesNotContain(calm.Actions, a => a.Label == "Обезвредить угрозы");
         Assert.Contains(calm.Actions, a => a.Label == "Журнал угроз");
+    }
+
+    [Fact]
+    public void ThreatRemoval_OnlyAllGoneIsSuccess()
+    {
+        var all = SecurityRules.ThreatRemovalOutcome(2, 0, null);
+        Assert.True(all.Success);
+        Assert.False(HealthScoring.LooksLikeFailure(all.Message));
+        Assert.Contains("Журнал защиты", all.Message); // how to get a needed file back
+
+        // Some threats remain: the dashboard must not mark the issue as fixed.
+        var partly = SecurityRules.ThreatRemovalOutcome(3, 1, null);
+        Assert.False(partly.Success);
+        Assert.True(HealthScoring.LooksLikeFailure(partly.Message));
+        Assert.Contains("2 из 3", partly.Message);
+
+        var none = SecurityRules.ThreatRemovalOutcome(2, 2, "Отказано в доступе.");
+        Assert.False(none.Success);
+        Assert.True(HealthScoring.LooksLikeFailure(none.Message));
+        Assert.Contains("Отказано в доступе.", none.Message);
+        Assert.DoesNotContain("..", none.Message);
+    }
+
+    [Fact]
+    public void ThreatCard_PointsToTheButtonOnlyWhenItIsShown()
+    {
+        var active = new[] { Threat("Trojan:Win32/Test", 1) };
+
+        var withButton = SecurityRules.EvaluateAntivirus(WorkingDefender, Array.Empty<SecurityProduct>(), active);
+        Assert.Contains("«Обезвредить угрозы»", withButton.Details);
+
+        // Another antivirus and no Defender data: no button, so the card points to the protection history.
+        var noButton = SecurityRules.EvaluateAntivirus(null, new[] { Product("ESET Security") }, active);
+        Assert.DoesNotContain("«Обезвредить угрозы»", noButton.Details);
+        Assert.Contains("«Журнал защиты»", noButton.Details);
     }
 
     // ===================== Page layout =====================

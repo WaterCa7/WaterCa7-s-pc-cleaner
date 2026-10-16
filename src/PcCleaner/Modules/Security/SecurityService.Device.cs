@@ -13,6 +13,15 @@ public sealed partial class SecurityService
     private const string DeviceGuardNamespace = @"root\Microsoft\Windows\DeviceGuard";
     private const string TestEnvironmentMessage = "Недоступно в тестовом окружении — ничего не изменено.";
 
+    private volatile bool _smb1RebootPending;
+
+    /// <summary>SMBv1 was disabled in this session and Windows waits for a reboot to finish the change.</summary>
+    internal bool Smb1RebootPending
+    {
+        get => _smb1RebootPending;
+        set => _smb1RebootPending = value;
+    }
+
     // =====================================================================
     // Read-only checks
     // =====================================================================
@@ -288,9 +297,12 @@ public sealed partial class SecurityService
             return SecurityActionResult.Fail(NeedAdminMessage);
 
         var restorePoint = await RestorePoint.CreateAsync("Отключение SMBv1", ct);
+        ct.ThrowIfCancellationRequested();
+        // Not cancellable once started: "Отмена" would kill PowerShell together with DismHost in the middle of
+        // servicing the component store. The generous timeout is only a safety net for a hung servicing stack.
         var r = await ProcessRunner.PowerShellAsync(
             "$r = Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart -ErrorAction Stop\r\n" +
-            "'RESTART:' + $r.RestartNeeded", TimeSpan.FromMinutes(15), ct);
+            "'RESTART:' + $r.RestartNeeded", TimeSpan.FromMinutes(30), CancellationToken.None);
         var restartLine = r.StdOut.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("RESTART:", StringComparison.Ordinal));
         if (!r.Success || restartLine is null)
         {
@@ -301,6 +313,9 @@ public sealed partial class SecurityService
                 "снимите флажок «Поддержка общего доступа к файлам SMB 1.0/CIFS».");
         }
         var restart = !restartLine.EndsWith("False", StringComparison.OrdinalIgnoreCase);
+        // Until the reboot the SMBv1 driver keeps running: the next scans say so instead of "SMBv1 выключен"
+        // (or, if Windows still lists the feature as enabled, instead of offering to disable it again).
+        Smb1RebootPending = restart;
         Log.Action("Отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» (SMB1Protocol)" +
                    (restart ? ", нужна перезагрузка" : "") + ". " + SecurityRules.RestorePointText(restorePoint));
         return SecurityActionResult.Ok(
@@ -328,31 +343,19 @@ public sealed partial class SecurityService
             return SecurityActionResult.Ok("Необезвреженных угроз уже нет — делать ничего не нужно.");
         Log.Action($"Запущено обезвреживание угроз Microsoft Defender (Remove-MpThreat), активных угроз: {before}");
         var r = await ProcessRunner.PowerShellAsync("Remove-MpThreat -ErrorAction Stop\r\n'OK'", TimeSpan.FromMinutes(10), ct);
-        // Defender finishes the remediation in its service: give it a moment before counting again.
+        // Defender finishes the remediation in its service: give it a moment before counting again. Remove-MpThreat
+        // has run by now, so "Отмена" no longer hides the outcome (the wait is only a few seconds).
         var after = before;
         for (var attempt = 0; attempt < 3 && after > 0; attempt++)
         {
-            await Task.Delay(1500, ct);
-            after = await Task.Run(CountActiveThreats, ct);
+            await Task.Delay(1500, CancellationToken.None);
+            after = await Task.Run(CountActiveThreats, CancellationToken.None);
         }
         var removed = Math.Max(0, before - after);
-        if (after == 0)
-        {
-            Log.Action($"Microsoft Defender обезвредил угрозы: {before}");
-            return SecurityActionResult.Ok(
-                $"Угрозы обезврежены: {before}. Microsoft Defender поместил их в карантин или удалил.\n\n" +
-                "Если какой-то файл нужен и вы уверены в нём, восстановите его в «Безопасность Windows» → «Журнал защиты».");
-        }
-        Log.Warn($"Remove-MpThreat: осталось активных угроз {after} из {before}. {FirstLine(r.StdErr)}");
+        if (after > 0)
+            Log.Warn($"Remove-MpThreat: осталось активных угроз {after} из {before}. {FirstLine(r.StdErr)}");
         if (removed > 0)
-        {
             Log.Action($"Microsoft Defender обезвредил угрозы: {removed} из {before}");
-            return SecurityActionResult.Ok(
-                $"Обезврежено угроз: {removed} из {before}. С остальными Defender не справился сам — откройте «Журнал защиты» " +
-                "и выберите действие вручную, а затем запустите полную проверку.");
-        }
-        return SecurityActionResult.Fail(
-            "Не удалось обезвредить угрозы" + (string.IsNullOrWhiteSpace(r.StdErr) ? "" : $": {FirstLine(r.StdErr)}") +
-            ". Откройте «Журнал защиты» и выберите действие вручную — или запустите полную проверку.");
+        return SecurityRules.ThreatRemovalOutcome(before, after, FirstLine(r.StdErr));
     }
 }

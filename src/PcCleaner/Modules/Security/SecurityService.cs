@@ -121,7 +121,7 @@ public sealed partial class SecurityService : IHealthContributor
             SecurityRules.EvaluateSmartScreen(reg.SmartScreen),
             SecurityRules.EvaluateRdp(reg.Rdp),
             SecurityRules.EvaluateExtensions(extensions, browsers),
-            SecurityRules.EvaluateSmb1(smb1Task.Result, isAdmin),
+            SecurityRules.EvaluateSmb1(smb1Task.Result, isAdmin, Smb1RebootPending),
             SecurityRules.EvaluateSecureBoot(secureBootTask.Result),
             SecurityRules.EvaluateTpm(tpmTask.Result, isAdmin),
             SecurityRules.EvaluateBitLocker(bitLockerTask.Result),
@@ -883,7 +883,8 @@ public sealed partial class SecurityService : IHealthContributor
         public IntPtr Options;
     }
 
-    [StructLayout(LayoutKind.Explicit)]
+    // Size = 8: the native union also holds a FILETIME, so it is 8 bytes on 32-bit Windows too.
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
     private struct InternetPerConnOptionValue
     {
         [FieldOffset(0)] public int Number;
@@ -1145,7 +1146,8 @@ public sealed partial class SecurityService : IHealthContributor
         if (smb1 is { Status: SecurityStatus.Danger or SecurityStatus.Warning })
         {
             issues.Add(Issue("Включён устаревший протокол SMBv1",
-                FirstParagraph(smb1.Details) + " Исправление отключит компонент Windows «SMB 1.0», после него нужна перезагрузка.",
+                FirstParagraph(smb1.Details) + " Исправление создаст точку восстановления и отключит компонент Windows " +
+                "«SMB 1.0», после него нужна перезагрузка. Вернуть его можно в «Включение или отключение компонентов Windows».",
                 smb1.Status == SecurityStatus.Danger ? IssueSeverity.High : IssueSeverity.Medium,
                 Wrap(DisableSmb1Async), gain: "Защита от сетевых червей вроде WannaCry"));
         }

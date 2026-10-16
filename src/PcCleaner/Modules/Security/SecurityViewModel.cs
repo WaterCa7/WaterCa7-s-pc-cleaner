@@ -984,7 +984,8 @@ public sealed class SecurityViewModel : PageViewModel
                 "Вернуть: «Включение или отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».\n\n" +
                 "Отключить SMBv1?"))
             return;
-        await RunActionAsync("Отключаем SMBv1 — это может занять пару минут…", "SMBv1", _service.DisableSmb1Async);
+        await RunActionAsync("Отключаем SMBv1 — это может занять несколько минут, не закрывайте программу…", "SMBv1",
+            _service.DisableSmb1Async);
     }
 
     private void OpenEncryptionSettings()

@@ -77,8 +77,15 @@ public static partial class SecurityRules
         return (clientOn, serverOn, false);
     }
 
-    public static SecurityCheckResult EvaluateSmb1(Smb1State s, bool isAdmin)
+    /// <param name="rebootPending">SMBv1 was disabled by this app in this session and Windows waits for a reboot.</param>
+    public static SecurityCheckResult EvaluateSmb1(Smb1State s, bool isAdmin, bool rebootPending = false)
     {
+        if (rebootPending)
+        {
+            // Whatever the feature list says right now, the change is made and only the reboot finishes it.
+            return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Info, "SMBv1 отключится после перезагрузки",
+                "Компонент уже отключён, но старый драйвер работает до перезагрузки. Перезагрузите компьютер, когда будет удобно.");
+        }
         var (client, server, exact) = ResolveSmb1(s);
         if (client is null && server is null)
         {
@@ -380,11 +387,12 @@ public static partial class SecurityRules
         {
             return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Info,
                 "Целостность памяти включится после перезагрузки",
-                "Защита уже включена в настройках и заработает после перезагрузки компьютера.");
+                "Защита уже включена в настройках и заработает после перезагрузки компьютера. Если и после перезагрузки " +
+                "она не работает, проверьте, включена ли в BIOS/UEFI виртуализация (Intel VT-x или AMD SVM).");
         }
         return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Info, "Целостность памяти выключена",
-            "Защищает ядро Windows от вредоносных и уязвимых драйверов. Включается в разделе «Изоляция ядра» " +
-            "«Безопасности Windows». В отдельных играх может немного снизить FPS.");
+            "Защищает ядро Windows от вредоносных и уязвимых драйверов. Включается в «Безопасности Windows» → " +
+            "«Безопасность устройства» → «Изоляция ядра». В отдельных играх может немного снизить FPS.");
     }
 
     // ===================== Several antiviruses / Defender threats =====================
@@ -413,6 +421,30 @@ public static partial class SecurityRules
     /// <summary>"Обезвредить угрозы" is offered only when Defender works and has detections it did not neutralize.</summary>
     public static bool CanRemoveThreats(DefenderStatus? defender, IReadOnlyList<ThreatDetection> threats)
         => defender is { ServiceEnabled: true } && threats.Any(t => t.IsActive);
+
+    /// <summary>
+    /// Result of "Обезвредить угрозы" from the active-threat counts before and after Remove-MpThreat.
+    /// Only "all gone" is a success: when some threats remain, the dashboard must not mark the issue as fixed.
+    /// </summary>
+    public static SecurityActionResult ThreatRemovalOutcome(int before, int after, string? error)
+    {
+        var removed = Math.Max(0, before - after);
+        if (after <= 0)
+        {
+            return SecurityActionResult.Ok(
+                $"Угрозы обезврежены: {before}. Microsoft Defender поместил их в карантин или удалил.\n\n" +
+                "Если какой-то файл нужен и вы уверены в нём, восстановите его в «Безопасность Windows» → «Журнал защиты».");
+        }
+        if (removed > 0)
+        {
+            return SecurityActionResult.Fail(
+                $"Не удалось обезвредить все угрозы: обезврежено {removed} из {before}. С остальными Defender не справился " +
+                "сам — откройте «Журнал защиты» и выберите действие вручную, а затем запустите полную проверку.");
+        }
+        return SecurityActionResult.Fail(
+            "Не удалось обезвредить угрозы" + (string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim().TrimEnd('.')}") +
+            ". Откройте «Журнал защиты» и выберите действие вручную — или запустите полную проверку.");
+    }
 
     // ===================== Misc =====================
 

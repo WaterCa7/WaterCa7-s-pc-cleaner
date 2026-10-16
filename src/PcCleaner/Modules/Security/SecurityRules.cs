@@ -248,7 +248,10 @@ public static partial class SecurityRules
         {
             status = SecurityStatus.Danger;
             state = $"Есть необезвреженные угрозы: {activeThreats.Count}";
-            lines.Insert(0, $"Последняя: {activeThreats[0].Name}. Откройте «Журнал защиты» и выберите действие.");
+            lines.Insert(0, $"Последняя: {activeThreats[0].Name}. " +
+                            (CanRemoveThreats(d, threats)
+                                ? "Нажмите «Обезвредить угрозы» или выберите действие в «Журнале защиты»."
+                                : "Откройте «Журнал защиты» и выберите действие."));
         }
         else
         {
