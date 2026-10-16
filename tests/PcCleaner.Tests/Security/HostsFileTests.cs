@@ -119,13 +119,13 @@ public class HostsFileTests
     {
         var dir = TestEnvironment.NewTempDir("hosts");
         var path = Path.Combine(dir, "hosts");
-        var text = "# заголовок\r\n127.0.0.1 localhost\n1.2.3.4 vk.com\r\n# конец\r\n0.0.0.0 ads.example.com";
+        var text = "# заголовок\r\n127.0.0.1 localhost\n10.0.0.9 old-nas.test\r\n# конец\r\n0.0.0.0 ads.example.com";
         var bytes = new byte[] { 0xEF, 0xBB, 0xBF }.Concat(Encoding.UTF8.GetBytes(text)).ToArray();
         File.WriteAllBytes(path, bytes);
         var backups = Path.Combine(dir, "backups");
 
         var report = HostsFile.Read(path);
-        var target = report.Entries.Single(e => e.Hostnames.Contains("vk.com"));
+        var target = report.Entries.Single(e => e.Hostnames.Contains("old-nas.test"));
         var backup = HostsFile.RemoveLines(path, new[] { target }, backups);
 
         var expected = new byte[] { 0xEF, 0xBB, 0xBF }
@@ -142,10 +142,10 @@ public class HostsFileTests
         var dir = TestEnvironment.NewTempDir("hosts-ansi");
         var path = Path.Combine(dir, "hosts");
         var cp1251 = Encoding.GetEncoding(1251);
-        File.WriteAllBytes(path, cp1251.GetBytes("# Мой файл\r\n1.2.3.4 www.google.com # подмена\r\n10.0.0.5 nas # мой NAS\r\n"));
+        File.WriteAllBytes(path, cp1251.GetBytes("# Мой файл\r\n10.0.0.6 old-printer.test # старый принтер\r\n10.0.0.5 nas # мой NAS\r\n"));
 
         var entries = HostsFile.Read(path).Entries;
-        HostsFile.RemoveLines(path, entries.Where(e => e.Risk == SecurityStatus.Danger).ToList(), Path.Combine(dir, "b"));
+        HostsFile.RemoveLines(path, entries.Where(e => e.Hostnames.Contains("old-printer.test")).ToList(), Path.Combine(dir, "b"));
 
         Assert.Equal(cp1251.GetBytes("# Мой файл\r\n10.0.0.5 nas # мой NAS\r\n"), File.ReadAllBytes(path));
     }
@@ -155,12 +155,12 @@ public class HostsFileTests
     {
         var dir = TestEnvironment.NewTempDir("hosts-changed");
         var path = Path.Combine(dir, "hosts");
-        File.WriteAllText(path, "1.2.3.4 vk.com\r\n");
+        File.WriteAllText(path, "10.0.0.7 media.test\r\n");
         var entry = HostsFile.Read(path).Entries.Single();
-        File.WriteAllText(path, "5.6.7.8 ok.ru\r\n");
+        File.WriteAllText(path, "10.0.0.8 backup.test\r\n");
 
         Assert.Throws<HostsChangedException>(() => HostsFile.RemoveLines(path, new[] { entry }, Path.Combine(dir, "b")));
-        Assert.Equal("5.6.7.8 ok.ru\r\n", File.ReadAllText(path));
+        Assert.Equal("10.0.0.8 backup.test\r\n", File.ReadAllText(path));
         Assert.False(Directory.Exists(Path.Combine(dir, "b")));
     }
 
@@ -169,13 +169,13 @@ public class HostsFileTests
     {
         var dir = TestEnvironment.NewTempDir("hosts-ro");
         var path = Path.Combine(dir, "hosts");
-        File.WriteAllText(path, "1.2.3.4 vk.com\r\n127.0.0.1 localhost\r\n");
+        File.WriteAllText(path, "10.0.0.7 media.test\r\n127.0.0.1 localhost\r\n");
         new FileInfo(path).IsReadOnly = true;
         try
         {
             var report = HostsFile.Read(path);
             Assert.True(report.IsReadOnly);
-            HostsFile.RemoveLines(path, report.Entries.Where(e => e.Hostnames.Contains("vk.com")).ToList(), Path.Combine(dir, "b"));
+            HostsFile.RemoveLines(path, report.Entries.Where(e => e.Hostnames.Contains("media.test")).ToList(), Path.Combine(dir, "b"));
             Assert.Equal("127.0.0.1 localhost\r\n", File.ReadAllText(path));
             Assert.True(new FileInfo(path).IsReadOnly);
         }

@@ -15,11 +15,12 @@ public sealed record SecurityActionResult(bool Success, string Message, bool Thr
 }
 
 /// <summary>
-/// Security checks: antivirus, firewall, UAC, hosts, Winlogon, IFEO, proxy, DNS, updates, SmartScreen, RDP and
-/// browser extensions. <see cref="ScanAsync"/> only reads; the action methods change the system and must be
-/// confirmed by the caller (the page asks with Dialogs.Confirm, the dashboard confirms before FixAsync).
+/// Security checks: antivirus, firewall, UAC, hosts, Winlogon, IFEO, proxy, DNS, updates, SmartScreen, RDP,
+/// browser extensions, SMBv1, Secure Boot, TPM, drive encryption and memory integrity. <see cref="ScanAsync"/> only
+/// reads; the action methods change the system and must be confirmed by the caller (the page asks with
+/// Dialogs.Confirm, the dashboard confirms before FixAsync).
 /// </summary>
-public sealed class SecurityService : IHealthContributor
+public sealed partial class SecurityService : IHealthContributor
 {
     public const string NeedAdminMessage =
         "Для этого нужны права администратора. Перезапустите программу от имени администратора " +
@@ -49,7 +50,7 @@ public sealed class SecurityService : IHealthContributor
     /// <summary>Runs every check in parallel. Read-only, never throws for system access problems.</summary>
     public async Task<SecurityReport> ScanAsync(Action<double, string>? progress, CancellationToken ct)
     {
-        var total = 9;
+        var total = 14;
         var done = 0;
 
         Task<T> Run<T>(string name, Func<T> work, T fallback) => Task.Run(() =>
@@ -85,9 +86,15 @@ public sealed class SecurityService : IHealthContributor
         var extTask = Run("расширения браузеров", () => BrowserExtensionScanner.Scan(Env.BrowserRoots, ct),
             (new List<BrowserExtension>(), -1));
         var mpTask = Run("Microsoft Defender", () => Env.IsRealSystem && FileTools.FindMpCmdRun() is not null, false);
+        var smb1Task = Run("SMBv1", () => ReadSmb1(ct), Smb1State.Unknown);
+        var secureBootTask = Run("Secure Boot", ReadSecureBoot, new SecureBootState(false, null, null));
+        var tpmTask = Run("TPM", () => ReadTpm(ct), TpmState.Unknown);
+        var bitLockerTask = Run("шифрование диска", () => ReadBitLocker(ct), BitLockerState.Unknown);
+        var deviceGuardTask = Run("изоляция ядра", ReadDeviceGuard, DeviceGuardState.Unknown);
 
         // WaitAsync: "Отмена" returns at once even if a WMI provider hangs (the stuck query finishes in the background).
-        await Task.WhenAll(defenderTask, firewallTask, registryTask, hostsTask, ifeoTask, dnsTask, updatesTask, extTask, mpTask)
+        await Task.WhenAll(defenderTask, firewallTask, registryTask, hostsTask, ifeoTask, dnsTask, updatesTask, extTask, mpTask,
+                smb1Task, secureBootTask, tpmTask, bitLockerTask, deviceGuardTask)
             .WaitAsync(ct);
 
         var defender = defenderTask.Result;
@@ -98,8 +105,9 @@ public sealed class SecurityService : IHealthContributor
         var profiles = firewallTask.Result;
         var hosts = hostsTask.Result;
         var updates = updatesTask.Result;
+        var isAdmin = Env.IsRealSystem && Admin.IsElevated;
 
-        var checks = new List<SecurityCheckResult>
+        var evaluated = new[]
         {
             SecurityRules.EvaluateAntivirus(defender.Status, defender.Antiviruses, defender.Threats),
             SecurityRules.EvaluateFirewall(profiles, defender.Firewalls),
@@ -113,7 +121,14 @@ public sealed class SecurityService : IHealthContributor
             SecurityRules.EvaluateSmartScreen(reg.SmartScreen),
             SecurityRules.EvaluateRdp(reg.Rdp),
             SecurityRules.EvaluateExtensions(extensions, browsers),
+            SecurityRules.EvaluateSmb1(smb1Task.Result, isAdmin, Smb1RebootPending),
+            SecurityRules.EvaluateSecureBoot(secureBootTask.Result),
+            SecurityRules.EvaluateTpm(tpmTask.Result, isAdmin),
+            SecurityRules.EvaluateBitLocker(bitLockerTask.Result),
+            SecurityRules.EvaluateMemoryIntegrity(deviceGuardTask.Result),
         };
+        // Keep the report in the order of importance (SecurityCheckIds.All).
+        var checks = evaluated.OrderBy(c => SecurityCheckIds.Importance(c.Id)).ToList();
 
         var report = new SecurityReport
         {
@@ -138,6 +153,11 @@ public sealed class SecurityService : IHealthContributor
             Extensions = extensions,
             BrowsersFound = Math.Max(0, browsers),
             MpCmdRunAvailable = mpTask.Result,
+            Smb1 = smb1Task.Result,
+            SecureBoot = secureBootTask.Result,
+            Tpm = tpmTask.Result,
+            BitLocker = bitLockerTask.Result,
+            DeviceGuard = deviceGuardTask.Result,
             Checks = checks,
         };
         LastReport = report;
@@ -834,7 +854,12 @@ public sealed class SecurityService : IHealthContributor
             return SecurityActionResult.Fail($"Не удалось отключить прокси: {ex.Message}");
         }
         if (Env.IsRealSystem)
+        {
+            // Browsers read the per-connection settings of WinINet: switch the connection to "direct" through the API
+            // too (it also rewrites the binary DefaultConnectionSettings), then tell running programs to reload them.
+            SetDirectConnection();
             NotifyInternetSettingsChanged();
+        }
         Log.Action("Прокси отключён: ProxyEnable=0" + (pac is null ? "" : $", удалён скрипт AutoConfigURL «{pac}»") +
                    $". Резервная копия: {Path.GetFileName(backup)}");
         return SecurityActionResult.Ok(
@@ -843,17 +868,92 @@ public sealed class SecurityService : IHealthContributor
             $"Резервная копия настроек: {backup}");
     }
 
-    [DllImport("wininet.dll", SetLastError = true)]
+    private const int InternetOptionRefresh = 37;
+    private const int InternetOptionSettingsChanged = 39;
+    private const int InternetOptionPerConnectionOption = 75;
+    private const int InternetPerConnFlags = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct InternetPerConnOptionList
+    {
+        public int Size;
+        public IntPtr Connection; // null = the LAN connection
+        public int OptionCount;
+        public int OptionError;
+        public IntPtr Options;
+    }
+
+    // Size = 8: the native union also holds a FILETIME, so it is 8 bytes on 32-bit Windows too.
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct InternetPerConnOptionValue
+    {
+        [FieldOffset(0)] public int Number;
+        [FieldOffset(0)] public IntPtr Pointer;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct InternetPerConnOption
+    {
+        public int Option;
+        public InternetPerConnOptionValue Value;
+    }
+
+    [DllImport("wininet.dll", SetLastError = true, EntryPoint = "InternetSetOptionW")]
     private static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
 
+    [DllImport("wininet.dll", SetLastError = true, EntryPoint = "InternetSetOptionW")]
+    private static extern bool InternetSetOption(IntPtr hInternet, int dwOption, ref InternetPerConnOptionList list, int size);
+
+    [DllImport("wininet.dll", SetLastError = true, EntryPoint = "InternetQueryOptionW")]
+    private static extern bool InternetQueryOption(IntPtr hInternet, int dwOption, ref InternetPerConnOptionList list, ref int size);
+
+    /// <summary>Sets the WinINet per-connection flags of the LAN connection to "direct" (keeps automatic detection).</summary>
+    private static void SetDirectConnection()
+    {
+        var buffer = IntPtr.Zero;
+        try
+        {
+            buffer = Marshal.AllocCoTaskMem(Marshal.SizeOf<InternetPerConnOption>());
+            var option = new InternetPerConnOption { Option = InternetPerConnFlags };
+            Marshal.StructureToPtr(option, buffer, false);
+            var list = new InternetPerConnOptionList
+            {
+                Size = Marshal.SizeOf<InternetPerConnOptionList>(),
+                Connection = IntPtr.Zero,
+                OptionCount = 1,
+                Options = buffer,
+            };
+            var size = list.Size;
+            var current = InternetQueryOption(IntPtr.Zero, InternetOptionPerConnectionOption, ref list, ref size)
+                ? Marshal.PtrToStructure<InternetPerConnOption>(buffer).Value.Number
+                : 0;
+            option.Value.Number = SecurityRules.DirectProxyFlags(current);
+            Marshal.StructureToPtr(option, buffer, true);
+            list.Size = Marshal.SizeOf<InternetPerConnOptionList>();
+            if (!InternetSetOption(IntPtr.Zero, InternetOptionPerConnectionOption, ref list, list.Size))
+                Log.Warn($"Не удалось переключить подключение на «без прокси» через WinINet (код {Marshal.GetLastWin32Error()})");
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            Log.Warn($"Не удалось переключить подключение на «без прокси»: {ex.Message}");
+        }
+        finally
+        {
+            if (buffer != IntPtr.Zero)
+                Marshal.FreeCoTaskMem(buffer);
+        }
+    }
+
+    /// <summary>INTERNET_OPTION_SETTINGS_CHANGED + INTERNET_OPTION_REFRESH: running browsers reload the proxy settings.</summary>
     private static void NotifyInternetSettingsChanged()
     {
         try
         {
-            const int settingsChanged = 39;
-            const int refresh = 37;
-            InternetSetOption(IntPtr.Zero, settingsChanged, IntPtr.Zero, 0);
-            InternetSetOption(IntPtr.Zero, refresh, IntPtr.Zero, 0);
+            var changed = InternetSetOption(IntPtr.Zero, InternetOptionSettingsChanged, IntPtr.Zero, 0);
+            var refreshed = InternetSetOption(IntPtr.Zero, InternetOptionRefresh, IntPtr.Zero, 0);
+            if (!changed || !refreshed)
+                Log.Warn($"Система не подтвердила обновление настроек прокси (код {Marshal.GetLastWin32Error()}) — " +
+                         "браузеры подхватят их после перезапуска");
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
@@ -935,12 +1035,29 @@ public sealed class SecurityService : IHealthContributor
             issues.Add(Issue("Антивирусные базы устарели",
                 "Обновите базы в настройках вашего антивируса.", IssueSeverity.Medium));
         }
-        var active = report.Threats.Where(t => t.IsActive).ToList();
+        var active = report.ActiveThreats;
         if (active.Count > 0)
         {
+            var canRemove = report.CanRemoveThreats;
             issues.Add(Issue($"Есть необезвреженные угрозы: {active.Count}",
-                $"Microsoft Defender нашёл «{active[0].Name}» и не завершил лечение. Откройте журнал защиты.",
-                IssueSeverity.High));
+                $"Microsoft Defender нашёл «{active[0].Name}» и не завершил лечение." +
+                (canRemove
+                    ? " Исправление попросит Defender обезвредить угрозы (обычно — поместить в карантин, откуда файл можно вернуть)."
+                    : " Откройте журнал защиты."),
+                IssueSeverity.High, canRemove ? Wrap(RemoveActiveThreatsAsync) : null, gain: "Угрозы обезврежены"));
+        }
+        var antiviruses = report.ActiveAntivirusNames;
+        if (antiviruses.Count >= 2)
+        {
+            issues.Add(new HealthIssue
+            {
+                Module = ModuleName,
+                Title = "Установлено несколько антивирусов",
+                Details = $"Одновременно работают: {string.Join(", ", antiviruses)}. Антивирусы конфликтуют друг с другом и " +
+                          "замедляют компьютер — оставьте один, а остальные удалите в разделе «Программы».",
+                Severity = IssueSeverity.Medium,
+                TargetPageKey = "Programs",
+            });
         }
 
         // Firewall
@@ -1024,6 +1141,47 @@ public sealed class SecurityService : IHealthContributor
         if (rdp is { Status: SecurityStatus.Warning })
             issues.Add(Issue(rdp.State, rdp.Details, IssueSeverity.Low));
 
+        // SMBv1: the server part lets worms like WannaCry in; the client part alone is a smaller risk.
+        var smb1 = report.Check(SecurityCheckIds.Smb1);
+        if (smb1 is { Status: SecurityStatus.Danger or SecurityStatus.Warning })
+        {
+            issues.Add(Issue("Включён устаревший протокол SMBv1",
+                FirstParagraph(smb1.Details) + " Исправление создаст точку восстановления и отключит компонент Windows " +
+                "«SMB 1.0», после него нужна перезагрузка. Вернуть его можно в «Включение или отключение компонентов Windows».",
+                smb1.Status == SecurityStatus.Danger ? IssueSeverity.High : IssueSeverity.Medium,
+                Wrap(DisableSmb1Async), gain: "Защита от сетевых червей вроде WannaCry"));
+        }
+
+        var secureBoot = report.Check(SecurityCheckIds.SecureBoot);
+        if (secureBoot is { Status: SecurityStatus.Warning })
+            issues.Add(Issue("Secure Boot выключен", secureBoot.Details, IssueSeverity.Medium));
+
+        var tpm = report.Check(SecurityCheckIds.Tpm);
+        if (tpm is { Status: SecurityStatus.Warning })
+        {
+            issues.Add(Issue(report.Tpm.Present == false ? "TPM не найден или выключен в BIOS" : "Модуль TPM выключен",
+                tpm.Details, IssueSeverity.Low));
+        }
+
+        if (SecurityRules.LaptopDriveUnprotected(report.BitLocker))
+        {
+            var bitLocker = report.Check(SecurityCheckIds.BitLocker);
+            issues.Add(Issue(report.BitLocker.Encryption == DriveEncryption.Suspended
+                    ? "Защита BitLocker на ноутбуке приостановлена"
+                    : "Системный диск ноутбука не зашифрован",
+                bitLocker?.Details ?? "Если ноутбук украдут, файлы можно будет прочитать.", IssueSeverity.Low));
+        }
+
+        var memory = report.Check(SecurityCheckIds.MemoryIntegrity);
+        if (memory is { Status: SecurityStatus.Info } && report.DeviceGuard.Available &&
+            !report.DeviceGuard.HvciRunning && !report.DeviceGuard.HvciConfigured)
+        {
+            issues.Add(Issue("Можно включить «Целостность памяти»",
+                "Изоляция ядра не даёт вредоносным драйверам проникнуть в ядро Windows. Включается в «Безопасность Windows» → " +
+                "«Безопасность устройства» → «Изоляция ядра». В отдельных играх может немного снизить FPS.",
+                IssueSeverity.Info));
+        }
+
         return issues;
     }
 
@@ -1033,4 +1191,7 @@ public sealed class SecurityService : IHealthContributor
 
     private static string FirstLine(string s)
         => s.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+
+    /// <summary>Card details without the trailing hint lines ("Для точной проверки нужны права администратора.").</summary>
+    private static string FirstParagraph(string s) => s.Split('\n')[0].Trim();
 }

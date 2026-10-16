@@ -74,6 +74,8 @@ public class SecurityServiceSandboxTests
         {
             sb.Env.UacPolicies, sb.Env.Winlogon, sb.Env.UserWinlogon, sb.Env.Ifeo, sb.Env.IfeoWow, sb.Env.InternetSettings,
             sb.Env.ExplorerKey, sb.Env.SmartScreenPolicy, sb.Env.TerminalServer, sb.Env.DefenderPolicy, sb.Env.FirewallPolicy,
+            sb.Env.LanmanServerParameters, sb.Env.Smb1ServerDriver, sb.Env.Smb1ClientDriver, sb.Env.SecureBootState,
+            sb.Env.HvciScenario, sb.Env.WindowsVersion,
         };
         Assert.All(locations, l =>
         {
@@ -450,17 +452,28 @@ public class SecurityServiceSandboxTests
     public async Task BuildIssues_HostsAndExtensions_TextsFitTheDashboard()
     {
         using var sb = new SecuritySandbox();
-        File.WriteAllText(sb.Env.HostsPath, "1.2.3.4 www.sberbank.ru\r\n");
         var ext = Path.Combine(sb.Env.BrowserRoots[0].Path, "Default", "Extensions", new string('a', 32), "1.0_0");
         Directory.CreateDirectory(ext);
         File.WriteAllText(Path.Combine(ext, "manifest.json"), """{ "name": "Search Manager Plus", "version": "1.0" }""");
+        var scanned = await sb.Service.ScanAsync(null, CancellationToken.None);
+        // The redirect is evaluated in memory: a hosts file with such a line is never written to disk.
+        var entries = HostsFile.Parse("1.2.3.4 www.sberbank.ru");
+        entries.ForEach(HostsRules.Classify);
+        var hosts = new HostsReport { Path = "hosts", Entries = entries };
+        var report = new SecurityReport
+        {
+            Hosts = hosts,
+            Extensions = scanned.Extensions,
+            BrowsersFound = scanned.BrowsersFound,
+            Checks = scanned.Checks.Select(c => c.Id == SecurityCheckIds.Hosts ? SecurityRules.EvaluateHosts(hosts) : c).ToList(),
+        };
 
-        var issues = sb.Service.BuildIssues(await sb.Service.ScanAsync(null, CancellationToken.None));
+        var issues = sb.Service.BuildIssues(report);
 
-        var hosts = issues.Single(i => i.Title == "Файл hosts подменяет адреса сайтов");
-        Assert.Contains("www.sberbank.ru", hosts.Details);
-        Assert.Contains("«Подробнее»", hosts.Details);
-        Assert.DoesNotContain("ниже", hosts.Details); // there is no list "below" on the dashboard
+        var hostsIssue = issues.Single(i => i.Title == "Файл hosts подменяет адреса сайтов");
+        Assert.Contains("www.sberbank.ru", hostsIssue.Details);
+        Assert.Contains("«Подробнее»", hostsIssue.Details);
+        Assert.DoesNotContain("ниже", hostsIssue.Details); // there is no list "below" on the dashboard
         var extIssue = issues.Single(i => i.Title == "Подозрительные расширения в браузере");
         Assert.Contains("Search Manager Plus", extIssue.Details);
         Assert.DoesNotContain("«Как удалить»", extIssue.Details);
@@ -470,12 +483,14 @@ public class SecurityServiceSandboxTests
     public async Task RemoveHostsLines_OnTempCopy()
     {
         using var sb = new SecuritySandbox();
-        File.WriteAllText(sb.Env.HostsPath, "# test\r\n127.0.0.1 localhost\r\n1.2.3.4 www.sberbank.ru\r\n");
+        // A harmless custom line (private address, reserved .test name) — never a hijack-looking file on disk.
+        File.WriteAllText(sb.Env.HostsPath, "# test\r\n127.0.0.1 localhost\r\n10.0.0.5 old-nas.test\r\n");
         var report = await sb.Service.ScanAsync(null, CancellationToken.None);
-        Assert.Equal(SecurityStatus.Danger, report.Check(SecurityCheckIds.Hosts)!.Status);
-        var bad = report.Hosts.Entries.Where(e => e.Risk == SecurityStatus.Danger).ToList();
+        Assert.Equal(SecurityStatus.Ok, report.Check(SecurityCheckIds.Hosts)!.Status);
+        var custom = report.Hosts.Entries.Where(e => e.Hostnames.Contains("old-nas.test")).ToList();
+        Assert.Equal(SecurityStatus.Info, Assert.Single(custom).Risk);
 
-        var result = await sb.Service.RemoveHostsLinesAsync(bad, CancellationToken.None);
+        var result = await sb.Service.RemoveHostsLinesAsync(custom, CancellationToken.None);
 
         Assert.True(result.Success, result.Message);
         Assert.Equal("# test\r\n127.0.0.1 localhost\r\n", File.ReadAllText(sb.Env.HostsPath));
@@ -591,7 +606,12 @@ public class SecurityServiceSandboxTests
     public async Task ViewModel_PreviewScan_PopulatesCards()
     {
         using var sb = new SecuritySandbox();
-        File.WriteAllText(sb.Env.HostsPath, "1.2.3.4 vk.com\r\n0.0.0.0 ads.example.com\r\n");
+        File.WriteAllText(sb.Env.HostsPath, "10.0.0.5 old-nas.test\r\n0.0.0.0 ads.example.com\r\n");
+        using (var key = sb.Create(sb.Env.Winlogon))
+        {
+            key.SetValue("Shell", "custom-shell.exe");
+            key.SetValue("Userinit", SecurityRules.DefaultUserinit(sb.Env.WindowsDir));
+        }
         var vm = new SecurityViewModel(sb.Service);
 
         await vm.PreviewScanAsync(CancellationToken.None);
@@ -599,8 +619,9 @@ public class SecurityServiceSandboxTests
         Assert.True(vm.HasData);
         Assert.Equal(SecurityCheckIds.All.Length, vm.Checks.Count);
         Assert.Equal(2, vm.HostsEntries.Count);
-        Assert.Equal(1, vm.SelectedHostsCount); // the dangerous line is pre-selected
+        Assert.Equal(0, vm.SelectedHostsCount); // only dangerous lines are pre-selected
         Assert.True(vm.DangerCount >= 1);
+        Assert.Equal(SecurityCheckIds.Winlogon, vm.Checks[0].Id); // the danger comes first
         Assert.InRange(vm.Score, 0, 99);
         Assert.Equal(2, vm.Checks.Single(c => c.Id == SecurityCheckIds.Antivirus).ColumnSpan);
     }

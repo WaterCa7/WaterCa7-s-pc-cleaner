@@ -11,6 +11,8 @@ public sealed class SecurityViewModel : PageViewModel
 {
     private const string WindowsSecurityUri = "windowsdefender:";
     private const string ProtectionHistoryUri = "windowsdefender://history";
+    private const string DeviceSecurityUri = "windowsdefender://devicesecurity";
+    private const string CoreIsolationUri = "windowsdefender://coreisolation";
 
     public const int HostsTab = 0;
     public const int ThreatsTab = 1;
@@ -29,11 +31,14 @@ public sealed class SecurityViewModel : PageViewModel
     private SecurityStatus _overallStatus = SecurityStatus.Unknown;
     private string _overallText = "Проверяем антивирус, брандмауэр, файл hosts и другие параметры защиты…";
     private int _okCount;
+    private int _infoCount;
     private int _warningCount;
     private int _dangerCount;
     private int _unknownCount;
     private string _lastScanText = "";
     private ObservableCollection<SecurityCheckCard> _checks = new();
+    private ObservableCollection<SecurityCheckCard> _attentionChecks = new();
+    private ObservableCollection<SecurityCheckCard> _okChecks = new();
     private ObservableCollection<HostsEntry> _hostsEntries = new();
     private ObservableCollection<ThreatDetection> _threats = new();
     private ObservableCollection<BrowserExtension> _extensions = new();
@@ -114,11 +119,20 @@ public sealed class SecurityViewModel : PageViewModel
         });
         DismissMessageCommand = new RelayCommand(() => Message = null);
         RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
+        RemoveThreatsCommand = new AsyncRelayCommand(RemoveThreatsAsync, () => !IsBusy && HasActiveThreats);
+        OpenProgramsCommand = new RelayCommand(() => AppServices.Navigator?.NavigateTo("Programs"));
+        DisableSmb1Command = new AsyncRelayCommand(DisableSmb1Async, () => !IsBusy);
+        OpenWindowsFeaturesCommand = new RelayCommand(() => ProcessRunner.ShellOpen("optionalfeatures.exe"));
+        OpenDeviceSecurityCommand = new RelayCommand(() => ProcessRunner.ShellOpen(DeviceSecurityUri));
+        OpenCoreIsolationCommand = new RelayCommand(() => ProcessRunner.ShellOpen(CoreIsolationUri));
+        SecureBootHowToCommand = new RelayCommand(() => Dialogs.Info("Как включить Secure Boot", SecurityRules.SecureBootHowTo));
+        TpmHowToCommand = new RelayCommand(() => Dialogs.Info("Как включить TPM", SecurityRules.TpmHowTo));
+        OpenEncryptionSettingsCommand = new RelayCommand(OpenEncryptionSettings);
     }
 
     public override string Title => "Безопасность";
 
-    public override string Subtitle => "Антивирус, брандмауэр, файл hosts, перехваты запуска и другие проверки защиты";
+    public override string Subtitle => "Антивирус, брандмауэр, файл hosts, SMBv1, Secure Boot, TPM, шифрование и другие проверки защиты";
 
     public override string IconGlyph => "";
 
@@ -163,6 +177,12 @@ public sealed class SecurityViewModel : PageViewModel
         private set => Set(ref _okCount, value);
     }
 
+    public int InfoCount
+    {
+        get => _infoCount;
+        private set => Set(ref _infoCount, value);
+    }
+
     public int WarningCount
     {
         get => _warningCount;
@@ -182,6 +202,8 @@ public sealed class SecurityViewModel : PageViewModel
     }
 
     public string OkCountText => $"{OkCount} в порядке";
+
+    public string InfoCountText => $"{InfoCount} — к сведению";
 
     public string WarningCountText => $"{WarningCount} — внимание";
 
@@ -211,11 +233,34 @@ public sealed class SecurityViewModel : PageViewModel
 
     // ===================== Lists =====================
 
+    /// <summary>All cards, most urgent first.</summary>
     public ObservableCollection<SecurityCheckCard> Checks
     {
         get => _checks;
         private set => Set(ref _checks, value);
     }
+
+    /// <summary>Cards worth a look: dangers, warnings, checks without data and notes.</summary>
+    public ObservableCollection<SecurityCheckCard> AttentionChecks
+    {
+        get => _attentionChecks;
+        private set => Set(ref _attentionChecks, value);
+    }
+
+    /// <summary>Cards that are fine (shown compact, below the others).</summary>
+    public ObservableCollection<SecurityCheckCard> OkChecks
+    {
+        get => _okChecks;
+        private set => Set(ref _okChecks, value);
+    }
+
+    public bool HasAttentionChecks => AttentionChecks.Count > 0;
+
+    public bool HasOkChecks => OkChecks.Count > 0;
+
+    public string AttentionHeader => $"Стоит посмотреть · {AttentionChecks.Count}";
+
+    public string OkHeader => $"В порядке · {OkChecks.Count}";
 
     public ObservableCollection<HostsEntry> HostsEntries
     {
@@ -298,6 +343,11 @@ public sealed class SecurityViewModel : PageViewModel
 
     public string ThreatsTabHeader => $"Журнал угроз ({Threats.Count})";
 
+    /// <summary>Defender works and has detections it did not neutralize ("Обезвредить угрозы" is shown).</summary>
+    public bool HasActiveThreats => _report?.CanRemoveThreats == true;
+
+    public string RemoveThreatsText => $"Обезвредить угрозы ({_report?.ActiveThreats.Count ?? 0})";
+
     public string ExtensionsTabHeader => $"Расширения ({_allExtensions.Count})";
 
     public string DnsTabHeader => $"DNS ({DnsServers.Count})";
@@ -347,6 +397,15 @@ public sealed class SecurityViewModel : PageViewModel
     public ICommand ShowDetailsCommand { get; }
     public ICommand DismissMessageCommand { get; }
     public ICommand RestartAsAdminCommand { get; }
+    public ICommand RemoveThreatsCommand { get; }
+    public ICommand OpenProgramsCommand { get; }
+    public ICommand DisableSmb1Command { get; }
+    public ICommand OpenWindowsFeaturesCommand { get; }
+    public ICommand OpenDeviceSecurityCommand { get; }
+    public ICommand OpenCoreIsolationCommand { get; }
+    public ICommand SecureBootHowToCommand { get; }
+    public ICommand TpmHowToCommand { get; }
+    public ICommand OpenEncryptionSettingsCommand { get; }
 
     // ===================== Navigation / scan =====================
 
@@ -395,7 +454,10 @@ public sealed class SecurityViewModel : PageViewModel
     {
         _report = report;
 
-        Checks = new ObservableCollection<SecurityCheckCard>(report.Checks.Select(c => BuildCard(c, report)));
+        var cards = BuildCards(report);
+        Checks = new ObservableCollection<SecurityCheckCard>(cards);
+        AttentionChecks = new ObservableCollection<SecurityCheckCard>(cards.Where(c => c.Status != SecurityStatus.Ok));
+        OkChecks = new ObservableCollection<SecurityCheckCard>(cards.Where(c => c.Status == SecurityStatus.Ok));
 
         foreach (var old in HostsEntries)
             old.PropertyChanged -= OnHostsEntryChanged;
@@ -423,7 +485,8 @@ public sealed class SecurityViewModel : PageViewModel
             SelectedDetailsTab = HostsTab;
 
         var checks = report.Checks;
-        OkCount = checks.Count(c => c.Status is SecurityStatus.Ok or SecurityStatus.Info);
+        OkCount = checks.Count(c => c.Status == SecurityStatus.Ok);
+        InfoCount = checks.Count(c => c.Status == SecurityStatus.Info);
         WarningCount = checks.Count(c => c.Status == SecurityStatus.Warning);
         DangerCount = checks.Count(c => c.Status == SecurityStatus.Danger);
         UnknownCount = checks.Count(c => c.Status == SecurityStatus.Unknown);
@@ -446,9 +509,12 @@ public sealed class SecurityViewModel : PageViewModel
 
         foreach (var name in new[]
                  {
-                     nameof(OkCountText), nameof(WarningCountText), nameof(DangerCountText), nameof(UnknownCountText),
+                     nameof(OkCountText), nameof(InfoCountText), nameof(WarningCountText), nameof(DangerCountText),
+                     nameof(UnknownCountText), nameof(HasAttentionChecks), nameof(HasOkChecks), nameof(AttentionHeader),
+                     nameof(OkHeader),
                      nameof(HostsTabHeader), nameof(ThreatsTabHeader), nameof(ExtensionsTabHeader), nameof(DnsTabHeader),
                      nameof(IfeoTabHeader), nameof(HasIfeo), nameof(ThreatsEmptyText), nameof(ExtensionsEmptyText),
+                     nameof(HasActiveThreats), nameof(RemoveThreatsText),
                  })
             OnPropertyChanged(name);
     }
@@ -477,6 +543,17 @@ public sealed class SecurityViewModel : PageViewModel
 
     // ===================== Cards =====================
 
+    /// <summary>
+    /// Cards in order of urgency: dangers, warnings, checks without data, notes, then everything that is fine.
+    /// Cards with the same status keep the order of importance (antivirus first).
+    /// </summary>
+    internal IReadOnlyList<SecurityCheckCard> BuildCards(SecurityReport report)
+        => report.Checks
+            .OrderByDescending(c => c.Status.Rank())
+            .ThenBy(c => SecurityCheckIds.Importance(c.Id))
+            .Select(c => BuildCard(c, report))
+            .ToList();
+
     private SecurityCheckCard BuildCard(SecurityCheckResult r, SecurityReport report)
     {
         var actions = new List<CardAction>();
@@ -502,9 +579,15 @@ public sealed class SecurityViewModel : PageViewModel
                     actions.Add(new CardAction("Обновить базы", UpdateSignaturesCommand, CardActionKind.Normal,
                         "Скачать свежие антивирусные базы Microsoft Defender"));
                 }
+                if (report.CanRemoveThreats)
+                    actions.Insert(0, new CardAction("Обезвредить угрозы", RemoveThreatsCommand, CardActionKind.Danger,
+                        "Microsoft Defender применит к найденным угрозам своё действие — обычно карантин (нужны права администратора)"));
                 if (report.Threats.Count > 0)
                     actions.Add(new CardAction("Журнал угроз", ShowDetailsCommand, CardActionKind.Normal,
                         "Показать, что находил антивирус", ThreatsTab));
+                if (report.ActiveAntivirusNames.Count >= 2)
+                    actions.Add(new CardAction("Открыть «Программы»", OpenProgramsCommand, CardActionKind.Normal,
+                        "Удалить лишний антивирус в разделе «Программы»"));
                 if (actions.Count == 0)
                     actions.Add(new CardAction("Безопасность Windows", OpenWindowsSecurityCommand, CardActionKind.Normal,
                         "Открыть приложение «Безопасность Windows»"));
@@ -581,6 +664,40 @@ public sealed class SecurityViewModel : PageViewModel
                     actions.Add(new CardAction("Как удалить", HowToRemoveExtensionCommand, CardActionKind.Normal,
                         "Инструкция по удалению расширений в каждом браузере"));
                 break;
+            case SecurityCheckIds.Smb1:
+                if (bad)
+                    actions.Add(new CardAction("Отключить SMBv1", DisableSmb1Command, CardActionKind.Primary,
+                        "Отключить компонент Windows «SMB 1.0» (нужны права администратора, затем — перезагрузка)"));
+                actions.Add(new CardAction("Компоненты Windows", OpenWindowsFeaturesCommand, CardActionKind.Normal,
+                    "Открыть окно «Включение или отключение компонентов Windows»"));
+                break;
+            case SecurityCheckIds.SecureBoot:
+                if (bad)
+                    actions.Add(new CardAction("Как включить", SecureBootHowToCommand, CardActionKind.Primary,
+                        "Пошаговая инструкция для BIOS/UEFI"));
+                actions.Add(new CardAction("Безопасность устройства", OpenDeviceSecurityCommand, CardActionKind.Normal,
+                    "«Безопасность Windows» → «Безопасность устройства»"));
+                break;
+            case SecurityCheckIds.Tpm:
+                if (bad)
+                    actions.Add(new CardAction("Как включить", TpmHowToCommand, CardActionKind.Primary,
+                        "Где включить fTPM (AMD) или PTT (Intel) в BIOS/UEFI"));
+                actions.Add(new CardAction("Безопасность устройства", OpenDeviceSecurityCommand, CardActionKind.Normal,
+                    "«Безопасность Windows» → «Безопасность устройства» → «Обработчик безопасности»"));
+                break;
+            case SecurityCheckIds.BitLocker:
+                if (report.BitLocker.Encryption is not (DriveEncryption.NotSupported or DriveEncryption.Unknown))
+                    actions.Add(new CardAction("Параметры шифрования", OpenEncryptionSettingsCommand,
+                        bad ? CardActionKind.Primary : CardActionKind.Normal,
+                        report.BitLocker.IsHomeEdition
+                            ? "«Параметры» → «Конфиденциальность и защита» → «Шифрование устройства»"
+                            : "«Панель управления» → «Шифрование диска BitLocker»"));
+                break;
+            case SecurityCheckIds.MemoryIntegrity:
+                actions.Add(new CardAction("Изоляция ядра", OpenCoreIsolationCommand,
+                    r.Status == SecurityStatus.Info && !report.DeviceGuard.HvciConfigured ? CardActionKind.Primary : CardActionKind.Normal,
+                    "«Безопасность Windows» → «Безопасность устройства» → «Изоляция ядра»"));
+                break;
         }
 
         return new SecurityCheckCard
@@ -594,6 +711,9 @@ public sealed class SecurityViewModel : PageViewModel
             Explanation = SecurityCheckIds.Explanation(r.Id),
             Actions = actions,
             ColumnSpan = r.Id == SecurityCheckIds.Antivirus ? 2 : 1,
+            // Cards that are fine keep the page short: their details move into a tooltip. The antivirus card keeps
+            // its facts (scan and update dates) visible.
+            IsCompact = r.Status == SecurityStatus.Ok && r.Id != SecurityCheckIds.Antivirus,
         };
     }
 
@@ -780,14 +900,18 @@ public sealed class SecurityViewModel : PageViewModel
             return;
         await RunActionAsync("Восстанавливаем параметры входа…", "Параметры входа", async ct =>
         {
+            RestorePointResult? restorePoint = null;
             if (hklm)
             {
                 ReportProgress(-1, "Создаём точку восстановления…");
-                await RestorePoint.TryCreateAsync("Восстановление параметров входа (Winlogon)", ct);
+                restorePoint = await RestorePoint.CreateAsync("Восстановление параметров входа (Winlogon)", ct);
                 ReportProgress(-1, "Восстанавливаем параметры входа…");
             }
             // Pass the confirmed values: if they changed since the scan, nothing is modified.
-            return await _service.RestoreWinlogonAsync(w, ct);
+            var result = await _service.RestoreWinlogonAsync(w, ct);
+            return result.Success && restorePoint is { } rp
+                ? result with { Message = result.Message + "\n\n" + SecurityRules.RestorePointText(rp) }
+                : result;
         });
     }
 
@@ -822,6 +946,64 @@ public sealed class SecurityViewModel : PageViewModel
                 "Перед изменением настройки сохраняются в резервную копию.\n\nОтключить прокси?"))
             return;
         await RunActionAsync("Отключаем прокси…", "Прокси-сервер", _service.DisableProxyAsync);
+    }
+
+    private async Task RemoveThreatsAsync()
+    {
+        var active = _report?.ActiveThreats ?? Array.Empty<ThreatDetection>();
+        if (active.Count == 0)
+            return;
+        if (!Admin.RequireElevation("Обезвреживание угроз"))
+            return;
+        var names = active.GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => $"• {g.Key}" + (string.IsNullOrWhiteSpace(g.First().Resources) ? "" : $" — {Shorten(g.First().Resources, 90)}"))
+            .ToList();
+        var shown = names.Take(10).ToList();
+        if (names.Count > 10)
+            shown.Add($"• … и ещё {names.Count - 10}");
+        if (!Dialogs.Confirm("Обезвредить угрозы",
+                $"Microsoft Defender обезвредит все найденные и не обезвреженные угрозы ({active.Count}):\n" +
+                string.Join("\n", shown) + "\n\n" +
+                "Defender применит к ним своё стандартное действие — обычно поместит файлы в карантин (команда Remove-MpThreat). " +
+                "Если файл оказался нужным, его можно восстановить в «Безопасность Windows» → «Журнал защиты».\n\nОбезвредить?"))
+            return;
+        await RunActionAsync("Обезвреживаем угрозы…", "Угрозы Microsoft Defender", _service.RemoveActiveThreatsAsync);
+    }
+
+    private static string Shorten(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
+
+    private async Task DisableSmb1Async()
+    {
+        if (!Admin.RequireElevation("Отключение SMBv1"))
+            return;
+        if (!Dialogs.Confirm("Отключить SMBv1",
+                "Будет отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» " +
+                "(Disable-WindowsOptionalFeature SMB1Protocol). Перед этим создаётся точка восстановления (если она включена в настройках).\n\n" +
+                "Изменение вступит в силу после перезагрузки. Современные сетевые папки, принтеры и NAS работают по SMB 2/3 и " +
+                "ничего не заметят; перестанут открываться только очень старые устройства, которые умеют лишь SMBv1.\n\n" +
+                "Вернуть: «Включение или отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».\n\n" +
+                "Отключить SMBv1?"))
+            return;
+        await RunActionAsync("Отключаем SMBv1 — это может занять несколько минут, не закрывайте программу…", "SMBv1",
+            _service.DisableSmb1Async);
+    }
+
+    private void OpenEncryptionSettings()
+    {
+        if (_report?.BitLocker.IsHomeEdition == true)
+        {
+            ProcessRunner.ShellOpen("ms-settings:deviceencryption");
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo("control.exe", "/name Microsoft.BitLockerDriveEncryption") { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Log.Warn($"Не удалось открыть параметры BitLocker: {ex.Message}");
+            Dialogs.Error("Шифрование диска", "Не удалось открыть параметры BitLocker: " + ex.Message);
+        }
     }
 
     private void ShowHowToRemoveExtension()

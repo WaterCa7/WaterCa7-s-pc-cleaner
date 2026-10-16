@@ -62,6 +62,55 @@
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,26,0,26" />
         </Style>
+
+        <!-- One check card (left status stripe, icon, title, status badge, state, details, actions) -->
+        <DataTemplate x:Key="CheckCard" DataType="{x:Type local:SecurityCheckCard}">
+            <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                    CornerRadius="10" ToolTip="{Binding StateToolTip}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="4" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border CornerRadius="9,0,0,9" Background="{Binding Status, Converter={StaticResource StatusBrush}}" />
+                    <DockPanel Grid.Column="1" Margin="14,14,14,12">
+                        <Grid DockPanel.Dock="Top" Background="Transparent" ToolTip="{Binding Explanation}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="34" Height="34" CornerRadius="8"
+                                    Background="{Binding Status, Converter={StaticResource StatusSoft}}">
+                                <TextBlock Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="17" HorizontalAlignment="Center"
+                                           Foreground="{Binding Status, Converter={StaticResource StatusBrush}}" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="{Binding Title}" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="10,0,8,0" />
+                            <ContentControl Grid.Column="2" Content="{Binding Status}" ContentTemplate="{StaticResource StatusBadge}"
+                                            Focusable="False" VerticalAlignment="Center" />
+                        </Grid>
+                        <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding Actions}" Focusable="False" Margin="0,2,0,0"
+                                      ItemTemplateSelector="{StaticResource ActionSelector}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <StackPanel Margin="0,12,0,2">
+                            <TextBlock Text="{Binding State}" FontWeight="SemiBold" FontSize="13.5" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Details}" Style="{StaticResource Muted}" Margin="0,4,0,0" LineHeight="18"
+                                       Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <Style x:Key="CheckCardContainer" TargetType="ContentPresenter">
+            <Setter Property="local:ResponsiveGrid.ColumnSpan" Value="{Binding ColumnSpan}" />
+        </Style>
     </UserControl.Resources>
 
     <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -105,6 +154,13 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="11" Foreground="{StaticResource SuccessBrush}" />
                                     <TextBlock Text="{Binding OkCountText}" Margin="6,0,0,0" FontSize="12" Foreground="{StaticResource SuccessBrush}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Badge}" Background="{StaticResource InfoSoftBrush}" Margin="0,0,8,4"
+                                    Visibility="{Binding InfoCount, Converter={StaticResource HasValueToVis}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE946;" FontSize="11" Foreground="{StaticResource InfoBrush}" />
+                                    <TextBlock Text="{Binding InfoCountText}" Margin="6,0,0,0" FontSize="12" Foreground="{StaticResource InfoBrush}" />
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource Badge}" Background="{StaticResource WarningSoftBrush}" Margin="0,0,8,4"
@@ -180,70 +236,44 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" Foreground="{StaticResource InfoBrush}" Margin="0,0,12,0" />
                     <TextBlock Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center"
-                               Text="Программа запущена без прав администратора. Все проверки работают, но исправления (брандмауэр, UAC, файл hosts, перехваты) и список исключений антивируса доступны только администратору." />
+                               Text="Без прав администратора все проверки работают, но исправления (брандмауэр, UAC, hosts, перехваты, SMBv1, угрозы Defender) и список исключений антивируса недоступны." />
                     <Button Grid.Column="2" Content="Перезапустить с правами" Command="{Binding RestartAsAdminCommand}" Padding="12,5"
                             FontSize="12" Margin="12,0,0,0" VerticalAlignment="Center"
                             ToolTip="Перезапустить программу от имени администратора (Windows спросит разрешение)" />
                 </Grid>
             </Border>
 
-            <!-- ===== Check cards ===== -->
-            <ItemsControl ItemsSource="{Binding Checks}" Margin="0,12,0,0" Focusable="False">
+            <!-- ===== Check cards: what is worth a look, then what is fine ===== -->
+            <DockPanel Margin="2,18,0,0" Visibility="{Binding HasAttentionChecks, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource H3}" Text="{Binding AttentionHeader}" />
+                <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Bottom"
+                           TextTrimming="CharacterEllipsis"
+                           Text="Сначала опасное, затем то, что стоит поправить, и советы" />
+            </DockPanel>
+            <ItemsControl ItemsSource="{Binding AttentionChecks}" Margin="0,10,0,0" Focusable="False"
+                          ItemTemplate="{StaticResource CheckCard}" ItemContainerStyle="{StaticResource CheckCardContainer}"
+                          Visibility="{Binding HasAttentionChecks, Converter={StaticResource BoolToVis}}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <local:ResponsiveGrid MinColumnWidth="290" MaxColumns="3" Spacing="12" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemContainerStyle>
-                    <Style TargetType="ContentPresenter">
-                        <Setter Property="local:ResponsiveGrid.ColumnSpan" Value="{Binding ColumnSpan}" />
-                    </Style>
-                </ItemsControl.ItemContainerStyle>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type local:SecurityCheckCard}">
-                        <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
-                                CornerRadius="10">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="4" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Border CornerRadius="9,0,0,9" Background="{Binding Status, Converter={StaticResource StatusBrush}}" />
-                                <DockPanel Grid.Column="1" Margin="14,14,14,12">
-                                    <Grid DockPanel.Dock="Top" Background="Transparent" ToolTip="{Binding Explanation}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Width="34" Height="34" CornerRadius="8"
-                                                Background="{Binding Status, Converter={StaticResource StatusSoft}}">
-                                            <TextBlock Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="17" HorizontalAlignment="Center"
-                                                       Foreground="{Binding Status, Converter={StaticResource StatusBrush}}" />
-                                        </Border>
-                                        <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="{Binding Title}" TextWrapping="Wrap"
-                                                   VerticalAlignment="Center" Margin="10,0,8,0" />
-                                        <ContentControl Grid.Column="2" Content="{Binding Status}" ContentTemplate="{StaticResource StatusBadge}"
-                                                        Focusable="False" VerticalAlignment="Center" />
-                                    </Grid>
-                                    <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding Actions}" Focusable="False" Margin="0,2,0,0"
-                                                  ItemTemplateSelector="{StaticResource ActionSelector}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
-                                    <StackPanel Margin="0,12,0,2">
-                                        <TextBlock Text="{Binding State}" FontWeight="SemiBold" FontSize="13.5" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding Details}" Style="{StaticResource Muted}" Margin="0,4,0,0" LineHeight="18"
-                                                   Visibility="{Binding Details, Converter={StaticResource HasValueToVis}}" />
-                                    </StackPanel>
-                                </DockPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <DockPanel Margin="2,20,0,0" Visibility="{Binding HasOkChecks, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource H3}" Text="{Binding OkHeader}" />
+                <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Bottom"
+                           TextTrimming="CharacterEllipsis"
+                           Text="Наведите на карточку, чтобы прочитать подробности" />
+            </DockPanel>
+            <ItemsControl ItemsSource="{Binding OkChecks}" Margin="0,10,0,0" Focusable="False"
+                          ItemTemplate="{StaticResource CheckCard}" ItemContainerStyle="{StaticResource CheckCardContainer}"
+                          Visibility="{Binding HasOkChecks, Converter={StaticResource BoolToVis}}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <local:ResponsiveGrid MinColumnWidth="290" MaxColumns="3" Spacing="12" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
             </ItemsControl>
 
             <!-- ===== Before the first scan ===== -->
@@ -254,7 +284,7 @@
                                Foreground="{StaticResource MutedBrush}" />
                     <TextBlock Style="{StaticResource H3}" Text="Проверка защиты" HorizontalAlignment="Center" Margin="0,12,0,4" />
                     <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" MaxWidth="460"
-                               Text="Проверим антивирус, брандмауэр, UAC, файл hosts, перехваты запуска, прокси, DNS, обновления и расширения браузеров. Проверка только читает настройки — ничего не меняется." />
+                               Text="Проверим антивирус, брандмауэр, UAC, файл hosts, перехваты запуска, прокси, DNS, обновления, SMBv1, Secure Boot, TPM, шифрование диска, изоляцию ядра и расширения браузеров. Проверка только читает настройки — ничего не меняется." />
                 </StackPanel>
             </Border>
 
@@ -349,6 +379,14 @@
                                 <TextBlock Style="{StaticResource Muted}"
                                            Text="Что находил Microsoft Defender. Угрозы «В карантине», «Удалена» и «Заблокирована» уже обезврежены — с ними ничего делать не нужно." />
                                 <WrapPanel Margin="0,10,0,10">
+                                    <Button Style="{StaticResource DangerButton}" Command="{Binding RemoveThreatsCommand}" Margin="0,0,8,0"
+                                            Visibility="{Binding HasActiveThreats, Converter={StaticResource BoolToVis}}"
+                                            ToolTip="Microsoft Defender применит к необезвреженным угрозам своё действие — обычно карантин (нужны права администратора)">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
+                                            <TextBlock Text="{Binding RemoveThreatsText}" Margin="8,0,0,0" />
+                                        </StackPanel>
+                                    </Button>
                                     <Button Command="{Binding OpenProtectionHistoryCommand}" Content="Открыть журнал защиты"
                                             ToolTip="«Безопасность Windows» → «Журнал защиты»" />
                                 </WrapPanel>
