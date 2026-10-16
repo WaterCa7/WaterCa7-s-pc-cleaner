@@ -184,6 +184,7 @@ public sealed class ProgramsService : IHealthContributor
             SystemComponent = B("SystemComponent"),
             ParentKeyName = S("ParentKeyName"),
             ReleaseType = S("ReleaseType"),
+            BundleCachePath = S("BundleCachePath"),
         };
     }
 
@@ -214,14 +215,20 @@ public sealed class ProgramsService : IHealthContributor
             dateFromFolder = true;
         }
 
-        UninstallLaunch? launch;
+        UninstallLaunch? launch = null, quietLaunch = null;
+        string? mainExecutable = null;
         try
         {
-            launch = ProgramRules.BuildLaunch(v.UninstallString, v.WindowsInstaller, v.KeyName);
+            launch = ProgramRules.WithBundleFallback(
+                ProgramRules.BuildLaunch(v.UninstallString, v.WindowsInstaller, v.KeyName), v.BundleCachePath, quiet: false);
+            if (!string.IsNullOrWhiteSpace(v.QuietUninstallString))
+                quietLaunch = ProgramRules.WithBundleFallback(
+                    ProgramRules.BuildQuietLaunch(v.QuietUninstallString), v.BundleCachePath, quiet: true);
+            mainExecutable = ProgramRules.FindMainExecutable(v.DisplayIcon, launch);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
         {
-            launch = null;
+            // malformed command lines: the entry is shown, but without uninstall actions
         }
 
         var program = new InstalledProgram
@@ -246,6 +253,8 @@ public sealed class ProgramsService : IHealthContributor
             IsRuntime = ProgramRules.IsRuntime(v.DisplayName, v.Publisher),
             IsDriver = ProgramRules.IsDriverPackage(v.DisplayName),
             Launch = launch,
+            QuietLaunch = quietLaunch,
+            MainExecutable = mainExecutable,
         };
         ApplyTrust(program);
         return program;
@@ -257,7 +266,7 @@ public sealed class ProgramsService : IHealthContributor
         p.IsTrusted = AppServices.Settings.IsTrusted(p.DisplayName);
         p.Suspicion = p.IsTrusted
             ? SuspicionResult.Clean
-            : Suspicion.AnalyzeProgram(p.DisplayName, p.Publisher, p.InstallLocation);
+            : ProgramRules.AnalyzeProgram(p.DisplayName, p.Publisher, p.InstallLocation);
         p.RefreshBadges();
     }
 
@@ -453,12 +462,13 @@ public sealed class ProgramsService : IHealthContributor
     /// </summary>
     public async Task<UninstallOutcome> RunUninstallerAsync(InstalledProgram p, bool quiet, Action<string>? waitingFor, CancellationToken ct)
     {
-        var launch = quiet ? ProgramRules.BuildQuietLaunch(p.QuietUninstallString) : p.Launch;
+        var launch = quiet ? p.QuietLaunch : p.Launch;
         if (launch is null)
             return new UninstallOutcome(UninstallStatus.NotStarted, "У программы не указан деинсталлятор.");
         if (!launch.IsMsi && Path.IsPathRooted(launch.FileName) && !File.Exists(launch.FileName))
             return new UninstallOutcome(UninstallStatus.NotStarted,
-                "Файл деинсталлятора не найден. Скорее всего, программа уже удалена — уберите запись из списка.");
+                $"Файл деинсталлятора не найден:\n{launch.FileName}\n\nПопробуйте удалить программу через «Параметры» → «Приложения». " +
+                "Если не получится, установите программу заново поверх старой и затем удалите.");
 
         var workingDir = launch.WorkingDirectory is not null && Directory.Exists(launch.WorkingDirectory) ? launch.WorkingDirectory : null;
         var psi = new ProcessStartInfo(launch.FileName, launch.Arguments)
@@ -471,7 +481,8 @@ public sealed class ProgramsService : IHealthContributor
         Process? process;
         try
         {
-            process = Process.Start(psi);
+            // ShellExecute waits for the UAC prompt: keep the window responsive meanwhile.
+            process = await Task.Run(() => Process.Start(psi));
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
@@ -520,11 +531,14 @@ public sealed class ProgramsService : IHealthContributor
 
     // ===================================================================== broken entries
 
+    /// <summary>Path separators would leave the Uninstall root; a quote would break the reg.exe backup command line.</summary>
+    private static readonly char[] ForbiddenKeyNameChars = { '\\', '/', '"' };
+
     /// <summary>True if the entry belongs to one of the Uninstall roots this service reads (never delete anything else).</summary>
     internal bool IsAllowedKey(InstalledProgram p)
         => _sources.Contains(p.Source) &&
            !string.IsNullOrWhiteSpace(p.KeyName) &&
-           !p.KeyName.Contains('\\') && !p.KeyName.Contains('/') &&
+           p.KeyName.IndexOfAny(ForbiddenKeyNameChars) < 0 &&
            p.Source.SubKeyPath.EndsWith(@"\Uninstall", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
@@ -537,6 +551,11 @@ public sealed class ProgramsService : IHealthContributor
             return new EntryDeletionResult(false, "Запись находится вне списка установленных программ — удаление запрещено.");
         if (p.IsMachineWide && !IsElevated())
             return new EntryDeletionResult(false, "Нужны права администратора: запись относится ко всем пользователям.");
+
+        // Re-check right before deleting: the program may have been reinstalled (or repaired) since the list was read.
+        var check = await Task.Run(() => RecheckBrokenEntry(p), ct);
+        if (check is not null)
+            return new EntryDeletionResult(false, check);
 
         var backup = await RegistryBackup.ExportAsync(p.RegistryKeyPath, $"Запись «{p.DisplayName}» из списка установленных программ", ct);
         if (backup is null)
@@ -561,16 +580,50 @@ public sealed class ProgramsService : IHealthContributor
         return new EntryDeletionResult(true, "Запись удалена.", backup);
     }
 
-    /// <summary>Deletes several broken entries (each with its own backup). Returns (deleted, failed messages).</summary>
+    /// <summary>
+    /// Reads the entry again from the registry. Returns null if it still exists and is still broken,
+    /// otherwise the reason why it must not be deleted.
+    /// </summary>
+    private static string? RecheckBrokenEntry(InstalledProgram p)
+    {
+        UninstallEntryValues? current;
+        try
+        {
+            using var baseKey = RegistryKey.OpenBaseKey(p.Source.Hive, p.Source.View);
+            using var parent = baseKey.OpenSubKey(p.Source.SubKeyPath);
+            current = parent is null ? null : ReadValues(parent, p.KeyName);
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return $"Не удалось прочитать запись: {ex.Message}";
+        }
+        if (current is null)
+            return "Этой записи уже нет в реестре — ничего не изменено.";
+        if (!string.Equals(current.DisplayName?.Trim(), p.DisplayName, StringComparison.OrdinalIgnoreCase) || !ProgramRules.IsBroken(current))
+            return "Запись изменилась: похоже, программу установили заново. Ничего не удалено — обновите список.";
+        return null;
+    }
+
+    /// <summary>
+    /// Deletes several broken entries (each with its own backup). Returns (deleted, failed messages).
+    /// Cancellation stops after the current entry and still reports what was done.
+    /// </summary>
     public async Task<(int Deleted, IReadOnlyList<string> Failures)> DeleteEntriesAsync(
         IReadOnlyList<InstalledProgram> entries, IProgress<double>? progress, CancellationToken ct)
     {
         var deleted = 0;
         var failures = new List<string>();
-        for (var i = 0; i < entries.Count; i++)
+        for (var i = 0; i < entries.Count && !ct.IsCancellationRequested; i++)
         {
-            ct.ThrowIfCancellationRequested();
-            var r = await DeleteEntryAsync(entries[i], ct);
+            EntryDeletionResult r;
+            try
+            {
+                r = await DeleteEntryAsync(entries[i], ct);
+            }
+            catch (OperationCanceledException)
+            {
+                break; // the backup export was interrupted: this entry was not deleted
+            }
             if (r.Success)
                 deleted++;
             else
@@ -662,7 +715,7 @@ public sealed class ProgramsService : IHealthContributor
             var bloat = store.Apps.Where(a => a.IsBloatware).ToList();
             if (bloat.Count > 0)
             {
-                var examples = string.Join(", ", bloat.Take(4).Select(a => a.DisplayName)) + (bloat.Count > 4 ? " и др." : "");
+                var examples = string.Join(", ", bloat.Take(4).Select(a => a.DisplayName)) + (bloat.Count > 4 ? " и другие" : "");
                 issues.Add(new HealthIssue
                 {
                     Module = ModuleName,
@@ -686,7 +739,7 @@ public sealed class ProgramsService : IHealthContributor
     private async Task<string> FixBrokenEntriesAsync(IReadOnlyList<InstalledProgram> broken, CancellationToken ct)
     {
         // Re-check: only entries that still exist and are still broken.
-        var fresh = ScanPrograms(ct).Programs.Where(p => p.IsBroken).ToList();
+        var fresh = (await ScanProgramsAsync(ct)).Programs.Where(p => p.IsBroken).ToList();
         var targets = fresh.Where(f => broken.Any(b => string.Equals(b.RegistryKeyPath, f.RegistryKeyPath, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (targets.Count == 0)
@@ -696,6 +749,8 @@ public sealed class ProgramsService : IHealthContributor
                    "Перезапустите программу от имени администратора и повторите.";
 
         var (deleted, failures) = await DeleteEntriesAsync(targets, null, ct);
+        if (deleted == 0)
+            return "Ничего не удалено. " + (failures.Count > 0 ? failures[0] : "");
         var text = $"Удалено {Format.Count(deleted, "запись", "записи", "записей")}, резервные копии сохранены.";
         if (failures.Count > 0)
             text += $" Не удалось: {failures.Count}.";

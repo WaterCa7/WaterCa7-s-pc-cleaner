@@ -18,8 +18,14 @@ public static class ProgramRules
     private static readonly Regex GuidRegex = new(
         @"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}", RegexOptions.Compiled);
 
+    /// <summary>"/I{GUID}", "/X {GUID}", "/uninstall {GUID}", "/package {GUID}", "/fa{GUID}" (repair flags p,o,e,d,c,a,u,m,s,v).</summary>
     private static readonly Regex MsiSwitchWithGuid = new(
-        @"(?:^|\s)[/-](?:i|x|uninstall|package|f)\s*""?(\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\})",
+        @"(?:^|\s)[/-](?:i|x|uninstall|package|f[poecdaumsv]*)\s*""?(\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\})""?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Any other msiexec action (install, repair, admin, advertise, patch...): a quiet command with one is not run.</summary>
+    private static readonly Regex MsiActionSwitch = new(
+        @"(?:^|\s)[/-](?:i|x|a|p|j[mu]?|f[poecdaumsv]*|package|uninstall|update)(?=\s|""|\{|$)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly string[] SkippedReleaseTypes =
@@ -77,11 +83,21 @@ public static class ProgramRules
 
     public static bool IsGuid(string? s) => s is not null && s.Length == 38 && GuidRegex.IsMatch(s);
 
+    /// <summary>
+    /// "msiexec ...", "MsiExec.exe ...", "\"C:\Windows\System32\msiexec.exe\" ...". Checked before CommandLine.Split, which
+    /// would read "msiexec /x C:\Setup\app.msi" as one file name (it stops at the first token with an executable extension).
+    /// </summary>
+    private static readonly Regex MsiexecHead = new(
+        @"^\s*(?:""(?:[^""]*\\)?msiexec(?:\.exe)?""|(?:[^\s""]*\\)?msiexec(?:\.exe)?)(?=\s|$)(?<args>.*)$",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
     /// <summary>True for "MsiExec.exe /X{...}" and similar.</summary>
     public static bool IsMsiexecCommand(string? commandLine)
     {
         if (string.IsNullOrWhiteSpace(commandLine))
             return false;
+        if (MsiexecHead.IsMatch(commandLine))
+            return true;
         var (exe, _) = CommandLine.Split(commandLine);
         if (exe is null)
             return false;
@@ -118,7 +134,11 @@ public static class ProgramRules
         return BuildRawLaunch(uninstallString);
     }
 
-    /// <summary>Launch for QuietUninstallString (or any command) as written by the installer.</summary>
+    /// <summary>
+    /// Launch for QuietUninstallString as written by the installer. For msiexec it is always "msiexec.exe /x {GUID}" plus the
+    /// installer's other switches (/qn, /norestart...): an install/repair ("/I", "/fa") never runs, and a command without a
+    /// product code or with a second msiexec action is not offered at all.
+    /// </summary>
     public static UninstallLaunch? BuildQuietLaunch(string? quietUninstallString)
     {
         if (string.IsNullOrWhiteSpace(quietUninstallString))
@@ -127,14 +147,66 @@ public static class ProgramRules
         if (launch is null)
             return null;
         if (IsMsiexecCommand(quietUninstallString))
-            return launch with { FileName = MsiExecPath, IsMsi = true, ProductCode = ExtractProductCode(quietUninstallString) };
+        {
+            var code = ExtractProductCode(quietUninstallString);
+            if (code is null)
+                return null;
+            var rest = MsiSwitchWithGuid.Replace(launch.Arguments, " ", 1).Trim();
+            if (MsiActionSwitch.IsMatch(rest))
+                return null;
+            var args = rest.Length == 0 ? $"/x {code}" : $"/x {code} {rest}";
+            return new UninstallLaunch(MsiExecPath, args, Environment.SystemDirectory, true, code);
+        }
         return launch;
+    }
+
+    /// <summary>
+    /// WiX Burn bundles keep their setup in "Package Cache" (BundleCachePath). When the uninstaller named in the
+    /// registry is gone, "&lt;cached setup&gt; /uninstall" is the bundle's own uninstall (the command Burn registers by default).
+    /// Returns <paramref name="launch"/> unchanged in every other case.
+    /// </summary>
+    public static UninstallLaunch? WithBundleFallback(UninstallLaunch? launch, string? bundleCachePath, bool quiet,
+        Func<string, bool>? fileExists = null)
+    {
+        if (launch is { IsMsi: true })
+            return launch;
+        fileExists ??= File.Exists;
+        var cache = NormalizeFolder(bundleCachePath);
+        if (cache is null || !IsLocalRootedPath(cache) || !cache.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return launch;
+        if (launch is not null && (!IsLocalRootedPath(launch.FileName) || fileExists(launch.FileName)))
+            return launch; // the registered uninstaller is there (or cannot be checked): use it
+        if (!fileExists(cache))
+            return launch;
+        return new UninstallLaunch(cache, quiet ? "/uninstall /quiet" : "/uninstall", SafeDirectory(cache), false, null);
+    }
+
+    /// <summary>
+    /// The program's main .exe for a VirusTotal lookup: DisplayIcon if it is an existing .exe, else the uninstaller.
+    /// Network paths and Windows' own tools (rundll32, msiexec, powershell) are skipped.
+    /// </summary>
+    public static string? FindMainExecutable(string? displayIcon, UninstallLaunch? launch, Func<string, bool>? fileExists = null)
+    {
+        fileExists ??= File.Exists;
+        bool Usable(string? path)
+            => path is not null && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && IsLocalRootedPath(path) &&
+               !IsUnderWindows(path) && fileExists(path);
+
+        var icon = ParseIconPath(displayIcon).Path;
+        if (Usable(icon))
+            return icon;
+        var exe = launch is { IsMsi: false } ? launch.FileName : null;
+        return Usable(exe) ? exe : null;
     }
 
     private static UninstallLaunch? BuildRawLaunch(string? commandLine)
     {
         if (string.IsNullOrWhiteSpace(commandLine))
             return null;
+        var msi = MsiexecHead.Match(commandLine);
+        if (msi.Success)
+            return new UninstallLaunch(MsiExecPath, msi.Groups["args"].Value.Trim(), Environment.SystemDirectory, true,
+                ExtractProductCode(commandLine));
         var (exe, args) = CommandLine.Split(commandLine);
         if (string.IsNullOrWhiteSpace(exe))
             return null;
@@ -155,6 +227,9 @@ public static class ProgramRules
     /// <summary>
     /// "Битая запись": the uninstaller file (for rundll32-style commands, the DLL) is missing AND the install folder
     /// is empty or missing. MSI entries are never considered broken here. Missing drives (unplugged disks) are not broken.
+    /// Conservative exceptions (the program may still be installed, so the entry must not be offered for removal):
+    /// Microsoft runtimes, WiX Burn bundles and "Package Cache" setups (their MSI parts can outlive the cached setup),
+    /// and entries whose own program .exe (DisplayIcon) still exists.
     /// </summary>
     public static bool IsBroken(UninstallEntryValues v, Func<string, bool>? fileExists = null, Func<string, bool>? dirExists = null)
     {
@@ -165,6 +240,10 @@ public static class ProgramRules
         if (IsMsiexecCommand(v.UninstallString))
             return false;
         if (v.WindowsInstaller && IsGuid(v.KeyName))
+            return false;
+        if (IsRuntime(v.DisplayName, v.Publisher))
+            return false;
+        if (!string.IsNullOrWhiteSpace(v.BundleCachePath))
             return false;
 
         string? target;
@@ -185,12 +264,23 @@ public static class ProgramRules
 
         if (fileExists(target))
             return false;
+        if (target.Contains(@"\Package Cache\", StringComparison.OrdinalIgnoreCase))
+            return false; // a cleaned-up setup cache does not mean the program itself is gone
 
         var location = NormalizeFolder(v.InstallLocation);
         if (location is not null && (IsNetworkPath(location) || dirExists(location)))
             return false; // network folders are not checked (could hang) - never call them broken
+
+        // The program's own .exe (DisplayIcon) is still there: only the uninstaller is missing.
+        var icon = ParseIconPath(v.DisplayIcon).Path;
+        if (icon is not null && icon.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && IsLocalRootedPath(icon) &&
+            !IsUnderWindows(icon) && fileExists(icon))
+            return false;
         return true;
     }
+
+    private static bool IsUnderWindows(string path)
+        => Suspicion.IsUnder(path.Replace('/', '\\'), Environment.GetFolderPath(Environment.SpecialFolder.Windows));
 
     /// <summary>UNC paths (\\server\share) are never probed: an offline server can block for a long time.</summary>
     public static bool IsNetworkPath(string? path)
@@ -214,24 +304,73 @@ public static class ProgramRules
     /// Plain-language note when a program lives where normal programs do not (Temp, Downloads, Recycle Bin, Public).
     /// Folders directly in AppData are normal for per-user apps and are not reported.
     /// </summary>
-    public static string? DescribeInstallLocationRisk(string? installLocation)
+    public static string? DescribeInstallLocationRisk(string? installLocation) => ClassifyInstallLocation(installLocation) switch
+    {
+        LocationRisk.Temp => "Программа установлена во временную папку (Temp) — обычные программы так не делают.",
+        LocationRisk.Downloads => "Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.",
+        LocationRisk.RecycleBin => "Папка программы находится в корзине.",
+        LocationRisk.Public => "Программа установлена в общую папку пользователей (Public) — это необычно.",
+        _ => null,
+    };
+
+    /// <summary>
+    /// PUP heuristics for an installed program: the Core checks (known PUPs, missing publisher) plus the install folder.
+    /// Unlike <see cref="Suspicion.AnalyzeProgram"/>, a folder directly in AppData is normal for programs (Discord, Telegram,
+    /// GitHub Desktop install per user there), and the reasons describe an install folder rather than a running file.
+    /// </summary>
+    public static SuspicionResult AnalyzeProgram(string displayName, string? publisher, string? installLocation)
+    {
+        if (AppServices.Settings.IsTrusted(displayName))
+            return SuspicionResult.Clean;
+        var core = Suspicion.AnalyzeProgram(displayName, publisher, installLocation: null);
+        var location = ClassifyInstallLocation(installLocation) switch
+        {
+            LocationRisk.Temp => "Установлена во временную папку (Temp)",
+            LocationRisk.Downloads => "Установлена прямо в папку «Загрузки»",
+            LocationRisk.RecycleBin => "Папка программы находится в корзине",
+            LocationRisk.Public => "Установлена в общую папку пользователей (Public)",
+            _ => null,
+        };
+        if (location is null)
+            return core;
+        return new SuspicionResult(Math.Clamp(core.Score + 20, 0, 100), core.Reasons.Append(location).ToList());
+    }
+
+    private enum LocationRisk
+    {
+        None,
+        Temp,
+        Downloads,
+        RecycleBin,
+        Public,
+    }
+
+    private static LocationRisk ClassifyInstallLocation(string? installLocation)
     {
         var folder = NormalizeFolder(installLocation);
-        if (folder is null)
-            return null;
-        // DescribeRiskyLocation looks at the parent folder of a file, so describe a file inside the install folder.
-        var reason = Suspicion.DescribeRiskyLocation(Path.Combine(folder, "app.exe"));
+        if (folder is null || IsNetworkPath(folder))
+            return LocationRisk.None;
+        string? reason;
+        try
+        {
+            // DescribeRiskyLocation looks at the parent folder of a file, so describe a file inside the install folder.
+            reason = Suspicion.DescribeRiskyLocation(Path.Combine(folder, "app.exe"));
+        }
+        catch (ArgumentException)
+        {
+            return LocationRisk.None;
+        }
         if (reason is null)
-            return null;
+            return LocationRisk.None;
         if (reason.Contains("Temp", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена во временную папку (Temp) — обычные программы так не делают.";
+            return LocationRisk.Temp;
         if (reason.Contains("Загрузки", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.";
+            return LocationRisk.Downloads;
         if (reason.Contains("корзин", StringComparison.OrdinalIgnoreCase))
-            return "Папка программы находится в корзине.";
+            return LocationRisk.RecycleBin;
         if (reason.Contains("Public", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена в общую папку пользователей (Public) — это необычно.";
-        return null;
+            return LocationRisk.Public;
+        return LocationRisk.None; // "directly in AppData" is normal for per-user programs
     }
 
     public static bool IsDriverPackage(string? displayName)
@@ -300,6 +439,11 @@ public static class ProgramRules
             Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+            Environment.GetEnvironmentVariable("PUBLIC") ?? "",
             Path.GetTempPath(),
         };
         foreach (var b in broad)
@@ -337,6 +481,18 @@ public static class ProgramRules
             return Path.GetPathRoot(path);
         }
         catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static string? SafeDirectory(string path)
+    {
+        try
+        {
+            return Path.GetDirectoryName(path);
+        }
+        catch (ArgumentException)
         {
             return null;
         }

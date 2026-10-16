@@ -186,4 +186,42 @@ public class StoreAppCatalogTests
         Assert.False(store.CanRemove);
         Assert.Equal("Не указан", store.PublisherDisplay);
     }
+
+    // Review regressions -------------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Facebook.InstagramBeta", "Instagram")]
+    [InlineData("Facebook.317180B0BB486", "Messenger")]
+    [InlineData("Facebook.Facebook", "Facebook")]
+    public void FriendlyName_InstagramAndMessengerAreNotCalledFacebook(string name, string expected)
+    {
+        Assert.Equal(expected, StoreAppCatalog.FriendlyName(name));
+        Assert.Equal(StoreAppKind.Bloatware, StoreAppCatalog.Classify(name));
+    }
+
+    [Theory]
+    [InlineData("Microsoft.Office.ActionsServer")]
+    [InlineData("Microsoft.OfficePushNotificationUtility")]
+    [InlineData("aimgr")]
+    [InlineData("Microsoft.WinAppRuntime.DDLM.6000.519.329.0-x6")]
+    [InlineData("Microsoft.DolbyAudioExtensions")]
+    public void Classify_OfficePartsRuntimesAndCodecs_AreProtected(string name)
+    {
+        Assert.Equal(StoreAppKind.Protected, StoreAppCatalog.Classify(name));
+        Assert.False(string.IsNullOrWhiteSpace(StoreAppCatalog.ProtectReason(name)));
+    }
+
+    [Fact]
+    public void UndoText_PromisesTheStoreOnlyForStoreSignedPackages()
+    {
+        var fromStore = ProgramsService.CreateStoreApp(new StoreAppRecord(
+            "Microsoft.BingNews", "Microsoft.BingNews_4.1.0.0_x64__8wekyb3d8bbwe", null, null, "4.1", null, "Store"));
+        var sideloaded = ProgramsService.CreateStoreApp(new StoreAppRecord(
+            "Vendor.Tool", "Vendor.Tool_1.0.0.0_x64__abc", null, null, "1.0", null, "Developer"));
+
+        Assert.True(fromStore.IsFromStore);
+        Assert.Contains("Microsoft Store", fromStore.UndoText);
+        Assert.False(sideloaded.IsFromStore);
+        Assert.Contains("не получится", sideloaded.UndoText);
+    }
 }

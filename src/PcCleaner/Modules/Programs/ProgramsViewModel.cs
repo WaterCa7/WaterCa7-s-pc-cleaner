@@ -708,7 +708,7 @@ public sealed class ProgramsViewModel : PageViewModel
             return;
         }
 
-        var launch = quiet ? ProgramRules.BuildQuietLaunch(p.QuietUninstallString) : p.Launch;
+        var launch = quiet ? p.QuietLaunch : p.Launch;
         var sb = new StringBuilder();
         sb.AppendLine($"Удалить программу «{p.DisplayName}»?");
         sb.AppendLine();
@@ -728,7 +728,7 @@ public sealed class ProgramsViewModel : PageViewModel
             sb.AppendLine("Внимание: это компонент, который нужен другим программам и играм. После его удаления они могут перестать запускаться.");
             sb.AppendLine();
         }
-        sb.AppendLine("Перед удалением будет создана точка восстановления Windows (если программа запущена от имени администратора).");
+        sb.AppendLine("Перед удалением будет создана точка восстановления Windows (если это включено в настройках и есть права администратора).");
         sb.Append("Отменить удаление нельзя, но программу можно установить заново.");
 
         if (!Dialogs.Confirm("Удаление программы", sb.ToString()))
@@ -855,7 +855,11 @@ public sealed class ProgramsViewModel : PageViewModel
             await RescanProgramsAsync();
         });
 
-        var text = $"Удалено {Format.Count(deleted, "запись", "записи", "записей")}. Резервные копии сохранены в папке:\n{AppPaths.BackupsDir}";
+        if (deleted == 0 && failures.Count == 0)
+            return; // cancelled before anything was done
+        var text = deleted > 0
+            ? $"Удалено {Format.Count(deleted, "запись", "записи", "записей")}. Резервные копии сохранены в папке:\n{AppPaths.BackupsDir}"
+            : "Ни одна запись не удалена.";
         if (failures.Count > 0)
             text += "\n\nНе удалось удалить:\n" + string.Join("\n", failures.Take(8));
         if (skippedNote.Length > 0)
@@ -938,7 +942,7 @@ public sealed class ProgramsViewModel : PageViewModel
             sb.AppendLine($"Размер: {Format.Bytes(app.SizeBytes)}");
         sb.AppendLine();
         sb.AppendLine("Приложение будет удалено только для вашей учётной записи (Remove-AppxPackage).");
-        sb.Append("Вернуть его можно в любой момент — установите заново из Microsoft Store.");
+        sb.Append(app.UndoText);
         if (!Dialogs.Confirm("Удаление приложения Microsoft Store", sb.ToString()))
             return;
 
@@ -952,7 +956,9 @@ public sealed class ProgramsViewModel : PageViewModel
         if (result is null)
             return;
         if (result.Value.Success)
-            Dialogs.Info("Приложение удалено", $"«{app.DisplayName}» удалено. Вернуть его можно через Microsoft Store.");
+            Dialogs.Info("Приложение удалено", app.IsFromStore
+                ? $"«{app.DisplayName}» удалено. Вернуть его можно через Microsoft Store."
+                : $"«{app.DisplayName}» удалено.");
         else
             Dialogs.Error("Не удалось удалить приложение", $"«{app.DisplayName}»: {result.Value.Message}");
     }
@@ -970,8 +976,11 @@ public sealed class ProgramsViewModel : PageViewModel
             names += $"\n• … и ещё {targets.Count - 15}";
         if (!Dialogs.Confirm("Удаление предустановленных приложений",
                 $"Удалить {Format.Count(targets.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений")}?\n\n" +
-                $"{names}\n\nОни удаляются только для вашей учётной записи. Любое из них можно вернуть, установив заново из Microsoft Store. " +
-                "Перед удалением будет создана точка восстановления (если есть права администратора).\n\n" +
+                $"{names}\n\nОни удаляются только для вашей учётной записи. " +
+                (targets.All(t => t.IsFromStore)
+                    ? "Любое из них можно вернуть, установив заново из Microsoft Store. "
+                    : "Приложения из Microsoft Store можно вернуть, установив заново оттуда же; остальные — только переустановив программу, которая их поставила. ") +
+                "Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора).\n\n" +
                 "Если какое-то из них вам нужно — нажмите «Нет» и удаляйте приложения по одному."))
             return;
 
@@ -981,11 +990,18 @@ public sealed class ProgramsViewModel : PageViewModel
         {
             ReportProgress(-1, "Создаём точку восстановления…");
             await RestorePoint.TryCreateAsync("Удаление предустановленных приложений", ct);
-            for (var i = 0; i < targets.Count; i++)
+            for (var i = 0; i < targets.Count && !ct.IsCancellationRequested; i++)
             {
-                ct.ThrowIfCancellationRequested();
                 ReportProgress(100.0 * i / targets.Count, $"Удаляем «{targets[i].DisplayName}» ({i + 1} из {targets.Count})…");
-                var r = await _service.RemoveStoreAppAsync(targets[i], ct);
+                (bool Success, string Message) r;
+                try
+                {
+                    r = await _service.RemoveStoreAppAsync(targets[i], ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    break; // "Отмена": stop here, but still refresh the list and report what was removed
+                }
                 (r.Success ? removed : failed).Add(r.Success ? targets[i].DisplayName : $"{targets[i].DisplayName}: {r.Message}");
             }
             ReportProgress(-1, "Обновляем список приложений…");
@@ -997,7 +1013,8 @@ public sealed class ProgramsViewModel : PageViewModel
         var text = $"Удалено {Format.Count(removed.Count, "приложение", "приложения", "приложений")}.";
         if (failed.Count > 0)
             text += "\n\nНе удалось удалить:\n" + string.Join("\n", failed.Take(8));
-        text += "\n\nВернуть любое приложение можно через Microsoft Store.";
+        if (removed.Count > 0)
+            text += "\n\nПриложения из Microsoft Store можно вернуть через Microsoft Store.";
         Dialogs.Info("Удаление предустановленных приложений", text);
     }
 

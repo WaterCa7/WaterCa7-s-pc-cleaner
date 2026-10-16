@@ -75,6 +75,9 @@ public sealed class UninstallEntryValues
     public bool SystemComponent { get; init; }
     public string? ParentKeyName { get; init; }
     public string? ReleaseType { get; init; }
+
+    /// <summary>Cached setup of a WiX Burn bundle (it can uninstall the bundle even when the custom uninstaller is gone).</summary>
+    public string? BundleCachePath { get; init; }
 }
 
 /// <summary>A classic (Win32) program from the Uninstall registry keys.</summary>
@@ -118,6 +121,9 @@ public sealed class InstalledProgram : ObservableObject
     /// <summary>The launch for the standard (interactive) uninstall, or null if none could be built.</summary>
     public UninstallLaunch? Launch { get; init; }
 
+    /// <summary>The launch for QuietUninstallString (built at scan time), or null.</summary>
+    public UninstallLaunch? QuietLaunch { get; init; }
+
     // ---- derived ----
 
     public string RegistryKeyPath => $@"{Source.HiveShortName}\{Source.SubKeyPath}\{KeyName}";
@@ -128,7 +134,8 @@ public sealed class InstalledProgram : ObservableObject
 
     public bool IsMsi => Launch?.IsMsi == true;
 
-    public bool HasQuietUninstall => !string.IsNullOrWhiteSpace(QuietUninstallString);
+    /// <summary>"Тихое удаление" is offered only when the installer left a usable QuietUninstallString.</summary>
+    public bool HasQuietUninstall => QuietLaunch is not null;
 
     public bool CanUninstall => !IsBroken && Launch is not null;
 
@@ -258,18 +265,11 @@ public sealed class InstalledProgram : ObservableObject
     /// <summary>Text used by the search box.</summary>
     public string SearchText => $"{DisplayName} {Publisher} {Version} {InstallLocation}";
 
-    /// <summary>Main executable for a VirusTotal lookup: DisplayIcon .exe if it exists, else the uninstaller.</summary>
-    public string? MainExecutable
-    {
-        get
-        {
-            var icon = ProgramRules.ParseIconPath(DisplayIcon).Path;
-            if (icon is not null && icon.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(icon))
-                return icon;
-            var exe = Launch?.IsMsi == false ? Launch.FileName : null;
-            return exe is not null && File.Exists(exe) ? exe : null;
-        }
-    }
+    /// <summary>
+    /// Main executable for a VirusTotal lookup (DisplayIcon .exe, else the uninstaller), found once at scan time:
+    /// command CanExecute checks run on the UI thread all the time and must not touch the disk.
+    /// </summary>
+    public string? MainExecutable { get; init; }
 
     /// <summary>Recomputes the badge list after flags or trust change.</summary>
     public void RefreshBadges()
@@ -397,6 +397,15 @@ public sealed class StoreApp : ObservableObject
             ProtectReason ?? "Нужен Windows или другим приложениям."),
         _ => null,
     };
+
+    /// <summary>Signed by Microsoft Store: after removal it can be installed again from the Store.</summary>
+    public bool IsFromStore => string.Equals(SignatureKind, "Store", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>How the user gets the app back after removal (only Store-signed packages come back from the Store).</summary>
+    public string UndoText => IsFromStore
+        ? "Вернуть приложение можно в любой момент — установите его заново из Microsoft Store."
+        : "Это приложение установлено не из Microsoft Store (его поставила другая программа или MSIX-файл), поэтому " +
+          "вернуть его через Store не получится — только переустановив программу, которая его установила.";
 
     public string SourceText => SignatureKind switch
     {

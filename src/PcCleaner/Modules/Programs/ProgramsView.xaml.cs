@@ -37,12 +37,43 @@ public partial class ProgramsView : UserControl
             grid.Dispatcher.BeginInvoke(() => grid.ScrollIntoView(item), DispatcherPriority.Background);
     }
 
-    /// <summary>On a narrow window the summary cards drop their icons so the titles stay readable.</summary>
+    /// <summary>
+    /// On a narrow window the summary cards drop their icons so the titles stay readable.
+    /// On a low window the action buttons of the details panels scroll together with the details: pinned, they would
+    /// leave only a few lines for the explanation.
+    /// </summary>
     private void View_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         var visibility = e.NewSize.Width < 900 ? Visibility.Collapsed : Visibility.Visible;
         foreach (var icon in new[] { CardIcon0, CardIcon1, CardIcon2, CardIcon3 })
             icon.Visibility = visibility;
+
+        var compact = e.NewSize.Height < CompactHeight;
+        PlaceActions(ProgramDetailsGrid, ProgramDetailsStack, ProgramActions, compact);
+        PlaceActions(StoreDetailsGrid, StoreDetailsStack, StoreActions, compact);
+    }
+
+    private const double CompactHeight = 600;
+
+    private static void PlaceActions(Grid detailsGrid, StackPanel detailsStack, Border actions, bool insideScroll)
+    {
+        if (insideScroll == ReferenceEquals(actions.Parent, detailsStack))
+            return;
+        if (actions.Parent is Panel current)
+            current.Children.Remove(actions);
+        if (insideScroll)
+        {
+            actions.Padding = new Thickness(0, 12, 0, 0);
+            actions.Margin = new Thickness(0, 8, 0, 0);
+            detailsStack.Children.Add(actions);
+        }
+        else
+        {
+            actions.Padding = new Thickness(16, 12, 16, 8);
+            actions.Margin = new Thickness(0);
+            Grid.SetRow(actions, 1);
+            detailsGrid.Children.Add(actions);
+        }
     }
 
     /// <summary>Hides secondary columns when the grid gets narrow (minimum window size).</summary>

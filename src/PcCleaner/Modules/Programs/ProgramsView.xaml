@@ -123,7 +123,7 @@
         <Style x:Key="SmallGhost" TargetType="Button" BasedOn="{StaticResource GhostButton}">
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="Margin" Value="0,0,4,4" />
-            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Padding" Value="6,5" />
         </Style>
     </UserControl.Resources>
 
@@ -444,10 +444,10 @@
                                                Text="Программы удаляются только их собственным деинсталлятором — так же, как через «Параметры Windows»." />
                                 </StackPanel>
 
-                                <Grid Visibility="{Binding HasSelectedProgram, Converter={StaticResource BoolToVis}}">
+                                <Grid x:Name="ProgramDetailsGrid" Visibility="{Binding HasSelectedProgram, Converter={StaticResource BoolToVis}}">
                                     <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                        <StackPanel Margin="16,16,16,8">
+                                        <StackPanel x:Name="ProgramDetailsStack" Margin="16,16,16,8">
                                             <!-- Header -->
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
@@ -553,7 +553,7 @@
                                         </StackPanel>
                                     </ScrollViewer>
                                     <!-- Actions (always visible) -->
-                                    <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
+                                    <Border x:Name="ProgramActions" Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
                                         <StackPanel>
                                             <Button Style="{StaticResource DangerButton}" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                                                     Command="{Binding UninstallCommand}"
@@ -772,13 +772,13 @@
                                                HorizontalAlignment="Center" />
                                     <TextBlock Style="{StaticResource H3}" Text="Выберите приложение" Margin="0,10,0,4" HorizontalAlignment="Center" />
                                     <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
-                                               Text="Приложения удаляются только для вашей учётной записи, и любое из них можно вернуть через Microsoft Store." />
+                                               Text="Приложения удаляются только для вашей учётной записи. Те, что установлены из Microsoft Store, можно в любой момент вернуть оттуда же." />
                                 </StackPanel>
 
-                                <Grid Visibility="{Binding HasSelectedStoreApp, Converter={StaticResource BoolToVis}}">
+                                <Grid x:Name="StoreDetailsGrid" Visibility="{Binding HasSelectedStoreApp, Converter={StaticResource BoolToVis}}">
                                     <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                        <StackPanel Margin="16,16,16,8">
+                                        <StackPanel x:Name="StoreDetailsStack" Margin="16,16,16,8">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
@@ -850,10 +850,13 @@
 
 
                                             <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,4,0,0"
-                                                       Text="Удаление касается только вашей учётной записи. Вернуть приложение можно в любой момент через Microsoft Store." />
+                                                       Visibility="{Binding SelectedStoreApp.CanRemove, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <Run Text="Удаление касается только вашей учётной записи." />
+                                                <Run Text="{Binding SelectedStoreApp.UndoText, Mode=OneWay}" />
+                                            </TextBlock>
                                         </StackPanel>
                                     </ScrollViewer>
-                                    <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
+                                    <Border x:Name="StoreActions" Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="16,12,16,8">
                                         <StackPanel>
                                             <Button Style="{StaticResource DangerButton}" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                                                     Command="{Binding RemoveStoreAppCommand}"

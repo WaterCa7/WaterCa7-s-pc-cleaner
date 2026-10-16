@@ -28,6 +28,7 @@ public static class StoreAppCatalog
     private const string CoreAppReason = "Стандартное приложение Windows — лучше оставить.";
     private const string DriverReason = "Панель управления драйвером устройства — без неё не получится менять его настройки.";
     private const string LanguageReason = "Языковой пакет интерфейса Windows — без него сменится язык системы.";
+    private const string OfficeReason = "Часть Microsoft Office: устанавливается и удаляется вместе с ним. Без компонента Office может работать с ошибками.";
 
     /// <summary>Order matters: the first matching entry wins (protected entries go first).</summary>
     private static readonly Entry[] Entries =
@@ -50,6 +51,11 @@ public static class StoreAppCatalog
         new("Microsoft.NET.*", StoreAppKind.Protected, "Среда .NET", null, RuntimeReason),
         new("Microsoft.WindowsAppRuntime*", StoreAppKind.Protected, "Среда выполнения Windows App SDK", null, RuntimeReason),
         new("MicrosoftCorporationII.WinAppRuntime*", StoreAppKind.Protected, "Среда выполнения Windows App SDK", null, RuntimeReason),
+        new("Microsoft.WinAppRuntime*", StoreAppKind.Protected, "Среда выполнения Windows App SDK", null, RuntimeReason),
+        // Parts of Microsoft 365 (Office) installed by its own setup: removing them breaks Office, and the Store cannot bring them back.
+        new("Microsoft.Office.ActionsServer", StoreAppKind.Protected, "Компонент Microsoft 365 (Office)", null, OfficeReason),
+        new("Microsoft.OfficePushNotificationUtility", StoreAppKind.Protected, "Уведомления Microsoft 365 (Office)", null, OfficeReason),
+        new("aimgr", StoreAppKind.Protected, "Локальный ИИ-менеджер Microsoft 365", null, OfficeReason),
         new("Microsoft.WidgetsPlatformRuntime", StoreAppKind.Protected, "Среда выполнения виджетов", null, RuntimeReason),
         new("Microsoft.DirectXRuntime", StoreAppKind.Protected, "DirectX", null, RuntimeReason),
         new("Microsoft.ApplicationCompatibilityEnhancements", StoreAppKind.Protected, "Улучшения совместимости приложений", null, RuntimeReason),
@@ -63,6 +69,7 @@ public static class StoreAppCatalog
         new("Microsoft.LanguageExperiencePack*", StoreAppKind.Protected, null, null, LanguageReason),
         new("*VideoExtension*", StoreAppKind.Protected, null, null, CodecReason),
         new("*ImageExtension*", StoreAppKind.Protected, null, null, CodecReason),
+        new("*AudioExtension*", StoreAppKind.Protected, null, null, CodecReason),
         new("Microsoft.WebMediaExtensions", StoreAppKind.Protected, "Расширения для веб-медиа", null, CodecReason),
         new("Microsoft.MicrosoftEdge*", StoreAppKind.Protected, "Microsoft Edge", "Браузер, встроенный в Windows.", "Часть Windows: от Edge зависят виджеты, справка и многие программы."),
         new("NVIDIACorp.NVIDIAControlPanel", StoreAppKind.Protected, "Панель управления NVIDIA", null, DriverReason),
@@ -122,8 +129,10 @@ public static class StoreAppCatalog
         new("*RoyalRevolt*", StoreAppKind.Bloatware, "Royal Revolt", "Игра с покупками внутри."),
         new("*Disney*", StoreAppKind.Bloatware, "Disney+", "Видеосервис (предустановлен)."),
         new("*TikTok*", StoreAppKind.Bloatware, "TikTok", "Приложение соцсети (предустановлено)."),
-        new("*Facebook*", StoreAppKind.Bloatware, "Facebook", "Приложение соцсети (предустановлено)."),
+        // Instagram and Messenger are published as "Facebook.*": they must be matched before "*Facebook*".
         new("*Instagram*", StoreAppKind.Bloatware, "Instagram", "Приложение соцсети (предустановлено)."),
+        new("Facebook.317180B0BB486", StoreAppKind.Bloatware, "Messenger", "Мессенджер Facebook (предустановлен)."),
+        new("*Facebook*", StoreAppKind.Bloatware, "Facebook", "Приложение соцсети (предустановлено)."),
         new("*Twitter*", StoreAppKind.Bloatware, "Twitter (X)", "Приложение соцсети (предустановлено)."),
         new("*LinkedInforWindows*", StoreAppKind.Bloatware, "LinkedIn", "Приложение соцсети (предустановлено)."),
         new("*Netflix*", StoreAppKind.Bloatware, "Netflix", "Видеосервис (предустановлен)."),

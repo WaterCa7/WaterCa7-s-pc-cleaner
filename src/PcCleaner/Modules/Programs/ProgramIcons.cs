@@ -32,9 +32,10 @@ internal static class ProgramIcons
             return ExtractIcon(path, index);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or COMException
-                                       or NotSupportedException or InvalidOperationException or ExternalException)
+                                       or NotSupportedException or InvalidOperationException or ExternalException
+                                       or FileFormatException or OverflowException)
         {
-            return null;
+            return null; // a damaged image must not stop loading the other icons and sizes
         }
     }
 

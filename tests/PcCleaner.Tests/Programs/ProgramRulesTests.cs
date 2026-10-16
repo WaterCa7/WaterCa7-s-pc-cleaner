@@ -332,6 +332,142 @@ public class ProgramRulesTests
         Assert.Null(ProgramRules.NormalizeFolder("  "));
     }
 
+    // ---------------------------------------------------------------- review regressions
+
+    [Theory]
+    [InlineData("MsiExec.exe /I" + Guid1 + " /qn")]
+    [InlineData("MsiExec.exe /i " + Guid1 + " /quiet")]
+    [InlineData("MsiExec.exe /fa" + Guid1 + " /qn")]
+    [InlineData("MsiExec.exe /package " + Guid1 + " /qn")]
+    public void BuildQuietLaunch_Msi_NeverInstallsOrRepairs(string quiet)
+    {
+        var launch = ProgramRules.BuildQuietLaunch(quiet);
+        Assert.NotNull(launch);
+        Assert.True(launch!.IsMsi);
+        Assert.Equal(ProgramRules.MsiExecPath, launch.FileName);
+        Assert.StartsWith("/x " + Guid1, launch.Arguments, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotMatch(@"(?i)(^|\s)[/-](i|f[a-z]*|package)(\s|\{|$)", launch.Arguments);
+    }
+
+    [Fact]
+    public void BuildQuietLaunch_Msi_KeepsRestartOptions_RefusesAmbiguousCommands()
+    {
+        Assert.Equal("/x " + Guid1 + " /qn /forcerestart", ProgramRules.BuildQuietLaunch("MsiExec.exe /X" + Guid1 + " /qn /forcerestart")!.Arguments);
+        Assert.Equal("/x " + Guid1 + " /quiet /norestart", ProgramRules.BuildQuietLaunch("msiexec.exe /x \"" + Guid1 + "\" /quiet /norestart")!.Arguments);
+        Assert.Null(ProgramRules.BuildQuietLaunch(@"msiexec /i C:\Setup\product.msi /qn"));
+        Assert.Null(ProgramRules.BuildQuietLaunch("MsiExec.exe /X" + Guid1 + @" /i C:\other.msi /qn"));
+        Assert.Equal("/x " + Guid1, ProgramRules.BuildLaunch("MsiExec.exe /fa" + Guid1, false, "K")!.Arguments);
+    }
+
+    [Fact]
+    public void IsBroken_ProgramExeFromDisplayIconStillThere_IsNotBroken()
+    {
+        // EA app: the uninstaller and InstallLocation are gone, but the program itself is installed.
+        var root = TestEnvironment.NewTempDir("icon");
+        var exe = Path.Combine(root, "EADesktop.exe");
+        File.WriteAllText(exe, "x");
+        var v = new UninstallEntryValues
+        {
+            KeyName = "EA", DisplayName = "EA app",
+            UninstallString = $"\"{Path.Combine(root, "gone", "EAInstaller.exe")}\" /uninstall",
+            DisplayIcon = $"\"{exe}\",0",
+        };
+        Assert.False(ProgramRules.IsBroken(v));
+        Assert.True(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "EA", DisplayName = "EA app", UninstallString = v.UninstallString,
+            DisplayIcon = Path.Combine(root, "gone", "EADesktop.exe"),
+        }));
+    }
+
+    [Fact]
+    public void IsBroken_ConservativeForBundlesPackageCacheAndRuntimes()
+    {
+        var root = TestEnvironment.NewTempDir("cache");
+        var missing = $"\"{Path.Combine(root, "missing", "setup.exe")}\" /uninstall";
+        Assert.False(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Bundle", DisplayName = "Some Bundle", UninstallString = missing,
+            BundleCachePath = Path.Combine(root, "missing", "setup.exe"),
+        }));
+        Assert.False(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Cache", DisplayName = "Cached", UninstallString = $"\"{Path.Combine(root, "Package Cache", "{X}", "setup.exe")}\" /uninstall",
+        }));
+        Assert.False(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Vc", DisplayName = "Microsoft Visual C++ 2015-2022 Redistributable (x64)", Publisher = "Microsoft Corporation",
+            UninstallString = missing,
+        }));
+    }
+
+    [Fact]
+    public void WithBundleFallback_UsesCachedSetupOnlyWhenTheUninstallerIsGone()
+    {
+        var root = TestEnvironment.NewTempDir("bundle");
+        var cache = Path.Combine(root, "Package Cache", "{B}", "bundle.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
+        File.WriteAllText(cache, "x");
+        var present = Path.Combine(root, "uninst.exe");
+        File.WriteAllText(present, "x");
+
+        var gone = ProgramRules.BuildLaunch($"\"{Path.Combine(root, "nope", "u.exe")}\"", false, "B");
+        var fallback = ProgramRules.WithBundleFallback(gone, cache, quiet: false);
+        Assert.Equal(cache, fallback!.FileName);
+        Assert.Equal("/uninstall", fallback.Arguments);
+        Assert.Equal("/uninstall /quiet", ProgramRules.WithBundleFallback(gone, cache, quiet: true)!.Arguments);
+
+        var ok = ProgramRules.BuildLaunch($"\"{present}\" /S", false, "B");
+        Assert.Same(ok, ProgramRules.WithBundleFallback(ok, cache, quiet: false));
+        var msi = ProgramRules.BuildLaunch("MsiExec.exe /X" + Guid1, false, "B");
+        Assert.Same(msi, ProgramRules.WithBundleFallback(msi, cache, quiet: false));
+        Assert.Same(gone, ProgramRules.WithBundleFallback(gone, Path.Combine(root, "missing.exe"), quiet: false));
+        Assert.Same(gone, ProgramRules.WithBundleFallback(gone, @"\\server\share\bundle.exe", quiet: false));
+    }
+
+    [Fact]
+    public void FindMainExecutable_PrefersExistingLocalProgramExe()
+    {
+        var root = TestEnvironment.NewTempDir("main");
+        var app = Path.Combine(root, "app.exe");
+        var uninst = Path.Combine(root, "unins000.exe");
+        File.WriteAllText(app, "x");
+        File.WriteAllText(uninst, "x");
+        var launch = ProgramRules.BuildLaunch($"\"{uninst}\"", false, "A");
+
+        Assert.Equal(app, ProgramRules.FindMainExecutable($"\"{app}\",0", launch));
+        Assert.Equal(uninst, ProgramRules.FindMainExecutable(Path.Combine(root, "icon.ico"), launch));
+        Assert.Null(ProgramRules.FindMainExecutable(@"\\server\share\app.exe", null, _ => true));
+        var rundll = Path.Combine(Environment.SystemDirectory, "rundll32.exe");
+        Assert.Null(ProgramRules.FindMainExecutable(rundll, null));
+        Assert.Null(ProgramRules.FindMainExecutable(null, ProgramRules.BuildLaunch("MsiExec.exe /X" + Guid1, false, "A")));
+    }
+
+    [Fact]
+    public void AnalyzeProgram_PerUserAppDataFolderIsNormal_TempIsNoted()
+    {
+        var discord = ProgramRules.AnalyzeProgram("Discord", "Discord Inc.",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Discord"));
+        Assert.Equal(0, discord.Score);
+
+        var temp = ProgramRules.AnalyzeProgram("Odd Tool", "Odd Vendor", Path.Combine(Path.GetTempPath(), "oddtool"));
+        Assert.Contains(temp.Reasons, r => r.StartsWith("Установлена во временную папку"));
+        Assert.DoesNotContain(temp.Reasons, r => r.Contains("Запускается") || r.Contains("Установлена из"));
+
+        var amigo = ProgramRules.AnalyzeProgram("Амиго", "Mail.Ru", null);
+        Assert.True(amigo.IsSuspicious);
+    }
+
+    [Fact]
+    public void IsTooBroadToMeasure_DownloadsAndPublic()
+    {
+        Assert.True(ProgramRules.IsTooBroadToMeasure(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")));
+        var publicDir = Environment.GetEnvironmentVariable("PUBLIC");
+        if (!string.IsNullOrEmpty(publicDir))
+            Assert.True(ProgramRules.IsTooBroadToMeasure(publicDir));
+        Assert.False(ProgramRules.IsTooBroadToMeasure(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "PortableTool")));
+    }
+
     [Theory]
     [InlineData("chrome", "Google Chrome Google LLC 120.0", true)]
     [InlineData("google llc", "Google Chrome Google LLC 120.0", true)]

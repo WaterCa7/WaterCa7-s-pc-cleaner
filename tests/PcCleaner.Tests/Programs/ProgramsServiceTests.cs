@@ -336,6 +336,82 @@ public sealed class ProgramsServiceTests : IDisposable
         Assert.DoesNotContain(service.ScanPrograms(CancellationToken.None).Programs, p => p.IsBroken);
     }
 
+    // ---------------------------------------------------------------- review regressions
+
+    [Fact]
+    public async Task DeleteEntry_ProgramReinstalledAfterScan_IsNotDeleted()
+    {
+        CreateStandardEntries();
+        var service = CreateService();
+        var broken = service.ScanPrograms(CancellationToken.None).Programs.Single(p => p.DisplayName == "Broken App");
+
+        // The user reinstalls the program while the list is open: its uninstaller is back.
+        var uninstaller = Path.Combine(_work, "Gone", "uninstall.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(uninstaller)!);
+        File.WriteAllText(uninstaller, "fake - never executed");
+
+        var result = await service.DeleteEntryAsync(broken, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Null(result.BackupFile);
+        Assert.True(service.EntryExists(broken));
+    }
+
+    [Fact]
+    public async Task DeleteEntry_KeyNameWithQuote_IsRefused()
+    {
+        var program = ProgramsService.CreateProgram(
+            new UninstallEntryValues { KeyName = "A\" \"B", DisplayName = "Quote", UninstallString = @"""C:\nope\u.exe""" }, MainSource, DateTime.Now);
+        var result = await CreateService().DeleteEntryAsync(program, CancellationToken.None);
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public async Task DeleteEntries_Cancelled_ReportsInsteadOfThrowing()
+    {
+        CreateStandardEntries();
+        var service = CreateService();
+        var broken = service.ScanPrograms(CancellationToken.None).Programs.Where(p => p.IsBroken).ToList();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var (deleted, failures) = await service.DeleteEntriesAsync(broken, null, cts.Token);
+
+        Assert.Equal(0, deleted);
+        Assert.Empty(failures);
+        Assert.All(broken, b => Assert.True(service.EntryExists(b)));
+    }
+
+    [Fact]
+    public void Scan_BuildsQuietLaunchMainExeAndBundleFallbackOnce()
+    {
+        var cache = Path.Combine(_work, "Package Cache", "{B}", "bundle.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
+        File.WriteAllText(cache, "fake - never executed");
+        CreateStandardEntries();
+        AddEntry(MainPath, "Bundle", new()
+        {
+            ["DisplayName"] = "Some Bundle",
+            ["Publisher"] = "Bundle Vendor",
+            ["UninstallString"] = $"\"{Path.Combine(_work, "gone-bundle", "setup.exe")}\" /uninstall",
+            ["QuietUninstallString"] = $"\"{Path.Combine(_work, "gone-bundle", "setup.exe")}\" /uninstall /quiet",
+            ["BundleCachePath"] = cache,
+        });
+        var programs = CreateService().ScanPrograms(CancellationToken.None).Programs.ToDictionary(p => p.DisplayName);
+
+        var bundle = programs["Some Bundle"];
+        Assert.False(bundle.IsBroken);
+        Assert.Equal(cache, bundle.Launch!.FileName);
+        Assert.Equal("/uninstall", bundle.Launch.Arguments);
+        Assert.Equal("/uninstall /quiet", bundle.QuietLaunch!.Arguments);
+
+        var good = programs["Good App"];
+        Assert.NotNull(good.QuietLaunch);
+        Assert.Equal(_uninstallerPath, good.MainExecutable);
+        Assert.False(programs["Амиго"].HasQuietUninstall);
+        Assert.False(programs["Амиго"].CanQuietUninstall);
+    }
+
     [Fact]
     public async Task ScanStoreApps_ClassifiesAndSorts()
     {
