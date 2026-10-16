@@ -123,11 +123,25 @@
                     <StackPanel Margin="0,0,4,0">
                         <!-- Loading placeholder -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,12"
-                                Visibility="{Binding HasDrives, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                                Visibility="{Binding ShowDrivesLoading, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <TextBlock Text="Загружаем сведения о дисках…" Style="{StaticResource Muted}" Margin="0,0,0,8" />
                                 <ProgressBar IsIndeterminate="True" />
                             </StackPanel>
+                        </Border>
+
+                        <!-- No drives found -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                                Visibility="{Binding ShowNoDrives, Converter={StaticResource BoolToVis}}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="20"
+                                           Foreground="{StaticResource WarningBrush}" VerticalAlignment="Top" Margin="0,2,12,0" />
+                                <StackPanel>
+                                    <TextBlock Text="Не удалось получить сведения о дисках" Style="{StaticResource H3}" />
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                               Text="Windows не сообщила ни об одном готовом локальном диске. Нажмите «Обновить» справа вверху, чтобы попробовать ещё раз." />
+                                </StackPanel>
+                            </DockPanel>
                         </Border>
 
                         <!-- Drive cards -->
@@ -146,7 +160,8 @@
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
+                                                <!-- fills the extra height so the buttons line up at the bottom of every card -->
+                                                <RowDefinition Height="*" />
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
 

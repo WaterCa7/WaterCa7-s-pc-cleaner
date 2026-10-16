@@ -143,9 +143,18 @@ internal static class SystemTools
             {
                 // already exited
             }
+            // Let the readers finish on the closed pipes (and observe their faults: an unobserved faulted task
+            // would be reported as an application error later).
+            var readers = Task.WhenAll(reader, errors);
+            _ = readers.ContinueWith(t => _ = t.Exception, CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            await Task.WhenAny(readers, Task.Delay(TimeSpan.FromSeconds(3), CancellationToken.None)).ConfigureAwait(false);
             if (ct.IsCancellationRequested)
                 throw;
-            return new ProcessResult(-1, output.ToString(), "", TimedOut: true);
+            string partial;
+            lock (output)
+                partial = output.ToString();
+            return new ProcessResult(-1, partial, "", TimedOut: true);
         }
 
         await reader.ConfigureAwait(false);
@@ -223,6 +232,56 @@ internal static class SystemTools
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHQueryRecycleBinW")]
     private static extern int SHQueryRecycleBin32(string? pszRootPath, ref SHQUERYRBINFO32 pSHQueryRBInfo);
+}
+
+/// <summary>
+/// Resolves the real location of an existing file or folder (through junctions, symbolic links, SUBST drives and
+/// 8.3 short names) with GetFinalPathNameByHandle. Read-only.
+/// </summary>
+internal static class FinalPaths
+{
+    private const uint FileShareAll = 0x1 | 0x2 | 0x4;
+    private const uint OpenExisting = 3;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+
+    /// <summary>The final path ("C:\Windows\..."), or null if the path does not exist or cannot be opened.</summary>
+    public static string? Resolve(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        // Access 0: only metadata is queried, so files locked by other programs can still be resolved.
+        using var handle = CreateFileW(path, 0, FileShareAll, IntPtr.Zero, OpenExisting, FileFlagBackupSemantics, IntPtr.Zero);
+        if (handle.IsInvalid)
+            return null;
+        var buffer = new char[512];
+        while (true)
+        {
+            var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
+            if (length == 0)
+                return null;
+            if (length < buffer.Length)
+                return Normalize(new string(buffer, 0, (int)length));
+            buffer = new char[length + 1];
+        }
+    }
+
+    /// <summary>"\\?\C:\x" -> "C:\x", "\\?\UNC\srv\share\x" -> "\\srv\share\x".</summary>
+    internal static string Normalize(string finalPath)
+    {
+        if (finalPath.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+            return @"\\" + finalPath[8..];
+        if (finalPath.StartsWith(@"\\?\", StringComparison.Ordinal))
+            return finalPath[4..];
+        return finalPath;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string lpFileName, uint dwDesiredAccess,
+        uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle hFile, [Out] char[] lpszFilePath,
+        uint cchFilePath, uint dwFlags);
 }
 
 /// <summary>

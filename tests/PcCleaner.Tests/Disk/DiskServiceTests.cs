@@ -35,6 +35,64 @@ public class DiskServiceTests
     }
 
     [Fact]
+    public void Protected_file_reached_through_a_junction_is_still_protected_and_never_recycled()
+    {
+        using var tree = new DiskTestTree("protect-link");
+        var windows = tree.Dir("Windows");
+        var system = tree.File(@"Windows\explorer.exe", 50);
+        var link = tree.Junction(@"Users\U\Shortcut", windows);
+        var viaLink = Path.Combine(link, "explorer.exe");
+        var called = new List<string>();
+        var service = new DiskService(new DiskEnvironment
+        {
+            SystemDriveRoot = tree.Root,
+            // the real location, as Windows reports it (the temp path may contain 8.3 short names)
+            ProtectedDirs = new[] { FinalPaths.Resolve(windows)! },
+            Recycler = path =>
+            {
+                called.Add(path);
+                return true;
+            },
+        });
+
+        Assert.True(File.Exists(viaLink));
+        Assert.True(service.IsProtectedPath(viaLink));
+        Assert.True(service.IsProtectedPath(system));
+
+        var result = service.RecycleFiles(new[] { (viaLink, 50L) });
+
+        Assert.Empty(called);
+        Assert.Empty(result.Recycled);
+        Assert.Contains(result.Skipped, s => s.Path == viaLink && s.Reason.Contains("системный"));
+        Assert.True(File.Exists(system));
+    }
+
+    [Theory]
+    [InlineData(@"\\?\C:\Windows\explorer.exe", @"C:\Windows\explorer.exe")]
+    [InlineData(@"\\?\UNC\server\share\a.txt", @"\\server\share\a.txt")]
+    [InlineData(@"C:\plain", @"C:\plain")]
+    public void Final_path_prefixes_are_removed(string raw, string expected)
+        => Assert.Equal(expected, FinalPaths.Normalize(raw));
+
+    [Fact]
+    public void Final_path_of_missing_file_is_null()
+    {
+        TestEnvironment.Init();
+        Assert.Null(FinalPaths.Resolve(Path.Combine(TestEnvironment.DataDir, "missing-" + Guid.NewGuid().ToString("N"), "x.bin")));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\U", @"C:\", true)] // a drive root keeps its separator
+    [InlineData(@"C:\", @"C:\", true)]
+    [InlineData(@"D:\Data", @"C:\", false)]
+    [InlineData(@"C:\Users\U\Videos", @"C:\Users\U", true)]
+    [InlineData(@"C:\Users\U", @"C:\Users\U\", true)]
+    [InlineData(@"C:\Users\UX", @"C:\Users\U", false)]
+    [InlineData(@"C:\Windows\x.dll", @"", false)]
+    public void Is_under_handles_drive_roots_and_name_prefixes(string path, string dir, bool expected)
+        => Assert.Equal(expected, DiskService.IsUnder(path, dir));
+
+    [Fact]
     public void Real_default_environment_protects_windows_and_program_files()
     {
         var service = new DiskService();

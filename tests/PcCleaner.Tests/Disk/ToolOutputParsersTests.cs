@@ -173,4 +173,18 @@ public class ToolOutputParsersTests
         Assert.Contains("100% complete", summary);
         Assert.Contains("The operation completed successfully.", summary);
     }
+
+    [Fact]
+    public void Defrag_summary_drops_the_russian_banner()
+    {
+        const string output = "Оптимизация дисков (Майкрософт)\r\n(c) Корпорация Майкрософт (Microsoft Corporation).\r\n\r\n" +
+                              "Вызов повторной оптимизации на (C:)...\r\nПовторная оптимизация: выполнено 100%.\r\n\r\n" +
+                              "Операция успешно завершена.\r\n";
+
+        var summary = DiskService.SummarizeDefragOutput(output);
+
+        Assert.DoesNotContain("Майкрософт", summary);
+        Assert.StartsWith("Вызов повторной оптимизации", summary);
+        Assert.Contains("Операция успешно завершена.", summary);
+    }
 }

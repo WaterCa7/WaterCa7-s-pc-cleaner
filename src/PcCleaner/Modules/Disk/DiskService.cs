@@ -360,10 +360,41 @@ public sealed class DiskService : IHealthContributor
 
     internal List<FileGroup> FindOldDownloads(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_env.DownloadsDir))
+        var downloads = _env.DownloadsDir;
+        if (string.IsNullOrWhiteSpace(downloads))
             return new List<FileGroup>();
-        var files = FileFinder.Find(_env.DownloadsDir, (name, _) => DownloadsAdvisor.KindOf(name) is not null, 4, ct);
+        // Downloads redirected to a whole drive ("D:\"): look at its own files only, not into games and programs on it.
+        var root = Path.GetPathRoot(downloads);
+        var isDriveRoot = !string.IsNullOrEmpty(root) && string.Equals(Path.TrimEndingDirectorySeparator(downloads),
+            Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
+        var files = FileFinder.Find(downloads, (name, _) => DownloadsAdvisor.KindOf(name) is not null, isDriveRoot ? 0 : 4, ct);
+        files = DownloadsAdvisor.ExcludeUnpackedPrograms(files, downloads, LooksLikeProgramFolder);
         return DownloadsAdvisor.GroupOld(files, _env.Now());
+    }
+
+    /// <summary>
+    /// True if a folder looks like an installed / unpacked program: it holds .dll files or more than one .exe.
+    /// Unreadable folders count as programs (they are then never suggested for deletion).
+    /// </summary>
+    internal static bool LooksLikeProgramFolder(string dir)
+    {
+        try
+        {
+            var options = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false, AttributesToSkip = 0 };
+            var exe = 0;
+            foreach (var name in Directory.EnumerateFiles(dir, "*", options))
+            {
+                if (name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && ++exe > 1)
+                    return true;
+            }
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return true;
+        }
     }
 
     internal List<FoundFile> FindBigVideos(CancellationToken ct)
@@ -688,8 +719,9 @@ public sealed class DiskService : IHealthContributor
             .Select(l => l.TrimEnd('\r').TrimEnd())
             .Where(l => l.Trim().Length > 0)
             .ToList();
-        // drop the copyright banner
+        // drop the copyright banner ("Microsoft Drive Optimizer" / "Оптимизация дисков (Майкрософт)")
         lines = lines.SkipWhile(l => l.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) ||
+                                     l.Contains("Майкрософт", StringComparison.OrdinalIgnoreCase) ||
                                      l.Contains("Copyright", StringComparison.OrdinalIgnoreCase) ||
                                      l.StartsWith("(C)", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -705,7 +737,11 @@ public sealed class DiskService : IHealthContributor
         return string.Join(Environment.NewLine, kept.TakeLast(30));
     }
 
-    /// <summary>Files that must never be deleted from this page (Windows, Program Files, ProgramData, drive-root system files).</summary>
+    /// <summary>
+    /// Files that must never be deleted from this page (Windows, Program Files, ProgramData, drive-root system files).
+    /// An existing path is also checked after resolving junctions / symbolic links / SUBST drives / 8.3 names, so a
+    /// protected file reached through a link is still protected.
+    /// </summary>
     public bool IsProtectedPath(string path)
     {
         string full;
@@ -718,6 +754,14 @@ public sealed class DiskService : IHealthContributor
             return true;
         }
 
+        if (IsProtectedLexical(full))
+            return true;
+        var final = FinalPaths.Resolve(full);
+        return final is not null && !string.Equals(final, full, StringComparison.OrdinalIgnoreCase) && IsProtectedLexical(final);
+    }
+
+    private bool IsProtectedLexical(string full)
+    {
         if (_env.ProtectedDirs.Any(dir => IsUnder(full, dir)))
             return true;
 
@@ -786,8 +830,11 @@ public sealed class DiskService : IHealthContributor
         if (string.IsNullOrEmpty(dir))
             return false;
         var d = Path.TrimEndingDirectorySeparator(dir);
-        return path.Equals(d, StringComparison.OrdinalIgnoreCase) ||
-               path.StartsWith(d + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        if (path.Equals(d, StringComparison.OrdinalIgnoreCase))
+            return true;
+        // A drive root keeps its separator ("C:\"), so do not add a second one.
+        var prefix = Path.EndsInDirectorySeparator(d) ? d : d + Path.DirectorySeparatorChar;
+        return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? FirstLine(string? text)

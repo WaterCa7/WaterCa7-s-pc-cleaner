@@ -78,6 +78,47 @@ public class DownloadsAdvisorTests
     }
 
     [Fact]
+    public void Exe_files_of_unpacked_programs_are_not_old_installers()
+    {
+        using var tree = new DiskTestTree("downloads-portable");
+        var downloads = tree.Dir("Downloads");
+        var old = DateTime.Now.AddDays(-200);
+        tree.File(@"Downloads\setup.exe", 300, old);                      // a real installer
+        tree.File(@"Downloads\Installers\driver-setup.exe", 200, old);    // a lone installer in a subfolder
+        tree.File(@"Downloads\portable-tool\tool.exe", 100, old);         // unpacked program: has a .dll next to it
+        tree.File(@"Downloads\portable-tool\tool.dll", 50, old);
+        tree.File(@"Downloads\ffmpeg\bin\ffmpeg.exe", 400, old);          // unpacked program: several .exe files
+        tree.File(@"Downloads\ffmpeg\bin\ffprobe.exe", 400, old);
+        tree.File(@"Downloads\portable-tool\data.zip", 70, old);          // archives are still suggested
+
+        var service = new DiskService(new DiskEnvironment { SystemDriveRoot = tree.Root, DownloadsDir = downloads });
+        var names = service.FindOldDownloads(CancellationToken.None).SelectMany(g => g.Files).Select(f => f.Name).OrderBy(n => n);
+
+        Assert.Equal(new[] { "data.zip", "driver-setup.exe", "setup.exe" }, names);
+    }
+
+    [Fact]
+    public void Unpacked_program_filter_keeps_files_in_the_downloads_root()
+    {
+        var files = new[]
+        {
+            F("setup.exe", 1, 200, 200),
+            new FoundFile(@"C:\Users\U\Downloads\app\app.exe", 1, Now, Now),
+            new FoundFile(@"C:\Users\U\Downloads\app\readme.zip", 1, Now, Now),
+        };
+        var asked = new List<string>();
+
+        var kept = DownloadsAdvisor.ExcludeUnpackedPrograms(files, @"C:\Users\U\Downloads\", dir =>
+        {
+            asked.Add(dir);
+            return true;
+        });
+
+        Assert.Equal(new[] { "setup.exe", "readme.zip" }, kept.Select(f => f.Name));
+        Assert.Equal(new[] { @"C:\Users\U\Downloads\app" }, asked);
+    }
+
+    [Fact]
     public void Old_downloads_issue_only_above_one_gigabyte()
     {
         var service = new DiskService(new DiskEnvironment { SystemDriveRoot = @"C:\" });

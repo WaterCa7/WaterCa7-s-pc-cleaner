@@ -256,7 +256,8 @@ public sealed class FolderRow
 
     public bool IsInaccessible => Node is { IsInaccessible: true, IsLink: false };
 
-    public bool CanOpen => Node is { IsLink: false } n && n.Children.Length > 0;
+    /// <summary>A subfolder that has subfolders of its own ("Файлы в этой папке" is the current folder itself).</summary>
+    public bool CanOpen => !IsFilesEntry && Node is { IsLink: false } n && n.Children.Length > 0;
 
     public string Icon => IsFilesEntry ? "" : IsLink ? "" : "";
 

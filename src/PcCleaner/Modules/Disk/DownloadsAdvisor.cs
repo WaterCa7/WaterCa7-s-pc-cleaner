@@ -30,6 +30,39 @@ internal static class DownloadsAdvisor
     /// </summary>
     public static bool IsOlderThan(FoundFile file, DateTime now, int days) => now - file.NewestTimeLocal >= TimeSpan.FromDays(days);
 
+    /// <summary>
+    /// Drops .exe files that are part of an unpacked (portable) program rather than a downloaded installer: files in a
+    /// subfolder of Downloads that <paramref name="isProgramFolder"/> recognises (it also holds .dll files or other
+    /// programs). Deleting such a file would break the program, so it is never suggested. Files directly in Downloads
+    /// are kept.
+    /// </summary>
+    public static List<FoundFile> ExcludeUnpackedPrograms(IEnumerable<FoundFile> files, string downloadsRoot,
+        Func<string, bool> isProgramFolder)
+    {
+        var root = Path.TrimEndingDirectorySeparator(downloadsRoot);
+        var verdicts = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<FoundFile>();
+        foreach (var file in files)
+        {
+            if (!file.Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(file);
+                continue;
+            }
+            var dir = Path.GetDirectoryName(file.Path);
+            if (dir is null || string.Equals(Path.TrimEndingDirectorySeparator(dir), root, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(file);
+                continue;
+            }
+            if (!verdicts.TryGetValue(dir, out var isProgram))
+                verdicts[dir] = isProgram = isProgramFolder(dir);
+            if (!isProgram)
+                result.Add(file);
+        }
+        return result;
+    }
+
     /// <summary>Groups old installers / archives / disk images; each group is sorted by size (largest first).</summary>
     public static List<FileGroup> GroupOld(IEnumerable<FoundFile> files, DateTime now, int days = DefaultAgeDays)
     {

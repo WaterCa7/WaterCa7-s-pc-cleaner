@@ -20,6 +20,8 @@ public sealed class DiskViewModel : PageViewModel
     private readonly LocationOption _profileLocation;
 
     private bool _loadedOnce;
+    private bool _overviewAttempted;
+    private CancellationTokenSource? _refineCts;
     private DateTime _overviewLoadedAt = DateTime.MinValue;
     private Task? _overviewTask;
     private Task? _suggestionsTask;
@@ -98,8 +100,10 @@ public sealed class DiskViewModel : PageViewModel
         SearchWebCommand = new RelayCommand(p =>
         {
             var path = PathOf(p);
-            if (!string.IsNullOrEmpty(path))
-                FileTools.SearchWeb($"{Path.GetFileName(Path.TrimEndingDirectorySeparator(path))} что это за файл");
+            if (string.IsNullOrEmpty(path))
+                return;
+            var isFolder = p is FolderRow or BreadcrumbItem;
+            FileTools.SearchWeb($"{Path.GetFileName(Path.TrimEndingDirectorySeparator(path))} что это за {(isFolder ? "папка" : "файл")}");
         });
         VirusTotalCommand = new AsyncRelayCommand(p => p is LargeFileRow row ? FileTools.OpenVirusTotalAsync(row.Path) : Task.CompletedTask);
 
@@ -195,7 +199,11 @@ public sealed class DiskViewModel : PageViewModel
     public bool IsOverviewLoading
     {
         get => _isOverviewLoading;
-        private set => Set(ref _isOverviewLoading, value);
+        private set
+        {
+            if (Set(ref _isOverviewLoading, value))
+                OnDrivesStateChanged();
+        }
     }
 
     public ObservableCollection<DriveItem> Drives
@@ -206,7 +214,7 @@ public sealed class DiskViewModel : PageViewModel
             if (Set(ref _drives, value))
             {
                 OnPropertyChanged(nameof(DriveColumns));
-                OnPropertyChanged(nameof(HasDrives));
+                OnDrivesStateChanged();
             }
         }
     }
@@ -214,6 +222,19 @@ public sealed class DiskViewModel : PageViewModel
     public int DriveColumns => Drives.Count <= 1 ? 1 : 2;
 
     public bool HasDrives => Drives.Count > 0;
+
+    /// <summary>"Loading…" placeholder: no drive cards yet and the first load has not finished.</summary>
+    public bool ShowDrivesLoading => !HasDrives && (IsOverviewLoading || !_overviewAttempted);
+
+    /// <summary>Empty state: the load finished but found no ready local drive (or failed).</summary>
+    public bool ShowNoDrives => !HasDrives && _overviewAttempted && !IsOverviewLoading;
+
+    private void OnDrivesStateChanged()
+    {
+        OnPropertyChanged(nameof(HasDrives));
+        OnPropertyChanged(nameof(ShowDrivesLoading));
+        OnPropertyChanged(nameof(ShowNoDrives));
+    }
 
     public ObservableCollection<PhysicalDiskItem> PhysicalDisks
     {
@@ -444,7 +465,9 @@ public sealed class DiskViewModel : PageViewModel
         }
         finally
         {
+            _overviewAttempted = true;
             IsOverviewLoading = false;
+            OnDrivesStateChanged();
         }
     }
 
@@ -458,6 +481,8 @@ public sealed class DiskViewModel : PageViewModel
     private async Task LoadSuggestionsCoreAsync()
     {
         IsSuggestionsLoading = true;
+        if (Suggestions.Count == 0)
+            SuggestionsSummary = "Ищем, что можно освободить…";
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
@@ -469,6 +494,8 @@ public sealed class DiskViewModel : PageViewModel
         catch (Exception ex)
         {
             Log.Error("Диски: не удалось подготовить советы по месту", ex);
+            if (Suggestions.Count == 0)
+                SuggestionsSummary = "Не удалось подготовить советы — нажмите «Обновить»";
         }
         finally
         {
@@ -585,10 +612,12 @@ public sealed class DiskViewModel : PageViewModel
                 (current is null ? "" : $" — {current}"));
         }
         var result = await task;
-        ApplyAnalysis(result);
+        // The protection check resolves links (file system calls), so it runs off the UI thread.
+        var protectedFlags = await Task.Run(() => result.LargestFiles.Select(h => _service.IsProtectedPath(h.Path)).ToArray());
+        ApplyAnalysis(result, protectedFlags);
     }
 
-    private void ApplyAnalysis(SpaceAnalysisResult result)
+    private void ApplyAnalysis(SpaceAnalysisResult result, bool[] protectedFlags)
     {
         _result = result;
         _analyzedPath = result.Root.FullPath;
@@ -601,7 +630,7 @@ public sealed class DiskViewModel : PageViewModel
         }
 
         var rows = result.LargestFiles
-            .Select(h => new LargeFileRow(h, _service.IsProtectedPath(h.Path), RiskNoteFor(h)))
+            .Select((h, i) => new LargeFileRow(h, i >= protectedFlags.Length || protectedFlags[i], RiskNoteFor(h)))
             .ToList();
         foreach (var row in rows)
             row.CheckedChanged += (_, _) => UpdateSelectedFiles();
@@ -725,11 +754,15 @@ public sealed class DiskViewModel : PageViewModel
 
     private async Task RecycleWithConfirmAsync(IReadOnlyList<RecycleCandidate> files)
     {
+        if (IsBusy)
+            return; // another operation is running; the buttons are disabled anyway
         if (files.Count == 0)
         {
             Dialogs.Info("Ничего не отмечено", "Отметьте галочками файлы, которые больше не нужны.");
             return;
         }
+        // Synchronous on purpose (at most a few hundred metadata look-ups): no await before the confirmation, so no
+        // other action can start in between.
         var blocked = files.Where(f => _service.IsProtectedPath(f.Path)).ToList();
         var allowed = files.Except(blocked).ToList();
         if (allowed.Count == 0)
@@ -757,7 +790,8 @@ public sealed class DiskViewModel : PageViewModel
         if (blocked.Count > 0)
         {
             message.AppendLine();
-            message.AppendLine($"{Format.Count(blocked.Count, "системный файл", "системных файла", "системных файлов")} будет пропущено.");
+            message.AppendLine($"{Format.Count(blocked.Count, "системный файл", "системных файла", "системных файлов")} " +
+                               $"{Format.Plural(blocked.Count, "будет пропущен", "будут пропущены", "будет пропущено")}.");
         }
         message.AppendLine();
         message.AppendLine("Файлы можно будет вернуть из корзины, пока она не очищена. " +
@@ -946,7 +980,7 @@ public sealed class DiskViewModel : PageViewModel
             item.Actions.Add(new SuggestionAction("Показать в проводнике", ShowInExplorerCommand, data.WindowsOldPath));
             list.Add(item);
             if (data.WindowsOldPartial)
-                _ = RefineFolderSizeAsync(item, data.WindowsOldPath);
+                StartRefineFolderSize(item, data.WindowsOldPath);
         }
 
         if (data.RecycleBinBytes > 0)
@@ -1004,19 +1038,38 @@ public sealed class DiskViewModel : PageViewModel
             .ToList();
     }
 
-    /// <summary>Measures a big folder (Windows.old) completely in the background and updates its card.</summary>
-    private async Task RefineFolderSizeAsync(SuggestionItem item, string path)
+    /// <summary>
+    /// Measures a big folder (Windows.old) completely in the background and updates its card. A newer refresh cancels
+    /// the previous measurement, so repeated "Обновить" clicks never stack several full scans.
+    /// </summary>
+    private void StartRefineFolderSize(SuggestionItem item, string path)
+    {
+        _refineCts?.Cancel();
+        _refineCts?.Dispose();
+        _refineCts = new CancellationTokenSource();
+        _ = RefineFolderSizeAsync(item, path, _refineCts.Token);
+    }
+
+    private async Task RefineFolderSizeAsync(SuggestionItem item, string path, CancellationToken ct)
     {
         try
         {
-            var (bytes, complete) = await DiskService.MeasureFolderAsync(path, TimeSpan.FromMinutes(3), CancellationToken.None);
+            var (bytes, complete) = await DiskService.MeasureFolderAsync(path, TimeSpan.FromMinutes(3), ct);
             if (bytes > item.Bytes || complete)
                 item.SetSize(Math.Max(bytes, item.Bytes), complete ? "" : "не меньше ");
             UpdateSuggestionsSummary();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (OperationCanceledException)
+        {
+            // replaced by a newer refresh
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             Log.Warn($"Диски: не удалось измерить {path}: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Диски: ошибка при измерении {path}", ex);
         }
     }
 
@@ -1125,20 +1178,32 @@ public sealed class DiskViewModel : PageViewModel
             return;
 
         OptimizeOutcome? outcome = null;
-        var started = false;
+        var cancelled = false;
         await RunBusyAsync($"Оптимизация диска {letter}:…", async ct =>
         {
-            started = true;
-            outcome = await _service.OptimizeDriveAsync(letter, line =>
+            double lastPercent = -1;
+            try
             {
-                var percent = ToolOutputParsers.ParseProgressPercent(line);
-                ReportProgress(percent ?? -1, $"Диск {letter}: {line.Trim()}");
-            }, ct);
+                outcome = await _service.OptimizeDriveAsync(letter, line =>
+                {
+                    // Lines without "NN%" keep the last known progress instead of flickering to "indeterminate".
+                    var percent = ToolOutputParsers.ParseProgressPercent(line);
+                    if (percent is not null)
+                        lastPercent = percent.Value;
+                    ReportProgress(lastPercent, $"Диск {letter}: {line.Trim()}");
+                }, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+                throw;
+            }
         });
 
         if (outcome is null)
         {
-            if (started)
+            // Errors were already reported by RunBusyAsync; only a user cancel needs its own message.
+            if (cancelled)
                 Dialogs.Info("Оптимизация остановлена",
                     $"Оптимизация диска {letter}: остановлена. Уже выполненная часть работы сохранилась — её можно продолжить в любой момент.");
             return;

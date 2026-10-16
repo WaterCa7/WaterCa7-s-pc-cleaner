@@ -137,6 +137,20 @@ public class SpaceAnalyzerTests
     }
 
     [Fact]
+    public void Files_entry_row_does_not_reopen_the_current_folder()
+    {
+        var root = new FolderNode(@"C:\data", null);
+        var sub = new FolderNode("sub", root);
+        var leaf = new FolderNode("leaf", sub);
+        sub.Children = new[] { leaf };
+        root.Children = new[] { sub };
+
+        Assert.True(new FolderRow(sub, "sub", 10, 1, 50, false).CanOpen);
+        Assert.False(new FolderRow(root, "Файлы в этой папке", 10, 1, 50, true).CanOpen);
+        Assert.False(new FolderRow(leaf, "leaf", 10, 1, 50, false).CanOpen); // no subfolders to show
+    }
+
+    [Fact]
     public void Junction_is_detected_as_link_by_reparse_tag()
     {
         using var tree = new DiskTestTree("tag");
