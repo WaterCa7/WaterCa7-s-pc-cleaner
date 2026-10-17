@@ -68,14 +68,7 @@ public sealed class UpdateClient : IDisposable
         }
         catch
         {
-            try
-            {
-                File.Delete(partial);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // the next download overwrites it
-            }
+            UpdateInstaller.TryDelete(partial);
             throw;
         }
     }
