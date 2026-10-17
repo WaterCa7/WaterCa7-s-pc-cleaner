@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -155,7 +156,19 @@ public class ErrorTextTests
     {
         Assert.StartsWith("нет доступа", ErrorText.For(new Win32Exception(5, "Access is denied")));
         Assert.Equal("действие отменено пользователем", ErrorText.For(new Win32Exception(1223, "The operation was canceled by the user")));
-        Assert.Equal("ошибка Windows (код 1234)", ErrorText.For(new Win32Exception(1234, "No service is operating at the destination network endpoint")));
+        // Windows has no text for this code in any language, so the result does not depend on the Windows display language.
+        Assert.Equal("ошибка Windows (код 99999)", ErrorText.For(new Win32Exception(99999, "No service is operating at the destination network endpoint")));
+    }
+
+    [Fact]
+    public void Win32Errors_UnknownCode_ShowWindowsOwnTextOnlyWhenItIsRussian()
+    {
+        // Russian Windows: FormatMessage gives Russian text for the code, shown as is. Other languages: the code.
+        Assert.Equal("Отсутствует служба, работающая с конечным сетевым адресом",
+            ErrorText.Win32Text(1234, "Отсутствует служба, работающая с конечным сетевым адресом.\r\n"));
+        Assert.Equal("ошибка Windows (код 1234)", ErrorText.Win32Text(1234, "No service is operating at the destination network endpoint."));
+        // Known codes always get the app's phrase, whatever the Windows language.
+        Assert.Equal("файл занят другой программой", ErrorText.Win32Text(32, "Процесс не может получить доступ к файлу, так как этот файл занят другим процессом."));
     }
 
     [Fact]
@@ -187,6 +200,56 @@ public class ErrorTextTests
             text = reader.ReadToEnd();
         var line = text.Split(Environment.NewLine).Last(l => l.Contains(marker));
         Assert.Contains("UnauthorizedAccessException: Access to the path", line);
+    }
+
+    // A Windows user named "Иван": the English .NET message has Cyrillic only inside the quoted path.
+    private const string RuPath = @"C:\Users\Иван\AppData\Local\Temp\Отчёт.html";
+
+    [Fact]
+    public void EnglishMessages_WithACyrillicPath_AreTranslated()
+    {
+        Assert.Equal(ErrorText.For(new UnauthorizedAccessException("Access denied")),
+            ErrorText.For(new UnauthorizedAccessException($"Access to the path '{RuPath}' is denied.")));
+        Assert.Equal("файл или папка не найдены", ErrorText.For(new FileNotFoundException($"Could not find file '{RuPath}'.", RuPath)));
+        Assert.Equal("файл или папка не найдены", ErrorText.For(new DirectoryNotFoundException($"Could not find a part of the path '{RuPath}'.")));
+        Assert.Equal("слишком длинный путь к файлу", ErrorText.For(new PathTooLongException($"The path '{RuPath}' is too long, or a component of the specified path is too long.")));
+        Assert.Equal("файл занят другой программой", ErrorText.For(new IOException(
+            $"The process cannot access the file '{RuPath}' because it is being used by another process.", unchecked((int)0x80070020))));
+        Assert.Equal("не удалось прочитать или записать файл", ErrorText.For(new IOException($"The file '{RuPath}' already exists.", unchecked((int)0x80070050))));
+        Assert.Equal("превышено время ожидания", ErrorText.For(new TimeoutException($"Timed out waiting for '{RuPath}'.")));
+        Assert.Equal("операция отменена", ErrorText.For(new OperationCanceledException($"Copying '{RuPath}' was canceled.")));
+    }
+
+    [Fact]
+    public void AppsOwnRussianMessages_AreKept_EvenWithAQuotedPath()
+    {
+        Assert.Equal($"Не удалось удалить '{RuPath}'", ErrorText.For(new InvalidOperationException($"Не удалось удалить '{RuPath}'.")));
+        // The app throws IOException with its own text (Quarantine, RegRestorePlan, Startup): kept, not replaced by the generic phrase.
+        Assert.Equal($"По этому пути уже есть файл: {RuPath}", ErrorText.For(new IOException($"По этому пути уже есть файл: {RuPath}")));
+        Assert.Equal("копия изменилась при записи", ErrorText.For(new IOException("копия изменилась при записи")));
+        // Windows' own localized text (Russian Windows) with the path .NET appends: kept.
+        Assert.Equal($"Каталог не пуст. : '{RuPath}'", ErrorText.For(new IOException($"Каталог не пуст. : '{RuPath}'", unchecked((int)0x80070091))));
+    }
+
+    [Fact]
+    public void ComErrors_RussianTextIsKept_EnglishWithACyrillicPathIsNot()
+    {
+        Assert.Equal("Shell.Application недоступен", ErrorText.For(new COMException("Shell.Application недоступен")));
+        Assert.Equal("ошибка Windows (код 0x80004005)",
+            ErrorText.For(new COMException($"Unspecified error opening '{RuPath}'", unchecked((int)0x80004005))));
+    }
+
+    [Fact]
+    public void Win32Errors_NeverShowTheEnglishProcessStartPrefix()
+    {
+        // Process.Start puts an English sentence with the quoted paths in front of Windows' own text.
+        var text = ErrorText.For(new Win32Exception(1234,
+            $"An error occurred trying to start process '{RuPath}' with working directory 'C:\\Users\\Иван'. Тестовый текст"));
+        Assert.DoesNotContain("An error occurred", text);
+        Assert.DoesNotContain("Иван", text);
+        Assert.DoesNotContain("Тестовый", text);
+        Assert.Equal("файл или папка не найдены", ErrorText.For(new Win32Exception(2,
+            $"An error occurred trying to start process '{RuPath}' with working directory 'C:\\'. Не удается найти указанный файл.")));
     }
 }
 

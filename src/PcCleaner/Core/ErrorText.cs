@@ -8,7 +8,8 @@ namespace PcCleaner.Core;
 /// <summary>
 /// Russian text for exceptions shown to the user. The .NET runtime has no Russian resources, so ex.Message of
 /// common errors ("Access to the path ... is denied.") would appear in English inside Russian dialogs.
-/// Messages that are already Russian (the app's own, or Windows' localized ones) are kept as is.
+/// Messages that are already Russian (the app's own, or Windows' localized ones) are kept as is; Cyrillic inside a quoted
+/// path ("C:\Users\Иван\…") does not make an English message Russian.
 /// The raw message and stack trace still go to the log file (<see cref="Log.Error"/>).
 /// </summary>
 public static class ErrorText
@@ -28,11 +29,8 @@ public static class ErrorText
         if (ex is System.Reflection.TargetInvocationException { InnerException: { } inner })
             return For(inner);
 
-        var message = ex.Message?.Trim() ?? "";
-        if (HasCyrillic(message))
-            return message.TrimEnd('.');
-
-        return ex switch
+        // Translated by type, whatever the message: .NET writes these in English, and any Cyrillic in them is a path.
+        var known = ex switch
         {
             OperationCanceledException => "операция отменена",
             UnauthorizedAccessException or SecurityException =>
@@ -41,11 +39,25 @@ public static class ErrorText
             PathTooLongException => "слишком длинный путь к файлу",
             IOException io when io.HResult is ErrorSharingViolation or ErrorLockViolation => "файл занят другой программой",
             IOException io when io.HResult is ErrorDiskFull or ErrorHandleDiskFull => "на диске недостаточно места",
-            IOException => "не удалось прочитать или записать файл",
-            Win32Exception w => Win32Text(w.NativeErrorCode),
-            ExternalException e => $"ошибка Windows (код 0x{e.HResult:X8})",
+            // Windows' own text for the code, not w.Message: Process.Start puts an English sentence with the quoted
+            // paths in front of it ("An error occurred trying to start process '…' with working directory '…'. …").
+            Win32Exception w => Win32Text(w.NativeErrorCode, new Win32Exception(w.NativeErrorCode).Message),
             TimeoutException => "превышено время ожидания",
             OutOfMemoryException or InsufficientExecutionStackException => "не хватило памяти",
+            _ => null,
+        };
+        if (known is not null)
+            return known;
+
+        // The app's own text (it throws IOException and COMException with Russian messages too) or Windows' localized one.
+        var message = ex.Message?.Trim() ?? "";
+        if (IsRussian(message))
+            return message.TrimEnd('.');
+
+        return ex switch
+        {
+            IOException => "не удалось прочитать или записать файл",
+            ExternalException e => $"ошибка Windows (код 0x{e.HResult:X8})",
             _ => "непредвиденная ошибка — подробности записаны в журнал",
         };
     }
@@ -60,7 +72,8 @@ public static class ErrorText
         return text.EndsWith('.') || text.EndsWith('!') || text.EndsWith('?') || text.EndsWith('…') ? text : text + ".";
     }
 
-    private static string Win32Text(int code) => code switch
+    /// <param name="systemMessage">Windows' text for the code in the Windows display language: kept when it is Russian.</param>
+    internal static string Win32Text(int code, string systemMessage) => code switch
     {
         5 => "нет доступа — нужны права администратора, или объект защищён Windows",
         2 or 3 => "файл или папка не найдены",
@@ -68,8 +81,23 @@ public static class ErrorText
         39 or 112 => "на диске недостаточно места",
         740 => "нужны права администратора",
         1223 => "действие отменено пользователем",
+        _ when HasCyrillic(systemMessage) => systemMessage.Trim().TrimEnd('.'),
         _ => $"ошибка Windows (код {code})",
     };
+
+    /// <summary>
+    /// Cyrillic outside the quotes. .NET puts paths into its English messages in single quotes, and a path has Cyrillic
+    /// when the Windows user name does ("Access to the path 'C:\Users\Иван\…' is denied."). Everything from the first
+    /// quote to the last one is skipped, so an apostrophe inside a path ("C:\Users\D'Arc\…") changes nothing.
+    /// </summary>
+    private static bool IsRussian(string text)
+    {
+        var first = text.IndexOf('\'');
+        var last = text.LastIndexOf('\'');
+        if (last > first && first >= 0)
+            text = string.Concat(text.AsSpan(0, first), text.AsSpan(last + 1));
+        return HasCyrillic(text);
+    }
 
     private static bool HasCyrillic(string text)
     {
