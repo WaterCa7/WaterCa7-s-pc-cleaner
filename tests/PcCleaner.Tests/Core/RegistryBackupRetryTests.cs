@@ -14,7 +14,6 @@ namespace PcCleaner.Tests.Core;
 /// </summary>
 public class RegistryBackupRetryTests : IDisposable
 {
-    private const string TestsRoot = @"Software\WaterCa7sPcCleanerTests";
     private static readonly ProcessResult WriteError = new(1, "", "Ошибка: Не удается выполнить запись в файл.", TimedOut: false);
     private readonly string _id = Guid.NewGuid().ToString("N")[..12];
 
@@ -25,7 +24,7 @@ public class RegistryBackupRetryTests : IDisposable
         key.SetValue("App", @"""C:\Program Files\App\app.exe"" /tray");
     }
 
-    private string KeyPath => $@"{TestsRoot}\Backup\{_id}";
+    private string KeyPath => $@"{TestEnvironment.RegistryRoot}\Backup\{_id}";
 
     private string FullKey => $@"HKCU\{KeyPath}";
 
@@ -106,24 +105,7 @@ public class RegistryBackupRetryTests : IDisposable
         }
         catch (Exception)
         {
-            // best effort
-        }
-        // Remove the shared parents only when nothing else lives there (other tests may use them).
-        foreach (var parent in new[] { TestsRoot + @"\Backup", TestsRoot })
-        {
-            try
-            {
-                using (var key = Registry.CurrentUser.OpenSubKey(parent))
-                {
-                    if (key is null || key.SubKeyCount > 0 || key.ValueCount > 0)
-                        break;
-                }
-                Registry.CurrentUser.DeleteSubKey(parent, throwOnMissingSubKey: false);
-            }
-            catch (Exception)
-            {
-                break;
-            }
+            // best effort; the shared parents are removed at exit by TestEnvironment
         }
         foreach (var file in OwnBackups())
         {

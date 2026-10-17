@@ -17,19 +17,8 @@ public sealed class OptimizerParityServiceTests : IDisposable
 
     public OptimizerParityServiceTests() => TestEnvironment.Init();
 
-    public void Dispose()
-    {
-        Registry.CurrentUser.DeleteSubKeyTree(_sandbox, throwOnMissingSubKey: false);
-        foreach (var key in new[] { @"Software\WaterCa7sPcCleanerTests\Optimizer", @"Software\WaterCa7sPcCleanerTests" })
-        {
-            using var k = Registry.CurrentUser.OpenSubKey(key);
-            if (k is { SubKeyCount: 0, ValueCount: 0 })
-            {
-                k.Close();
-                Registry.CurrentUser.DeleteSubKey(key, false);
-            }
-        }
-    }
+    // The shared parent keys are removed at exit by TestEnvironment.
+    public void Dispose() => Registry.CurrentUser.DeleteSubKeyTree(_sandbox, throwOnMissingSubKey: false);
 
     private OptimizerService Create(HardwareSnapshot hw, SettingsSnapshot s, BatteryReportGenerator? report = null) => new(
         () => Task.FromResult(hw),

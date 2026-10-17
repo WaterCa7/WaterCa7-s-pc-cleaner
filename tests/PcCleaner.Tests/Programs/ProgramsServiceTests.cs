@@ -46,35 +46,14 @@ public sealed class ProgramsServiceTests : IDisposable
         }
         catch (Exception)
         {
-            // best effort
+            // best effort; the shared parent keys are removed at exit by TestEnvironment
         }
-        DeleteIfEmpty(SandboxRoot);
-        DeleteIfEmpty(@"Software\WaterCa7sPcCleanerTests");
         try
         {
             Directory.Delete(_work, recursive: true);
         }
         catch (IOException)
         {
-        }
-    }
-
-    /// <summary>Removes a sandbox parent key only if nothing else (another test run) uses it.</summary>
-    private static void DeleteIfEmpty(string path)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(path);
-            if (key is null || key.SubKeyCount > 0 || key.ValueCount > 0)
-                return;
-            key.Close();
-            var idx = path.LastIndexOf('\\');
-            using var parent = Registry.CurrentUser.OpenSubKey(path[..idx], writable: true);
-            parent?.DeleteSubKey(path[(idx + 1)..], throwOnMissingSubKey: false);
-        }
-        catch (Exception)
-        {
-            // another run may have added keys meanwhile - leave it
         }
     }
 

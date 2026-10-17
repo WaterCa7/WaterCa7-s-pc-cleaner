@@ -26,22 +26,8 @@ public sealed class RegistryTweakTests : IDisposable
         _engine = new RegistryTweakEngine(_sandbox, _settings, ExportWithRetryAsync); // real RegistryBackup.ExportAsync into the temp data dir
     }
 
-    public void Dispose()
-    {
-        Registry.CurrentUser.DeleteSubKeyTree(_sandbox, throwOnMissingSubKey: false);
-        DeleteIfEmpty(SandboxRoot);
-        DeleteIfEmpty(@"Software\WaterCa7sPcCleanerTests");
-    }
-
-    private static void DeleteIfEmpty(string path)
-    {
-        using (var key = Registry.CurrentUser.OpenSubKey(path))
-        {
-            if (key is null || key.SubKeyCount > 0 || key.ValueCount > 0)
-                return;
-        }
-        Registry.CurrentUser.DeleteSubKey(path, throwOnMissingSubKey: false);
-    }
+    // The shared parent keys are removed at exit by TestEnvironment.
+    public void Dispose() => Registry.CurrentUser.DeleteSubKeyTree(_sandbox, throwOnMissingSubKey: false);
 
     private string SandboxPath(RegistryValueSpec spec) => $@"{_sandbox}\{spec.HiveName}\{spec.SubKey}";
 
@@ -330,26 +316,8 @@ public sealed class OptimizerServiceTests : IDisposable
 
     public OptimizerServiceTests() => TestEnvironment.Init();
 
-    public void Dispose()
-    {
-        Registry.CurrentUser.DeleteSubKeyTree(_sandbox, throwOnMissingSubKey: false);
-        using (var key = Registry.CurrentUser.OpenSubKey(@"Software\WaterCa7sPcCleanerTests\Optimizer"))
-        {
-            if (key is { SubKeyCount: 0, ValueCount: 0 })
-            {
-                key.Close();
-                Registry.CurrentUser.DeleteSubKey(@"Software\WaterCa7sPcCleanerTests\Optimizer", false);
-            }
-        }
-        using (var key = Registry.CurrentUser.OpenSubKey(@"Software\WaterCa7sPcCleanerTests"))
-        {
-            if (key is { SubKeyCount: 0, ValueCount: 0 })
-            {
-                key.Close();
-                Registry.CurrentUser.DeleteSubKey(@"Software\WaterCa7sPcCleanerTests", false);
-            }
-        }
-    }
+    // The shared parent keys are removed at exit by TestEnvironment.
+    public void Dispose() => Registry.CurrentUser.DeleteSubKeyTree(_sandbox, throwOnMissingSubKey: false);
 
     private OptimizerService Create(HardwareSnapshot hw, SettingsSnapshot s, bool elevated = false)
     {

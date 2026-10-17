@@ -8,11 +8,12 @@ namespace PcCleaner.Tests.Startup;
 /// <summary>
 /// Isolated playground for destructive startup logic: registry roots live under
 /// HKCU\Software\WaterCa7sPcCleanerTests\Startup\&lt;guid&gt; and Startup folders/targets in a temp dir.
-/// The real Run keys, Startup folders, tasks and services are never touched. Everything is removed on Dispose.
+/// The real Run keys, Startup folders, tasks and services are never touched. Everything is removed on Dispose
+/// (the shared parent keys at exit, see <see cref="TestEnvironment.RegistryRoot"/>).
 /// </summary>
 internal sealed class StartupSandbox : IDisposable
 {
-    public const string TestsRoot = @"Software\WaterCa7sPcCleanerTests";
+    public const string TestsRoot = TestEnvironment.RegistryRoot;
     public const string ModuleRoot = TestsRoot + @"\Startup";
 
     public StartupSandbox(bool elevated = true)
@@ -115,23 +116,7 @@ internal sealed class StartupSandbox : IDisposable
         {
             // best effort
         }
-        // Remove the shared parents only when nothing else lives there (other test runs may use them).
-        foreach (var parent in new[] { ModuleRoot, TestsRoot })
-        {
-            try
-            {
-                using (var key = Registry.CurrentUser.OpenSubKey(parent))
-                {
-                    if (key is null || key.SubKeyCount > 0 || key.ValueCount > 0)
-                        break;
-                }
-                Registry.CurrentUser.DeleteSubKey(parent, throwOnMissingSubKey: false);
-            }
-            catch (Exception)
-            {
-                break;
-            }
-        }
+        // The shared parents are removed at exit by TestEnvironment.
         try
         {
             Directory.Delete(Dir, recursive: true);

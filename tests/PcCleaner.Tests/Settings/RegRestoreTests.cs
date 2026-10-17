@@ -329,9 +329,8 @@ public sealed class RegRestoreRoundTripTests : IDisposable
 
     public void Dispose()
     {
+        // The shared parent keys are removed at exit by TestEnvironment.
         Registry.CurrentUser.DeleteSubKeyTree(_sandbox, throwOnMissingSubKey: false);
-        DeleteIfEmpty(SandboxRoot);
-        DeleteIfEmpty(@"Software\WaterCa7sPcCleanerTests");
         foreach (var f in _files)
         {
             try
@@ -342,23 +341,6 @@ public sealed class RegRestoreRoundTripTests : IDisposable
             catch (IOException)
             {
             }
-        }
-    }
-
-    private static void DeleteIfEmpty(string path)
-    {
-        try
-        {
-            using (var key = Registry.CurrentUser.OpenSubKey(path))
-            {
-                if (key is null || key.SubKeyCount > 0 || key.ValueCount > 0)
-                    return;
-            }
-            Registry.CurrentUser.DeleteSubKey(path, throwOnMissingSubKey: false);
-        }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
-        {
-            // another sandbox test is using it right now
         }
     }
 

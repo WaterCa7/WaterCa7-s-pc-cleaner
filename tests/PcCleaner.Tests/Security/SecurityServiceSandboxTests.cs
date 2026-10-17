@@ -56,12 +56,10 @@ public sealed class SecuritySandbox : IDisposable
         try
         {
             Registry.CurrentUser.DeleteSubKeyTree(KeyPath, throwOnMissingSubKey: false);
-            DeleteIfEmpty(RootKey);
-            DeleteIfEmpty(@"Software\WaterCa7sPcCleanerTests");
         }
         catch (Exception)
         {
-            // best effort; other test classes may be using the parent keys concurrently
+            // best effort; the shared parent keys are removed at exit by TestEnvironment
         }
         try
         {
@@ -70,16 +68,6 @@ public sealed class SecuritySandbox : IDisposable
         catch (IOException)
         {
         }
-    }
-
-    private static void DeleteIfEmpty(string path)
-    {
-        using (var key = Registry.CurrentUser.OpenSubKey(path))
-        {
-            if (key is null || key.SubKeyCount > 0 || key.ValueCount > 0)
-                return;
-        }
-        Registry.CurrentUser.DeleteSubKey(path, throwOnMissingSubKey: false);
     }
 }
 
