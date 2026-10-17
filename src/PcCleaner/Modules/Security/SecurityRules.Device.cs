@@ -451,6 +451,15 @@ public static partial class SecurityRules
     /// <summary>WinINet per-connection flags for "no proxy": direct, keeping "automatic detection" as the user had it.</summary>
     public static int DirectProxyFlags(int currentFlags) => 0x1 | (currentFlags & 0x8);
 
+    /// <summary>Result text of a successful "Отключить SMBv1" (on the page and on the dashboard).</summary>
+    public static string Smb1DisabledText(bool restartNeeded, RestorePointResult restorePoint)
+        => (restartNeeded
+               ? "SMBv1 отключён. Перезагрузите компьютер, чтобы изменение вступило в силу."
+               : "SMBv1 отключён.") +
+           "\n\n" + RestorePointText(restorePoint) +
+           "\n\nЕсли перестанет открываться старое сетевое хранилище (NAS), включить SMBv1 обратно можно в «Включение или " +
+           "отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».";
+
     /// <summary>One sentence about the restore point made before a change.</summary>
     public static string RestorePointText(RestorePointResult result) => result switch
     {

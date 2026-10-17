@@ -23,11 +23,15 @@ public sealed class SecuritySandbox : IDisposable
     public SecuritySandbox()
     {
         TestEnvironment.Init();
-        KeyPath = RootKey + "\\" + Guid.NewGuid().ToString("N");
+        Id = Guid.NewGuid().ToString("N");
+        KeyPath = RootKey + "\\" + Id;
         TempDir = TestEnvironment.NewTempDir("security");
         Env = SecurityEnvironment.CreateSandbox(KeyPath, TempDir);
         Service = new SecurityService(Env);
     }
+
+    /// <summary>The unique part of <see cref="KeyPath"/>; RegistryBackup puts the key path into the backup file name.</summary>
+    public string Id { get; }
 
     public string KeyPath { get; }
     public string TempDir { get; }
@@ -35,6 +39,17 @@ public sealed class SecuritySandbox : IDisposable
     public SecurityService Service { get; }
 
     public RegistryKey Create(RegLocation loc) => loc.Create();
+
+    /// <summary>
+    /// The .reg backups of this sandbox's keys. Count only these: other test classes add and delete backups in the
+    /// shared AppPaths.BackupsDir in parallel, so the total number of files there can go up or down at any time.
+    /// </summary>
+    public HashSet<string> OwnBackups()
+        => Directory.Exists(AppPaths.BackupsDir)
+            ? Directory.GetFiles(AppPaths.BackupsDir, "*.reg")
+                .Where(f => Path.GetFileName(f).Contains(Id, StringComparison.OrdinalIgnoreCase))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     public void Dispose()
     {
@@ -76,8 +91,6 @@ public sealed class SecuritySandboxCollection
 [Collection(SecuritySandbox.Collection)]
 public class SecurityServiceSandboxTests
 {
-    private static int BackupCount() => Directory.Exists(AppPaths.BackupsDir) ? Directory.GetFiles(AppPaths.BackupsDir, "*.reg").Length : 0;
-
     [Fact]
     public void Sandbox_PointsOnlyToHkcuTestKeyAndTempFolder()
     {
@@ -110,7 +123,7 @@ public class SecurityServiceSandboxTests
             key.SetValue("AutoConfigURL", "http://evil.example/proxy.pac");
             key.SetValue("Other", "keep");
         }
-        var before = BackupCount();
+        var before = sb.OwnBackups();
 
         var report = await sb.Service.ScanAsync(null, CancellationToken.None);
         Assert.Equal(SecurityStatus.Warning, report.Check(SecurityCheckIds.Proxy)!.Status);
@@ -125,7 +138,10 @@ public class SecurityServiceSandboxTests
             Assert.Equal("1.2.3.4:8080", key.GetValue("ProxyServer"));
             Assert.Equal("keep", key.GetValue("Other"));
         }
-        Assert.True(BackupCount() > before);
+        // Exactly one new backup of this sandbox's key, named in the result (not a count of the shared folder).
+        var backup = Assert.Single(sb.OwnBackups().Except(before));
+        Assert.Contains(backup, result.Message);
+        Assert.Contains("1.2.3.4:8080", File.ReadAllText(backup));
         var after = await sb.Service.ScanAsync(null, CancellationToken.None);
         Assert.Equal(SecurityStatus.Ok, after.Check(SecurityCheckIds.Proxy)!.Status);
     }
@@ -426,14 +442,12 @@ public class SecurityServiceSandboxTests
             Assert.Equal(5, check.GetValue("ConsentPromptBehaviorAdmin"));
         }
 
-        var guid = sb.KeyPath[(sb.KeyPath.LastIndexOf('\\') + 1)..];
-        int OwnBackups() => Directory.GetFiles(AppPaths.BackupsDir, "*.reg").Count(f => f.Contains(guid, StringComparison.OrdinalIgnoreCase));
-        var backups = OwnBackups();
-        Assert.Equal(1, backups);
+        var backups = sb.OwnBackups();
+        Assert.Single(backups);
         var again = await sb.Service.EnableUacAsync(CancellationToken.None);
         Assert.True(again.Success, again.Message);
         Assert.Contains("ничего не нужно", again.Message);
-        Assert.Equal(backups, OwnBackups()); // nothing to change: no backup, no write
+        Assert.Equal(backups, sb.OwnBackups()); // nothing to change: no backup, no write
     }
 
     [Theory]

@@ -98,7 +98,7 @@ public static class HostsFile
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
             Log.Warn($"Не удалось прочитать файл hosts: {ex.Message}");
-            return new HostsReport { Path = path, Error = ex.Message };
+            return new HostsReport { Path = path, Error = ErrorText.Sentence(ex) };
         }
     }
 

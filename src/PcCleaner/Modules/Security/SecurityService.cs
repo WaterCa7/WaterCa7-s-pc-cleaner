@@ -29,6 +29,12 @@ public sealed partial class SecurityService : IHealthContributor
     private const string BackupFailedMessage =
         "Не удалось сохранить резервную копию реестра, поэтому изменения отменены. Ничего не изменено.";
 
+    // Results of successful dashboard fixes (tests check that the dashboard reads them as fixed).
+    internal const string SignaturesUpdatedMessage = "Антивирусные базы Защитника Windows обновлены.";
+    internal const string RealtimeEnabledMessage = "Защита в реальном времени включена.";
+    internal const string FirewallEnabledMessage =
+        "Брандмауэр включён для всех типов сетей. Выключить его снова можно в «Безопасность Windows» → «Брандмауэр и защита сети».";
+
     public SecurityService() : this(SecurityEnvironment.CreateDefault()) { }
 
     internal SecurityService(SecurityEnvironment environment)
@@ -558,7 +564,7 @@ public sealed partial class SecurityService : IHealthContributor
         if (r.Success)
         {
             Log.Action("Обновлены антивирусные базы Защитника Windows");
-            return SecurityActionResult.Ok("Антивирусные базы Защитника Windows обновлены.");
+            return SecurityActionResult.Ok(SignaturesUpdatedMessage);
         }
         Log.Warn($"MpCmdRun -SignatureUpdate: код {HResult(r.ExitCode)}: {FirstLine(r.StdOut + r.StdErr)}");
         var denied = (uint)r.ExitCode == 0x80070005;
@@ -595,7 +601,7 @@ public sealed partial class SecurityService : IHealthContributor
         if (enabled)
         {
             Log.Action("Включена защита в реальном времени Защитника Windows");
-            return SecurityActionResult.Ok("Защита в реальном времени включена.");
+            return SecurityActionResult.Ok(RealtimeEnabledMessage);
         }
         Log.Warn($"Не удалось включить защиту в реальном времени: {FirstLine(r.StdErr)}");
         return SecurityActionResult.Fail(policy
@@ -628,9 +634,11 @@ public sealed partial class SecurityService : IHealthContributor
                                                    "(или удалите её, если компьютер не рабочий)."
                                                  : ". Вероятно, его отключает другая программа."));
         }
-        return SecurityActionResult.Ok("Брандмауэр включён для всех типов сетей. Выключить его снова можно в " +
-                                       "«Безопасность Windows» → «Брандмауэр и защита сети».");
+        return SecurityActionResult.Ok(FirewallEnabledMessage);
     }
+
+    internal const string UacUnreadableMessage =
+        "Не удалось прочитать настройки UAC: нет доступа к разделу реестра. Ничего не изменено.";
 
     /// <summary>Values that <see cref="EnableUacAsync"/> changes: EnableLUA → 1 if it is 0; the prompt → 5 if it is 0.</summary>
     /// <remarks>A stricter prompt setting the user chose ("Всегда уведомлять", 1–4) is kept.</remarks>
@@ -643,9 +651,12 @@ public sealed partial class SecurityService : IHealthContributor
         var loc = Env.UacPolicies;
         if (loc.NeedsAdmin && !Admin.IsElevated)
             return SecurityActionResult.Fail(NeedAdminMessage);
-        var (fixLua, fixConsent) = UacChangesNeeded(
-            SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(loc, "EnableLUA").Value),
-            SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(loc, "ConsentPromptBehaviorAdmin").Value));
+        var lua = SecurityEnvironment.ReadValue(loc, "EnableLUA");
+        var consent = SecurityEnvironment.ReadValue(loc, "ConsentPromptBehaviorAdmin");
+        // Values that cannot be read are not "UAC is on": that would mark the problem fixed while UAC may still be off.
+        if (!lua.Readable || !consent.Readable)
+            return SecurityActionResult.Fail(UacUnreadableMessage);
+        var (fixLua, fixConsent) = UacChangesNeeded(SecurityEnvironment.AsInt(lua.Value), SecurityEnvironment.AsInt(consent.Value));
         if (!fixLua && !fixConsent)
             return SecurityActionResult.Ok("UAC уже включён и запрашивает разрешение — менять ничего не нужно.");
         var backup = await RegistryBackup.ExportAsync(loc.FullPath, "Перед включением UAC", ct);
@@ -682,7 +693,7 @@ public sealed partial class SecurityService : IHealthContributor
             Log.Warn($"Не удалось изменить настройки UAC: {ex.Message}");
             if (done.Count > 0)
                 Log.Action($"UAC (частично): {string.Join(", ", done)} ({loc.FullPath}). Резервная копия: {Path.GetFileName(backup)}");
-            return SecurityActionResult.Fail($"Не удалось изменить настройки UAC: {ex.Message}" +
+            return SecurityActionResult.Fail($"Не удалось изменить настройки UAC: {ErrorText.For(ex)}." +
                                              (done.Count > 0 ? $"\n\nУспели измениться: {string.Join(", ", done)}. Резервная копия: {backup}" : ""));
         }
     }
@@ -711,7 +722,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (HostsChangedException ex)
         {
-            return SecurityActionResult.Fail(ex.Message);
+            return SecurityActionResult.Fail(ErrorText.Sentence(ex));
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -722,7 +733,7 @@ public sealed partial class SecurityService : IHealthContributor
         catch (IOException ex)
         {
             Log.Warn($"Не удалось изменить файл hosts: {ex.Message}");
-            return SecurityActionResult.Fail($"Не удалось изменить файл hosts: {ex.Message}");
+            return SecurityActionResult.Fail($"Не удалось изменить файл hosts: {ErrorText.For(ex)}.");
         }
     }
 
@@ -809,7 +820,7 @@ public sealed partial class SecurityService : IHealthContributor
                 Log.Action("Winlogon восстановлен частично: " + string.Join("; ", done) + ". Резервные копии: " +
                            string.Join(", ", backups.Select(Path.GetFileName)));
             }
-            return SecurityActionResult.Fail($"Не удалось восстановить значения: {ex.Message}" +
+            return SecurityActionResult.Fail($"Не удалось восстановить значения: {ErrorText.For(ex)}." +
                                              (done.Count > 0 ? "\n\nУспели измениться: " + string.Join("; ", done) : "") +
                                              "\n\nРезервная копия: " + string.Join(", ", backups));
         }
@@ -846,7 +857,7 @@ public sealed partial class SecurityService : IHealthContributor
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
             Log.Warn($"Не удалось удалить перехват {entry.ImageName}: {ex.Message}");
-            return SecurityActionResult.Fail($"Не удалось удалить перехват: {ex.Message}");
+            return SecurityActionResult.Fail($"Не удалось удалить перехват: {ErrorText.For(ex)}.");
         }
         Log.Action($"Удалён перехват запуска (IFEO Debugger) для {entry.ImageName}: «{entry.Debugger}». " +
                    $"Резервная копия: {Path.GetFileName(backup)}");
@@ -890,7 +901,7 @@ public sealed partial class SecurityService : IHealthContributor
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
             Log.Warn($"Не удалось отключить прокси: {ex.Message}");
-            return SecurityActionResult.Fail($"Не удалось отключить прокси: {ex.Message}");
+            return SecurityActionResult.Fail($"Не удалось отключить прокси: {ErrorText.For(ex)}.");
         }
         if (Env.IsRealSystem)
         {
@@ -1010,6 +1021,25 @@ public sealed partial class SecurityService : IHealthContributor
         return BuildIssues(report);
     }
 
+    /// <summary>Start of the dashboard text of a failed fix (see <see cref="DashboardText"/>).</summary>
+    internal const string DashboardFailurePrefix = "Не удалось исправить.";
+
+    /// <summary>
+    /// The text a dashboard fix returns. HealthIssue.FixAsync has no success flag: the dashboard decides from the wording
+    /// whether the problem is fixed, and some failures read like a plain statement ("Команда выполнена, но брандмауэр всё
+    /// ещё выключен…", "Windows не дала включить защиту…"). So the text of every failed action starts with "Не удалось",
+    /// which the dashboard always counts as "not fixed"; a successful result is passed on unchanged.
+    /// </summary>
+    internal static string DashboardText(SecurityActionResult result)
+    {
+        var message = result.Message?.Trim() ?? "";
+        if (result.Success)
+            return message;
+        if (message.StartsWith("Не удалось", StringComparison.OrdinalIgnoreCase))
+            return message;
+        return message.Length == 0 ? DashboardFailurePrefix : DashboardFailurePrefix + " " + message;
+    }
+
     internal IReadOnlyList<HealthIssue> BuildIssues(SecurityReport report)
     {
         var issues = new List<HealthIssue>();
@@ -1027,8 +1057,9 @@ public sealed partial class SecurityService : IHealthContributor
                 TargetPageKey = "Security",
             };
 
+        // The dashboard gets only the text: DashboardText keeps a failed action from reading as "Исправлено".
         static Func<CancellationToken, Task<string>> Wrap(Func<CancellationToken, Task<SecurityActionResult>> action)
-            => async ct => (await action(ct)).Message;
+            => async ct => DashboardText(await action(ct));
 
         // Antivirus
         var d = report.Defender;
