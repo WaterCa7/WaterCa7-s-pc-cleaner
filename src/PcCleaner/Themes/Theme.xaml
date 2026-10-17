@@ -100,6 +100,21 @@
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
 
+    <!-- ===== Keyboard focus =====
+         Rounded ring drawn around a control focused with the keyboard (Tab). WPF shows a FocusVisualStyle only for
+         keyboard focus, so a mouse click never leaves an outline. Use it instead of FocusVisualStyle="{x:Null}" on any
+         custom template that has no IsKeyboardFocused trigger of its own: FocusVisualStyle="{StaticResource FocusRing}". -->
+    <Style x:Key="FocusRing">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Margin="-3" CornerRadius="8" BorderThickness="2" BorderBrush="{StaticResource TextBrush}"
+                            SnapsToDevicePixels="True" IsHitTestVisible="False" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===== Buttons ===== -->
     <Style TargetType="Button">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
@@ -142,6 +157,8 @@
         <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
         <Setter Property="Foreground" Value="{StaticResource AccentTextBrush}" />
         <Setter Property="FontWeight" Value="SemiBold" />
+        <!-- The template below has no border to recolor, so keyboard focus is shown with the ring. -->
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -225,7 +242,7 @@
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
@@ -272,7 +289,7 @@
     <Style x:Key="ToggleSwitch" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">

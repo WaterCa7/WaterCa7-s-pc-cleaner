@@ -37,13 +37,25 @@ tests/PcCleaner.Tests/  xUnit-тесты (Core/ и <Key>/)
   `PreviewScanAsync(ct)` (только чтение!). Оболочка сама показывает заголовок и полосу прогресса с кнопкой «Отмена».
 - `HealthIssue` / `IHealthContributor.AnalyzeAsync(ct)` — находки для «Главной». Анализ только читает систему.
 - `ObservableObject.Set(ref field, value)`, `RelayCommand`, `AsyncRelayCommand` (ловит исключения).
-- `Dialogs.Confirm/Info/Error` — **каждое изменение системы подтверждается через `Dialogs.Confirm`**.
-  В тестах и режиме скриншотов все подтверждения автоматически = «Нет».
+- `Dialogs.Confirm/Info/Error` — **каждое изменение системы подтверждается через `Dialogs.Confirm`** (значок
+  предупреждения). `Dialogs.Ask` — нейтральный вопрос, после которого система не меняется («Открыть отчёт?»), со значком
+  вопроса. В тестах и режиме скриншотов все подтверждения и вопросы автоматически = «Нет».
 - `Log.Info/Warn/Error/Action` — `Action` для каждого изменения системы. Нет прав → `Warn`, не `Error`.
-- `Admin.IsElevated`, `Admin.RequireElevation("...")`, `Admin.RestartElevated()`.
+  `Log.Error(msg, ex)` показывает в журнале и статус-баре русское описание ошибки, тип и текст исключения — только в файле.
+- `ErrorText.For(ex)` / `ErrorText.Sentence(ex)` — русский текст ошибки для пользователя (сообщения .NET — на английском).
+  Не показывайте `ex.Message` в диалогах и результатах: используйте `ErrorText`.
+- `Admin.IsElevated`, `Admin.RequireElevation("...")`, `Admin.RestartElevated()`. Перезапуск закрывает программу, поэтому
+  `RestartElevated` (и `RequireElevation`) сначала спрашивает, если какая-то страница занята (`IsBusy`), а с обычной
+  учётной записи — предупреждает, что программа запустится от имени администратора и будет работать с его профилем.
+  `Admin.IsStandardUser`, `Admin.OtherAccountWarning` (программа запущена не от имени вошедшего пользователя — оболочка
+  показывает предупреждение над страницей).
 - `RegistryBackup.ExportAsync(@"HKCU\...")` — обязательная резервная копия перед изменением/удалением ключа
   (если вернула null — изменение отменяется). `RegistryBackup.OpenKey(...)`.
-- `RestorePoint.TryCreateAsync("...")` — перед пакетом системных изменений.
+  `RegistryBackup.ImportCheckedAsync(file, verify)` — импорт .reg именно в том виде, в котором его проверили
+  (снимок файла проверяется и импортируется; папку Backups может переписать любой процесс пользователя).
+- `RestorePoint.TryCreateAsync("...")` — перед пакетом системных изменений. Сама **не включает** защиту системы: если
+  она выключена, точка не создаётся (результат `Failed`). Включает её только ручное действие в «Настройках»
+  (`force: true`, это сказано в подтверждении), и это записывается через `Log.Action`.
 - `FileSignature.Get(path)` — проверка Authenticode (встроенная и каталожная подписи), кэшируется.
 - `Suspicion.Analyze(path, signature, commandLine)` / `Suspicion.AnalyzeProgram(...)` — эвристика с причинами.
   `KnownPups.Match(name, publisher)` — потенциально нежелательные программы.
@@ -51,9 +63,12 @@ tests/PcCleaner.Tests/  xUnit-тесты (Core/ и <Key>/)
 - `Quarantine.Add/Restore/Delete` — вместо удаления подозрительных файлов.
 - `FileTools.Sha256Async`, `OpenVirusTotalAsync`, `SearchWeb`, `ScanWithDefenderAsync`, `SendToRecycleBin`, `IsReparsePoint`.
 - `ProcessRunner.RunAsync(exe, args)` (кодировка OEM 866 учтена), `ProcessRunner.PowerShellAsync(script)` (UTF-8),
-  `ShellOpen`, `ShowInExplorer`.
+  `ShellOpen`, `ShowInExplorer`. С правами администратора скрипт PowerShell пишется в `%WINDIR%\Temp` с доступом только
+  для SYSTEM и администраторов (`SecureTemp`), а не в `%LOCALAPPDATA%`, который может переписать любой процесс пользователя.
+  Никогда не вставляйте в скрипт текст из реестра/файлов как код: передавайте его как данные (см. `RestorePoint.BuildScript`).
 - `Wmi.Query(query, scope)` + расширения `Str/Long/Bool/Date`. Без прав/при ошибке → пустой список.
-- `AppServices.Settings` (`AppSettings`, JSON в `%LOCALAPPDATA%\WaterCa7sPcCleaner`), `ModuleData` для состояния модулей.
+- `AppServices.Settings` (`AppSettings`, JSON в `%LOCALAPPDATA%\WaterCa7sPcCleaner`), `ModuleData` для состояния модулей:
+  `GetModuleValue/SetModuleValue`; кто меняет `ModuleData` напрямую — только внутри `lock (settings)`, `Save()` — после него.
 - `Ui.Post/Invoke` — выполнение в UI-потоке (в тестах — напрямую).
 - `Format.Bytes/Percent/Number/Duration/Date/Plural/Count` — русское форматирование.
 - `SystemStats.CpuUsagePercent()`, `SystemStats.Memory()`, `SystemStats.Uptime` — живые метрики без WMI.
@@ -68,6 +83,9 @@ SuccessBrush InfoBrush InfoSoftBrush HoverBrush SelectionBrush`.
 Стили: текст `H1 H2 H3 Muted BigNumber Icon`; контейнеры `Card InnerCard Badge`; кнопки (по умолчанию) +
 `AccentButton DangerButton GhostButton LinkButton`; `ToggleSwitch` (для CheckBox). Для DataGrid, ListBox, TabControl,
 ComboBox, TextBox, CheckBox, RadioButton, ProgressBar, ScrollBar, ToolTip, ContextMenu стили применяются автоматически.
+`FocusRing` — рамка фокуса клавиатуры: свой шаблон кнопки/плитки без триггера `IsKeyboardFocused` должен ставить
+`FocusVisualStyle="{StaticResource FocusRing}"`, а не `{x:Null}` (иначе при переходе по Tab не видно, где фокус).
+У кнопок только со значком задавайте `AutomationProperties.Name` (тот же текст, что в подсказке).
 Конвертеры: `BoolToVis` (параметр `Invert`), `InverseBool`, `HasValueToVis`, `Bytes`, `SeverityToBrush`,
 `SeverityToText`, `PercentToBrush`.
 

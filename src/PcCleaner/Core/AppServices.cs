@@ -14,6 +14,12 @@ public interface INavigator
 {
     /// <summary>Opens the page with the given PageViewModel.Key, e.g. "Startup".</summary>
     void NavigateTo(string pageKey);
+
+    /// <summary>
+    /// All pages of the shell. <see cref="Admin.RestartElevated"/> uses it to ask before a restart interrupts work
+    /// that is still running on any page.
+    /// </summary>
+    IEnumerable<PageViewModel> Pages => Enumerable.Empty<PageViewModel>();
 }
 
 /// <summary>

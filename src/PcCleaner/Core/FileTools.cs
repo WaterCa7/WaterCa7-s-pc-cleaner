@@ -17,7 +17,7 @@ public static class FileTools
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось прочитать {path}: {ex.Message}");
+            Log.Warn($"Не удалось прочитать {path}: {ErrorText.For(ex)}");
             return null;
         }
     }

@@ -97,7 +97,7 @@ public partial class App : Application
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         Log.Error("Необработанная ошибка", e.Exception);
-        Dialogs.Error("Ошибка", e.Exception.Message);
+        Dialogs.Error("Ошибка", ErrorText.Sentence(e.Exception));
         e.Handled = true;
     }
 }

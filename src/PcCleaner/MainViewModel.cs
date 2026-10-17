@@ -36,13 +36,24 @@ public sealed class MainViewModel : ObservableObject, INavigator
             new SettingsViewModel(),
         };
 
-        RestartAsAdminCommand = new RelayCommand(RestartAsAdmin, () => !Admin.IsElevated);
+        // Admin.RestartElevated itself asks first when any page is busy (one guard for every restart button and prompt).
+        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
         Log.EntryAdded += entry => StatusText = entry.Message;
+
+        if (OtherAccountWarning is { } warning)
+            Log.Warn(warning);
 
         SelectedPage = Pages[0];
     }
 
     public ObservableCollection<PageViewModel> Pages { get; }
+
+    IEnumerable<PageViewModel> INavigator.Pages => Pages;
+
+    /// <summary>Shown above the page when the program runs under another account than the signed-in user.</summary>
+    public string? OtherAccountWarning => Admin.OtherAccountWarning;
+
+    public bool HasOtherAccountWarning => OtherAccountWarning is not null;
 
     public PageViewModel? SelectedPage
     {
@@ -67,17 +78,6 @@ public sealed class MainViewModel : ObservableObject, INavigator
     }
 
     public RelayCommand RestartAsAdminCommand { get; }
-
-    /// <summary>Restarting closes the app, so ask first if a page is in the middle of an operation.</summary>
-    private void RestartAsAdmin()
-    {
-        var busy = Pages.Where(p => p.IsBusy).Select(p => $"«{p.Title}»").ToList();
-        if (busy.Count > 0 &&
-            !Dialogs.Confirm("Перезапуск от имени администратора",
-                $"Сейчас идёт операция в разделе {string.Join(", ", busy)}. Перезапуск прервёт её.\n\nПерезапустить программу всё равно?"))
-            return;
-        Admin.RestartElevated();
-    }
 
     public void NavigateTo(string pageKey)
     {

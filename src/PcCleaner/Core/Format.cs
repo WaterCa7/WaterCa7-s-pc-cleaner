@@ -32,7 +32,7 @@ public static class Format
 
     public static string Number(long value) => value.ToString("N0", Ru);
 
-    /// <summary>TimeSpan -> "2 д 3 ч", "5 ч 12 мин", "42 сек".</summary>
+    /// <summary>TimeSpan -> "2 д 3 ч", "5 ч 12 мин", "42 с" (the standard abbreviation, as in "1,6 с" elsewhere).</summary>
     public static string Duration(TimeSpan span)
     {
         if (span.TotalDays >= 1)
@@ -40,8 +40,8 @@ public static class Format
         if (span.TotalHours >= 1)
             return $"{(int)span.TotalHours} ч {span.Minutes} мин";
         if (span.TotalMinutes >= 1)
-            return $"{(int)span.TotalMinutes} мин {span.Seconds} сек";
-        return $"{Math.Max(0, (int)span.TotalSeconds)} сек";
+            return $"{(int)span.TotalMinutes} мин {span.Seconds} с";
+        return $"{Math.Max(0, (int)span.TotalSeconds)} с";
     }
 
     public static string Date(DateTime? date) => date is null ? "—" : date.Value.ToString("dd.MM.yyyy", Ru);

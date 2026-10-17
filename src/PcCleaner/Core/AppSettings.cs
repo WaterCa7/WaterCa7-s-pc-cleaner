@@ -33,7 +33,11 @@ public sealed class AppSettings
     /// <summary>Paths/names the user marked as trusted in process/startup/program checks.</summary>
     public List<string> TrustedItems { get; set; } = new();
 
-    /// <summary>Free-form per-module storage: ModuleData["Optimizer"]["PowerPlan.Previous"] = "...".</summary>
+    /// <summary>
+    /// Free-form per-module storage: ModuleData["Optimizer"]["PowerPlan.Previous"] = "...".
+    /// Use <see cref="GetModuleValue"/>/<see cref="SetModuleValue"/>; code that changes it directly must hold
+    /// <c>lock (settings)</c> while doing so (and call <see cref="Save"/> after releasing it).
+    /// </summary>
     public Dictionary<string, Dictionary<string, string>> ModuleData { get; set; } = new();
 
     public static AppSettings Load()
@@ -48,21 +52,34 @@ public sealed class AppSettings
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось прочитать настройки, используются значения по умолчанию: {ex.Message}");
+            Log.Warn($"Не удалось прочитать настройки, используются значения по умолчанию: {ErrorText.For(ex)}");
         }
         return new AppSettings();
     }
 
+    private long _snapshotVersion;
+    private long _writtenVersion;
+
+    /// <summary>
+    /// Saves settings.json atomically (tmp + move). Thread-safe: the JSON snapshot is taken under <c>lock (this)</c> —
+    /// the lock every ModuleData reader and writer uses (<see cref="GetModuleValue"/>, <see cref="SetModuleValue"/>,
+    /// and modules that change ModuleData directly lock the settings object too) — and a snapshot older than the one
+    /// already written is skipped, so a slow save never overwrites a newer one.
+    /// </summary>
     public void Save()
     {
         try
         {
+            var (json, version) = Snapshot();
             lock (SaveLock)
             {
+                if (version <= _writtenVersion)
+                    return;
                 Directory.CreateDirectory(AppPaths.DataDir);
                 var tmp = AppPaths.SettingsFile + ".tmp";
-                File.WriteAllText(tmp, JsonSerializer.Serialize(this, JsonOptions));
+                File.WriteAllText(tmp, json);
                 File.Move(tmp, AppPaths.SettingsFile, overwrite: true);
+                _writtenVersion = version;
             }
         }
         catch (Exception ex)
@@ -71,17 +88,43 @@ public sealed class AppSettings
         }
     }
 
+    private (string Json, long Version) Snapshot()
+    {
+        // Lists such as CleanerExclusions are changed by the UI without this lock; retry if one changed mid-way.
+        for (var attempt = 1; ; attempt++)
+        {
+            lock (this)
+            {
+                try
+                {
+                    return (JsonSerializer.Serialize(this, JsonOptions), ++_snapshotVersion);
+                }
+                catch (InvalidOperationException) when (attempt < 5)
+                {
+                    // "Collection was modified": try again
+                }
+            }
+            Thread.Sleep(10);
+        }
+    }
+
     public string? GetModuleValue(string module, string key)
-        => ModuleData.TryGetValue(module, out var d) && d.TryGetValue(key, out var v) ? v : null;
+    {
+        lock (this)
+            return ModuleData.TryGetValue(module, out var d) && d.TryGetValue(key, out var v) ? v : null;
+    }
 
     public void SetModuleValue(string module, string key, string? value)
     {
-        if (!ModuleData.TryGetValue(module, out var d))
-            ModuleData[module] = d = new Dictionary<string, string>();
-        if (value is null)
-            d.Remove(key);
-        else
-            d[key] = value;
+        lock (this)
+        {
+            if (!ModuleData.TryGetValue(module, out var d))
+                ModuleData[module] = d = new Dictionary<string, string>();
+            if (value is null)
+                d.Remove(key);
+            else
+                d[key] = value;
+        }
         Save();
     }
 

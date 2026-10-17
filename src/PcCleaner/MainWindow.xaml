@@ -39,15 +39,29 @@
                                 <TextBlock MaxWidth="320" TextWrapping="Wrap"
                                            Text="Без прав администратора программа всё проверяет, но часть действий недоступна: системные папки, службы, раздел реестра HKLM, брандмауэр и другие настройки Windows." />
                             </DockPanel.ToolTip>
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                     Fill="{Binding IsAdmin, Converter={StaticResource SeverityToBrush}}" />
+                            <!-- Without admin rights is the normal mode, not an error: blue dot, green with admin rights. -->
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{StaticResource InfoBrush}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsAdmin}" Value="True">
+                                                <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
                             <TextBlock Text="{Binding AdminText}" Margin="8,0,6,0" FontSize="12.5" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                         </DockPanel>
-                        <Button Content="Запустить как админ" Command="{Binding RestartAsAdminCommand}" Margin="0,8,0,0"
+                        <Button Command="{Binding RestartAsAdminCommand}" Margin="0,8,0,0"
                                 Padding="10,5" FontSize="12" HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="Перезапустить от имени администратора"
                                 ToolTip="Перезапустить программу с правами администратора — откроется окно контроля учётных записей"
-                                Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
+                                Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                            <TextBlock Text="Перезапустить от имени администратора" TextWrapping="Wrap" TextAlignment="Center" />
+                        </Button>
                     </StackPanel>
                 </Border>
 
@@ -79,6 +93,16 @@
             <StackPanel Margin="32,24,32,10">
                 <TextBlock Style="{StaticResource H1}" Text="{Binding SelectedPage.Title}" />
                 <TextBlock Style="{StaticResource Muted}" FontSize="13" Margin="0,4,0,0" Text="{Binding SelectedPage.Subtitle}" />
+                <!-- The program runs under another account than the signed-in user (e.g. an administrator's password was
+                     typed on a standard account): per-user checks then look at that account's profile. -->
+                <Border Margin="0,10,0,0" Padding="10,7" CornerRadius="6" Background="{StaticResource WarningSoftBrush}"
+                        Visibility="{Binding HasOtherAccountWarning, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="14" Foreground="{StaticResource WarningBrush}"
+                                   VerticalAlignment="Top" Margin="0,1,8,0" />
+                        <TextBlock Text="{Binding OtherAccountWarning}" TextWrapping="Wrap" FontSize="12.5" />
+                    </DockPanel>
+                </Border>
             </StackPanel>
 
             <!-- Shared busy strip for the current page -->
