@@ -464,7 +464,7 @@ public static class NetworkProbes
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
             Log.Warn($"Сеть: не удалось запустить netsh: {ex.Message}");
-            return new WifiReport { Error = ex.Message };
+            return new WifiReport { Error = $"Не удалось запустить netsh: {ErrorText.For(ex)}." };
         }
         var stdout = DecodeConsoleOutput(Encoding.Latin1.GetBytes(result.StdOut));
         var stderr = DecodeConsoleOutput(Encoding.Latin1.GetBytes(result.StdErr));

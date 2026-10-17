@@ -586,7 +586,7 @@
                             <TextBlock Grid.Column="1" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}">
                                 <Run Text="{Binding AdminHintText, Mode=OneWay}" />
                                 <Hyperlink Style="{StaticResource InlineLink}" Command="{Binding RestartAsAdminCommand}"
-                                           ToolTip="Перезапустить WaterCa7s PC Cleaner от имени администратора">Перезапустить</Hyperlink>
+                                           ToolTip="Программа перезапустится — Windows покажет окно контроля учётных записей">Перезапустить от имени администратора</Hyperlink>
                             </TextBlock>
                         </Grid>
                     </Border>

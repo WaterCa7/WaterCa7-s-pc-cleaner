@@ -75,7 +75,7 @@ public static class SmartScanner
                 ? "нет доступа или файл занят"
                 : ex.GetType().Name;
             Log.Warn($"Главная: ошибка проверки модуля «{name}» ({kind}): {ex.Message}");
-            return new ModuleScanResult(name, ModuleScanState.Failed, Array.Empty<HealthIssue>(), ex.Message, Elapsed());
+            return new ModuleScanResult(name, ModuleScanState.Failed, Array.Empty<HealthIssue>(), ErrorText.Sentence(ex), Elapsed());
         }
     }
 

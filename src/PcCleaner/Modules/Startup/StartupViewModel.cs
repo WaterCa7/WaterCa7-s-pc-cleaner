@@ -739,7 +739,7 @@ public sealed class StartupViewModel : PageViewModel
             catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
             {
                 Log.Warn($"Автозагрузка: не удалось запустить проверку Защитником: {ex.Message}");
-                message = $"Не удалось запустить проверку: {ex.Message}";
+                message = $"Не удалось запустить проверку: {ErrorText.For(ex)}.";
             }
             var threat = message.Contains("обнаружил", StringComparison.OrdinalIgnoreCase);
             ShowMessage($"Защитник Windows: {message}", threat);
@@ -758,7 +758,7 @@ public sealed class StartupViewModel : PageViewModel
               "Убрать его из доверенных можно здесь же или в «Настройках»."
             : $"«{item.DisplayName}» больше не в списке доверенных — проверки снова включены.");
 
-        // The same program file may be used by several entries (and by the Processes/Programs checks).
+        // The same program file may be used by several entries (the «Процессы» page checks the same file key).
         RefreshTrust();
         AfterItemChanged(item);
     }

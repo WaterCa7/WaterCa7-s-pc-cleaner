@@ -364,7 +364,7 @@
                                     <DockPanel>
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE946;" FontSize="15"
                                                    Foreground="{StaticResource InfoBrush}" Margin="0,0,10,0" />
-                                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Перезапустить как администратор"
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Перезапустить от имени администратора"
                                                 Command="{Binding RestartAsAdminCommand}" VerticalAlignment="Center" Margin="12,0,0,0" />
                                         <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"
                                                    Text="Температура, износ и наработка накопителей видны при запуске программы от имени администратора." />

@@ -131,7 +131,7 @@ public sealed partial class StartupService : IHealthContributor
         Enrich(items, ct, (done, total) =>
             progress?.Invoke(40 + 60.0 * done / Math.Max(1, total), $"Проверяем цифровые подписи ({done} из {total})…"));
 
-        Log.Info($"Автозагрузка: найдено {items.Count} записей за {sw.Elapsed.TotalSeconds:0.0} с");
+        Log.Info($"Автозагрузка: найдено {Format.Count(items.Count, "запись", "записи", "записей")} за {sw.Elapsed.TotalSeconds:0.0} с");
         return Sort(items);
     }
 
@@ -220,9 +220,27 @@ public sealed partial class StartupService : IHealthContributor
         {
             var pup = KnownPups.Match(item.Name, item.Publisher) ?? KnownPups.Match(item.FileDescription, null);
             if (pup is not null && !item.IsMicrosoft)
-                result = new SuspicionResult(Math.Min(100, result.Score + 35), result.Reasons.Append(pup).ToList());
+                result = AddPupMatch(result, pup, item.Signature);
         }
         item.Suspicion = result;
+    }
+
+    /// <summary>Highest score of an informational verdict («Внимание»): one point below <see cref="SuspicionLevel.Medium"/>.</summary>
+    internal const int BelowMediumScore = 34;
+
+    /// <summary>
+    /// Adds a KnownPups match by the entry name, publisher or file description (+35). When that match is the ONLY signal and
+    /// the program file has a valid signature, the verdict stays informational (below Medium): the page still shows why,
+    /// but the dashboard reports the program once — as an unwanted program from «Программы» — instead of a second
+    /// "suspicious startup entry" for the same program. An unsigned (or unchecked) file, or one with other signals,
+    /// keeps the full boost.
+    /// </summary>
+    internal static SuspicionResult AddPupMatch(SuspicionResult result, string pup, SignatureInfo? signature)
+    {
+        var score = Math.Min(100, result.Score + 35);
+        if (signature is { IsValid: true } && result.Reasons.Count == 0)
+            score = Math.Min(score, BelowMediumScore);
+        return new SuspicionResult(score, result.Reasons.Append(pup).ToList());
     }
 
     /// <summary>
@@ -256,9 +274,12 @@ public sealed partial class StartupService : IHealthContributor
     }
 
     /// <summary>
-    /// What "Доверять" stores in AppSettings.TrustedItems: the program file (shared with the Processes/Programs checks),
-    /// or the entry itself when the file is unknown or a generic host such as powershell.exe / rundll32.exe —
-    /// trusting the interpreter would silence warnings for every script started through it, everywhere in the app.
+    /// What "Доверять" stores in AppSettings.TrustedItems: the program file, or the entry itself when the file is unknown or a
+    /// generic host such as powershell.exe / rundll32.exe — trusting the interpreter would silence warnings for every script
+    /// started through it, everywhere in the app.
+    /// The file key is the same one «Процессы» checks for a process's exe path. «Программы» checks a program's DisplayName
+    /// instead; it adds a file key only for the program's main exe (InstalledProgram.TrustFile) when the user presses
+    /// «Доверять» there, so only that one file is shared with this page — not the program's other executables.
     /// </summary>
     internal static string TrustKey(StartupItem item)
         => string.IsNullOrWhiteSpace(item.TargetFile) || StartupTargets.IsGenericHost(item.TargetFile) ? item.Id : item.TargetFile!;
@@ -481,7 +502,7 @@ public sealed partial class StartupService : IHealthContributor
         catch (Exception ex) when (ex is IOException or COMException or Win32Exception or InvalidOperationException)
         {
             Log.Warn($"Автозагрузка: не удалось изменить «{item.DisplayName}»: {ex.Message}");
-            return StartupActionResult.Fail($"Не удалось изменить запись: {ex.Message}");
+            return StartupActionResult.Fail($"Не удалось изменить запись: {ErrorText.For(ex)}.");
         }
     }
 
@@ -519,7 +540,7 @@ public sealed partial class StartupService : IHealthContributor
         catch (Exception ex) when (ex is IOException or COMException or Win32Exception or InvalidOperationException)
         {
             Log.Warn($"Автозагрузка: не удалось удалить «{item.DisplayName}»: {ex.Message}");
-            return StartupActionResult.Fail($"Не удалось удалить запись: {ex.Message}");
+            return StartupActionResult.Fail($"Не удалось удалить запись: {ErrorText.For(ex)}.");
         }
     }
 

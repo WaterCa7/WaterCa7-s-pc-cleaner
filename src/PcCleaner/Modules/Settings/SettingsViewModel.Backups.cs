@@ -152,7 +152,9 @@ public sealed partial class SettingsViewModel
                 }
             }
 
-            var ok = await RegistryBackup.ImportAsync(copy.FilePath, ct);
+            // Core imports its own snapshot of the copy (elevated: in an admin-only folder) and only if that snapshot holds
+            // exactly the bytes that were checked and shown in the confirmation.
+            var ok = await RegistryBackup.ImportCheckedAsync(copy.FilePath, snapshot => SnapshotMatches(snapshot, bytes), ct);
             if (ok)
             {
                 // RegistryBackup.ImportAsync has already logged the action with the file name; add the key and the values.
@@ -172,6 +174,16 @@ public sealed partial class SettingsViewModel
         await LoadBackupsAsync(CancellationToken.None);
         if (resultMessage is not null)
             Dialogs.Info("Восстановление из резервной копии", resultMessage);
+    }
+
+    /// <summary>
+    /// The check passed to <see cref="RegistryBackup.ImportCheckedAsync"/>: the snapshot Core is about to import holds exactly
+    /// the bytes that were checked and confirmed (and still is a plain export of one key). False if it cannot be read.
+    /// </summary>
+    internal static bool SnapshotMatches(string snapshot, byte[] confirmed)
+    {
+        var (again, info) = BackupCatalog.ReadForRestore(snapshot);
+        return again is not null && again.AsSpan().SequenceEqual(confirmed) && RestoreRefusal(info) is null;
     }
 
     /// <summary>

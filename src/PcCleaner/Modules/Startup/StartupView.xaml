@@ -12,7 +12,7 @@
         <!-- Summary card that doubles as a quick filter (click again to reset). -->
         <Style x:Key="StatCard" TargetType="CheckBox">
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -56,7 +56,7 @@
         <Style x:Key="SegmentItem" TargetType="ListBoxItem">
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
@@ -558,7 +558,7 @@
                                     </StackPanel>
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,8"
                                                Text="Без прав администратора часть заданий планировщика может быть скрыта, а записи для всех пользователей и службы можно только просматривать." />
-                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить с правами администратора"
+                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить от имени администратора"
                                             Command="{Binding RestartAsAdminCommand}" HorizontalAlignment="Left" />
                                 </StackPanel>
                             </Border>

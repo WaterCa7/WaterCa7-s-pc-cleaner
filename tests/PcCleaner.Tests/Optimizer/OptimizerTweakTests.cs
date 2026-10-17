@@ -45,6 +45,28 @@ public sealed class RegistryTweakTests : IDisposable
 
     private string SandboxPath(RegistryValueSpec spec) => $@"{_sandbox}\{spec.HiveName}\{spec.SubKey}";
 
+    /// <summary>.reg exports of this test's sandbox keys in the shared backups folder (reg.exe writes UTF-16).</summary>
+    private List<string> SandboxBackups()
+    {
+        if (!Directory.Exists(AppPaths.BackupsDir))
+            return new List<string>();
+        var marker = _sandbox[(_sandbox.LastIndexOf('\\') + 1)..];
+        var found = new List<string>();
+        foreach (var file in Directory.GetFiles(AppPaths.BackupsDir, "*.reg"))
+        {
+            try
+            {
+                if (File.ReadAllText(file).Contains(marker, StringComparison.OrdinalIgnoreCase))
+                    found.Add(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // another test is writing or deleting its own backup right now
+            }
+        }
+        return found;
+    }
+
     private object? ReadSandbox(RegistryValueSpec spec)
     {
         using var key = Registry.CurrentUser.OpenSubKey(SandboxPath(spec));
@@ -91,11 +113,13 @@ public sealed class RegistryTweakTests : IDisposable
         WriteSandbox(tweak.Values[1], 1, RegistryValueKind.DWord); // AppCaptureEnabled = 1
         // HistoricalCaptureEnabled is missing
 
-        var backupsBefore = Directory.Exists(AppPaths.BackupsDir) ? Directory.GetFiles(AppPaths.BackupsDir, "*.reg").Length : 0;
+        // Other tests add and delete their own backups in the shared folder at the same time: count only this sandbox's exports.
+        var backupsBefore = SandboxBackups();
         var applied = await _engine.ApplyAsync(tweak);
         Assert.True(applied.Success, applied.Message);
         Assert.All(tweak.Values, v => Assert.Equal(0, ReadSandbox(v)));
-        Assert.True(Directory.GetFiles(AppPaths.BackupsDir, "*.reg").Length >= backupsBefore + 2, "both existing keys must be exported");
+        Assert.True(SandboxBackups().Except(backupsBefore, StringComparer.OrdinalIgnoreCase).Count() >= 2,
+            "both existing keys must be exported");
 
         var reverted = await _engine.RevertAsync(tweak);
         Assert.True(reverted.Success, reverted.Message);

@@ -47,7 +47,7 @@ public sealed class BatteryReportGenerator
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             Log.Warn($"Ускорение: нет доступа к папке для отчёта о батарее: {ex.Message}");
-            return new BatteryReportResult(false, $"Не удалось подготовить папку для отчёта: {ex.Message}");
+            return new BatteryReportResult(false, $"Не удалось подготовить папку для отчёта: {ErrorText.For(ex)}.");
         }
 
         var before = LastWrite(path);
@@ -96,7 +96,7 @@ public sealed class BatteryReportGenerator
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            return new ProcessResult(-1, "", ex.Message, false);
+            return new ProcessResult(-1, "", ErrorText.For(ex), false);
         }
     }
 }
