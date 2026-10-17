@@ -444,12 +444,7 @@ public sealed class ProcessesService : IHealthContributor
 
         var report = await Task.Run(() => Kill(running), ct).ConfigureAwait(false);
         if (report.Failed.Count > 0)
-        {
-            var why = report.AccessDenied
-                ? "Windows не дала завершить процесс — нужны права администратора."
-                : "Не удалось завершить процесс: " + report.Failed[0].Error;
-            return new QuarantineOutcome(false, why + " Файл оставлен на месте.", report);
-        }
+            return new QuarantineOutcome(false, KillFailedMessage(report), report);
 
         Exception? last = null;
         for (var attempt = 0; attempt < 10; attempt++)
@@ -496,6 +491,19 @@ public sealed class ProcessesService : IHealthContributor
     }
 
     /// <summary>
+    /// A process of the program could not be terminated, so the file was not touched. The reasons in
+    /// <see cref="KillReport.Failed"/> are short phrases without a final period ("защищённый системный процесс",
+    /// <see cref="ErrorText.For"/>), so the sentence gets its own.
+    /// </summary>
+    internal static string KillFailedMessage(KillReport report)
+    {
+        var why = report.AccessDenied
+            ? "Windows не дала завершить процесс — нужны права администратора."
+            : $"Не удалось завершить процесс: {report.Failed[0].Error.Trim().TrimEnd('.')}.";
+        return why + " Файл оставлен на месте.";
+    }
+
+    /// <summary>
     /// The file could not be moved (it stayed locked, or Windows refused access) — after the program's processes were
     /// terminated (<paramref name="killed"/>), or when nothing of it was running any more.
     /// </summary>
@@ -515,12 +523,15 @@ public sealed class ProcessesService : IHealthContributor
     /// </summary>
     internal static string QuarantineRefusedMessage(string path, InvalidOperationException error, bool killed)
     {
-        var why = error.InnerException is not null
-            ? "не удалось прочитать или записать список карантина (файл index.json в папке карантина). Файл оставлен на месте, " +
-              "иначе его нельзя было бы потом восстановить."
-            : LowerFirst(ErrorText.For(error)) + ".";
         var what = killed ? "Программа завершена, но её файл не помещён" : "Файл не помещён";
-        return $"{what} в карантин: {why}\n\n{path}\n\n" +
+        if (error.InnerException is null)
+        {
+            // Any other refusal (e.g. "Системные файлы Windows нельзя помещать в карантин."): the quarantine list is fine,
+            // so there is nothing to check in «Настройки» — Core's own Russian reason says it all.
+            return $"{what} в карантин: {LowerFirst(ErrorText.For(error))}.\n\n{path}";
+        }
+        return $"{what} в карантин: не удалось прочитать или записать список карантина (файл index.json в папке карантина). " +
+               $"Файл оставлен на месте, иначе его нельзя было бы потом восстановить.\n\n{path}\n\n" +
                "Откройте «Настройки» → «Карантин», чтобы проверить список карантина, и повторите. Подробности — в журнале.";
     }
 

@@ -91,11 +91,15 @@ public class ProcessesRound3Tests
         var killed = ProcessesService.QuarantineRefusedMessage(@"C:\Tools\tool.exe", index, killed: true);
         Assert.StartsWith("Программа завершена, но её файл не помещён в карантин: не удалось прочитать или записать список карантина", killed);
         Assert.Contains(@"C:\Tools\tool.exe", killed);
+        Assert.Contains("«Настройки» → «Карантин»", killed);
 
-        // Not an index problem (no inner exception): Core's own Russian reason, starting with a lower-case letter.
+        // Not an index problem (no inner exception): Core's own Russian reason, starting with a lower-case letter, and no
+        // advice to check the quarantine list — there is nothing wrong with it.
         var other = ProcessesService.QuarantineRefusedMessage(@"C:\Tools\tool.exe",
             new InvalidOperationException("Системные файлы Windows нельзя помещать в карантин."), killed: false);
-        Assert.StartsWith("Файл не помещён в карантин: системные файлы Windows нельзя помещать в карантин.", other);
+        Assert.Equal("Файл не помещён в карантин: системные файлы Windows нельзя помещать в карантин.\n\nC:\\Tools\\tool.exe", other);
+        Assert.DoesNotContain("index.json", other);
+        Assert.DoesNotContain("«Настройки»", other);
     }
 
     [Fact]
@@ -116,6 +120,32 @@ public class ProcessesRound3Tests
         var deniedElevated = ProcessesService.MoveFailedMessage(@"C:\Tools\tool.exe", new UnauthorizedAccessException("Access denied"),
             elevated: true, killed: true);
         Assert.DoesNotContain("Перезапустите", deniedElevated);
+    }
+
+    [Fact]
+    public void KillFailedMessage_IsTwoSentences()
+    {
+        var target = new KillTarget(4242, 0, "tool.exe", @"C:\Tools\tool.exe");
+
+        var guarded = new KillReport();
+        guarded.Failed.Add((target, "защищённый системный процесс"));
+        Assert.Equal("Не удалось завершить процесс: защищённый системный процесс. Файл оставлен на месте.",
+            ProcessesService.KillFailedMessage(guarded));
+
+        // ErrorText phrase (no final period) and an odd reason that already has one: exactly one period either way.
+        var other = new KillReport();
+        other.Failed.Add((target, ErrorText.For(new UnauthorizedAccessException("Access is denied."))));
+        Assert.Equal("Не удалось завершить процесс: нет доступа — нужны права администратора, или объект защищён Windows. " +
+                     "Файл оставлен на месте.", ProcessesService.KillFailedMessage(other));
+        var dotted = new KillReport();
+        dotted.Failed.Add((target, "процесс не отвечает."));
+        Assert.Equal("Не удалось завершить процесс: процесс не отвечает. Файл оставлен на месте.",
+            ProcessesService.KillFailedMessage(dotted));
+
+        var denied = new KillReport { AccessDenied = true };
+        denied.Failed.Add((target, "нет доступа"));
+        Assert.Equal("Windows не дала завершить процесс — нужны права администратора. Файл оставлен на месте.",
+            ProcessesService.KillFailedMessage(denied));
     }
 
     // ---------- RAM boundary shared with «Ускорение» ----------

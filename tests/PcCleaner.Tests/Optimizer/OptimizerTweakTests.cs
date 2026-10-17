@@ -23,7 +23,7 @@ public sealed class RegistryTweakTests : IDisposable
     {
         TestEnvironment.Init();
         _sandbox = $@"{SandboxRoot}\{Guid.NewGuid():N}";
-        _engine = new RegistryTweakEngine(_sandbox, _settings, null); // real RegistryBackup.ExportAsync into the temp data dir
+        _engine = new RegistryTweakEngine(_sandbox, _settings, ExportWithRetryAsync); // real RegistryBackup.ExportAsync into the temp data dir
     }
 
     public void Dispose()
@@ -44,28 +44,6 @@ public sealed class RegistryTweakTests : IDisposable
     }
 
     private string SandboxPath(RegistryValueSpec spec) => $@"{_sandbox}\{spec.HiveName}\{spec.SubKey}";
-
-    /// <summary>.reg exports of this test's sandbox keys in the shared backups folder (reg.exe writes UTF-16).</summary>
-    private List<string> SandboxBackups()
-    {
-        if (!Directory.Exists(AppPaths.BackupsDir))
-            return new List<string>();
-        var marker = _sandbox[(_sandbox.LastIndexOf('\\') + 1)..];
-        var found = new List<string>();
-        foreach (var file in Directory.GetFiles(AppPaths.BackupsDir, "*.reg"))
-        {
-            try
-            {
-                if (File.ReadAllText(file).Contains(marker, StringComparison.OrdinalIgnoreCase))
-                    found.Add(file);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // another test is writing or deleting its own backup right now
-            }
-        }
-        return found;
-    }
 
     private object? ReadSandbox(RegistryValueSpec spec)
     {
@@ -113,15 +91,32 @@ public sealed class RegistryTweakTests : IDisposable
         WriteSandbox(tweak.Values[1], 1, RegistryValueKind.DWord); // AppCaptureEnabled = 1
         // HistoricalCaptureEnabled is missing
 
-        // Other tests add and delete their own backups in the shared folder at the same time: count only this sandbox's exports.
-        var backupsBefore = SandboxBackups();
-        var applied = await _engine.ApplyAsync(tweak);
+        // The real export, recorded: other tests add and delete their own backups in the shared folder at the same time
+        // (and a virus scanner may hold a fresh file for a moment), so counting files there is unreliable.
+        var exports = new List<(string Key, string? File, object? Dvr, object? Capture)>();
+        var engine = new RegistryTweakEngine(_sandbox, _settings, async (key, ct) =>
+        {
+            var before = (Dvr: ReadSandbox(tweak.Values[0]), Capture: ReadSandbox(tweak.Values[1]));
+            var file = await ExportWithRetryAsync(key, ct);
+            lock (exports)
+                exports.Add((key, file, before.Dvr, before.Capture));
+            return file;
+        });
+
+        var applied = await engine.ApplyAsync(tweak);
         Assert.True(applied.Success, applied.Message);
         Assert.All(tweak.Values, v => Assert.Equal(0, ReadSandbox(v)));
-        Assert.True(SandboxBackups().Except(backupsBefore, StringComparer.OrdinalIgnoreCase).Count() >= 2,
-            "both existing keys must be exported");
+        // Both existing keys were exported to a file, and before anything was written.
+        Assert.Equal(new[] { $@"HKCU\{SandboxPath(tweak.Values[0])}", $@"HKCU\{SandboxPath(tweak.Values[1])}" }.OrderBy(k => k),
+            exports.Select(e => e.Key).OrderBy(k => k));
+        Assert.All(exports, e =>
+        {
+            Assert.True(e.File is not null && File.Exists(e.File), $"{e.Key} must be exported");
+            Assert.Equal(1, e.Dvr);
+            Assert.Equal(1, e.Capture);
+        });
 
-        var reverted = await _engine.RevertAsync(tweak);
+        var reverted = await engine.RevertAsync(tweak);
         Assert.True(reverted.Success, reverted.Message);
         Assert.Equal(1, ReadSandbox(tweak.Values[0]));
         Assert.Equal(1, ReadSandbox(tweak.Values[1]));
@@ -136,12 +131,15 @@ public sealed class RegistryTweakTests : IDisposable
         var spec = tweak.Values[0];
         WriteSandbox(spec, 1, RegistryValueKind.DWord);
 
-        Assert.True((await _engine.ApplyAsync(tweak)).Success);
+        var first = await _engine.ApplyAsync(tweak);
+        Assert.True(first.Success, first.Message);
         WriteSandbox(spec, 1, RegistryValueKind.DWord); // something (e.g. Windows) turned it back on
-        Assert.True((await _engine.ApplyAsync(tweak)).Success);
+        var second = await _engine.ApplyAsync(tweak);
+        Assert.True(second.Success, second.Message);
         Assert.Equal(0, ReadSandbox(spec));
 
-        Assert.True((await _engine.RevertAsync(tweak)).Success);
+        var reverted = await _engine.RevertAsync(tweak);
+        Assert.True(reverted.Success, reverted.Message);
         Assert.Equal(1, ReadSandbox(spec));
     }
 
@@ -370,7 +368,7 @@ public sealed class OptimizerServiceTests : IDisposable
             return Task.FromResult(new ProcessResult(1, "", "", false));
         }, _settings);
         return new OptimizerService(() => Task.FromResult(hw), _ => Task.FromResult(s),
-            new RegistryTweakEngine(_sandbox, _settings, null), power, () => elevated);
+            new RegistryTweakEngine(_sandbox, _settings, ExportWithRetryAsync), power, () => elevated);
     }
 
     [Fact]
@@ -436,7 +434,7 @@ public sealed class OptimizerServiceTests : IDisposable
     {
         // The engine is sandboxed: even if the guard regressed, nothing outside the test key could be touched.
         var service = new OptimizerService(() => Task.FromResult(GoodDesktop()), _ => Task.FromResult(GoodSettings()),
-            new RegistryTweakEngine(_sandbox, _settings, null),
+            new RegistryTweakEngine(_sandbox, _settings, ExportWithRetryAsync),
             new PowerPlanSwitcher((_, _) => throw new InvalidOperationException("must not run"), _settings),
             () => false);
         var rec = new Recommendation
@@ -506,7 +504,7 @@ public sealed class OptimizerServiceTests : IDisposable
             {
                 Interlocked.Increment(ref calls);
                 return Task.FromResult(GoodDesktop());
-            }, _ => Task.FromResult(GoodSettings()), new RegistryTweakEngine(_sandbox, _settings, null),
+            }, _ => Task.FromResult(GoodSettings()), new RegistryTweakEngine(_sandbox, _settings, ExportWithRetryAsync),
             new PowerPlanSwitcher((_, _) => Task.FromResult(new ProcessResult(1, "", "", false)), _settings));
         await Task.WhenAll(service.GetHardwareAsync(), service.GetHardwareAsync(), service.GetHardwareAsync());
         Assert.Equal(1, calls);

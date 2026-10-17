@@ -157,7 +157,7 @@ public sealed partial class SettingsViewModel
             var ok = await RegistryBackup.ImportCheckedAsync(copy.FilePath, snapshot => SnapshotMatches(snapshot, bytes), ct);
             if (ok)
             {
-                // RegistryBackup.ImportAsync has already logged the action with the file name; add the key and the values.
+                // RegistryBackup.ImportCheckedAsync has already logged the action with the file name; add the key and the values.
                 var changes = plan.DescribeAll();
                 Log.Info($"Раздел реестра восстановлен из резервной копии от {backup.TimeText}: {key}" +
                          (changes.Length > 0 ? $". Записано: {changes}" : ""));

@@ -1,3 +1,4 @@
+using PcCleaner.Core;
 using PcCleaner.Modules.Optimizer;
 
 namespace PcCleaner.Tests.Optimizer;
@@ -6,6 +7,22 @@ namespace PcCleaner.Tests.Optimizer;
 internal static class OptimizerTestData
 {
     public const long Gb = 1024L * 1024 * 1024;
+
+    /// <summary>
+    /// The real <see cref="RegistryBackup.ExportAsync"/> for sandboxed engines, retried a few times: with many tests (and other
+    /// test runs) exporting at once, reg.exe occasionally fails to write its file ("Не удается выполнить запись в файл").
+    /// That is an environment hiccup, not what these tests check — the engine's "no backup → no change" rule has its own test.
+    /// </summary>
+    public static async Task<string?> ExportWithRetryAsync(string key, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var file = await RegistryBackup.ExportAsync(key, "WaterCa7s PC Cleaner: Ускорение (тест)", ct);
+            if (file is not null || attempt == 3)
+                return file;
+            await Task.Delay(250, ct);
+        }
+    }
 
     public static readonly DateTime Now = new(2026, 10, 16, 12, 0, 0);
 
