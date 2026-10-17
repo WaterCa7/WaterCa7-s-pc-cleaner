@@ -1,3 +1,5 @@
+using System.Security.AccessControl;
+using System.Security.Principal;
 using Microsoft.Win32;
 using PcCleaner.Core;
 using PcCleaner.Modules.Dashboard;
@@ -85,13 +87,13 @@ public class SecurityDashboardFixTests
     }
 
     /// <summary>A report with every dashboard issue that has a fix (Defender, threats, firewall, UAC, SMBv1).</summary>
-    private static SecurityReport ReportWithEveryFix()
+    private static SecurityReport ReportWithEveryFix(SecurityStatus uac = SecurityStatus.Danger)
     {
         var checks = SecurityCheckIds.All.Select(id => new SecurityCheckResult(id, SecurityStatus.Ok, "ok", "")).ToList();
         void Set(string id, SecurityStatus status, string state)
             => checks[checks.FindIndex(c => c.Id == id)] = new SecurityCheckResult(id, status, state, "details");
         Set(SecurityCheckIds.Firewall, SecurityStatus.Danger, "Выключен для частной сети");
-        Set(SecurityCheckIds.Uac, SecurityStatus.Danger, "UAC отключён");
+        Set(SecurityCheckIds.Uac, uac, uac == SecurityStatus.Danger ? "UAC отключён" : "Запросы UAC отключены");
         Set(SecurityCheckIds.Smb1, SecurityStatus.Danger, "SMBv1 включён");
         return new SecurityReport
         {
@@ -138,22 +140,74 @@ public class SecurityDashboardFixTests
         }
     }
 
-    [Fact]
-    public async Task BuildIssues_UacFix_SuccessCountsAsFixed()
+    [Theory]
+    [InlineData(0, SecurityStatus.Danger, "Перезагрузите")]   // UAC off: "UAC включён. Перезагрузите компьютер…"
+    [InlineData(1, SecurityStatus.Warning, "Запросы UAC снова включены")] // only the prompt was off
+    public async Task BuildIssues_UacFix_SuccessCountsAsFixed(int enableLua, SecurityStatus uac, string expected)
     {
         using var sb = new SecuritySandbox();
         using (var key = sb.Create(sb.Env.UacPolicies))
         {
-            key.SetValue("EnableLUA", 0, RegistryValueKind.DWord);
+            key.SetValue("EnableLUA", enableLua, RegistryValueKind.DWord);
             key.SetValue("ConsentPromptBehaviorAdmin", 0, RegistryValueKind.DWord);
         }
-        var issue = sb.Service.BuildIssues(ReportWithEveryFix()).Single(i => i.Title.StartsWith("Контроль учётных записей"));
+        var issue = sb.Service.BuildIssues(ReportWithEveryFix(uac)).Single(i => i.Title.Contains("UAC"));
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        Assert.Contains("Перезагрузите", text);
+        Assert.Contains(expected, text);
         Assert.False(HealthScoring.LooksLikeFailure(text), text);
         using var check = sb.Env.UacPolicies.Open();
         Assert.Equal(1, check!.GetValue("EnableLUA"));
+        Assert.Equal(5, check.GetValue("ConsentPromptBehaviorAdmin"));
+    }
+
+    /// <summary>
+    /// UAC settings that cannot be read (no access to the key) are not "UAC is already on": the fix fails, changes nothing
+    /// and the dashboard keeps the problem open.
+    /// </summary>
+    [Fact]
+    public async Task BuildIssues_UacFix_SettingsUnreadable_IsNotReportedAsFixed()
+    {
+        using var sb = new SecuritySandbox();
+        var loc = sb.Env.UacPolicies;
+        using (var key = sb.Create(loc))
+        {
+            key.SetValue("EnableLUA", 0, RegistryValueKind.DWord);
+            key.SetValue("ConsentPromptBehaviorAdmin", 0, RegistryValueKind.DWord);
+        }
+        // Only the sandbox key under HKCU\Software\WaterCa7sPcCleanerTests: reading its values is denied for a moment.
+        var deny = new RegistryAccessRule(WindowsIdentity.GetCurrent().User!, RegistryRights.QueryValues, AccessControlType.Deny);
+        ChangeRule(loc, deny, add: true);
+        string text;
+        try
+        {
+            var issue = sb.Service.BuildIssues(ReportWithEveryFix()).Single(i => i.Title.Contains("UAC"));
+            text = await issue.FixAsync!(CancellationToken.None);
+        }
+        finally
+        {
+            ChangeRule(loc, deny, add: false);
+        }
+
+        Assert.Equal(SecurityService.UacUnreadableMessage, text);
+        Assert.True(HealthScoring.LooksLikeFailure(text), text);
+        Assert.Empty(sb.OwnBackups()); // refused before the backup: nothing changed
+        using var check = loc.Open();
+        Assert.Equal(0, check!.GetValue("EnableLUA"));
+        Assert.Equal(0, check.GetValue("ConsentPromptBehaviorAdmin"));
+    }
+
+    private static void ChangeRule(RegLocation loc, RegistryAccessRule rule, bool add)
+    {
+        using var root = RegistryKey.OpenBaseKey(loc.Hive, loc.View);
+        using var key = root.OpenSubKey(loc.SubKey, RegistryKeyPermissionCheck.ReadWriteSubTree,
+            RegistryRights.ReadPermissions | RegistryRights.ChangePermissions)!;
+        var acl = key.GetAccessControl();
+        if (add)
+            acl.AddAccessRule(rule);
+        else
+            acl.RemoveAccessRule(rule);
+        key.SetAccessControl(acl);
     }
 }

@@ -637,6 +637,9 @@ public sealed partial class SecurityService : IHealthContributor
         return SecurityActionResult.Ok(FirewallEnabledMessage);
     }
 
+    internal const string UacUnreadableMessage =
+        "Не удалось прочитать настройки UAC: нет доступа к разделу реестра. Ничего не изменено.";
+
     /// <summary>Values that <see cref="EnableUacAsync"/> changes: EnableLUA → 1 if it is 0; the prompt → 5 if it is 0.</summary>
     /// <remarks>A stricter prompt setting the user chose ("Всегда уведомлять", 1–4) is kept.</remarks>
     public static (bool FixLua, bool FixConsent) UacChangesNeeded(int? enableLua, int? consent)
@@ -648,9 +651,12 @@ public sealed partial class SecurityService : IHealthContributor
         var loc = Env.UacPolicies;
         if (loc.NeedsAdmin && !Admin.IsElevated)
             return SecurityActionResult.Fail(NeedAdminMessage);
-        var (fixLua, fixConsent) = UacChangesNeeded(
-            SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(loc, "EnableLUA").Value),
-            SecurityEnvironment.AsInt(SecurityEnvironment.ReadValue(loc, "ConsentPromptBehaviorAdmin").Value));
+        var lua = SecurityEnvironment.ReadValue(loc, "EnableLUA");
+        var consent = SecurityEnvironment.ReadValue(loc, "ConsentPromptBehaviorAdmin");
+        // Values that cannot be read are not "UAC is on": that would mark the problem fixed while UAC may still be off.
+        if (!lua.Readable || !consent.Readable)
+            return SecurityActionResult.Fail(UacUnreadableMessage);
+        var (fixLua, fixConsent) = UacChangesNeeded(SecurityEnvironment.AsInt(lua.Value), SecurityEnvironment.AsInt(consent.Value));
         if (!fixLua && !fixConsent)
             return SecurityActionResult.Ok("UAC уже включён и запрашивает разрешение — менять ничего не нужно.");
         var backup = await RegistryBackup.ExportAsync(loc.FullPath, "Перед включением UAC", ct);
