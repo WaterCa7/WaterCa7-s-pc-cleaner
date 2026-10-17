@@ -110,6 +110,19 @@
                         <TextBlock Text="{Binding OtherAccountWarning}" TextWrapping="Wrap" FontSize="12.5" />
                     </DockPanel>
                 </Border>
+                <!-- Update strip: downloaded / installed / needs a manual download (Core/Updates/UpdateBanner). -->
+                <Border Margin="0,10,0,0" Padding="10,6" CornerRadius="6" Background="{StaticResource AccentSoftBrush}"
+                        Visibility="{Binding ShowUpdateBanner, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="10" Padding="8,5"
+                                Margin="6,0,0,0" ToolTip="Скрыть" Command="{Binding DismissUpdateBannerCommand}" />
+                        <Button DockPanel.Dock="Right" Content="{Binding UpdateBannerAction}" Padding="12,4" Margin="12,0,0,0"
+                                Command="{Binding UpdateBannerCommand}" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE895;" FontSize="14" Foreground="{StaticResource AccentBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding UpdateBannerText}" TextWrapping="Wrap" FontSize="12.5" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
             </StackPanel>
 
             <!-- Shared busy strip for the current page -->

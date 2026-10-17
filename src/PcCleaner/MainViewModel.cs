@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using PcCleaner.Core;
+using PcCleaner.Core.Updates;
 using PcCleaner.Modules.Cleaner;
 using PcCleaner.Modules.Dashboard;
 using PcCleaner.Modules.Disk;
@@ -17,6 +18,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
 {
     private PageViewModel? _selectedPage;
     private string _statusText = "Готово";
+    private bool _updateBannerDismissed;
 
     public MainViewModel()
     {
@@ -38,6 +40,14 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
         // Admin.RestartElevated itself asks first when any page is busy (one guard for every restart button and prompt).
         RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
+        Updates = AppServices.Updates;
+        Updates.PropertyChanged += (_, _) => OnUpdateBannerChanged();
+        UpdateBannerCommand = new RelayCommand(RunUpdateBannerAction);
+        DismissUpdateBannerCommand = new RelayCommand(() =>
+        {
+            _updateBannerDismissed = true;
+            OnUpdateBannerChanged();
+        });
         Log.EntryAdded += entry => StatusText = entry.Message;
 
         if (OtherAccountWarning is { } warning)
@@ -79,11 +89,53 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
     public RelayCommand RestartAsAdminCommand { get; }
 
+    public UpdateService Updates { get; }
+
+    private UpdateBanner? Banner => _updateBannerDismissed ? null : UpdateBanner.For(Updates.State, Updates.Manifest, Updates.CurrentVersion);
+
+    public bool ShowUpdateBanner => Banner is not null;
+
+    public string UpdateBannerText => Banner?.Text ?? "";
+
+    public string UpdateBannerAction => Banner?.Action ?? "";
+
+    public RelayCommand UpdateBannerCommand { get; }
+
+    public RelayCommand DismissUpdateBannerCommand { get; }
+
     public void NavigateTo(string pageKey)
     {
         var page = Pages.FirstOrDefault(p => string.Equals(p.Key, pageKey, StringComparison.OrdinalIgnoreCase));
         if (page is not null)
             SelectedPage = page;
+    }
+
+    private void OnUpdateBannerChanged()
+    {
+        OnPropertyChanged(nameof(ShowUpdateBanner));
+        OnPropertyChanged(nameof(UpdateBannerText));
+        OnPropertyChanged(nameof(UpdateBannerAction));
+    }
+
+    private void RunUpdateBannerAction()
+    {
+        switch (Updates.State)
+        {
+            case UpdateState.Ready:
+                var busy = Pages.Where(p => p.IsBusy).Select(p => p.Title).ToList();
+                if (busy.Count > 0 && !Dialogs.Confirm("Установка обновления", UpdateBanner.BusyWarning(busy)))
+                    return;
+                if (Updates.InstallNow(Environment.GetCommandLineArgs().Skip(1).ToList()))
+                    System.Windows.Application.Current.Shutdown();
+                break;
+            case UpdateState.Updated:
+                Dialogs.Info($"Что нового в версии {Updates.CurrentVersion.ToString(3)}",
+                    string.IsNullOrWhiteSpace(Updates.Manifest?.Notes) ? "Описание изменений есть на странице релиза." : Updates.Manifest!.Notes);
+                break;
+            case UpdateState.ManualRequired:
+                ProcessRunner.ShellOpen(UpdateService.ReleasesUrl);
+                break;
+        }
     }
 
     /// <summary>Selects a page and awaits its activation.</summary>

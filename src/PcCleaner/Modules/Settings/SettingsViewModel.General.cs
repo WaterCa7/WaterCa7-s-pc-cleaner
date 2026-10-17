@@ -147,6 +147,9 @@ public sealed partial class SettingsViewModel
             // Backing fields + explicit notifications: loading must never trigger a save.
             _createRestorePoint = s.CreateRestorePoint;
             OnPropertyChanged(nameof(CreateRestorePoint));
+            _autoUpdate = s.AutoUpdate;
+            OnPropertyChanged(nameof(AutoUpdate));
+            OnPropertyChanged(nameof(LastCheckText));
 
             var options = SettingsLogic.BuildAgeOptions(s.CleanerMinFileAgeHours);
             if (!options.SequenceEqual(AgeOptions))

@@ -2,6 +2,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using PcCleaner.Core;
+using PcCleaner.Core.Updates;
 
 namespace PcCleaner;
 
@@ -12,6 +13,9 @@ public partial class App : Application
     internal static string[]? ScreenshotPages { get; private set; }
     internal static bool ScreenshotScan { get; private set; } = true;
     internal static (int Width, int Height)? ScreenshotSize { get; private set; }
+
+    /// <summary>Set by the updater when it starts the freshly installed version: --updated-from &lt;old version&gt;.</summary>
+    internal static string? UpdatedFrom { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -42,6 +46,13 @@ public partial class App : Application
         Log.Info($"Запуск WaterCa7s PC Cleaner {typeof(App).Assembly.GetName().Version?.ToString(3)}" +
                  (Admin.IsElevated ? " (администратор)" : ""));
 
+        // Install an already downloaded update before any window appears; the new version starts and this one exits.
+        if (ScreenshotDir is null && UpdatedFrom is null && AppServices.Updates.TryInstallStaged(e.Args))
+        {
+            Shutdown();
+            return;
+        }
+
         var vm = new MainViewModel();
         var window = new MainWindow { DataContext = vm };
         MainWindow = window;
@@ -68,6 +79,13 @@ public partial class App : Application
         }
 
         window.Show();
+
+        if (ScreenshotDir is null)
+        {
+            _ = UpdatedFrom is not null
+                ? AppServices.Updates.CompleteUpdateAsync(UpdatedFrom)
+                : AppServices.Updates.CheckAsync(manual: false, CancellationToken.None);
+        }
     }
 
     private static void ParseArgs(string[] args)
@@ -84,6 +102,9 @@ public partial class App : Application
                     break;
                 case "--no-scan":
                     ScreenshotScan = false;
+                    break;
+                case UpdateService.UpdatedFromArg when i + 1 < args.Length:
+                    UpdatedFrom = args[++i];
                     break;
                 case "--size" when i + 1 < args.Length:
                     var parts = args[++i].ToLowerInvariant().Split('x');
