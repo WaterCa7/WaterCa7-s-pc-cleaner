@@ -24,11 +24,29 @@ public sealed record SignatureInfo(SignatureStatus Status, string? Publisher, bo
 {
     public bool IsValid => Status == SignatureStatus.Valid;
 
-    public bool IsMicrosoft => IsValid && Publisher is not null &&
-                               Publisher.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// The file has no Authenticode signature of its own but belongs to a signed Microsoft Store / MSIX package that
+    /// Windows installed into %ProgramFiles%\WindowsApps (see <see cref="PackageSignature"/>). <see cref="Publisher"/>
+    /// is then the package's publisher display name and <see cref="PackagePublisher"/> its full publisher name.
+    /// </summary>
+    public bool IsPackageSigned { get; init; }
+
+    /// <summary>Publisher of the package ("CN=..., O=..., C=US") when <see cref="IsPackageSigned"/>; otherwise null.</summary>
+    public string? PackagePublisher { get; init; }
+
+    /// <summary>
+    /// Valid signature by Microsoft. For package-signed files this comes from the package publisher (O=Microsoft
+    /// Corporation), never from the display name, which is not checked against the certificate.
+    /// </summary>
+    public bool IsMicrosoft => IsValid && (IsPackageSigned
+        ? PackageSignature.IsMicrosoftPublisher(PackagePublisher)
+        : Publisher is not null && Publisher.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase));
 
     public string StatusText => Status switch
     {
+        SignatureStatus.Valid when IsPackageSigned => Publisher is null
+            ? "Подписан (пакет приложения)"
+            : $"Подписан: {Publisher} (пакет приложения)",
         SignatureStatus.Valid => Publisher is null ? "Подписан" : $"Подписан: {Publisher}",
         SignatureStatus.Unsigned => "Без подписи",
         SignatureStatus.Invalid => "Подпись повреждена!",
@@ -39,7 +57,9 @@ public sealed record SignatureInfo(SignatureStatus Status, string? Publisher, bo
 }
 
 /// <summary>
-/// Authenticode verification via WinVerifyTrust, including catalog-signed Windows files.
+/// Authenticode verification via WinVerifyTrust, including catalog-signed Windows files. Files of signed Microsoft
+/// Store / MSIX packages in %ProgramFiles%\WindowsApps, which have no signature of their own, are checked through their
+/// package (<see cref="SignatureInfo.IsPackageSigned"/>).
 /// Works offline (no revocation checks). Results are cached per file version. Thread-safe.
 /// </summary>
 public static class FileSignature
@@ -60,7 +80,7 @@ public static class FileSignature
         }
         catch (Exception ex)
         {
-            Log.Warn($"Проверка подписи {path}: {ex.Message}");
+            Log.Warn($"Проверка подписи {path}: {ErrorText.For(ex)}");
             return new SignatureInfo(SignatureStatus.Error, null);
         }
     }
@@ -74,7 +94,10 @@ public static class FileSignature
         if (embedded.Status != SignatureStatus.Unsigned)
             return embedded;
         var catalog = VerifyCatalog(path);
-        return catalog ?? embedded;
+        if (catalog is not null)
+            return catalog;
+        // Store / MSIX app files are covered by the package signature instead (only inside WindowsApps).
+        return PackageSignature.TryVerify(path) ?? embedded;
     }
 
     private static SignatureInfo VerifyEmbedded(string path)

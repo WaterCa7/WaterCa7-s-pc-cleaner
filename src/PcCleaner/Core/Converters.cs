@@ -96,15 +96,18 @@ public sealed class SeverityToBrushConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>IssueSeverity -> Russian label.</summary>
+/// <summary>
+/// IssueSeverity -> Russian badge label. Noun-like labels (as on the Network page): a bare "Низко" next to a title such
+/// as "Высокая задержка" reads as a contradiction. The dashboard groups by severity with its own headers.
+/// </summary>
 public sealed class SeverityToTextConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
         IssueSeverity.Critical => "Критично",
         IssueSeverity.High => "Важно",
-        IssueSeverity.Medium => "Средне",
-        IssueSeverity.Low => "Низко",
+        IssueSeverity.Medium => "Внимание",
+        IssueSeverity.Low => "Мелочь",
         IssueSeverity.Info => "Совет",
         _ => value?.ToString() ?? "",
     };

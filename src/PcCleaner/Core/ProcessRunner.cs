@@ -198,7 +198,11 @@ public static class ProcessRunner
         }
     }
 
-    private static string ExplorerPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+    /// <summary>
+    /// "C:\Windows\explorer.exe". CreateProcess looks in the application's own folder first, so a bare "explorer.exe"
+    /// would let a planted explorer.exe next to our exe run with our (possibly administrator) rights.
+    /// </summary>
+    internal static string ExplorerPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
 
     /// <summary>Opens Explorer with the file selected.</summary>
     public static void ShowInExplorer(string path)
