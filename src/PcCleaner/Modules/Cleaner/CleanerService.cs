@@ -282,7 +282,7 @@ public sealed class CleanerService : IHealthContributor
             {
                 if (before is null)
                 {
-                    result.Errors.Add("не удалось проверить, что в ней сейчас лежит, поэтому ничего не удалено");
+                    result.Errors.Add("Windows не сообщила, что в ней сейчас лежит, поэтому ничего не удалено");
                     return result;
                 }
                 if (before.Value.Items == 0 || !shown.IsExceededBy(before.Value))

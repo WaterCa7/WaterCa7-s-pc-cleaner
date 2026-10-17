@@ -84,18 +84,17 @@ public class CleanerRecycleBinRecheckTests
     }
 
     [Fact]
-    public async Task DashboardBinFix_ByDefault_TheSecondQuestionGoesThroughDialogsConfirm()
+    public void ByDefault_BothQuestionsGoThroughDialogsConfirm()
     {
-        // TestEnvironment puts Dialogs in silent mode ("Нет"): the default must ask, never assume "Да".
+        // Checked by identity, not by answering through the dialogs: other test collections temporarily replace the
+        // global Dialogs.ConfirmHandler with "Да" while this class runs in parallel.
         using var t = new CleanerTestFolder("r3-bin-default");
-        var service = CleanerServiceTests.CreateService(t, out _, out var bin);
-        var issue = await AnalyzeBinIssueAsync(service, bin, 5 * Mb, 3);
+        var service = CleanerServiceTests.CreateService(t, out _, out _);
+        var confirm = typeof(Dialogs).GetMethod(nameof(Dialogs.Confirm))!;
 
-        bin.Items = 4;
-        var message = await issue.FixAsync!(CancellationToken.None);
-
-        Assert.Equal(0, bin.EmptyCalls);
-        Assert.True(HealthScoring.LooksLikeFailure(message));
+        Assert.Equal(confirm, service.ConfirmAgain.Method);
+        Assert.Null(service.ConfirmAgain.Target);
+        Assert.Equal(confirm, new CleanerViewModel(service).Confirm.Method);
     }
 
     [Theory]

@@ -149,54 +149,67 @@ public sealed class CleanerViewModel : PageViewModel
     public string? DismStatus
     {
         get => _dismStatus;
-        private set => Set(ref _dismStatus, value);
+        private set
+        {
+            if (Set(ref _dismStatus, value))
+                RaiseTips(); // while DISM runs, the busy tooltips say that it cannot be stopped
+        }
     }
+
+    internal const string DismRunning = "Выполняется…";
 
     // ===== Button tooltips (also shown on disabled buttons: they say why the button cannot be pressed) =====
 
     internal const string BusyTip =
         "Сейчас идёт анализ или очистка — дождитесь окончания или нажмите «Отмена» над страницей";
 
+    /// <summary>DISM is not cancelled on purpose (see CleanerService.RunComponentCleanupAsync): "Отмена" would not help.</summary>
+    internal const string DismBusyTip =
+        "Идёт очистка компонентов Windows (DISM) — дождитесь её окончания, прерывать её нельзя";
+
+    private string CurrentBusyTip => BusyTipFor(DismStatus);
+
+    internal static string BusyTipFor(string? dismStatus) => dismStatus == DismRunning ? DismBusyTip : BusyTip;
+
     public string AnalyzeTip => IsBusy
-        ? BusyTip
+        ? CurrentBusyTip
         : HasScanned
             ? "Проверить ещё раз (ничего не удаляется)"
             : "Найти временные файлы, кэш и другой мусор (ничего не удаляется)";
 
-    public string CleanTip
+    public string CleanTip => IsBusy ? CurrentBusyTip : IdleCleanTip(SelectedCount, HasScanned, TotalBytes);
+
+    /// <summary>"Очистить выбранное" while nothing runs. It is enabled exactly when something is selected.</summary>
+    internal static string IdleCleanTip(int selectedCount, bool hasScanned, long totalBytes)
     {
-        get
-        {
-            if (IsBusy)
-                return BusyTip;
-            if (!HasScanned)
-                return "Сначала выполните анализ — кнопка станет доступна, когда будет понятно, что удалять";
-            if (SelectedCount == 0)
-                return TotalBytes < Mb
-                    ? "Удалять нечего: мусора почти нет"
-                    : "Отметьте в списке ниже хотя бы одну категорию, в которой найдены файлы";
+        // Checked first: rows sized by an analysis that was stopped half-way can already be cleaned.
+        if (selectedCount > 0)
             return "Удалить файлы в отмеченных категориях (перед удалением появится подтверждение)";
-        }
+        if (!hasScanned)
+            return "Сначала выполните анализ — кнопка станет доступна, когда будет понятно, что удалять";
+        return totalBytes < Mb
+            ? "Удалять нечего: мусора почти нет"
+            : "Отметьте в списке ниже хотя бы одну категорию, в которой найдены файлы";
     }
 
     public string SelectRecommendedTip => IsBusy
-        ? BusyTip
+        ? CurrentBusyTip
         : _items.Count == 0
             ? "Список категорий ещё не готов — дождитесь анализа"
             : "Отметить безопасные категории, которые мы рекомендуем очищать";
 
     public string UnselectAllTip => IsBusy
-        ? BusyTip
+        ? CurrentBusyTip
         : _items.Count == 0
             ? "Список категорий ещё не готов — дождитесь анализа"
             : "Снять отметки со всех категорий";
 
     public string RestartAsAdminTip => IsBusy
-        ? BusyTip
+        ? CurrentBusyTip
         : "Программа перезапустится с правами администратора — тогда можно будет очистить и системные папки";
 
     public string RunDismTip => IsBusy
-        ? BusyTip
+        ? CurrentBusyTip
         : "Перед запуском появится подтверждение со всеми подробностями";
 
     private void RaiseTips()
@@ -496,7 +509,11 @@ public sealed class CleanerViewModel : PageViewModel
             selected = _items.Where(i => i.IsSelectedForCleaning).ToList();
             if (selected.Count == 0)
             {
-                Dialogs.Info("Очистка", "Корзина уже пуста, а других отмеченных категорий с файлами нет — удалять нечего.");
+                // A bin whose contents cannot be read is never emptied (and is not "already empty").
+                Dialogs.Info("Очистка", binItem.Result?.Error is not null
+                    ? "Не удалось узнать, что сейчас лежит в корзине, поэтому она не будет очищена, а других отмеченных " +
+                      "категорий с файлами нет. Попробуйте ещё раз чуть позже."
+                    : "Корзина уже пуста, а других отмеченных категорий с файлами нет — удалять нечего.");
                 return;
             }
         }
@@ -630,13 +647,13 @@ public sealed class CleanerViewModel : PageViewModel
         await RunBusyAsync("Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…",
             async ct =>
             {
-                DismStatus = "Выполняется…";
+                DismStatus = DismRunning;
                 await RestorePoint.TryCreateAsync("Очистка компонентов Windows", ct);
                 ReportProgress(-1, "Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…");
                 DismStatus = await _service.RunComponentCleanupAsync(ct);
                 Dialogs.Info("Очистка компонентов Windows", DismStatus);
             });
-        if (DismStatus == "Выполняется…")
+        if (DismStatus == DismRunning)
             DismStatus = null;
     }
 }
