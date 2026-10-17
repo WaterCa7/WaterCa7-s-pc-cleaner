@@ -53,18 +53,26 @@ tests/PcCleaner.Tests/  xUnit-тесты (Core/ и <Key>/)
   (если вернула null — изменение отменяется). `RegistryBackup.OpenKey(...)`.
   `RegistryBackup.ImportCheckedAsync(file, verify)` — импорт .reg именно в том виде, в котором его проверили
   (снимок файла проверяется и импортируется; папку Backups может переписать любой процесс пользователя).
+  `ImportAsync(file)` импортирует файл таким, каким он будет в момент импорта: если содержимое проверяли или показывали
+  в подтверждении — только `ImportCheckedAsync` или собственная заблокированная копия.
 - `RestorePoint.TryCreateAsync("...")` — перед пакетом системных изменений. Сама **не включает** защиту системы: если
   она выключена, точка не создаётся (результат `Failed`). Включает её только ручное действие в «Настройках»
   (`force: true`, это сказано в подтверждении), и это записывается через `Log.Action`.
-- `FileSignature.Get(path)` — проверка Authenticode (встроенная и каталожная подписи), кэшируется.
+- `FileSignature.Get(path)` — проверка Authenticode (встроенная и каталожная подписи), кэшируется. Файлы приложений
+  Microsoft Store / MSIX в `%ProgramFiles%\WindowsApps\<PackageFullName>\` своей подписи не имеют: они считаются
+  подписанными через пакет (`SignatureInfo.IsPackageSigned`, `PackagePublisher` — издатель из AppxManifest.xml), только
+  если путь действительно внутри этой папки (без junction/symlink/коротких имён), имя папки совпадает с манифестом
+  (имя, версия, хеш издателя), есть AppxSignature.p7x, а Windows зарегистрировала эту папку как подписанный пакет.
+  `IsMicrosoft` у таких файлов определяется по издателю пакета (`O=Microsoft Corporation`), а не по отображаемому имени.
 - `Suspicion.Analyze(path, signature, commandLine)` / `Suspicion.AnalyzeProgram(...)` — эвристика с причинами.
   `KnownPups.Match(name, publisher)` — потенциально нежелательные программы.
 - `CommandLine.Split(cmd)` / `CommandLine.TargetFile(cmd)` — разбор командных строк.
 - `Quarantine.Add/Restore/Delete` — вместо удаления подозрительных файлов.
 - `FileTools.Sha256Async`, `OpenVirusTotalAsync`, `SearchWeb`, `ScanWithDefenderAsync`, `SendToRecycleBin`, `IsReparsePoint`.
 - `ProcessRunner.RunAsync(exe, args)` (кодировка OEM 866 учтена), `ProcessRunner.PowerShellAsync(script)` (UTF-8),
-  `ShellOpen`, `ShowInExplorer`. С правами администратора скрипт PowerShell пишется в `%WINDIR%\Temp` с доступом только
-  для SYSTEM и администраторов (`SecureTemp`), а не в `%LOCALAPPDATA%`, который может переписать любой процесс пользователя.
+  `ShellOpen`, `ShowInExplorer` (`ProcessRunner.ExplorerPath` — полный путь к explorer.exe в папке Windows).
+  С правами администратора скрипт PowerShell пишется в `%WINDIR%\Temp` с доступом только для SYSTEM и администраторов
+  (`SecureTemp`), а не в `%LOCALAPPDATA%`, который может переписать любой процесс пользователя.
   Никогда не вставляйте в скрипт текст из реестра/файлов как код: передавайте его как данные (см. `RestorePoint.BuildScript`).
 - `Wmi.Query(query, scope)` + расширения `Str/Long/Bool/Date`. Без прав/при ошибке → пустой список.
 - `AppServices.Settings` (`AppSettings`, JSON в `%LOCALAPPDATA%\WaterCa7sPcCleaner`), `ModuleData` для состояния модулей:
@@ -87,7 +95,7 @@ ComboBox, TextBox, CheckBox, RadioButton, ProgressBar, ScrollBar, ToolTip, Conte
 `FocusVisualStyle="{StaticResource FocusRing}"`, а не `{x:Null}` (иначе при переходе по Tab не видно, где фокус).
 У кнопок только со значком задавайте `AutomationProperties.Name` (тот же текст, что в подсказке).
 Конвертеры: `BoolToVis` (параметр `Invert`), `InverseBool`, `HasValueToVis`, `Bytes`, `SeverityToBrush`,
-`SeverityToText`, `PercentToBrush`.
+`SeverityToText` (значок важности: «Критично», «Важно», «Внимание», «Мелочь», «Совет»), `PercentToBrush`.
 
 ## Правила безопасности
 

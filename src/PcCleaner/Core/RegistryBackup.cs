@@ -55,7 +55,13 @@ public static class RegistryBackup
         return file;
     }
 
-    /// <summary>Imports a .reg backup (HKLM keys need admin).</summary>
+    /// <summary>
+    /// Imports a .reg backup (HKLM keys need admin) exactly as the file is at the moment reg.exe reads it.
+    /// Files in the Backups folder can be rewritten by any process of the user, so a caller that has inspected the file
+    /// or shown its contents in a confirmation must not import that path afterwards: use
+    /// <see cref="ImportCheckedAsync"/>, which imports the very snapshot it verified, or pass a private copy that the
+    /// caller keeps locked against writes until the import ends.
+    /// </summary>
     public static async Task<bool> ImportAsync(string regFile, CancellationToken ct = default)
     {
         var result = await ProcessRunner.RunAsync("reg.exe", $"import \"{regFile}\"", TimeSpan.FromSeconds(60), ct);
