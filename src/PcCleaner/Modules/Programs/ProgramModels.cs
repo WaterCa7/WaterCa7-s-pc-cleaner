@@ -102,6 +102,13 @@ public sealed class InstalledProgram : ObservableObject
 
     public string? InstallLocation { get; init; }
     public bool InstallLocationExists { get; init; }
+
+    /// <summary>
+    /// The install folder is on a network, removable or disconnected drive and was not checked (see
+    /// ProgramRules.IsUnprobeablePath): it is neither "there" nor "gone".
+    /// </summary>
+    public bool InstallLocationUnchecked { get; init; }
+
     public string? UninstallString { get; init; }
     public string? QuietUninstallString { get; init; }
     public string? DisplayIcon { get; init; }
@@ -213,7 +220,9 @@ public sealed class InstalledProgram : ObservableObject
 
     public string InstallLocationText => string.IsNullOrWhiteSpace(InstallLocation)
         ? "Не указана"
-        : InstallLocationExists ? InstallLocation! : InstallLocation + " (папки нет)";
+        : InstallLocationExists ? InstallLocation!
+        : InstallLocationUnchecked ? InstallLocation + " (сетевой, съёмный или отключённый диск — не проверялась)"
+        : InstallLocation + " (папки нет)";
 
     public string UninstallCommandText => Launch is null
         ? (string.IsNullOrWhiteSpace(UninstallString) ? "—" : UninstallString!)
@@ -282,6 +291,12 @@ public sealed class InstalledProgram : ObservableObject
     /// command CanExecute checks run on the UI thread all the time and must not touch the disk.
     /// </summary>
     public string? MainExecutable { get; init; }
+
+    /// <summary>
+    /// The program file "Доверять" also trusts, so the «Процессы» and «Автозагрузка» pages (which recognise programs by
+    /// file path) stop flagging it too: <see cref="ProgramRules.TrustFileFor"/>, found once at scan time. Null if none qualifies.
+    /// </summary>
+    public string? TrustFile { get; init; }
 
     /// <summary>Recomputes the badge list after flags or trust change.</summary>
     public void RefreshBadges()

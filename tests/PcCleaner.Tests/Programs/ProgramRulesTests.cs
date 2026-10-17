@@ -238,6 +238,156 @@ public class ProgramRulesTests
         Assert.True(ProgramRules.IsBroken(v));
     }
 
+    /// <summary>C: is a local disk, R: a RAM disk, Z: a mapped network drive, E: a USB stick, F: a DVD drive, others are free letters.</summary>
+    private static DriveType FakeDrives(string drive) => char.ToUpperInvariant(drive[0]) switch
+    {
+        'C' => DriveType.Fixed,
+        'R' => DriveType.Ram,
+        'Z' => DriveType.Network,
+        'E' => DriveType.Removable,
+        'F' => DriveType.CDRom,
+        _ => DriveType.NoRootDirectory,
+    };
+
+    [Fact]
+    public void IsUnprobeablePath_OnlyLocalFixedDisksAreProbed()
+    {
+        Assert.False(ProgramRules.IsUnprobeablePath(@"C:\Program Files\App", FakeDrives));
+        Assert.False(ProgramRules.IsUnprobeablePath(@"c:\program files\app\app.exe", FakeDrives));
+        Assert.False(ProgramRules.IsUnprobeablePath(@"R:\Cache\app.exe", FakeDrives));
+
+        Assert.True(ProgramRules.IsUnprobeablePath(@"Z:\Apps\Tool", FakeDrives));       // mapped NAS share
+        Assert.True(ProgramRules.IsUnprobeablePath(@"z:\apps\tool\tool.exe", FakeDrives));
+        Assert.True(ProgramRules.IsUnprobeablePath(@"E:\PortableApps\x.exe", FakeDrives)); // USB stick
+        Assert.True(ProgramRules.IsUnprobeablePath(@"F:\setup.exe", FakeDrives));          // DVD drive
+        Assert.True(ProgramRules.IsUnprobeablePath(@"Q:\Gone\app.exe", FakeDrives));       // nothing behind the letter
+        Assert.True(ProgramRules.IsUnprobeablePath(@"\\nas\share\app", FakeDrives));
+        Assert.True(ProgramRules.IsUnprobeablePath("//nas/share/app", FakeDrives));
+
+        Assert.False(ProgramRules.IsUnprobeablePath(null, FakeDrives));
+        Assert.False(ProgramRules.IsUnprobeablePath("", FakeDrives));
+        Assert.False(ProgramRules.IsUnprobeablePath("app.exe", FakeDrives)); // relative: local
+
+        // Real drive types: the Windows disk is a local fixed disk.
+        Assert.False(ProgramRules.IsUnprobeablePath(Environment.SystemDirectory));
+        Assert.True(ProgramRules.IsUnprobeablePath(@"\\server\share\app.exe"));
+    }
+
+    [Fact]
+    public void IsBroken_NeverProbesMappedNetworkOrRemovableDrives()
+    {
+        var probed = new List<string>();
+        bool FileExists(string p)
+        {
+            probed.Add(p);
+            return false;
+        }
+        bool DirExists(string p)
+        {
+            probed.Add(p);
+            return p.Length <= 3; // every drive root is there, every folder is gone
+        }
+
+        // Uninstaller and folder on a mapped NAS drive (the share may be offline): not checked, never broken.
+        Assert.False(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Nas", DisplayName = "Tool on NAS", UninstallString = @"""Z:\Apps\Tool\unins000.exe""", InstallLocation = @"Z:\Apps\Tool",
+        }, FileExists, DirExists, FakeDrives));
+        Assert.Empty(probed);
+
+        // On a USB stick: another stick under the same letter must not make the program look gone.
+        Assert.False(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Usb", DisplayName = "Portable", UninstallString = @"""E:\Apps\Portable\uninstall.exe""",
+        }, FileExists, DirExists, FakeDrives));
+        Assert.Empty(probed);
+
+        // Local uninstaller gone, but the folder or the program's own .exe is on a mapped drive: cannot tell, not broken.
+        Assert.False(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Mix", DisplayName = "Mixed", UninstallString = @"""C:\Gone\uninstall.exe""", InstallLocation = @"Z:\Apps\Mixed",
+        }, FileExists, DirExists, FakeDrives));
+        Assert.False(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Mix2", DisplayName = "Mixed 2", UninstallString = @"""C:\Gone\uninstall.exe""", DisplayIcon = @"""Z:\Apps\Mixed\mixed.exe"",0",
+        }, FileExists, DirExists, FakeDrives));
+        Assert.DoesNotContain(probed, p => p.StartsWith("Z:", StringComparison.OrdinalIgnoreCase));
+
+        // The same kind of entry entirely on a local disk is still recognised as broken.
+        Assert.True(ProgramRules.IsBroken(new UninstallEntryValues
+        {
+            KeyName = "Local", DisplayName = "Local", UninstallString = @"""C:\Gone\uninstall.exe""", InstallLocation = @"C:\Gone",
+            DisplayIcon = @"C:\Gone\local.exe",
+        }, FileExists, DirExists, FakeDrives));
+    }
+
+    [Fact]
+    public void FindMainExecutableAndBundleFallback_DoNotProbeMappedDrives()
+    {
+        var probed = new List<string>();
+        bool FileExists(string p)
+        {
+            probed.Add(p);
+            return true;
+        }
+
+        Assert.Null(ProgramRules.FindMainExecutable(@"""Z:\Apps\Tool\tool.exe"",0", null, FileExists, FakeDrives));
+        Assert.Null(ProgramRules.FindMainExecutable(@"E:\Apps\Tool\tool.exe", null, FileExists, FakeDrives));
+        Assert.Empty(probed);
+        Assert.Equal(@"C:\Apps\Tool\tool.exe", ProgramRules.FindMainExecutable(@"C:\Apps\Tool\tool.exe", null, FileExists, FakeDrives));
+
+        probed.Clear();
+        var onShare = ProgramRules.BuildLaunch(@"""Z:\Apps\Tool\uninstall.exe""", false, "T");
+        Assert.Same(onShare, ProgramRules.WithBundleFallback(onShare, @"C:\ProgramData\Package Cache\{B}\bundle.exe", false, FileExists, FakeDrives));
+        var local = ProgramRules.BuildLaunch(@"""C:\Gone\uninstall.exe""", false, "T");
+        Assert.Same(local, ProgramRules.WithBundleFallback(local, @"Z:\Package Cache\{B}\bundle.exe", false, p =>
+        {
+            probed.Add(p);
+            return false;
+        }, FakeDrives));
+        Assert.Empty(probed);
+    }
+
+    // ---------------------------------------------------------------- trust
+
+    [Fact]
+    public void TrustFileFor_OnlyTheProgramsOwnExeInsideItsInstallFolder()
+    {
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var folder = Path.Combine(programFiles, "IObit", "Driver Booster", "11.0.0");
+        var exe = Path.Combine(folder, "DriverBooster.exe");
+        var uninstaller = Path.Combine(folder, "unins000.exe");
+        var launch = ProgramRules.BuildLaunch($"\"{uninstaller}\" /S", false, "DB");
+
+        Assert.Equal(exe, ProgramRules.TrustFileFor(exe, folder, launch));
+        Assert.Equal(exe, ProgramRules.TrustFileFor(exe, folder + "\\", launch));
+        Assert.Equal(exe, ProgramRules.TrustFileFor(exe, folder, null));
+
+        Assert.Null(ProgramRules.TrustFileFor(uninstaller, folder, launch));                                // its uninstaller
+        Assert.Null(ProgramRules.TrustFileFor(Path.Combine(programFiles, "Shared", "x.exe"), folder, null)); // outside its folder
+        Assert.Null(ProgramRules.TrustFileFor(Path.Combine(programFiles, "app.exe"), programFiles, null));  // folder too broad
+        Assert.Null(ProgramRules.TrustFileFor(Path.Combine(folder, "readme.txt"), folder, null));
+        Assert.Null(ProgramRules.TrustFileFor(Path.Combine(Environment.SystemDirectory, "notepad.exe"), Environment.SystemDirectory, null));
+
+        // Names that keep their own warnings: Windows binaries and look-alikes, interpreters, risky tools, odd names.
+        foreach (var name in new[]
+                 {
+                     "svchost.exe", "svch0st.exe", "explorer.exe", "powershell.exe", "python.exe", "node.exe", "xmrig.exe",
+                     "AnyDesk.exe", "invoice.pdf.exe", "a8f3k2x9q1.exe",
+                 })
+            Assert.Null(ProgramRules.TrustFileFor(Path.Combine(folder, name), folder, null));
+
+        // Risky folders keep their warnings too.
+        var temp = Path.Combine(Path.GetTempPath(), "Tool");
+        Assert.Null(ProgramRules.TrustFileFor(Path.Combine(temp, "tool.exe"), temp, null));
+        var downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Tool");
+        Assert.Null(ProgramRules.TrustFileFor(Path.Combine(downloads, "tool.exe"), downloads, null));
+
+        Assert.Null(ProgramRules.TrustFileFor(@"\\nas\apps\tool\tool.exe", @"\\nas\apps\tool", null));
+        Assert.Null(ProgramRules.TrustFileFor(null, folder, null));
+        Assert.Null(ProgramRules.TrustFileFor(exe, null, null));
+    }
+
     [Fact]
     public void IsBroken_UsesInjectedFileSystem()
     {

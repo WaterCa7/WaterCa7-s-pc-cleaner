@@ -192,8 +192,9 @@ public sealed class ProgramsService : IHealthContributor
     {
         var location = ProgramRules.NormalizeFolder(v.InstallLocation);
         var locationExists = false;
+        var locationUnchecked = location is not null && ProgramRules.IsUnprobeablePath(location);
         DateTime? folderCreated = null;
-        if (location is not null && !ProgramRules.IsNetworkPath(location))
+        if (location is not null && !locationUnchecked)
         {
             try
             {
@@ -216,7 +217,7 @@ public sealed class ProgramsService : IHealthContributor
         }
 
         UninstallLaunch? launch = null, quietLaunch = null;
-        string? mainExecutable = null;
+        string? mainExecutable = null, trustFile = null;
         try
         {
             launch = ProgramRules.WithBundleFallback(
@@ -225,6 +226,8 @@ public sealed class ProgramsService : IHealthContributor
                 quietLaunch = ProgramRules.WithBundleFallback(
                     ProgramRules.BuildQuietLaunch(v.QuietUninstallString), v.BundleCachePath, quiet: true);
             mainExecutable = ProgramRules.FindMainExecutable(v.DisplayIcon, launch);
+            if (locationExists)
+                trustFile = ProgramRules.TrustFileFor(mainExecutable, location, launch);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
         {
@@ -241,6 +244,7 @@ public sealed class ProgramsService : IHealthContributor
             EstimatedSizeBytes = ProgramRules.EstimatedSizeToBytes(v.EstimatedSizeKb),
             InstallLocation = location,
             InstallLocationExists = locationExists,
+            InstallLocationUnchecked = locationUnchecked,
             UninstallString = v.UninstallString,
             QuietUninstallString = v.QuietUninstallString,
             DisplayIcon = v.DisplayIcon,
@@ -255,6 +259,7 @@ public sealed class ProgramsService : IHealthContributor
             Launch = launch,
             QuietLaunch = quietLaunch,
             MainExecutable = mainExecutable,
+            TrustFile = trustFile,
         };
         ApplyTrust(program);
         return program;
@@ -279,11 +284,30 @@ public sealed class ProgramsService : IHealthContributor
     public static bool SetTrusted(string displayName, bool trusted) => SetTrusted(AppServices.Settings, displayName, trusted);
 
     internal static bool SetTrusted(AppSettings settings, string displayName, bool trusted)
+        => SetTrusted(settings, displayName, Array.Empty<string?>(), trusted);
+
+    /// <summary>
+    /// "Доверять" / "Убрать из доверенных" for a program: its name (what this page checks) together with the program files
+    /// of its entries (<see cref="InstalledProgram.TrustFile"/>: the «Процессы» and «Автозагрузка» pages recognise programs
+    /// by file path), so one click clears — or brings back — the program's warnings on all three pages.
+    /// Changes the shared list only through AppSettings.AddTrusted/RemoveTrusted. Returns the new trust state of the name.
+    /// </summary>
+    internal static bool SetTrusted(AppSettings settings, string displayName, IEnumerable<string?> trustFiles, bool trusted)
     {
+        var files = trustFiles.Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => f!)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (trusted)
+        {
             settings.AddTrusted(displayName);
+            foreach (var file in files)
+                settings.AddTrusted(file);
+        }
         else
+        {
             settings.RemoveTrusted(displayName);
+            foreach (var file in files.Where(settings.IsTrusted))
+                settings.RemoveTrusted(file);
+        }
         return settings.IsTrusted(displayName);
     }
 

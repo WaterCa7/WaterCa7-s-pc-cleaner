@@ -385,6 +385,43 @@
             </Border>
         </UniformGrid>
 
+        <!--
+            Search and "Обновить" share the row of the tab pills (like on the «Диски» page): the filter chips below then fit
+            in one line even at the minimum window size. The search box follows the selected tab.
+            Declared before the TabControl so that Tab reaches them before the list, as they appear above it. The tab row has
+            no background right of the pills, so the TabControl drawn over this panel does not hide it or take its clicks.
+        -->
+        <StackPanel Grid.Row="1" Margin="0,14,0,0" Height="37" Orientation="Horizontal" HorizontalAlignment="Right"
+                    VerticalAlignment="Top">
+            <Grid x:Name="SearchHost" Width="230" VerticalAlignment="Center">
+                <Grid Visibility="{Binding SelectedTabIndex, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,6,8,6"
+                             ToolTip="Поиск по названию, издателю, версии или папке" />
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                               Margin="10,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                    <TextBlock Text="Поиск программ" Foreground="{StaticResource MutedBrush}" Margin="31,0,8,0" VerticalAlignment="Center"
+                               IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                </Grid>
+                <Grid Visibility="{Binding SelectedTabIndex, Converter={StaticResource HasValueToVis}}">
+                    <TextBox Text="{Binding StoreSearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,6,8,6"
+                             ToolTip="Поиск по названию или издателю" />
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                               Margin="10,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                    <TextBlock Text="Поиск приложений" Foreground="{StaticResource MutedBrush}" Margin="31,0,8,0" VerticalAlignment="Center"
+                               IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding StoreSearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
+                </Grid>
+            </Grid>
+            <Button Command="{Binding RefreshCommand}" VerticalAlignment="Center" Margin="8,0,0,0" Padding="12,6"
+                    ToolTip="Заново прочитать список программ и приложений">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" />
+                    <TextBlock x:Name="RefreshText" Text="Обновить" Margin="7,0,0,0" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
         <!-- ===================== Tabs ===================== -->
         <TabControl Grid.Row="1" Margin="0,14,0,0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
 
@@ -397,7 +434,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- Filters (the search box and "Обновить" sit in the tab row, see the end of the file) -->
+                    <!-- Filters (the search box and "Обновить" sit in the tab row, see right before the TabControl) -->
                     <ItemsControl ItemsSource="{Binding Filters}" Margin="0,0,0,4" Focusable="False">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -692,7 +729,7 @@
                                                         <TextBlock Grid.Column="1" Text="Поиск" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
                                                     </Grid>
                                                 </Button>
-                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding ToggleTrustCommand}" ToolTip="Доверенные программы не помечаются как нежелательные">
+                                                <Button Style="{StaticResource SmallGhost}" Command="{Binding ToggleTrustCommand}" ToolTip="Доверенные программы не помечаются как нежелательные, а их основной файл — как подозрительный в разделах «Процессы» и «Автозагрузка»">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" />
@@ -998,40 +1035,5 @@
                 </Grid>
             </TabItem>
         </TabControl>
-
-        <!--
-            Search and "Обновить" share the row of the tab pills (like on the «Диски» page): the filter chips below then fit
-            in one line even at the minimum window size. The search box follows the selected tab.
-        -->
-        <StackPanel Grid.Row="1" Margin="0,14,0,0" Height="37" Orientation="Horizontal" HorizontalAlignment="Right"
-                    VerticalAlignment="Top">
-            <Grid x:Name="SearchHost" Width="230" VerticalAlignment="Center">
-                <Grid Visibility="{Binding SelectedTabIndex, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
-                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,6,8,6"
-                             ToolTip="Поиск по названию, издателю, версии или папке" />
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
-                               Margin="10,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
-                    <TextBlock Text="Поиск программ" Foreground="{StaticResource MutedBrush}" Margin="31,0,8,0" VerticalAlignment="Center"
-                               IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
-                               Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
-                </Grid>
-                <Grid Visibility="{Binding SelectedTabIndex, Converter={StaticResource HasValueToVis}}">
-                    <TextBox Text="{Binding StoreSearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,6,8,6"
-                             ToolTip="Поиск по названию или издателю" />
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
-                               Margin="10,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
-                    <TextBlock Text="Поиск приложений" Foreground="{StaticResource MutedBrush}" Margin="31,0,8,0" VerticalAlignment="Center"
-                               IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
-                               Visibility="{Binding StoreSearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
-                </Grid>
-            </Grid>
-            <Button Command="{Binding RefreshCommand}" VerticalAlignment="Center" Margin="8,0,0,0" Padding="12,6"
-                    ToolTip="Заново прочитать список программ и приложений">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" />
-                    <TextBlock x:Name="RefreshText" Text="Обновить" Margin="7,0,0,0" />
-                </StackPanel>
-            </Button>
-        </StackPanel>
     </Grid>
 </UserControl>

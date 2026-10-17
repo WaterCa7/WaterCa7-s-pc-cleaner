@@ -1,6 +1,8 @@
 using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Modules.Processes;
 using PcCleaner.Modules.Programs;
+using PcCleaner.Modules.Startup;
 using Xunit;
 
 namespace PcCleaner.Tests.Programs;
@@ -175,5 +177,172 @@ public sealed class ProgramsPolishTests
         vm.ToggleTrustCommand.Execute(null);
         Assert.False(settings.IsTrusted(name));
         Assert.Equal("Доверять", vm.TrustButtonText);
+    }
+
+    // ---------------------------------------------------------------- one trust for all pages
+
+    /// <summary>
+    /// A known unwanted program installed in Program Files (paths only: nothing is created there). Its main .exe is what
+    /// the «Процессы» and «Автозагрузка» pages see.
+    /// </summary>
+    private static InstalledProgram UnwantedProgram(string name, out string exe)
+    {
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "IObit", name);
+        exe = Path.Combine(folder, "DriverBooster.exe");
+        var uninstaller = ProgramRules.BuildLaunch($"\"{Path.Combine(folder, "unins000.exe")}\" /S", false, name);
+        var program = new InstalledProgram
+        {
+            DisplayName = name,
+            Publisher = "IObit",
+            InstallLocation = folder,
+            InstallLocationExists = true,
+            KeyName = name.Replace(' ', '_'),
+            Source = UninstallSource.Defaults[2],
+            Launch = uninstaller,
+            MainExecutable = exe,
+            TrustFile = ProgramRules.TrustFileFor(exe, folder, uninstaller),
+        };
+        ProgramsService.ApplyTrust(program, new AppSettings());
+        return program;
+    }
+
+    private static StartupItem StartupEntry(string name, string exe)
+    {
+        var item = new StartupItem
+        {
+            Id = $"RegistryRun|{name}",
+            Kind = StartupKind.RegistryRun,
+            Scope = StartupScope.CurrentUser,
+            Name = name,
+            Command = $"\"{exe}\" /autostart",
+            TargetFile = exe,
+            IsEnabled = true,
+        };
+        // Unsigned, so the entry stays suspicious (score above 0) whatever weight the «Автозагрузка» page gives to the
+        // unwanted program's name: the test is about trust, not about that weight.
+        item.Signature = new SignatureInfo(SignatureStatus.Unsigned, null);
+        item.Publisher = "IObit";
+        item.TargetExists = true;
+        return item;
+    }
+
+    [Fact]
+    public void TrustInPrograms_ClearsTheSameProgramOnTheStartupAndProcessesPages()
+    {
+        var name = "Driver Booster " + Guid.NewGuid().ToString("N")[..6];
+        var program = UnwantedProgram(name, out var exe);
+        Assert.True(program.IsPup);
+        Assert.Equal(exe, program.TrustFile);
+
+        var settings = new AppSettings();
+        var vm = new ProgramsViewModel(new ProgramsService(Array.Empty<UninstallSource>(),
+            _ => Task.FromResult<IReadOnlyList<StoreAppRecord>>(Array.Empty<StoreAppRecord>())))
+        {
+            Settings = () => settings,
+        };
+        vm.ShowProgramsForTests(new[] { program });
+        var startup = new StartupService(new StartupEnvironment
+        {
+            Settings = () => settings, IncludeTasks = false, IncludeServices = false,
+        });
+
+        // Before: the autostart entry of the same program is checked (and flagged) on its own.
+        var entry = StartupEntry(name, exe);
+        startup.Reanalyze(entry);
+        Assert.False(entry.IsTrusted);
+        Assert.True(entry.Suspicion.Score > 0);
+
+        // "Доверять" on the Programs page trusts the name and the program's own file.
+        vm.SelectedProgram = program;
+        vm.ToggleTrustCommand.Execute(null);
+        Assert.True(program.IsTrusted);
+        Assert.True(settings.IsTrusted(name));
+        Assert.True(settings.IsTrusted(exe));
+
+        startup.Reanalyze(entry);
+        Assert.True(entry.IsTrusted);
+        Assert.Equal(0, entry.Suspicion.Score);
+        Assert.DoesNotContain(startup.BuildIssues(new[] { entry }), i => i.Title.StartsWith("Подозрительная запись", StringComparison.Ordinal));
+
+        // "Убрать из доверенных" brings every warning back.
+        vm.ToggleTrustCommand.Execute(null);
+        Assert.False(program.IsTrusted);
+        Assert.False(settings.IsTrusted(name));
+        Assert.False(settings.IsTrusted(exe));
+        startup.Reanalyze(entry);
+        Assert.False(entry.IsTrusted);
+        Assert.True(entry.Suspicion.Score > 0);
+    }
+
+    [Fact]
+    public void TrustInPrograms_ClearsTheProgramsProcess()
+    {
+        // The Processes page checks the app-wide settings: use a unique program and clean up.
+        var name = "Driver Booster " + Guid.NewGuid().ToString("N")[..6];
+        var program = UnwantedProgram(name, out var exe);
+        var unsigned = new SignatureInfo(SignatureStatus.Unsigned, null);
+        var meta = new FileMeta(name, "IObit", name);
+        Assert.True(ProcessesService.Evaluate(exe, unsigned, null, meta).Score > 0);
+
+        Assert.True(ProgramsService.SetTrusted(AppServices.Settings, program.DisplayName, new[] { program.TrustFile }, trusted: true));
+        try
+        {
+            Assert.Equal(0, ProcessesService.Evaluate(exe, unsigned, null, meta).Score);
+        }
+        finally
+        {
+            Assert.False(ProgramsService.SetTrusted(AppServices.Settings, program.DisplayName, new[] { program.TrustFile }, trusted: false));
+        }
+        Assert.False(AppServices.Settings.IsTrusted(exe));
+        Assert.True(ProcessesService.Evaluate(exe, unsigned, null, meta).Score > 0);
+    }
+
+    [Fact]
+    public void TrustMessage_NamesTheFilesTrustedOnTheOtherPages()
+    {
+        Assert.Equal("«X» убрана из доверенных: проверки снова включены.",
+            ProgramsViewModel.BuildTrustMessage("X", new[] { @"C:\Program Files\X\x.exe" }, trusted: false));
+        var none = ProgramsViewModel.BuildTrustMessage("X", Array.Empty<string>(), trusted: true);
+        Assert.StartsWith("«X» отмечена как доверенная: она больше не будет помечаться как нежелательная. ", none);
+        Assert.DoesNotContain("Процессы", none);
+        var one = ProgramsViewModel.BuildTrustMessage("X", new[] { @"C:\Program Files\X\x.exe" }, trusted: true);
+        Assert.Contains("а её файл x.exe — как подозрительный в разделах «Процессы» и «Автозагрузка».", one);
+        var same = ProgramsViewModel.BuildTrustMessage("X", new[] { @"C:\Program Files\X\x.exe", @"C:\Program Files (x86)\X\X.exe" }, trusted: true);
+        Assert.Contains("а её файл x.exe — как подозрительный", same);
+        var two = ProgramsViewModel.BuildTrustMessage("X", new[] { @"C:\Program Files\X\x.exe", @"C:\Program Files\X\x-tray.exe" }, trusted: true);
+        Assert.Contains("а её файлы x.exe, x-tray.exe — как подозрительные", two);
+    }
+
+    // ---------------------------------------------------------------- folders that are not checked
+
+    [Fact]
+    public void InstallFolderOnANetworkShare_IsNeitherCheckedNorCalledMissing()
+    {
+        // A UNC path: CreateProgram must not touch it at all (an offline server blocks every check for a long time).
+        var program = ProgramsService.CreateProgram(new UninstallEntryValues
+        {
+            KeyName = "NasTool",
+            DisplayName = "Nas Tool",
+            UninstallString = @"""\\nas\apps\Tool\unins000.exe""",
+            InstallLocation = @"\\nas\apps\Tool",
+            DisplayIcon = @"\\nas\apps\Tool\tool.exe,0",
+        }, UninstallSource.Defaults[2], DateTime.Now);
+
+        Assert.False(program.InstallLocationExists);
+        Assert.True(program.InstallLocationUnchecked);
+        Assert.False(program.IsBroken);
+        Assert.Null(program.MainExecutable);
+        Assert.Null(program.TrustFile);
+        Assert.Equal(@"\\nas\apps\Tool (сетевой, съёмный или отключённый диск — не проверялась)", program.InstallLocationText);
+
+        // A missing folder on the local disk is still reported as missing.
+        var gone = Path.Combine(TestEnvironment.DataDir, "gone-" + Guid.NewGuid().ToString("N")[..8]);
+        var local = ProgramsService.CreateProgram(new UninstallEntryValues
+        {
+            KeyName = "LocalTool", DisplayName = "Local Tool", InstallLocation = gone,
+        }, UninstallSource.Defaults[2], DateTime.Now);
+        Assert.False(local.InstallLocationExists);
+        Assert.False(local.InstallLocationUnchecked);
+        Assert.Equal(gone + " (папки нет)", local.InstallLocationText);
     }
 }

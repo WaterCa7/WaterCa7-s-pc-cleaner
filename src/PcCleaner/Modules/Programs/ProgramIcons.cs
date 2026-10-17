@@ -20,8 +20,8 @@ internal static class ProgramIcons
     public static ImageSource? FromDisplayIcon(string? displayIcon)
     {
         var (path, index) = ProgramRules.ParseIconPath(displayIcon);
-        if (path is null || ProgramRules.IsNetworkPath(path))
-            return null;
+        if (path is null || ProgramRules.IsUnprobeablePath(path))
+            return null; // network or removable drive: an offline share would block the icon loader
         try
         {
             if (!File.Exists(path))

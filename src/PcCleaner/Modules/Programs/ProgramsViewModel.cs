@@ -960,13 +960,32 @@ public sealed class ProgramsViewModel : PageViewModel
         var p = SelectedProgram;
         if (p is null)
             return;
-        var trusted = ProgramsService.SetTrusted(Settings(), p.DisplayName, !p.IsTrusted);
-        // Every entry with the same name (e.g. 32- and 64-bit) follows the shared list.
+        // Every entry with the same name (e.g. 32- and 64-bit) follows the shared list, and so do their program files.
+        var files = _programs.Where(x => string.Equals(x.DisplayName, p.DisplayName, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.TrustFile)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var trusted = ProgramsService.SetTrusted(Settings(), p.DisplayName, files, !p.IsTrusted);
         RefreshTrust();
-        Dialogs.Info("Доверенные программы", trusted
-            ? $"«{p.DisplayName}» отмечена как доверенная: она больше не будет помечаться как нежелательная. " +
-              "Убрать её из доверенных можно здесь же или в «Настройках»."
-            : $"«{p.DisplayName}» убрана из доверенных: проверки снова включены.");
+        Dialogs.Info("Доверенные программы", BuildTrustMessage(p.DisplayName, files, trusted));
+    }
+
+    internal static string BuildTrustMessage(string displayName, IReadOnlyList<string> trustFiles, bool trusted)
+    {
+        if (!trusted)
+            return $"«{displayName}» убрана из доверенных: проверки снова включены.";
+        // The 32- and 64-bit entries of one program usually have a file of the same name: name it once.
+        var fileNames = trustFiles.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var names = string.Join(", ", fileNames);
+        var files = fileNames.Count switch
+        {
+            0 => "",
+            1 => $", а её файл {names} — как подозрительный в разделах «Процессы» и «Автозагрузка»",
+            _ => $", а её файлы {names} — как подозрительные в разделах «Процессы» и «Автозагрузка»",
+        };
+        return $"«{displayName}» отмечена как доверенная: она больше не будет помечаться как нежелательная{files}. " +
+               "Убрать её из доверенных можно здесь же или в «Настройках».";
     }
 
     private async Task CheckVirusTotalAsync()
