@@ -12,17 +12,28 @@ namespace PcCleaner.Modules.Startup;
 /// <summary>Outcome of one change made to a startup entry.</summary>
 public sealed record StartupActionResult(bool Success, string Message, bool NeedsAdmin = false, string? BackupPath = null)
 {
+    /// <summary>
+    /// A "broken" entry was left alone because it is no longer what the scan saw (rewritten by an update, file back).
+    /// Not an error: nothing was changed. Message holds the reason.
+    /// </summary>
+    public bool Skipped { get; init; }
+
     public static StartupActionResult Ok(string message, string? backupPath = null) => new(true, message, false, backupPath);
 
     public static StartupActionResult Fail(string message) => new(false, message);
 
     public static StartupActionResult Admin(string message) => new(false, message, true);
+
+    public static StartupActionResult Skip(string reason) => new(false, reason) { Skipped = true };
 }
 
 /// <summary>Outcome of a batch deletion.</summary>
 public sealed record StartupBulkResult(IReadOnlyList<StartupItem> Done, IReadOnlyList<(StartupItem Item, string Error)> Failed)
 {
     public bool NeedsAdmin { get; init; }
+
+    /// <summary>Broken entries left alone because they changed after the scan (see <see cref="StartupActionResult.Skipped"/>).</summary>
+    public IReadOnlyList<(StartupItem Item, string Reason)> Skipped { get; init; } = Array.Empty<(StartupItem, string)>();
 
     public string Summary
     {
@@ -31,9 +42,20 @@ public sealed record StartupBulkResult(IReadOnlyList<StartupItem> Done, IReadOnl
             var lines = new List<string>();
             lines.Add(Done.Count > 0
                 ? $"Удалено из автозагрузки: {Format.Count(Done.Count, "запись", "записи", "записей")}."
-                : "Ничего не удалено.");
+                : Failed.Count == 0 && Skipped.Count > 0
+                    ? "Удалять нечего."
+                    : "Ничего не удалено.");
             if (Done.Count > 0)
                 lines.Add($"Резервные копии сохранены в папке {AppPaths.BackupsDir} (ярлыки — в Корзине).");
+            if (Skipped.Count > 0)
+            {
+                lines.Add("");
+                lines.Add($"Оставлены без изменений — после проверки записи изменились ({Skipped.Count}):");
+                lines.AddRange(Skipped.Take(10).Select(s => $"• {s.Item.DisplayName} — {s.Reason}"));
+                if (Skipped.Count > 10)
+                    lines.Add($"• …и ещё {Skipped.Count - 10}");
+                lines.Add("Обновите список автозагрузки, чтобы увидеть их текущее состояние.");
+            }
             if (Failed.Count > 0)
             {
                 lines.Add("");
@@ -318,21 +340,115 @@ public sealed partial class StartupService : IHealthContributor
                     i.Kind is StartupKind.RegistryRun or StartupKind.StartupFolder or StartupKind.ScheduledTask)
         .ToList();
 
-    /// <summary>Dashboard fix: deletes the broken entries with backups. The dashboard has already asked the user.</summary>
+    /// <summary>
+    /// Dashboard fix: deletes the broken entries with backups. The dashboard has already asked the user.
+    /// The scan may be hours old, so every entry is read again first (not only its old file): an entry that is gone,
+    /// was rewritten by an update or whose file is back is left alone, and "already resolved" is reported as success.
+    /// </summary>
     internal async Task<string> FixBrokenAsync(IReadOnlyList<StartupItem> broken, CancellationToken ct)
     {
-        var current = broken.Where(i => StartupNative.TargetExists(i.TargetFile, i.Is32Bit) == false).ToList();
-        if (current.Count == 0)
-            return "Битых записей больше нет — ничего не изменено.";
-        var needAdmin = current.Where(i => i.RequiresAdmin).ToList();
-        if (needAdmin.Count > 0 && !_env.IsElevated())
-            return $"Нужны права администратора: {Format.Count(needAdmin.Count, "запись относится", "записи относятся", "записей относятся")} " +
-                   "ко всем пользователям. Ничего не изменено — перезапустите программу от имени администратора и повторите.";
+        var current = new List<StartupItem>();
+        foreach (var item in broken)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!await NoLongerBrokenAsync(item, ct))
+                current.Add(item);
+        }
+        // Entries that are gone or changed mean the Startup page list is out of date as well.
+        var changed = current.Count < broken.Count;
+        try
+        {
+            if (current.Count == 0)
+                return "Битых записей больше нет — исправлять нечего.";
+            var needAdmin = current.Where(i => i.RequiresAdmin).ToList();
+            if (needAdmin.Count > 0 && !_env.IsElevated())
+                return $"Нужны права администратора: {Format.Count(needAdmin.Count, "запись относится", "записи относятся", "записей относятся")} " +
+                       "ко всем пользователям. Ничего не изменено — перезапустите программу от имени администратора и повторите.";
 
-        var result = await DeleteManyAsync(current, ct);
-        if (result.Done.Count > 0)
-            ChangedExternally?.Invoke();
-        return result.Summary;
+            var result = await DeleteBrokenAsync(current, ct);
+            changed |= result.Done.Count > 0 || result.Skipped.Count > 0;
+            return result.Summary;
+        }
+        finally
+        {
+            if (changed)
+                ChangedExternally?.Invoke();
+        }
+    }
+
+    internal const string ChangedSinceScan = "в записи теперь другая команда запуска (похоже, программу обновили или переустановили)";
+    internal const string TargetIsBack = "файл программы снова на месте";
+
+    /// <summary>
+    /// The re-check made right before a "broken" entry is deleted. <paramref name="currentCommand"/> / <paramref name="currentTarget"/>
+    /// are read again from the registry value, the shortcut or the task. Returns null when the entry still holds exactly the scanned
+    /// command and its file is still definitely missing; otherwise the reason to leave it alone. Programs that keep a version folder in
+    /// their autostart command ("…\95.0.1.0\GoogleDriveFS.exe") rewrite the same value after an update — checking only the old file
+    /// would delete the new, working entry.
+    /// </summary>
+    internal static string? WhyNoLongerBroken(StartupItem item, string? currentCommand, string? currentTarget)
+    {
+        if (currentCommand is null || !string.Equals(currentCommand.Trim(), item.Command, StringComparison.Ordinal))
+            return ChangedSinceScan;
+        // A per-user path in an entry of another account may exist in that account's profile: never "broken" (as in Enrich).
+        if (item.TargetDependsOnUser || StartupNative.TargetExists(currentTarget, item.Is32Bit) != false)
+            return TargetIsBack;
+        return null;
+    }
+
+    /// <summary>
+    /// Reads the entry again (registry value, shortcut target, task action). Null = still exactly as scanned and still broken
+    /// (or nothing to re-read: the deletion refuses an entry without a location); otherwise why not, including "the entry is gone".
+    /// May throw on access/COM errors.
+    /// </summary>
+    private async Task<string?> RecheckBrokenAsync(StartupItem item, CancellationToken ct)
+    {
+        switch (item.Kind)
+        {
+            case StartupKind.RegistryRun or StartupKind.RegistryRunOnce when item.RegistryKeyPath is not null:
+            {
+                var (exists, command) = await Task.Run(() => ReadRunValue(item), ct);
+                return exists ? WhyNoLongerBroken(item, command, StartupTargets.Resolve(command)) : "записи уже нет";
+            }
+            case StartupKind.StartupFolder when !string.IsNullOrWhiteSpace(item.FilePath):
+            {
+                var path = item.FilePath;
+                var current = await Task.Run(() => File.Exists(path) ? DescribeFolderFile(path) : ((string Command, string? Target)?)null, ct);
+                return current is { } c ? WhyNoLongerBroken(item, c.Command, c.Target) : "ярлыка уже нет";
+            }
+            case StartupKind.ScheduledTask when !string.IsNullOrWhiteSpace(item.TaskPath):
+            {
+                (string Command, string? Target) current = default;
+                try
+                {
+                    await RunOnTaskAsync(item.TaskPath, (_, task) => current = DescribeRegisteredTask(task), ct);
+                }
+                catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException ||
+                                           (ex is COMException com && (uint)com.HResult is 0x80070002 or 0x80070003))
+                {
+                    return "задания уже нет";
+                }
+                return WhyNoLongerBroken(item, current.Command, current.Target);
+            }
+            default:
+                return null; // no location (or a service): the deletion itself refuses such an entry
+        }
+    }
+
+    /// <summary>
+    /// True when the entry is definitely no longer the broken one from the scan. A read error is "undecided" (false):
+    /// the deletion re-checks the entry itself and reports the error.
+    /// </summary>
+    private async Task<bool> NoLongerBrokenAsync(StartupItem item, CancellationToken ct)
+    {
+        try
+        {
+            return await RecheckBrokenAsync(item, ct) is not null;
+        }
+        catch (Exception ex) when (IsAccessDenied(ex) || ex is IOException or COMException or Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     // ===================== actions =====================
@@ -370,7 +486,15 @@ public sealed partial class StartupService : IHealthContributor
     }
 
     /// <summary>Removes an entry from startup (with a backup). Services are never deleted. The caller confirms first.</summary>
-    public async Task<StartupActionResult> DeleteAsync(StartupItem item, CancellationToken ct)
+    public Task<StartupActionResult> DeleteAsync(StartupItem item, CancellationToken ct)
+        => DeleteAsync(item, onlyIfStillBroken: false, ct);
+
+    /// <summary>
+    /// Removes an entry from startup (with a backup). With <paramref name="onlyIfStillBroken"/> the entry is read again right before
+    /// the deletion and left alone (<see cref="StartupActionResult.Skipped"/>) unless it still holds the scanned command and its file
+    /// is still missing — see <see cref="WhyNoLongerBroken"/>.
+    /// </summary>
+    internal async Task<StartupActionResult> DeleteAsync(StartupItem item, bool onlyIfStillBroken, CancellationToken ct)
     {
         if (!item.CanDelete)
             return StartupActionResult.Fail(item.IsService
@@ -381,9 +505,9 @@ public sealed partial class StartupService : IHealthContributor
         {
             return item.Kind switch
             {
-                StartupKind.RegistryRun or StartupKind.RegistryRunOnce => await DeleteRegistryValueAsync(item, ct),
-                StartupKind.StartupFolder => await DeleteFolderItemAsync(item, ct),
-                StartupKind.ScheduledTask => await DeleteTaskAsync(item, ct),
+                StartupKind.RegistryRun or StartupKind.RegistryRunOnce => await DeleteRegistryValueAsync(item, onlyIfStillBroken, ct),
+                StartupKind.StartupFolder => await DeleteFolderItemAsync(item, onlyIfStillBroken, ct),
+                StartupKind.ScheduledTask => await DeleteTaskAsync(item, onlyIfStillBroken, ct),
                 _ => StartupActionResult.Fail("Эту запись нельзя удалить."),
             };
         }
@@ -400,24 +524,38 @@ public sealed partial class StartupService : IHealthContributor
     }
 
     /// <summary>Deletes several entries one by one; each one is backed up first.</summary>
-    public async Task<StartupBulkResult> DeleteManyAsync(IEnumerable<StartupItem> items, CancellationToken ct)
+    public Task<StartupBulkResult> DeleteManyAsync(IEnumerable<StartupItem> items, CancellationToken ct)
+        => DeleteManyAsync(items, onlyIfStillBroken: false, ct);
+
+    /// <summary>
+    /// "Удалить битые" and the dashboard fix: deletes broken entries one by one (each backed up first), re-reading every entry right
+    /// before its deletion. Entries rewritten since the scan (e.g. a program update moved them to a new version folder) or whose file
+    /// is back are left alone and reported in <see cref="StartupBulkResult.Skipped"/>.
+    /// </summary>
+    public Task<StartupBulkResult> DeleteBrokenAsync(IEnumerable<StartupItem> items, CancellationToken ct)
+        => DeleteManyAsync(items, onlyIfStillBroken: true, ct);
+
+    private async Task<StartupBulkResult> DeleteManyAsync(IEnumerable<StartupItem> items, bool onlyIfStillBroken, CancellationToken ct)
     {
         var done = new List<StartupItem>();
         var failed = new List<(StartupItem, string)>();
+        var skipped = new List<(StartupItem, string)>();
         var needsAdmin = false;
         foreach (var item in items)
         {
             ct.ThrowIfCancellationRequested();
-            var result = await DeleteAsync(item, ct);
+            var result = await DeleteAsync(item, onlyIfStillBroken, ct);
             if (result.Success)
                 done.Add(item);
+            else if (result.Skipped)
+                skipped.Add((item, result.Message));
             else
             {
                 failed.Add((item, result.Message));
                 needsAdmin |= result.NeedsAdmin;
             }
         }
-        return new StartupBulkResult(done, failed) { NeedsAdmin = needsAdmin };
+        return new StartupBulkResult(done, failed) { NeedsAdmin = needsAdmin, Skipped = skipped };
     }
 
     internal static bool IsAccessDenied(Exception ex)

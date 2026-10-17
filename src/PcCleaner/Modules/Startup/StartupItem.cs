@@ -258,7 +258,8 @@ public sealed class StartupItem : ObservableObject
 
     public string SignatureText => Signature?.StatusText ?? (TargetExists == false ? "Файл не найден" : "Подпись не проверена");
 
-    public string ScopeText => Scope == StartupScope.CurrentUser ? "Текущий пользователь" : "Все пользователи";
+    /// <summary>Who the entry starts for; the grid shows the short form of the same wording (<see cref="SourceDetail"/>).</summary>
+    public string ScopeText => Scope == StartupScope.CurrentUser ? "Для вас" : "Для всех пользователей";
 
     public string SourceText => Kind switch
     {

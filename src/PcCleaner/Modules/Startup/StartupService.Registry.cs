@@ -187,7 +187,21 @@ public sealed partial class StartupService
             : $"«{item.DisplayName}» больше не будет запускаться вместе с Windows. Включить обратно можно в любой момент.", backup);
     }
 
-    private async Task<StartupActionResult> DeleteRegistryValueAsync(StartupItem item, CancellationToken ct)
+    /// <summary>Whether the Run value still exists, and its command as the scan reads it (null when it is no longer a string).</summary>
+    private static (bool Exists, string? Command) ReadRunValue(StartupItem item)
+    {
+        using var key = OpenKey(item.Hive, item.RegistryKeyPath!, false);
+        return ReadRunValue(key, item.RegistryValueName ?? "");
+    }
+
+    private static (bool Exists, string? Command) ReadRunValue(RegistryKey? key, string valueName)
+    {
+        if (key?.GetValue(valueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not { } value)
+            return (false, null);
+        return (true, value is string raw ? raw.Trim() : null);
+    }
+
+    private async Task<StartupActionResult> DeleteRegistryValueAsync(StartupItem item, bool onlyIfStillBroken, CancellationToken ct)
     {
         if (item.RegistryKeyPath is null)
             return StartupActionResult.Fail("Неизвестное расположение записи.");
@@ -196,24 +210,28 @@ public sealed partial class StartupService
 
         var valueName = item.RegistryValueName ?? "";
         var fullKey = $@"{StartupEnvironment.HiveName(item.Hive)}\{item.RegistryKeyPath}";
-        var exists = await Task.Run(() =>
-        {
-            using var key = OpenKey(item.Hive, item.RegistryKeyPath, false);
-            return key?.GetValue(valueName) is not null;
-        }, ct);
+        var (exists, command) = await Task.Run(() => ReadRunValue(item), ct);
         if (!exists)
             return StartupActionResult.Ok($"Записи «{item.DisplayName}» уже нет в реестре.");
+        if (onlyIfStillBroken && WhyNoLongerBroken(item, command, StartupTargets.Resolve(command)) is { } reason)
+            return StartupActionResult.Skip(reason);
 
         var backup = await _env.BackupKey(fullKey, $"Автозагрузка: перед удалением «{item.DisplayName}»", ct);
         if (backup is null)
             return StartupActionResult.Fail("Не удалось сохранить резервную копию раздела реестра — удаление отменено.");
 
-        await Task.Run(() =>
+        var deleted = await Task.Run(() =>
         {
             using var key = OpenKey(item.Hive, item.RegistryKeyPath, true)
                             ?? throw new IOException($"Раздел {fullKey} не найден");
+            // The value may have been rewritten while the backup was being exported.
+            if (onlyIfStillBroken && ReadRunValue(key, valueName) is (true, var now) && !string.Equals(now, item.Command, StringComparison.Ordinal))
+                return false;
             key.DeleteValue(valueName, throwOnMissingValue: false);
+            return true;
         }, ct);
+        if (!deleted)
+            return StartupActionResult.Skip(ChangedSinceScan);
 
         Log.Action($"Автозагрузка: удалена запись «{item.DisplayName}» из {fullKey} (команда: {item.Command}). " +
                    $"Резервная копия: {Path.GetFileName(backup)}");
@@ -221,7 +239,7 @@ public sealed partial class StartupService
             $"Запись «{item.DisplayName}» удалена. Резервная копия: {backup} — чтобы вернуть запись, дважды щёлкните этот файл.", backup);
     }
 
-    private async Task<StartupActionResult> DeleteFolderItemAsync(StartupItem item, CancellationToken ct)
+    private async Task<StartupActionResult> DeleteFolderItemAsync(StartupItem item, bool onlyIfStillBroken, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(item.FilePath))
             return StartupActionResult.Fail("Неизвестное расположение ярлыка.");
@@ -229,6 +247,13 @@ public sealed partial class StartupService
             return StartupActionResult.Admin("Общую папку автозагрузки можно менять только с правами администратора.");
         if (!File.Exists(item.FilePath))
             return StartupActionResult.Ok($"Ярлыка «{item.DisplayName}» уже нет в папке автозагрузки.");
+        if (onlyIfStillBroken)
+        {
+            // An updater may have re-pointed the same shortcut to the new version of the program.
+            var (command, target) = await Task.Run(() => DescribeFolderFile(item.FilePath), ct);
+            if (WhyNoLongerBroken(item, command, target) is { } reason)
+                return StartupActionResult.Skip(reason);
+        }
 
         var ok = await Task.Run(() => _env.RecycleFile(item.FilePath), ct);
         if (!ok)

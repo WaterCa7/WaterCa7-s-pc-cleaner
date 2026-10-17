@@ -185,41 +185,8 @@ public sealed partial class StartupService
             if (!boot && !logon)
                 return null;
 
-            string? exe = null, args = null, classId = null;
-            foreach (var action in (System.Collections.IEnumerable)definition.Actions)
-            {
-                dynamic a = action;
-                int type = a.Type;
-                if (type == ActionExec && exe is null)
-                {
-                    exe = a.Path;
-                    args = a.Arguments;
-                }
-                else if (type == ActionComHandler && classId is null)
-                {
-                    classId = a.ClassId;
-                }
-                StartupNative.Release(action);
-            }
-
-            string command;
-            string? target;
-            if (!string.IsNullOrWhiteSpace(exe))
-            {
-                var path = System.Environment.ExpandEnvironmentVariables(exe.Trim().Trim('"'));
-                command = string.IsNullOrWhiteSpace(args) ? Quote(path) : $"{Quote(path)} {args.Trim()}";
-                target = StartupTargets.Resolve(command);
-            }
-            else if (!string.IsNullOrWhiteSpace(classId))
-            {
-                target = StartupTargets.ComServer(classId);
-                command = target is null ? $"COM-обработчик {classId}" : $"COM-обработчик {classId} ({target})";
-            }
-            else
-            {
-                command = "(нет команды запуска)";
-                target = null;
-            }
+            var (exe, args, classId) = ReadTaskActions((object)definition);
+            var (command, target) = DescribeTaskAction(exe, args, classId);
 
             string taskPath = task.Path;
             string taskName = task.Name;
@@ -260,6 +227,63 @@ public sealed partial class StartupService
         finally
         {
             StartupNative.Release((object)definition);
+        }
+    }
+
+    /// <summary>The first Exec action (program + arguments) and the first COM-handler action of a task definition.</summary>
+    private static (string? Exe, string? Args, string? ClassId) ReadTaskActions(object definitionObject)
+    {
+        dynamic definition = definitionObject;
+        string? exe = null, args = null, classId = null;
+        foreach (var action in (System.Collections.IEnumerable)definition.Actions)
+        {
+            dynamic a = action;
+            int type = a.Type;
+            if (type == ActionExec && exe is null)
+            {
+                exe = a.Path;
+                args = a.Arguments;
+            }
+            else if (type == ActionComHandler && classId is null)
+            {
+                classId = a.ClassId;
+            }
+            StartupNative.Release(action);
+        }
+        return (exe, args, classId);
+    }
+
+    /// <summary>Command line and target file shown for a task action (the same text the scan stores in StartupItem.Command).</summary>
+    internal static (string Command, string? Target) DescribeTaskAction(string? exe, string? args, string? classId)
+    {
+        if (!string.IsNullOrWhiteSpace(exe))
+        {
+            var path = System.Environment.ExpandEnvironmentVariables(exe.Trim().Trim('"'));
+            var command = string.IsNullOrWhiteSpace(args) ? Quote(path) : $"{Quote(path)} {args.Trim()}";
+            return (command, StartupTargets.Resolve(command));
+        }
+        if (!string.IsNullOrWhiteSpace(classId))
+        {
+            var target = StartupTargets.ComServer(classId);
+            return (target is null ? $"COM-обработчик {classId}" : $"COM-обработчик {classId} ({target})", target);
+        }
+        return ("(нет команды запуска)", null);
+    }
+
+    /// <summary>The current command and target of a registered task (IRegisteredTask), read again from the scheduler.</summary>
+    private static (string Command, string? Target) DescribeRegisteredTask(object taskObject)
+    {
+        dynamic task = taskObject;
+        object? definition = null;
+        try
+        {
+            definition = task.Definition;
+            var (exe, args, classId) = ReadTaskActions(definition!);
+            return DescribeTaskAction(exe, args, classId);
+        }
+        finally
+        {
+            StartupNative.Release(definition);
         }
     }
 
@@ -332,14 +356,23 @@ public sealed partial class StartupService
             : $"Задание «{item.DisplayName}» отключено. Оно осталось в планировщике — включить его можно здесь в любой момент.");
     }
 
-    private async Task<StartupActionResult> DeleteTaskAsync(StartupItem item, CancellationToken ct)
+    private async Task<StartupActionResult> DeleteTaskAsync(StartupItem item, bool onlyIfStillBroken, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(item.TaskPath))
             return StartupActionResult.Fail("Неизвестный путь задания.");
 
-        string? backupFile = null;
+        string? backupFile = null, skipReason = null;
         await RunOnTaskAsync(item.TaskPath, (folder, task) =>
         {
+            if (onlyIfStillBroken)
+            {
+                // Re-read the action of the very task about to be deleted: an update may have re-registered it for a new version.
+                var (command, target) = DescribeRegisteredTask(task);
+                skipReason = WhyNoLongerBroken(item, command, target);
+                if (skipReason is not null)
+                    return;
+            }
+
             dynamic t = task;
             string xml = t.Xml;
             Directory.CreateDirectory(AppPaths.BackupsDir);
@@ -356,6 +389,8 @@ public sealed partial class StartupService
             string name = t.Name;
             f.DeleteTask(name, 0);
         }, ct);
+        if (skipReason is not null)
+            return StartupActionResult.Skip(skipReason);
 
         Log.Action($"Автозагрузка: удалено задание планировщика «{item.TaskPath}» (команда: {item.Command}). " +
                    $"Резервная копия: {Path.GetFileName(backupFile)}");
