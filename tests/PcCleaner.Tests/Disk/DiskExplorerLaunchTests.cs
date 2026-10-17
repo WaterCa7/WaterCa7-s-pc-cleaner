@@ -40,18 +40,19 @@ public class DiskExplorerLaunchTests
     }
 
     /// <summary>
-    /// Guards every future copy: a string literal without a folder as the program of Process.Start,
-    /// ProcessStartInfo, SystemTools.Launch / RunStreamingAsync or a FileName initializer is a search-order hijack.
+    /// A string literal without a folder as the program of Process.Start, ProcessStartInfo, SystemTools.Launch /
+    /// RunStreamingAsync or a FileName initializer: a search-order hijack.
     /// (ProcessRunner.RunAsync resolves bare names itself, and OpenToolAsync wraps its name in SystemTools.Exe.)
     /// </summary>
+    private static readonly Regex BareProgram = new(
+        @"(?:Process\.Start|new\s+ProcessStartInfo|\bLaunch|RunStreamingAsync)\s*\(\s*""(?<name>[^""\\/]*)""" +
+        @"|\bFileName\s*=\s*""(?<name>[^""\\/]*)""",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>Guards every future copy of a launch in the Disk module.</summary>
     [Fact]
     public void DiskModule_StartsNoProgramByBareName()
     {
-        var bareProgram = new Regex(
-            @"(?:Process\.Start|new\s+ProcessStartInfo|\bLaunch|RunStreamingAsync)\s*\(\s*""(?<name>[^""\\/]*)""" +
-            @"|\bFileName\s*=\s*""(?<name>[^""\\/]*)""",
-            RegexOptions.CultureInvariant);
-
         var sources = Directory.GetFiles(DiskSourceFolder(), "*.cs", SearchOption.AllDirectories);
         Assert.Contains(sources, s => Path.GetFileName(s) == "SystemTools.cs");
 
@@ -61,7 +62,7 @@ public class DiskExplorerLaunchTests
             var lines = File.ReadAllLines(source);
             for (var i = 0; i < lines.Length; i++)
             {
-                foreach (Match m in bareProgram.Matches(lines[i]))
+                foreach (Match m in BareProgram.Matches(lines[i]))
                     offenders.Add($"{Path.GetFileName(source)}:{i + 1}: \"{m.Groups["name"].Value}\"");
             }
         }
@@ -71,10 +72,15 @@ public class DiskExplorerLaunchTests
     [Fact]
     public void BareNameGuard_CatchesTheOldExplorerLaunch()
     {
-        // The guard itself must recognise the defect it protects against.
-        var bareProgram = new Regex(@"(?:Process\.Start|new\s+ProcessStartInfo)\s*\(\s*""(?<name>[^""\\/]*)""");
-        Assert.Matches(bareProgram, "Process.Start(\"explorer.exe\", $\"/select,\\\"{path}\\\"\")?.Dispose();");
-        Assert.DoesNotMatch(bareProgram, "Process.Start(ExplorerPath, $\"/select,\\\"{path}\\\"\")?.Dispose();");
+        // The guard itself must recognise the defect it protects against (and not flag the fixed forms).
+        Assert.Matches(BareProgram, "Process.Start(\"explorer.exe\", $\"/select,\\\"{path}\\\"\")?.Dispose();");
+        Assert.Matches(BareProgram, "Process.Start(\"explorer.exe\", $\"\\\"{path}\\\"\")?.Dispose();");
+        Assert.Matches(BareProgram, "Process.Start(new ProcessStartInfo(\"cleanmgr.exe\") { UseShellExecute = true });");
+        Assert.Matches(BareProgram, "var psi = new ProcessStartInfo { FileName = \"defrag.exe\" };");
+        Assert.Matches(BareProgram, "SystemTools.Launch(\"SystemPropertiesProtection.exe\");");
+        Assert.DoesNotMatch(BareProgram, "Process.Start(ExplorerPath, $\"/select,\\\"{path}\\\"\")?.Dispose();");
+        Assert.DoesNotMatch(BareProgram, "SystemTools.Launch(SystemTools.Exe(\"cleanmgr.exe\"));");
+        Assert.DoesNotMatch(BareProgram, "Process.Start(new ProcessStartInfo(\"C:\\\\Windows\\\\explorer.exe\"));");
     }
 
     private static string DiskSourceFolder()
