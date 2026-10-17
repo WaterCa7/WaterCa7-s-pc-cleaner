@@ -130,7 +130,7 @@ public class StartupLogicTests
         Assert.False(task.IsProtected);
         Assert.True(task.CanToggle);
         Assert.True(task.CanDelete);
-        Assert.True(StartupFilter.IsVisible(task, new StartupFilterOptions())); // not hidden behind "Показать задачи Windows"
+        Assert.True(StartupFilter.IsVisible(task, new StartupFilterOptions())); // not hidden behind "Показать задания Windows"
     }
 
     [Fact]
@@ -521,5 +521,107 @@ public class StartupLogicTests
         };
         var sorted = StartupService.Sort(items).Select(i => i.Name).ToArray();
         Assert.Equal(new[] { "c-evil", "a-broken", "b-normal", "a-service" }, sorted);
+    }
+
+    // ---------- re-check before deleting "broken" entries ----------
+
+    [Fact]
+    public void WhyNoLongerBroken_ComparesTheCurrentCommand_NotOnlyTheOldFile()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "WaterCa7sTests-gone-" + Guid.NewGuid().ToString("N"), "app-1.0", "app.exe");
+        var item = Item("Versioned", exists: false, target: missing);
+        var existing = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+
+        // Still exactly as scanned and still missing: may be deleted.
+        Assert.Null(StartupService.WhyNoLongerBroken(item, item.Command, missing));
+        Assert.Null(StartupService.WhyNoLongerBroken(item, "  " + item.Command + " ", missing));
+        // Rewritten (an update moved it to a new version folder), even if the new path is missing too.
+        Assert.Equal(StartupService.ChangedSinceScan, StartupService.WhyNoLongerBroken(item, $"\"{existing}\" --flag", existing));
+        Assert.Equal(StartupService.ChangedSinceScan,
+            StartupService.WhyNoLongerBroken(item, item.Command.Replace("app-1.0", "app-2.0"), missing.Replace("app-1.0", "app-2.0")));
+        Assert.Equal(StartupService.ChangedSinceScan, StartupService.WhyNoLongerBroken(item, item.Command.ToUpperInvariant(), missing));
+        Assert.Equal(StartupService.ChangedSinceScan, StartupService.WhyNoLongerBroken(item, null, null));
+        // Same command, but the file is back (reinstalled) or cannot be judged.
+        Assert.Equal(StartupService.TargetIsBack, StartupService.WhyNoLongerBroken(item, item.Command, existing));
+        Assert.Equal(StartupService.TargetIsBack, StartupService.WhyNoLongerBroken(item, item.Command, null));
+    }
+
+    [Fact]
+    public void WhyNoLongerBroken_PerUserPathOfAnotherAccount_IsNeverBroken()
+    {
+        var item = new StartupItem
+        {
+            Id = "reg|HKLM|Run|PerUser",
+            Kind = StartupKind.RegistryRun,
+            Scope = StartupScope.AllUsers,
+            Name = "PerUser",
+            Command = @"""%LOCALAPPDATA%\Vendor\gone.exe""",
+            TargetFile = @"C:\nowhere-" + Guid.NewGuid().ToString("N") + @"\gone.exe",
+            TargetDependsOnUser = true,
+        };
+        Assert.Equal(StartupService.TargetIsBack, StartupService.WhyNoLongerBroken(item, item.Command, item.TargetFile));
+    }
+
+    [Fact]
+    public void DescribeTaskAction_BuildsTheSameCommandTheScanStores()
+    {
+        var (command, target) = StartupService.DescribeTaskAction(@"""%SystemRoot%\System32\cmd.exe""", " /c echo hi ", null);
+        var cmd = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"System32\cmd.exe");
+        Assert.Equal($"{cmd} /c echo hi", command, ignoreCase: true);
+        Assert.Equal(cmd, target, ignoreCase: true);
+
+        var (spaced, _) = StartupService.DescribeTaskAction(@"C:\Program Files\Vendor\Updater 2.0\upd.exe", "", null);
+        Assert.Equal(@"""C:\Program Files\Vendor\Updater 2.0\upd.exe""", spaced);
+
+        var (none, noTarget) = StartupService.DescribeTaskAction(null, null, null);
+        Assert.Equal("(нет команды запуска)", none);
+        Assert.Null(noTarget);
+
+        var (com, _) = StartupService.DescribeTaskAction(null, null, "{00000000-0000-0000-0000-00000000F00D}");
+        Assert.StartsWith("COM-обработчик {00000000-0000-0000-0000-00000000F00D}", com);
+    }
+
+    [Fact]
+    public void BulkResult_SkippedEntriesAreNotReportedAsFailures()
+    {
+        var kept = Item("Kept", exists: false);
+        var gone = Item("Gone", exists: false);
+        var onlySkipped = new StartupBulkResult(Array.Empty<StartupItem>(), Array.Empty<(StartupItem, string)>())
+        {
+            Skipped = new[] { (kept, StartupService.ChangedSinceScan) },
+        };
+        Assert.StartsWith("Удалять нечего.", onlySkipped.Summary);
+        Assert.Contains($"• Kept — {StartupService.ChangedSinceScan}", onlySkipped.Summary);
+        Assert.DoesNotContain("Ничего не удалено", onlySkipped.Summary);
+        Assert.False(PcCleaner.Modules.Dashboard.HealthScoring.LooksLikeFailure(onlySkipped.Summary));
+        Assert.Equal("Удалять нечего. Оставлено без изменений (запись изменилась после проверки): 1. Список обновлён.",
+            StartupViewModel.BrokenResultMessage(onlySkipped));
+
+        var mixed = new StartupBulkResult(new[] { gone }, Array.Empty<(StartupItem, string)>())
+        {
+            Skipped = new[] { (kept, StartupService.TargetIsBack) },
+        };
+        Assert.StartsWith("Удалено из автозагрузки: 1 запись.", mixed.Summary);
+        Assert.Contains("Битые записи удалены: 1.", StartupViewModel.BrokenResultMessage(mixed));
+
+        // Without skipped entries the texts are as before.
+        var plain = new StartupBulkResult(Array.Empty<StartupItem>(), new[] { (gone, "Нет доступа") });
+        Assert.StartsWith("Ничего не удалено.", plain.Summary);
+        Assert.Equal("Удалено 0, не удалось: 1.", StartupViewModel.BrokenResultMessage(plain));
+        Assert.Equal("Битые записи удалены: 2.",
+            StartupViewModel.BrokenResultMessage(new StartupBulkResult(new[] { gone, kept }, Array.Empty<(StartupItem, string)>())));
+    }
+
+    [Fact]
+    public void ScopeWording_IsTheSameInTheGridAndTheDetails()
+    {
+        var mine = Item("Mine");
+        var all = Item("All", scope: StartupScope.AllUsers);
+        Assert.Equal("для вас", mine.SourceDetail);
+        Assert.Equal("Для вас", mine.ScopeText);
+        Assert.Equal("для всех", all.SourceDetail);
+        Assert.Equal("Для всех пользователей", all.ScopeText);
+        using var sandbox = new StartupSandbox();
+        Assert.StartsWith("Показать задания Windows", new StartupViewModel(sandbox.Service).WindowsTasksText);
     }
 }

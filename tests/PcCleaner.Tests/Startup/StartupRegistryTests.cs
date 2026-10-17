@@ -268,6 +268,171 @@ public class StartupRegistryTests
     }
 
     [Fact]
+    public async Task BrokenIssue_FixLeavesAnEntryRewrittenToANewVersionFolder()
+    {
+        using var sandbox = new StartupSandbox();
+        // An updater moves the program to a new version folder and rewrites the same Run value.
+        var oldCommand = $"\"{sandbox.MissingFile(@"app-1.0\app.exe")}\" --background";
+        sandbox.SetValue("HKCU\\Run", "VersionedApp", oldCommand);
+        var issue = Assert.Single(sandbox.Service.BuildIssues(Scan(sandbox)));
+        var newCommand = $"\"{sandbox.CreateFile(@"app-2.0\app.exe")}\" --background";
+        sandbox.SetValue("HKCU\\Run", "VersionedApp", newCommand);
+        var changed = false;
+        sandbox.Service.ChangedExternally += () => changed = true;
+
+        var message = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Equal(newCommand, sandbox.GetValue("HKCU\\Run", "VersionedApp"));
+        Assert.Equal("Битых записей больше нет — исправлять нечего.", message);
+        Assert.False(PcCleaner.Modules.Dashboard.HealthScoring.LooksLikeFailure(message)); // already resolved = fixed
+        Assert.True(changed); // the Startup page list is out of date too
+    }
+
+    [Fact]
+    public async Task BrokenIssue_EntriesAlreadyRemoved_CountAsFixed()
+    {
+        using var sandbox = new StartupSandbox();
+        sandbox.SetValue("HKCU\\Run", "Dead", $"\"{sandbox.MissingFile("d.exe")}\"");
+        var issue = Assert.Single(sandbox.Service.BuildIssues(Scan(sandbox)));
+        // Removed on the Startup page (or by an uninstaller) before the dashboard fix is pressed.
+        using (var key = Registry.CurrentUser.OpenSubKey($@"{sandbox.RegistryRoot}\HKCU\Run", writable: true))
+            key!.DeleteValue("Dead");
+
+        var message = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Contains("Битых записей больше нет", message);
+        Assert.False(PcCleaner.Modules.Dashboard.HealthScoring.LooksLikeFailure(message));
+    }
+
+    [Fact]
+    public async Task BrokenIssue_FixStillDeletesUnchangedBrokenEntries_AndKeepsRewrittenOnes()
+    {
+        using var sandbox = new StartupSandbox();
+        sandbox.SetValue("HKCU\\Run", "Dead", $"\"{sandbox.MissingFile("dead.exe")}\"");
+        sandbox.SetValue("HKCU\\Run", "Updated", $"\"{sandbox.MissingFile(@"v1\upd.exe")}\"");
+        var issue = Assert.Single(sandbox.Service.BuildIssues(Scan(sandbox)));
+        Assert.Contains("(2)", issue.Title);
+        var updated = $"\"{sandbox.CreateFile(@"v2\upd.exe")}\"";
+        sandbox.SetValue("HKCU\\Run", "Updated", updated);
+
+        var message = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Contains("Удалено из автозагрузки: 1 запись", message);
+        Assert.Null(sandbox.GetValue("HKCU\\Run", "Dead"));
+        Assert.Equal(updated, sandbox.GetValue("HKCU\\Run", "Updated"));
+        Assert.False(PcCleaner.Modules.Dashboard.HealthScoring.LooksLikeFailure(message));
+    }
+
+    [Theory]
+    [InlineData(true)]  // rewritten to the new version of the program
+    [InlineData(false)] // rewritten to another path that is missing too: still not what the user confirmed
+    public async Task DeleteBroken_SkipsAValueRewrittenAfterTheScan(bool newTargetExists)
+    {
+        using var sandbox = new StartupSandbox();
+        sandbox.SetValue("HKCU\\Run", "App", $"\"{sandbox.MissingFile(@"1.0\app.exe")}\"");
+        var item = Find(Scan(sandbox), "App");
+        Assert.True(item.IsBroken);
+        var target = newTargetExists ? sandbox.CreateFile(@"2.0\app.exe") : sandbox.MissingFile(@"2.0\app.exe");
+        sandbox.SetValue("HKCU\\Run", "App", $"\"{target}\"");
+
+        var result = await sandbox.Service.DeleteBrokenAsync(new[] { item }, CancellationToken.None);
+
+        Assert.Empty(result.Done);
+        Assert.Empty(result.Failed);
+        var skipped = Assert.Single(result.Skipped);
+        Assert.Equal(StartupService.ChangedSinceScan, skipped.Reason);
+        Assert.Equal($"\"{target}\"", sandbox.GetValue("HKCU\\Run", "App"));
+        Assert.StartsWith("Удалять нечего.", result.Summary);
+        Assert.Contains("обновили", result.Summary);
+        Assert.False(PcCleaner.Modules.Dashboard.HealthScoring.LooksLikeFailure(result.Summary));
+    }
+
+    [Fact]
+    public async Task DeleteBroken_SkipsAnEntryWhoseFileIsBack()
+    {
+        using var sandbox = new StartupSandbox();
+        var path = sandbox.MissingFile("back.exe");
+        sandbox.SetValue("HKCU\\Run", "Back", $"\"{path}\"");
+        var item = Find(Scan(sandbox), "Back");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "reinstalled");
+
+        var result = await sandbox.Service.DeleteBrokenAsync(new[] { item }, CancellationToken.None);
+
+        Assert.Equal(StartupService.TargetIsBack, Assert.Single(result.Skipped).Reason);
+        Assert.NotNull(sandbox.GetValue("HKCU\\Run", "Back"));
+    }
+
+    [Fact]
+    public async Task DeleteBroken_DeletesAnUnchangedBrokenValue_WithBackup()
+    {
+        using var sandbox = new StartupSandbox();
+        var marker = "StillDead-" + sandbox.Id;
+        sandbox.SetValue("HKCU\\Run", marker, $"\"{sandbox.MissingFile("x.exe")}\" /min");
+        sandbox.SetValue("HKCU\\RunOnce", "OnceDead", $"\"{sandbox.MissingFile("y.exe")}\"");
+        var items = Scan(sandbox);
+
+        var result = await sandbox.Service.DeleteBrokenAsync(items, CancellationToken.None);
+
+        Assert.Equal(2, result.Done.Count);
+        Assert.Empty(result.Skipped);
+        Assert.Null(sandbox.GetValue("HKCU\\Run", marker));
+        Assert.Null(sandbox.GetValue("HKCU\\RunOnce", "OnceDead"));
+        Assert.Contains(SandboxBackups(sandbox), b => File.ReadAllText(b.FullName, Encoding.Unicode).Contains(marker));
+    }
+
+    [Fact]
+    public async Task DeleteBroken_ValueRewrittenWhileTheBackupIsMade_IsKept()
+    {
+        using var sandbox = new StartupSandbox();
+        var newCommand = $"\"{sandbox.CreateFile(@"9.1\app.exe")}\"";
+        var env = new StartupEnvironment
+        {
+            UserHive = sandbox.Environment.UserHive,
+            UserSoftware = sandbox.Environment.UserSoftware,
+            MachineHive = sandbox.Environment.MachineHive,
+            MachineSoftware = sandbox.Environment.MachineSoftware,
+            MachineSoftware32 = sandbox.Environment.MachineSoftware32,
+            IncludeServices = false,
+            IncludeTasks = false,
+            IsElevated = () => true,
+            Settings = () => sandbox.Settings,
+            BackupKey = (_, _, _) =>
+            {
+                sandbox.SetValue("HKCU\\Run", "App", newCommand); // the updater wins the race
+                return Task.FromResult<string?>(Path.Combine(sandbox.Dir, "backup.reg"));
+            },
+        };
+        var service = new StartupService(env);
+        sandbox.SetValue("HKCU\\Run", "App", $"\"{sandbox.MissingFile(@"9.0\app.exe")}\"");
+        var items = service.ScanRegistry(CancellationToken.None);
+        service.Enrich(items, CancellationToken.None);
+
+        var result = await service.DeleteBrokenAsync(items, CancellationToken.None);
+
+        Assert.Single(result.Skipped);
+        Assert.Empty(result.Done);
+        Assert.Equal(newCommand, sandbox.GetValue("HKCU\\Run", "App"));
+    }
+
+    [Fact]
+    public async Task PlainDelete_IsUnchanged_DeletesTheNamedEntryTheUserConfirmed()
+    {
+        using var sandbox = new StartupSandbox();
+        sandbox.SetValue("HKCU\\Run", "App", $"\"{sandbox.MissingFile(@"1\app.exe")}\"");
+        var item = Find(Scan(sandbox), "App");
+        sandbox.SetValue("HKCU\\Run", "App", $"\"{sandbox.MissingFile(@"2\app.exe")}\"");
+
+        var result = await sandbox.Service.DeleteAsync(item, CancellationToken.None);
+
+        Assert.True(result.Success, result.Message);
+        Assert.False(result.Skipped);
+        Assert.Null(sandbox.GetValue("HKCU\\Run", "App"));
+    }
+
+    private static IEnumerable<FileInfo> SandboxBackups(StartupSandbox sandbox) => StartupSandbox.Backups($"*{sandbox.Id}*");
+
+    [Fact]
     public async Task Analyze_IsReadOnly()
     {
         using var sandbox = new StartupSandbox();

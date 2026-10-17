@@ -225,7 +225,7 @@ public sealed class StartupViewModel : PageViewModel
 
     public string DeleteBrokenText => $"Удалить битые записи ({DeletableBrokenCount})";
 
-    public string WindowsTasksText => WindowsTaskCount > 0 ? $"Показать задачи Windows ({WindowsTaskCount})" : "Показать задачи Windows";
+    public string WindowsTasksText => WindowsTaskCount > 0 ? $"Показать задания Windows ({WindowsTaskCount})" : "Показать задания Windows";
 
     public string MicrosoftServicesText => MicrosoftServiceCount > 0
         ? $"Показать службы Microsoft ({MicrosoftServiceCount})"
@@ -580,8 +580,11 @@ public sealed class StartupViewModel : PageViewModel
     private async Task DeleteBrokenAsync()
     {
         // The list may be minutes old: re-check every file so a program reinstalled meanwhile is never removed as "broken".
+        // This quick check only shapes the confirmation; the service re-reads every entry (its current command, not only the
+        // old file) right before deleting it, so an entry rewritten by an update is left alone too.
         var candidates = _items.Where(i => i.IsBroken && i.CanDelete).ToList();
         var broken = candidates.Where(StillBroken).ToList();
+        var reload = broken.Count < candidates.Count;
         try
         {
             if (broken.Count == 0)
@@ -591,24 +594,25 @@ public sealed class StartupViewModel : PageViewModel
                     : "Файлы этих записей снова на месте — удалять нечего. Список обновлён.");
                 return;
             }
-            await DeleteBrokenCoreAsync(broken);
+            reload |= await DeleteBrokenCoreAsync(broken);
         }
         finally
         {
-            // Some files came back (program reinstalled?): show their real state once the deletion has finished.
-            if (broken.Count < candidates.Count)
+            // Some entries came back or changed (program reinstalled or updated?): show their real state once the deletion has finished.
+            if (reload)
                 await LoadAsync();
         }
     }
 
-    private async Task DeleteBrokenCoreAsync(IReadOnlyList<StartupItem> broken)
+    /// <summary>Confirms and deletes; returns true when some entries changed since the scan and the list must be reloaded.</summary>
+    private async Task<bool> DeleteBrokenCoreAsync(IReadOnlyList<StartupItem> broken)
     {
         var allowed = Admin.IsElevated ? broken : broken.Where(i => !i.RequiresAdmin || i.IsTask).ToList();
         var skipped = broken.Count - allowed.Count;
         if (allowed.Count == 0)
         {
             ElevatedRestart.RequireElevation("удаление битых записей автозагрузки для всех пользователей");
-            return;
+            return false;
         }
 
         var sb = new StringBuilder();
@@ -629,23 +633,37 @@ public sealed class StartupViewModel : PageViewModel
                           "для них нужны права администратора.");
         }
         if (!Dialogs.Confirm("Удалить битые записи?", sb.ToString().TrimEnd()))
-            return;
+            return false;
 
         StartupBulkResult? result = null;
         await RunBusyAsync("Удаляем битые записи…", async ct =>
         {
-            result = await _service.DeleteManyAsync(allowed, ct);
+            result = await _service.DeleteBrokenAsync(allowed, ct);
         });
         if (result is null)
-            return;
+            return false;
         RemoveItems(result.Done);
         var summary = result.Summary;
         if (skipped > 0)
             summary += $"{Environment.NewLine}{Environment.NewLine}Пропущено (нужны права администратора): {skipped}.";
-        ShowMessage(result.Failed.Count == 0
-            ? $"Битые записи удалены: {result.Done.Count}."
-            : $"Удалено {result.Done.Count}, не удалось: {result.Failed.Count}.", result.Failed.Count > 0);
+        ShowMessage(BrokenResultMessage(result), result.Failed.Count > 0);
         Dialogs.Info("Битые записи", summary);
+        return result.Skipped.Count > 0;
+    }
+
+    /// <summary>Banner text after "Удалить битые".</summary>
+    internal static string BrokenResultMessage(StartupBulkResult result)
+    {
+        string text;
+        if (result.Failed.Count > 0)
+            text = $"Удалено {result.Done.Count}, не удалось: {result.Failed.Count}.";
+        else if (result.Done.Count == 0 && result.Skipped.Count > 0)
+            text = "Удалять нечего.";
+        else
+            text = $"Битые записи удалены: {result.Done.Count}.";
+        if (result.Skipped.Count > 0)
+            text += $" Оставлено без изменений (запись изменилась после проверки): {result.Skipped.Count}. Список обновлён.";
+        return text;
     }
 
     /// <summary>True only if the target file is still definitely missing right now.</summary>

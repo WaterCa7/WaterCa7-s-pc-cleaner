@@ -110,6 +110,57 @@ public class StartupFolderTests
     }
 
     [Fact]
+    public async Task DeleteBroken_KeepsAShortcutRepointedToANewVersion()
+    {
+        using var sandbox = new StartupSandbox();
+        var lnk = Path.Combine(sandbox.UserFolder, "Versioned App.lnk");
+        if (!CreateShortcut(lnk, sandbox.MissingFile(@"app-1.0\app.exe"), "--tray"))
+            return; // WScript.Shell is unavailable on this machine: nothing to verify
+        var item = Scan(sandbox).Single();
+        Assert.True(item.IsBroken);
+        // The updater re-points the same shortcut to the new version folder.
+        Assert.True(CreateShortcut(lnk, sandbox.CreateFile(@"app-2.0\app.exe"), "--tray"));
+
+        var result = await sandbox.Service.DeleteBrokenAsync(new[] { item }, CancellationToken.None);
+
+        Assert.Empty(result.Done);
+        Assert.Equal(StartupService.ChangedSinceScan, Assert.Single(result.Skipped).Reason);
+        Assert.True(File.Exists(lnk));
+        Assert.Empty(Directory.GetFiles(sandbox.RecycledDir));
+    }
+
+    [Fact]
+    public async Task DeleteBroken_RecyclesAShortcutThatIsStillBroken()
+    {
+        using var sandbox = new StartupSandbox();
+        var lnk = Path.Combine(sandbox.UserFolder, "Gone App.lnk");
+        if (!CreateShortcut(lnk, sandbox.MissingFile("GoneApp.exe"), ""))
+            return;
+        var item = Scan(sandbox).Single();
+
+        var result = await sandbox.Service.DeleteBrokenAsync(new[] { item }, CancellationToken.None);
+
+        Assert.Single(result.Done);
+        Assert.Empty(result.Skipped);
+        Assert.False(File.Exists(lnk));
+        Assert.True(File.Exists(Path.Combine(sandbox.RecycledDir, "Gone App.lnk")));
+    }
+
+    [Fact]
+    public async Task DeleteBroken_FileInTheFolderItself_IsNeverBroken()
+    {
+        using var sandbox = new StartupSandbox();
+        var file = Path.Combine(sandbox.UserFolder, "tool.bat");
+        File.WriteAllText(file, "@echo off");
+        var item = Scan(sandbox).Single();
+
+        var result = await sandbox.Service.DeleteBrokenAsync(new[] { item }, CancellationToken.None);
+
+        Assert.Equal(StartupService.TargetIsBack, Assert.Single(result.Skipped).Reason);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
     public void Shortcut_ToExistingTarget_IsResolved()
     {
         using var sandbox = new StartupSandbox();
