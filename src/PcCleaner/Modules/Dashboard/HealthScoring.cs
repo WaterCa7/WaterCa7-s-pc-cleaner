@@ -50,6 +50,17 @@ public static class HealthScoring
         _ => "Плохо",
     };
 
+    /// <summary>Verdict of a scan in which some modules failed or timed out.</summary>
+    public const string IncompleteVerdict = "Проверка неполная";
+
+    /// <summary>
+    /// Like <see cref="Verdict(int?)"/>, but a scan with failed/timed-out modules never says "Отлично"/"Хорошо": their
+    /// problems are missing from the score (it can only be lower in reality), so the verdict is "Проверка неполная".
+    /// "Плохо" stays: the real score can only be even lower (same rule as <see cref="ScoreBrushKey(int?, int)"/>).
+    /// </summary>
+    public static string Verdict(int? score, int failedModules)
+        => score is >= 50 && failedModules > 0 ? IncompleteVerdict : Verdict(score);
+
     /// <summary>
     /// One friendly sentence under the verdict. <paramref name="problemCount"/> = remaining issues that lower the score
     /// (tips are not problems); <paramref name="fixedSome"/> = something was fixed since the scan.
@@ -71,6 +82,22 @@ public static class HealthScoring
         };
     }
 
+    /// <summary>
+    /// <see cref="VerdictDescription(int?, int, bool)"/> for a scan in which <paramref name="failedModules"/> modules
+    /// failed or timed out: never "в отличной форме" — the score only counts the modules that were checked.
+    /// </summary>
+    public static string VerdictDescription(int? score, int problemCount, bool fixedSome, int failedModules)
+    {
+        if (score is null || failedModules <= 0)
+            return VerdictDescription(score, problemCount, fixedSome);
+        var notChecked = Format.Count(failedModules, "раздел", "раздела", "разделов");
+        if (problemCount > 0)
+            return $"Не удалось проверить {notChecked} — оценка учитывает только остальные и может быть завышена.";
+        return fixedSome
+            ? $"Найденные проблемы исправлены, но {notChecked} проверить не удалось — нажмите «Проверить снова»."
+            : $"В проверенных разделах проблем нет, но {notChecked} проверить не удалось — оценка может быть завышена.";
+    }
+
     /// <summary>Theme brush key for the score: green / amber / red, muted when there is no score.</summary>
     public static string ScoreBrushKey(int? score) => score switch
     {
@@ -79,6 +106,13 @@ public static class HealthScoring
         >= 50 => "WarningBrush",
         _ => "DangerBrush",
     };
+
+    /// <summary>
+    /// <see cref="ScoreBrushKey(int?)"/> that is never green for an incomplete scan (failed modules can only lower the
+    /// real score): amber instead, red stays red.
+    /// </summary>
+    public static string ScoreBrushKey(int? score, int failedModules)
+        => score is >= 50 && failedModules > 0 ? "WarningBrush" : ScoreBrushKey(score);
 
     /// <summary>Group header: "Критично", "Важно", "Средне", "Низко", "Советы".</summary>
     public static string GroupTitle(IssueSeverity severity) => severity switch
@@ -190,7 +224,9 @@ public static class HealthScoring
 
     /// <summary>
     /// FixAsync has no success flag: modules return a message. Some messages mean "nothing was changed"
-    /// (e.g. admin rights are required) — such a result must not mark the issue as fixed.
+    /// (e.g. admin rights are required) or "the problem is still there" — such a result must not mark the issue as fixed.
+    /// When in doubt the result counts as NOT fixed: claiming that a firewall or antivirus is on while it is still off
+    /// is far worse than asking the user to check again.
     /// </summary>
     public static bool LooksLikeFailure(string? message)
     {
@@ -198,6 +234,7 @@ public static class HealthScoring
             return false;
         var m = message.Trim().ToLowerInvariant();
         return LooksLikeAdminRequired(m)
+               || StillBroken.IsMatch(m)
                || m.StartsWith("не удалось")
                || m.StartsWith("ошибка")
                || m.StartsWith("отменено")
@@ -216,6 +253,25 @@ public static class HealthScoring
     /// <summary>The fix result says administrator rights are required ("Нужны права администратора", "Недостаточно прав"...).</summary>
     public static bool LooksLikeAdminRequired(string? message)
         => !string.IsNullOrWhiteSpace(message) && AdminRequired.IsMatch(message);
+
+    // Results that are returned normally (not "Не удалось …" at the start) but mean the problem is still there, e.g.
+    //   "Команда выполнена, но брандмауэр всё ещё выключен для: …", "Windows не дала включить защиту …",
+    //   "Защиту не удалось включить: …", "Раздел реестра с настройками UAC не найден.",
+    //   "Недоступно в тестовом окружении.", "Эту рекомендацию нельзя применить автоматически.",
+    //   "… (очистка прервана)." (stopped half-way), and partial bulk results that list failures:
+    //   "Удалено 2 записи … Не удалось: 3." / "… Не удалось удалить (1): …".
+    // Deliberately NOT matched: "Не удалось удалить 3 занятых файла" (a normal cleaning result) and
+    // "Точку восстановления создать не удалось" (a side note of a successful fix).
+    private static readonly Regex StillBroken = new(
+        @"\b(?:всё|все)\s+(?:ещё|еще)\s+(?:вы|от)ключ|\bпо-прежнему\s+(?:вы|от)ключ" +
+        @"|\bне\s+дал[аио]?\b" +
+        @"|\bне\s+удалось\s+(?:включить|выключить|отключить)\b" +
+        @"|\bне\s+найден[аы]?\b" +
+        @"|\bв\s+тестовом\s+окружении\b" +
+        @"|\bнельзя\s+применить\b" +
+        @"|\bпрерван[аоы]?\b" +
+        @"|\bне\s+удалось\s*:\s*\d|\bне\s+удалось\s+удалить\s*\(\s*\d",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // \b keeps "нет правил" / "недостаточно правильно" from matching.
     private static readonly Regex AdminRequired = new(

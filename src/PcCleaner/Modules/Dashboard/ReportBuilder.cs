@@ -24,7 +24,7 @@ public static class ReportBuilder
     public static string BuildHtml(DashboardReport r)
     {
         var sb = new StringBuilder(48 * 1024);
-        var scoreClass = ScoreClass(r.Score);
+        var scoreClass = ScoreClass(r.Score, r.FailedModules);
 
         sb.Append("<!DOCTYPE html>\n<html lang=\"ru\">\n<head>\n<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
@@ -109,7 +109,12 @@ public static class ReportBuilder
         // ----- findings
         sb.Append("<section class=\"card\">\n<h2>Найденные проблемы</h2>\n");
         var all = r.AllIssues.ToList();
-        if (all.Count == 0)
+        if (all.Count == 0 && r.IsIncomplete)
+        {
+            sb.Append("<p class=\"muted\">В проверенных разделах проблем не найдено. Часть разделов проверить не удалось ")
+                .Append("(см. «Проверенные разделы») — их проблемы в отчёт не попали.</p>\n");
+        }
+        else if (all.Count == 0)
         {
             sb.Append("<div class=\"empty\"><div class=\"empty-mark\" aria-hidden=\"true\">✓</div>")
                 .Append("<p><b>Проблем не найдено</b></p><p class=\"muted\">")
@@ -204,7 +209,9 @@ public static class ReportBuilder
         sb.Append(nl).Append("НАЙДЕННЫЕ ПРОБЛЕМЫ").Append(nl);
         if (!r.AllIssues.Any())
         {
-            sb.Append("  Проблем не найдено.").Append(nl);
+            sb.Append(r.IsIncomplete
+                ? "  В проверенных разделах проблем не найдено (часть разделов проверить не удалось)."
+                : "  Проблем не найдено.").Append(nl);
         }
         else
         {
@@ -272,6 +279,10 @@ public static class ReportBuilder
         >= 50 => "score-warn",
         _ => "score-bad",
     };
+
+    /// <summary>Like the dashboard gauge: an incomplete scan is never green (amber instead, red stays red).</summary>
+    internal static string ScoreClass(int? score, int failedModules)
+        => score is >= 50 && failedModules > 0 ? "score-warn" : ScoreClass(score);
 
     internal static string SeverityClass(IssueSeverity severity) => severity switch
     {

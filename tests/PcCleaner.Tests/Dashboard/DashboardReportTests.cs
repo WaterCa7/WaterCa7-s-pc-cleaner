@@ -377,12 +377,12 @@ public class ScoreDeltaAndReclaimableTests
         const long gb = 1024L * 1024 * 1024;
         var both = new ReclaimableSplit(2 * gb, 40 * gb);
         Assert.Equal("Можно освободить 2 ГБ", both.AutoText);
-        Assert.Equal("Ещё до 40 ГБ — после проверки вручную", both.ManualText);
-        Assert.Equal("Можно освободить 2 ГБ (ещё до 40 ГБ — после проверки вручную)", both.SummaryText);
+        Assert.Equal("Ещё до 40 ГБ — если решите удалить сами", both.ManualText);
+        Assert.Equal("Можно освободить 2 ГБ (ещё до 40 ГБ — если решите удалить сами)", both.SummaryText);
 
         var manualOnly = new ReclaimableSplit(0, 40 * gb);
         Assert.Null(manualOnly.AutoText);
-        Assert.Equal("До 40 ГБ можно освободить после проверки вручную", manualOnly.ManualText);
+        Assert.Equal("До 40 ГБ можно освободить, если решите удалить сами", manualOnly.ManualText);
         Assert.Equal(manualOnly.ManualText, manualOnly.SummaryText);
 
         var autoOnly = new ReclaimableSplit(2 * gb, 0);
@@ -800,8 +800,8 @@ public class DashboardReportViewModelTests
         Assert.True(vm.HasAutoReclaimable);
         Assert.Equal("Можно освободить 2 ГБ", vm.AutoReclaimableText);
         Assert.True(vm.HasManualReclaimable);
-        Assert.Equal("Ещё до 40 ГБ — после проверки вручную", vm.ManualReclaimableText);
-        Assert.Equal("Можно освободить 2 ГБ (ещё до 40 ГБ — после проверки вручную)", vm.ReclaimableText);
+        Assert.Equal("Ещё до 40 ГБ — если решите удалить сами", vm.ManualReclaimableText);
+        Assert.Equal("Можно освободить 2 ГБ (ещё до 40 ГБ — если решите удалить сами)", vm.ReclaimableText);
         Assert.Equal(new ReclaimableSplit(2 * gb, 40 * gb), ScanSummary.Load(settings)!.Reclaimable);
     }
 
@@ -828,7 +828,7 @@ public class DashboardReportViewModelTests
 
         Assert.False(vm.HasAutoReclaimable);
         Assert.True(vm.HasManualReclaimable);
-        Assert.Equal("До 10 ГБ можно освободить после проверки вручную", vm.ManualReclaimableText);
+        Assert.Equal("До 10 ГБ можно освободить, если решите удалить сами", vm.ManualReclaimableText);
         Assert.Equal(10 * gb, vm.ReclaimableBytes);
     }
 

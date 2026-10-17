@@ -45,20 +45,40 @@ public sealed record ScanSummary
     public int FailedModules { get; init; }
 
     /// <summary>
+    /// Some modules could not be checked: their problems are missing, so <see cref="Score"/> may be too high. Such a scan
+    /// is never called "Отлично", shows no "Было → стало" and never becomes the baseline of the next comparison.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsIncomplete => FailedModules > 0;
+
+    /// <summary>
     /// Score the scan itself measured. <see cref="Score"/> is re-estimated after fixes made in that session; the next
     /// scan compares with this measured value, so "Проверить снова" right after fixing shows the real improvement
     /// (not "Было 100 → стало 94" because a fix freed slightly less than estimated). Null in older summaries.
     /// </summary>
     public int? MeasuredScore { get; init; }
 
-    /// <summary>What the next scan is compared with: the measured score, or <see cref="Score"/> for older summaries.</summary>
+    /// <summary>The score this scan measured: <see cref="MeasuredScore"/>, or <see cref="Score"/> for older summaries.</summary>
     [JsonIgnore]
     public int BaselineScore => MeasuredScore ?? Score;
 
-    /// <summary>Score of the scan before this one (for "Было 52 → стало 78"); null on the first scan.</summary>
+    /// <summary>
+    /// Score the scan before this one was compared with (for "Было 52 → стало 78"); null on the first scan. An incomplete
+    /// scan keeps here the baseline it inherited, so the next scan still compares with the last complete one.
+    /// </summary>
     public int? PreviousScore { get; init; }
 
     public DateTime? PreviousTime { get; init; }
+
+    /// <summary>
+    /// What the NEXT scan compares with: this scan's measured score and time — or, when this scan was incomplete,
+    /// the baseline it inherited (a partial, possibly inflated score must not fake "Было 100 → стало 46"). Null when
+    /// there is nothing reliable to compare with.
+    /// </summary>
+    [JsonIgnore]
+    public (int Score, DateTime? Time)? NextBaseline => IsIncomplete
+        ? PreviousScore is { } inherited ? (inherited, PreviousTime) : null
+        : (BaselineScore, Time);
 
     /// <summary>Reclaimable space split into "fixable from the dashboard" and "after manual review".</summary>
     [JsonIgnore]
@@ -72,9 +92,9 @@ public sealed record ScanSummary
         }
     }
 
-    /// <summary>Change against the previous scan; null on the first scan.</summary>
+    /// <summary>Change against the previous scan; null on the first scan and for an incomplete scan.</summary>
     [JsonIgnore]
-    public ScoreDelta? Delta => ScoreDelta.Create(PreviousScore, Score, PreviousTime);
+    public ScoreDelta? Delta => IsIncomplete ? null : ScoreDelta.Create(PreviousScore, Score, PreviousTime);
 
     public static ScanSummary? Load(AppSettings settings)
     {

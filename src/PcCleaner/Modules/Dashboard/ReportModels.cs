@@ -72,20 +72,24 @@ public readonly record struct ReclaimableSplit(long AutoBytes, long ManualBytes)
     /// <summary>"Можно освободить 2,1 ГБ" or null.</summary>
     public string? AutoText => AutoBytes > 0 ? "Можно освободить " + Format.Bytes(AutoBytes) : null;
 
-    /// <summary>"Ещё до 41 ГБ — после проверки вручную" (or a standalone wording when nothing is freed automatically).</summary>
+    // Not "после проверки вручную": everywhere else in the app "проверка" means the scan, while this space is freed
+    // only if the user looks through it and decides to delete it (old downloads, Windows.old...).
+    private const string ManualHint = "если решите удалить сами";
+
+    /// <summary>"Ещё до 41 ГБ — если решите удалить сами" (or a standalone wording when nothing is freed automatically).</summary>
     public string? ManualText => ManualBytes <= 0
         ? null
         : AutoBytes > 0
-            ? $"Ещё до {Format.Bytes(ManualBytes)} — после проверки вручную"
-            : $"До {Format.Bytes(ManualBytes)} можно освободить после проверки вручную";
+            ? $"Ещё до {Format.Bytes(ManualBytes)} — {ManualHint}"
+            : $"До {Format.Bytes(ManualBytes)} можно освободить, {ManualHint}";
 
-    /// <summary>One line for reports: "Можно освободить 2,1 ГБ (ещё до 41 ГБ — после проверки вручную)".</summary>
+    /// <summary>One line for reports: "Можно освободить 2,1 ГБ (ещё до 41 ГБ — если решите удалить сами)".</summary>
     public string? SummaryText
     {
         get
         {
             if (AutoBytes > 0 && ManualBytes > 0)
-                return $"Можно освободить {Format.Bytes(AutoBytes)} (ещё до {Format.Bytes(ManualBytes)} — после проверки вручную)";
+                return $"Можно освободить {Format.Bytes(AutoBytes)} (ещё до {Format.Bytes(ManualBytes)} — {ManualHint})";
             return AutoText ?? ManualText;
         }
     }
@@ -219,6 +223,11 @@ public sealed record DashboardReport
     /// <summary>"Не удалось проверить: …" — the score may be incomplete.</summary>
     public string? Warning { get; init; }
 
+    /// <summary>Modules that failed or timed out: the score only counts the others (verdict "Проверка неполная").</summary>
+    public int FailedModules { get; init; }
+
+    public bool IsIncomplete => FailedModules > 0;
+
     public string AppName { get; init; } = AppInfo.Name;
 
     public string AppVersion { get; init; } = AppInfo.Version;
@@ -234,9 +243,9 @@ public sealed record DashboardReport
 
     public int RemainingTips => AllIssues.Count(i => !i.IsFixed && i.Severity <= IssueSeverity.Info);
 
-    public string Verdict => HealthScoring.Verdict(Score);
+    public string Verdict => HealthScoring.Verdict(Score, FailedModules);
 
-    public string VerdictDescription => HealthScoring.VerdictDescription(Score, RemainingProblems, FixedCount > 0);
+    public string VerdictDescription => HealthScoring.VerdictDescription(Score, RemainingProblems, FixedCount > 0, FailedModules);
 
     /// <summary>"Найдено: 2 проблемы и 1 совет" over every finding of the scan (fixed ones included).</summary>
     public string FindingsText
