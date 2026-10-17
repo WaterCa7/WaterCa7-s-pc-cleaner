@@ -119,21 +119,6 @@ public class RestoreAndRestartTests
 
     // ---------- restart as administrator ----------
 
-    private sealed class FakePage : PageViewModel
-    {
-        private readonly string _title;
-
-        public FakePage(string title) => _title = title;
-
-        public override string Title => _title;
-
-        public override string Subtitle => "";
-
-        public override string IconGlyph => "";
-
-        public Task StartWork(string text, Task until) => RunBusyAsync(text, _ => until);
-    }
-
     [Fact]
     public void BusyWarning_NamesThePagesAndWhatTheyAreDoing()
     {
@@ -150,36 +135,11 @@ public class RestoreAndRestartTests
     }
 
     [Fact]
-    public async Task Restart_AsksWhileAnotherPageIsBusy_AndGoesAheadWhenIdle()
+    public void BusyWarning_IsTheTextCoreAsksWith()
     {
-        if (Admin.IsElevated)
-            return; // nothing to restart: the helper does nothing when the app already has admin rights
-
-        var idle = new FakePage("Очистка");
-        var busy = new FakePage("Программы");
-        var gate = new TaskCompletionSource();
-        var work = busy.StartWork("Удаление «Test App»…", gate.Task);
-        Assert.True(busy.IsBusy);
-        var restarts = 0;
-        bool Restart()
-        {
-            restarts++;
-            return true;
-        }
-
-        // TestEnvironment answers every confirmation with "No": the busy page keeps working, nothing restarts.
-        Assert.False(ElevatedRestart.Request(new PageViewModel[] { idle, busy }, Restart));
-        Assert.Equal(0, restarts);
-
-        gate.SetResult();
-        await work;
-        Assert.False(busy.IsBusy);
-
-        // Nothing is running: restart right away (Windows shows its own UAC prompt).
-        Assert.True(ElevatedRestart.Request(new PageViewModel[] { idle, busy }, Restart));
-        Assert.Equal(1, restarts);
-
-        // "Нужны права администратора — перезапустить?" answered "No": nothing happens, the action is not allowed.
-        Assert.False(ElevatedRestart.RequireElevation("Тестовое действие"));
+        // ElevatedRestart only delegates: Admin.RestartElevated/RequireElevation ask the busy and standard-account
+        // questions themselves, once (Core tests: Restart_AsksWhileAnyPageIsBusy, RequireElevation_Declined_DoesNotRestart).
+        var busy = new[] { ("Программы", "Удаление «Test App»…"), ("Диски", "") };
+        Assert.Equal(Admin.BusyWarning(busy), ElevatedRestart.BusyWarning(busy));
     }
 }

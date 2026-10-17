@@ -146,10 +146,11 @@ internal static class QuarantineActions
             return new(QuarantineRestoreStatus.Conflict, target, $"По исходному пути уже есть файл: {target}");
         }
         catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException
-                                       or System.Security.SecurityException)
+                                       or System.Security.SecurityException or InvalidOperationException)
         {
+            // InvalidOperationException: the quarantine list (index.json) cannot be read, so Core changed nothing.
             Log.Warn($"Карантин: не удалось восстановить {item.OriginalPath}: {ex.Message}");
-            return new(QuarantineRestoreStatus.Failed, target, $"Не удалось восстановить файл: {ex.Message}");
+            return new(QuarantineRestoreStatus.Failed, target, $"Не удалось восстановить файл: {ErrorPhrase(ex)}.");
         }
 
         return string.Equals(target, item.OriginalPath, StringComparison.OrdinalIgnoreCase)
@@ -170,11 +171,23 @@ internal static class QuarantineActions
             Quarantine.Delete(item);
             return (true, $"{item.FileName}: удалён навсегда.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             Log.Warn($"Карантин: не удалось удалить {item.StoredPath}: {ex.Message}");
-            return (false, $"{item.FileName}: не удалось удалить ({ex.Message}).");
+            return (false, $"{item.FileName}: не удалось удалить — {ErrorPhrase(ex)}.");
         }
+    }
+
+    /// <summary>
+    /// Russian reason for a result line ("файл занят другой программой"): <see cref="ErrorText.For"/>, starting with a
+    /// lower-case letter because it follows a colon or a dash.
+    /// </summary>
+    internal static string ErrorPhrase(Exception ex)
+    {
+        var text = ErrorText.For(ex);
+        return text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1])
+            ? char.ToLower(text[0], Format.Ru) + text[1..]
+            : text;
     }
 
     /// <summary>

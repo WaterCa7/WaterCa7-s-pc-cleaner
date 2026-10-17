@@ -1226,7 +1226,8 @@ public sealed class ProcessesViewModel : PageViewModel
         }
         if (!item.IsTrusted)
         {
-            var ok = Dialogs.Confirm("Доверять программе?",
+            // Neutral question: trusting changes only the app's own list, nothing on the system.
+            var ok = Dialogs.Ask("Доверять программе?",
                 $"«{item.FriendlyName}» больше не будет помечаться как подозрительная — ни здесь, ни в других разделах.\n\n" +
                 $"{path}\n\nДоверяйте только программам, в которых уверены. Отменить можно здесь же кнопкой «Не доверять».");
             if (!ok)
@@ -1285,7 +1286,7 @@ public sealed class ProcessesViewModel : PageViewModel
         catch (Exception ex)
         {
             Log.Warn($"Процессы: проверка Защитником {path}: {ex.Message}");
-            result = "Не удалось запустить проверку: " + ex.Message;
+            result = $"Не удалось запустить проверку: {ErrorText.For(ex)}.";
         }
         finally
         {

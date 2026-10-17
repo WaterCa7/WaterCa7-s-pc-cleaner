@@ -249,10 +249,7 @@ public sealed class OptimizerService : IHealthContributor
                 fix = async ct =>
                 {
                     var result = await ApplyAsync(captured, createRestorePoint: true, ct).ConfigureAwait(false);
-                    var note = result.Success && result.Changed && !string.IsNullOrEmpty(captured.AfterApplyNote)
-                        ? " " + captured.AfterApplyNote
-                        : "";
-                    return result.Message + note;
+                    return DashboardResultText(result, captured.AfterApplyNote);
                 };
             }
 
@@ -278,4 +275,31 @@ public sealed class OptimizerService : IHealthContributor
         }
         return issues;
     }
+
+    /// <summary>Prefix of a failed fix's text: the dashboard reads a result that starts with it as "не исправлено".</summary>
+    internal const string FailurePrefix = "Не удалось исправить: ";
+
+    /// <summary>
+    /// The text the dashboard gets for a fix. HealthIssue.FixAsync has no success flag, so a failed tweak
+    /// (<see cref="TweakResult.Success"/> = false) must say so in words the dashboard recognises: such a text starts with
+    /// «Не удалось». A success keeps its own text, plus what the user has to do afterwards (e.g. restart Windows).
+    /// </summary>
+    internal static string DashboardResultText(TweakResult result, string? afterApplyNote)
+    {
+        var message = string.IsNullOrWhiteSpace(result.Message) ? "" : result.Message.Trim();
+        if (!result.Success)
+        {
+            if (message.StartsWith("Не удалось", StringComparison.OrdinalIgnoreCase))
+                return message;
+            return message.Length == 0 ? FailurePrefix + "причина неизвестна." : FailurePrefix + LowerFirst(message);
+        }
+        var note = result.Changed && !string.IsNullOrEmpty(afterApplyNote) ? " " + afterApplyNote : "";
+        return message + note;
+    }
+
+    /// <summary>"Для изменения…" → "для изменения…" (an abbreviation such as "BIOS…" or a quote «…» stays as is).</summary>
+    private static string LowerFirst(string text)
+        => text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1])
+            ? char.ToLower(text[0], Format.Ru) + text[1..]
+            : text;
 }

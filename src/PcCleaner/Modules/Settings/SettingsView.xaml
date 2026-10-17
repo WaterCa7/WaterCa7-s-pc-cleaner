@@ -881,7 +881,7 @@
                                 <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="3" Text="Администратор" />
                                 <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,10">
                                     <TextBlock Style="{StaticResource InfoValue}" Margin="0" Text="{Binding AdminStatusText}" />
-                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить с правами администратора" Margin="0,4,0,0"
+                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить от имени администратора" Margin="0,4,0,0"
                                             HorizontalAlignment="Left" FontSize="12.5" Command="{Binding RestartAsAdminCommand}"
                                             Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
                                 </StackPanel>

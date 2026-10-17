@@ -519,7 +519,7 @@ public sealed class ProgramsService : IHealthContributor
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
             Log.Warn($"Не удалось запустить деинсталлятор «{p.DisplayName}»: {ex.Message}");
-            return new UninstallOutcome(UninstallStatus.NotStarted, $"Не удалось запустить деинсталлятор: {ex.Message}");
+            return new UninstallOutcome(UninstallStatus.NotStarted, $"Не удалось запустить деинсталлятор: {ErrorText.For(ex)}.");
         }
 
         Log.Action($"Запущен деинсталлятор «{p.DisplayName}»{(quiet ? " (тихое удаление)" : "")}: {launch.DisplayText}");
@@ -599,7 +599,7 @@ public sealed class ProgramsService : IHealthContributor
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
             Log.Warn($"Не удалось удалить запись «{p.DisplayName}» ({p.RegistryKeyPath}): {ex.Message}");
-            return new EntryDeletionResult(false, $"Нет доступа к записи: {ex.Message}", backup);
+            return new EntryDeletionResult(false, $"Не удалось удалить запись: {ErrorText.For(ex)}.", backup);
         }
 
         Log.Action($"Удалена запись «{p.DisplayName}» из списка установленных программ ({p.RegistryKeyPath}). " +
@@ -622,7 +622,7 @@ public sealed class ProgramsService : IHealthContributor
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            return $"Не удалось прочитать запись: {ex.Message}";
+            return $"Не удалось прочитать запись: {ErrorText.For(ex)}.";
         }
         if (current is null)
             return "Этой записи уже нет в реестре — ничего не изменено.";
@@ -679,7 +679,7 @@ public sealed class ProgramsService : IHealthContributor
         catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
         {
             Log.Warn($"Не удалось запустить PowerShell для удаления «{app.DisplayName}»: {ex.Message}");
-            return (false, ex.Message);
+            return (false, $"Не удалось запустить PowerShell: {ErrorText.For(ex)}.");
         }
 
         if (result.Success && result.StdOut.Contains("OK", StringComparison.Ordinal))
@@ -776,12 +776,26 @@ public sealed class ProgramsService : IHealthContributor
                    "Перезапустите программу от имени администратора и повторите.";
 
         var (deleted, failures) = await DeleteEntriesAsync(targets, null, ct);
+        return BrokenEntriesFixText(targets.Count, deleted, failures);
+    }
+
+    /// <summary>
+    /// The dashboard's text for <see cref="FixBrokenEntriesAsync"/>. HealthIssue.FixAsync has no success flag, so a partial
+    /// result must say so in words the dashboard recognises: failures ("Не удалось: 2.") and entries left unprocessed
+    /// because "Отмена" stopped the batch ("Удаление прервано…").
+    /// </summary>
+    internal static string BrokenEntriesFixText(int targets, int deleted, IReadOnlyList<string> failures)
+    {
+        var notProcessed = Math.Max(0, targets - deleted - failures.Count);
+        var interrupted = notProcessed > 0
+            ? $" Удаление прервано — не обработано: {Format.Count(notProcessed, "запись", "записи", "записей")}."
+            : "";
         if (deleted == 0)
-            return "Ничего не удалено. " + (failures.Count > 0 ? failures[0] : "");
+            return ("Ничего не удалено." + (failures.Count > 0 ? " " + failures[0] : "")).TrimEnd() + interrupted;
         var text = $"Удалено {Format.Count(deleted, "запись", "записи", "записей")}, резервные копии сохранены.";
         if (failures.Count > 0)
             text += $" Не удалось: {failures.Count}.";
-        return text;
+        return text + interrupted;
     }
 
     private static string FirstLine(string s)

@@ -1067,7 +1067,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            issue.FixResult = "Не удалось исправить: " + ex.Message;
+            issue.FixResult = $"Не удалось исправить: {ErrorText.For(ex)}.";
             item.AccessDenied = ex is UnauthorizedAccessException or SecurityException;
             item.FixFailed = true;
             item.RaiseNeedsAdmin();
@@ -1185,7 +1185,8 @@ public sealed class DashboardViewModel : PageViewModel
             .AppendLine("Это низкорисковые действия: например, удаление временных файлов и кэша или включение " +
                         "рекомендованных параметров Windows.")
             .AppendLine("Перед изменениями программа попробует создать точку восстановления Windows (если это включено " +
-                        "в настройках и есть права администратора). Всё сделанное запишется в журнал.")
+                        "в настройках и есть права администратора). Если в Windows выключена защита системы, точка не " +
+                        "создаётся — программа её не включает сама. Всё сделанное запишется в журнал.")
             .AppendLine().Append("Продолжить?");
         return message.ToString();
     }
@@ -1304,7 +1305,7 @@ public sealed class DashboardViewModel : PageViewModel
             Log.Warn($"Главная: не удалось сохранить отчёт в «{path}»: {ex.Message}");
             SetReportStatus("Отчёт не сохранён — выберите другую папку", ok: false);
             Dialogs.Error("Не удалось сохранить отчёт",
-                $"{path}\n\n{ex.Message}\n\nПопробуйте сохранить отчёт в другую папку, например в «Документы».");
+                $"{path}\n\n{ErrorText.Sentence(ex)}\n\nПопробуйте сохранить отчёт в другую папку, например в «Документы».");
             return null;
         }
 
@@ -1320,7 +1321,7 @@ public sealed class DashboardViewModel : PageViewModel
                 "сохраните отчёт с расширением .html.");
             return path;
         }
-        if (Dialogs.Confirm("Отчёт сохранён",
+        if (Dialogs.Ask("Отчёт сохранён",
                 $"Отчёт о проверке сохранён в файл:\n{path}\n\nЕго можно открыть в любом браузере, распечатать или отправить. " +
                 "Открыть отчёт в браузере?"))
             ProcessRunner.ShellOpen(path);

@@ -136,7 +136,6 @@ public sealed class NetworkViewModel : PageViewModel
         });
         ShowSocketsCommand = new RelayCommand(ShowSockets);
         DismissMessageCommand = new RelayCommand(() => Message = null);
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
     }
 
     public override string Title => "Сеть";
@@ -187,7 +186,6 @@ public sealed class NetworkViewModel : PageViewModel
     public RelayCommand ShowSocketsCommand { get; }
     public RelayCommand DismissMessageCommand { get; }
     public RelayCommand ToggleGroupCommand { get; }
-    public RelayCommand RestartAsAdminCommand { get; }
 
     // ================================================================ state
 

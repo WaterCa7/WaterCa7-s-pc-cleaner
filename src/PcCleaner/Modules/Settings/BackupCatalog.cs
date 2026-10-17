@@ -447,7 +447,7 @@ internal static class BackupCatalog
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Warn($"Не удалось удалить резервную копию {name}: {ex.Message}");
-            return (false, $"Не удалось удалить файл: {ex.Message}");
+            return (false, $"Не удалось удалить файл: {ErrorText.For(ex)}.");
         }
 
         Log.Action($"Удалена резервная копия реестра: {name}");

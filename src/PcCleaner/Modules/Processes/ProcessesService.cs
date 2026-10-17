@@ -25,6 +25,7 @@ public sealed class ProcessesService : IHealthContributor
     private readonly Func<string, SignatureInfo> _signatureProvider;
     private readonly Func<string, FileMeta?> _fileMetaProvider;
     private readonly Func<string, bool> _canMoveFile;
+    private readonly Func<string, string, QuarantineItem> _addToQuarantine;
     private readonly ConcurrentDictionary<ProcessKey, ProcessStaticInfo> _cache = new();
     private readonly ConcurrentDictionary<string, FileMeta?> _metaCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<Task<SignatureInfo>>> _signatures = new(StringComparer.OrdinalIgnoreCase);
@@ -46,13 +47,15 @@ public sealed class ProcessesService : IHealthContributor
         Func<string, bool>? canMoveFile = null,
         int? selfPid = null,
         Func<MemoryStatus>? memory = null,
-        TimeSpan? analysisInterval = null)
+        TimeSpan? analysisInterval = null,
+        Func<string, string, QuarantineItem>? addToQuarantine = null)
     {
         _source = source;
         _details = details;
         _signatureProvider = signatures ?? FileSignature.Get;
         _fileMetaProvider = fileMeta ?? ReadFileMeta;
         _canMoveFile = canMoveFile ?? FileMoveProbe.CanMove;
+        _addToQuarantine = addToQuarantine ?? Quarantine.Add;
         Clock = clock ?? Stopwatch.GetTimestamp;
         LogicalCpus = logicalCpus ?? Environment.ProcessorCount;
         SelfPid = selfPid ?? Environment.ProcessId;
@@ -311,7 +314,24 @@ public sealed class ProcessesService : IHealthContributor
         var pup = KnownPups.Match(meta.Description ?? meta.Product, meta.Company);
         if (pup is null || result.Reasons.Contains(pup))
             return result;
-        var score = Math.Clamp(result.Score + (signature?.IsValid == true ? 10 : 35), 0, 100);
+        return AddPupMatch(result, pup, signature);
+    }
+
+    /// <summary>Highest score of an informational finding: one point below <see cref="SuspicionLevel.Medium"/>.</summary>
+    internal const int BelowMediumScore = 34;
+
+    /// <summary>
+    /// Adds a KnownPups match by the file's description or company. A validly signed file gets a small boost only, and when
+    /// that match is the ONLY signal it stays informational (below Medium): the program is reported once on the dashboard,
+    /// as an unwanted program by «Программы», not again as a suspicious process here. An unsigned file, or one with other
+    /// signals, keeps the full boost.
+    /// </summary>
+    internal static SuspicionResult AddPupMatch(SuspicionResult result, string pup, SignatureInfo? signature)
+    {
+        var signed = signature?.IsValid == true;
+        var score = Math.Clamp(result.Score + (signed ? 10 : 35), 0, 100);
+        if (signed && result.Reasons.Count == 0)
+            score = Math.Min(score, BelowMediumScore);
         return new SuspicionResult(score, result.Reasons.Append(pup).ToList());
     }
 
@@ -369,7 +389,7 @@ public sealed class ProcessesService : IHealthContributor
             }
             catch (Exception ex) when (ex is Win32Exception or NotSupportedException or UnauthorizedAccessException)
             {
-                report.Failed.Add((t, ex.Message));
+                report.Failed.Add((t, ErrorText.For(ex)));
                 Log.Warn($"Не удалось завершить {t.Name} (PID {t.Pid}): {ex.Message}");
             }
         }
@@ -424,12 +444,7 @@ public sealed class ProcessesService : IHealthContributor
 
         var report = await Task.Run(() => Kill(running), ct).ConfigureAwait(false);
         if (report.Failed.Count > 0)
-        {
-            var why = report.AccessDenied
-                ? "Windows не дала завершить процесс — нужны права администратора."
-                : "Не удалось завершить процесс: " + report.Failed[0].Error;
-            return new QuarantineOutcome(false, why + " Файл оставлен на месте.", report);
-        }
+            return new QuarantineOutcome(false, KillFailedMessage(report), report);
 
         Exception? last = null;
         for (var attempt = 0; attempt < 10; attempt++)
@@ -438,7 +453,7 @@ public sealed class ProcessesService : IHealthContributor
             {
                 if (!File.Exists(path))
                     return new QuarantineOutcome(false, "Файл уже удалён или перемещён.", report);
-                var item = Quarantine.Add(path, reason);
+                var item = _addToQuarantine(path, reason);
                 return new QuarantineOutcome(true, $"Файл перемещён в карантин: {item.StoredPath}", report);
             }
             catch (FileNotFoundException)
@@ -458,16 +473,72 @@ public sealed class ProcessesService : IHealthContributor
                     return new QuarantineOutcome(false, CancelledAfterKillMessage(path, report), report, Cancelled: true);
                 }
             }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
+            catch (InvalidOperationException ex)
+            {
+                // Quarantine.Add refuses to move the file when its list (index.json) cannot be read, and moves the file
+                // back when the list cannot be written: retrying would not help.
+                Log.Warn($"Не удалось поместить в карантин {path}: {ErrorText.For(ex)}");
+                return new QuarantineOutcome(false, QuarantineRefusedMessage(path, ex, report.Killed.Count > 0), report);
+            }
+            catch (UnauthorizedAccessException ex)
             {
                 last = ex;
                 break;
             }
         }
-        Log.Warn($"Не удалось поместить в карантин {path}: {last?.Message}");
-        var hint = last is UnauthorizedAccessException && !Admin.IsElevated ? " Попробуйте запустить программу от имени администратора." : "";
-        return new QuarantineOutcome(false, $"Процесс завершён, но файл переместить не удалось: {last?.Message}{hint}", report);
+        Log.Warn($"Не удалось поместить в карантин {path}: {ErrorText.For(last)}");
+        return new QuarantineOutcome(false, MoveFailedMessage(path, last, Admin.IsElevated, report.Killed.Count > 0), report);
     }
+
+    /// <summary>
+    /// A process of the program could not be terminated, so the file was not touched. The reasons in
+    /// <see cref="KillReport.Failed"/> are short phrases without a final period ("защищённый системный процесс",
+    /// <see cref="ErrorText.For"/>), so the sentence gets its own.
+    /// </summary>
+    internal static string KillFailedMessage(KillReport report)
+    {
+        var why = report.AccessDenied
+            ? "Windows не дала завершить процесс — нужны права администратора."
+            : $"Не удалось завершить процесс: {report.Failed[0].Error.Trim().TrimEnd('.')}.";
+        return why + " Файл оставлен на месте.";
+    }
+
+    /// <summary>
+    /// The file could not be moved (it stayed locked, or Windows refused access) — after the program's processes were
+    /// terminated (<paramref name="killed"/>), or when nothing of it was running any more.
+    /// </summary>
+    internal static string MoveFailedMessage(string path, Exception? error, bool elevated, bool killed)
+    {
+        var hint = error is UnauthorizedAccessException && !elevated
+            ? "\n\nПерезапустите программу от имени администратора и повторите."
+            : "";
+        var what = killed ? "Программа завершена, но её файл не удалось" : "Файл не удалось";
+        return $"{what} переместить в карантин: {ErrorText.For(error)}. Файл остался на месте:\n{path}{hint}";
+    }
+
+    /// <summary>
+    /// The quarantine refused the file (InvalidOperationException from Quarantine.Add), possibly after the program was
+    /// terminated: the quarantine list (index.json) could not be read or written, so the file was left in place — otherwise
+    /// it could never be restored. The quarantine's own explanation goes to the log; the user gets what it means and what to do.
+    /// </summary>
+    internal static string QuarantineRefusedMessage(string path, InvalidOperationException error, bool killed)
+    {
+        var what = killed ? "Программа завершена, но её файл не помещён" : "Файл не помещён";
+        if (error.InnerException is null)
+        {
+            // Any other refusal (e.g. "Системные файлы Windows нельзя помещать в карантин."): the quarantine list is fine,
+            // so there is nothing to check in «Настройки» — Core's own Russian reason says it all.
+            return $"{what} в карантин: {LowerFirst(ErrorText.For(error))}.\n\n{path}";
+        }
+        return $"{what} в карантин: не удалось прочитать или записать список карантина (файл index.json в папке карантина). " +
+               $"Файл оставлен на месте, иначе его нельзя было бы потом восстановить.\n\n{path}\n\n" +
+               "Откройте «Настройки» → «Карантин», чтобы проверить список карантина, и повторите. Подробности — в журнале.";
+    }
+
+    private static string LowerFirst(string text)
+        => text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1])
+            ? char.ToLower(text[0], Format.Ru) + text[1..]
+            : text;
 
     /// <summary>What "Отмена" did once the program's processes were already terminated.</summary>
     internal static string CancelledAfterKillMessage(string path, KillReport report)
@@ -601,8 +672,9 @@ internal static class ProcessIssues
             });
         }
 
-        // 2. Low free memory: name the biggest consumers.
-        if (memory.TotalBytes > 0 && memory.LoadPercent > LowMemoryLoadPercent)
+        // 2. Low free memory: name the biggest consumers. "85% or more", the same boundary as the «Ускорение» page's RAM
+        // item: this module alone reports high RAM load on the dashboard (Optimizer keeps it page-only).
+        if (memory.TotalBytes > 0 && memory.LoadPercent >= LowMemoryLoadPercent)
         {
             var top = programs
                 .Select(g => (Name: DisplayName(g), Memory: g.Sum(e => e.Sample.MemoryBytes), Count: g.Count()))

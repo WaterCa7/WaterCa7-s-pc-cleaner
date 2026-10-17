@@ -417,8 +417,9 @@
                     <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" Foreground="{StaticResource WarningBrush}" />
                     <TextBlock Grid.Column="1" Style="{StaticResource Muted}" Margin="10,0,12,0" VerticalAlignment="Center"
                                Text="{Binding AdminHintText}" />
-                    <Button Grid.Column="2" Content="Перезапустить" Padding="12,5" Command="{Binding RestartAsAdminCommand}"
-                            ToolTip="Перезапустить программу от имени администратора" />
+                    <Button Grid.Column="2" Content="Перезапустить от имени администратора" Padding="12,5" VerticalAlignment="Center"
+                            Command="{Binding RestartAsAdminCommand}"
+                            ToolTip="Программа перезапустится — Windows покажет окно контроля учётных записей" />
                 </Grid>
             </Border>
 

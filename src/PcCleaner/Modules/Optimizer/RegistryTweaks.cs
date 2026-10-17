@@ -187,7 +187,7 @@ public sealed class RegistryTweakEngine
             RollBack(tweak, written);
             if (storedNow)
                 ForgetState(tweak);
-            return new TweakResult(false, $"Не удалось изменить настройку «{tweak.Title}»: {ex.Message}. Изменения отменены.");
+            return new TweakResult(false, $"Не удалось изменить настройку «{tweak.Title}»: {ErrorText.For(ex)}. Изменения отменены.");
         }
 
         Log.Action($"Ускорение: применено «{tweak.Title}» ({string.Join("; ", tweak.Values.Select(v => v.Describe()))})" +
@@ -232,7 +232,7 @@ public sealed class RegistryTweakEngine
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
             Log.Warn($"Ускорение: не удалось вернуть «{tweak.Title}»: {ex.Message}");
-            return new TweakResult(false, $"Не удалось вернуть «{tweak.Title}»: {ex.Message}");
+            return new TweakResult(false, $"Не удалось вернуть «{tweak.Title}»: {ErrorText.For(ex)}.");
         }
 
         ForgetState(tweak);

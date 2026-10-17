@@ -72,7 +72,7 @@ public sealed partial class StartupService
         if (context is { Denied: > 0 })
             Log.Warn($"Автозагрузка: без прав администратора пропущено объектов планировщика (заданий и папок): {context.Denied}");
         if (context is { Failed: > 0 })
-            Log.Warn($"Автозагрузка: не удалось прочитать заданий планировщика: {context.Failed} ({context.FirstError})");
+            Log.Warn($"Автозагрузка: не удалось прочитать {Format.Count(context.Failed, "задание", "задания", "заданий")} планировщика ({context.FirstError})");
         return list;
     }
 
