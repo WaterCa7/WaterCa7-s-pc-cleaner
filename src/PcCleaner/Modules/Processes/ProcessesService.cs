@@ -8,7 +8,9 @@ namespace PcCleaner.Modules.Processes;
 
 /// <summary>Result of "В карантин" for a running program.</summary>
 /// <param name="NeedsElevation">Nothing was done because moving the file needs administrator rights.</param>
-internal sealed record QuarantineOutcome(bool Success, string Message, KillReport Report, bool NeedsElevation = false);
+/// <param name="Cancelled">The user cancelled after the processes had been terminated: the file was not moved.</param>
+internal sealed record QuarantineOutcome(bool Success, string Message, KillReport Report, bool NeedsElevation = false,
+    bool Cancelled = false);
 
 /// <summary>
 /// Everything about running processes: cheap snapshots for the live list, cached heavy details (path, version info,
@@ -173,12 +175,14 @@ public sealed class ProcessesService : IHealthContributor
     private void LoadDetails(List<ProcessStaticInfo> todo)
     {
         var pids = todo.Select(i => i.Key.Pid).Distinct().ToList();
+        // A live refresh usually brings only a few new processes: ask WMI about those, not about the whole system.
+        var filter = pids.Count <= WmiDetailsProvider.MaxFilteredPids ? pids : null;
         IReadOnlyList<WmiProcessRow> processRows;
         IReadOnlyList<WmiServiceRow> serviceRows;
         try
         {
-            processRows = _details.QueryProcesses(pids.Count <= WmiDetailsProvider.MaxFilteredPids ? pids : null);
-            serviceRows = _details.QueryServices();
+            processRows = _details.QueryProcesses(filter);
+            serviceRows = _details.QueryServices(filter);
         }
         catch (Exception ex)
         {
@@ -393,6 +397,9 @@ public sealed class ProcessesService : IHealthContributor
     /// <summary>
     /// Terminates the program's processes and moves its executable to quarantine. Caller must have confirmed.
     /// Refuses files in the Windows folder and Microsoft-signed files.
+    /// Cancellation before the processes are terminated throws (nothing has changed). Once they are terminated it no
+    /// longer throws: it stops waiting for the file to unlock and returns an outcome that says so, because the user must
+    /// learn that the program was closed while its file stayed in place.
     /// </summary>
     internal async Task<QuarantineOutcome> QuarantineAsync(string path, IReadOnlyList<KillTarget> running, string reason,
         CancellationToken ct)
@@ -441,7 +448,15 @@ public sealed class ProcessesService : IHealthContributor
             catch (IOException ex)
             {
                 last = ex; // the file is still locked for a moment after the process exits
-                await Task.Delay(500, ct).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(500, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    Log.Warn($"Карантин отменён после завершения процессов: файл остался на месте ({path})");
+                    return new QuarantineOutcome(false, CancelledAfterKillMessage(path, report), report, Cancelled: true);
+                }
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
             {
@@ -452,6 +467,17 @@ public sealed class ProcessesService : IHealthContributor
         Log.Warn($"Не удалось поместить в карантин {path}: {last?.Message}");
         var hint = last is UnauthorizedAccessException && !Admin.IsElevated ? " Попробуйте запустить программу от имени администратора." : "";
         return new QuarantineOutcome(false, $"Процесс завершён, но файл переместить не удалось: {last?.Message}{hint}", report);
+    }
+
+    /// <summary>What "Отмена" did once the program's processes were already terminated.</summary>
+    internal static string CancelledAfterKillMessage(string path, KillReport report)
+    {
+        var closed = report.Killed.Count > 0
+            ? $"Программа уже завершена ({Format.Count(report.Killed.Count, "процесс", "процесса", "процессов")}), но её файл " +
+              "не перемещён в карантин"
+            : "Файл не перемещён в карантин";
+        return $"Операция отменена. {closed} и остался на месте:\n{path}\n\n" +
+               "Если программа запустится снова, её можно будет поместить в карантин здесь же.";
     }
 
     /// <summary>Adds/removes a path from the user's trusted list (shared by all modules, thread-safe, logged by AppSettings).</summary>

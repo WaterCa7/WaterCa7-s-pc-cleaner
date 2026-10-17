@@ -83,7 +83,14 @@ internal sealed class FakeDetails : IProcessDetailsProvider
         return Processes.Where(p => pids is null || pids.Contains(p.Pid)).ToList();
     }
 
-    public IReadOnlyList<WmiServiceRow> QueryServices() => Services;
+    /// <summary>PID filter of every service query (null = all services were asked for).</summary>
+    public List<IReadOnlyCollection<int>?> ServiceQueries { get; } = new();
+
+    public IReadOnlyList<WmiServiceRow> QueryServices(IReadOnlyCollection<int>? pids)
+    {
+        ServiceQueries.Add(pids?.ToList());
+        return Services.Where(s => pids is null || pids.Contains(s.Pid)).ToList();
+    }
 }
 
 internal sealed class FakeClock

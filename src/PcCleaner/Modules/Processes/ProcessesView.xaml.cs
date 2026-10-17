@@ -12,6 +12,7 @@ namespace PcCleaner.Modules.Processes;
 public partial class ProcessesView : UserControl
 {
     private ProcessesViewModel? _subscribed;
+    private Window? _window;
 
     public ProcessesView()
     {
@@ -24,23 +25,60 @@ public partial class ProcessesView : UserControl
     /// <summary>The shell creates a new view on every visit: only a loaded view listens to the view-model.</summary>
     private void Subscribe(ProcessesViewModel? vm)
     {
-        if (ReferenceEquals(_subscribed, vm))
+        if (!ReferenceEquals(_subscribed, vm))
         {
-            UpdateSortGlyphs();
-            return;
+            if (_subscribed is not null)
+            {
+                _subscribed.RevealRequested -= OnRevealRequested;
+                _subscribed.PropertyChanged -= OnVmPropertyChanged;
+            }
+            _subscribed = vm;
+            if (vm is not null)
+            {
+                vm.RevealRequested += OnRevealRequested;
+                vm.PropertyChanged += OnVmPropertyChanged;
+            }
         }
-        if (_subscribed is not null)
-        {
-            _subscribed.RevealRequested -= OnRevealRequested;
-            _subscribed.PropertyChanged -= OnVmPropertyChanged;
-        }
-        _subscribed = vm;
-        if (vm is not null)
-        {
-            vm.RevealRequested += OnRevealRequested;
-            vm.PropertyChanged += OnVmPropertyChanged;
-        }
+        WatchWindow(vm is null ? null : Window.GetWindow(this));
         UpdateSortGlyphs();
+    }
+
+    /// <summary>Tells the view-model when the window is minimized or hidden, so the live refresh can rest meanwhile.</summary>
+    private void WatchWindow(Window? window)
+    {
+        if (!ReferenceEquals(_window, window))
+        {
+            if (_window is not null)
+            {
+                _window.StateChanged -= OnWindowStateChanged;
+                _window.IsVisibleChanged -= OnWindowIsVisibleChanged;
+            }
+            _window = window;
+            if (window is not null)
+            {
+                window.StateChanged += OnWindowStateChanged;
+                window.IsVisibleChanged += OnWindowIsVisibleChanged;
+            }
+        }
+        ReportWindowState();
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e) => ReportWindowState();
+
+    private void OnWindowIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) => ReportWindowState();
+
+    private void ReportWindowState()
+    {
+        if (_subscribed is not { } vm || _window is not { } window)
+            return;
+        try
+        {
+            vm.SetWindowHidden(window.WindowState == WindowState.Minimized || !window.IsVisible);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Процессы: состояние окна: {ex.Message}");
+        }
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -132,9 +170,13 @@ public partial class ProcessesView : UserControl
         }
     }
 
+    /// <summary>Below this list width the "Оценка" badge becomes a coloured icon (its tooltip names the status).</summary>
+    private const double StatusIconsBelowWidth = 520;
+
     /// <summary>
-    /// On narrow windows the publisher column gives its space to the name (it is still in the details panel), and the
-    /// number columns get slimmer so the "Оценка" badge is never cut off by the scroll bar.
+    /// On narrow windows the publisher column gives its space to the name (it is still in the details panel), the
+    /// number columns get slimmer, and the "Оценка" badges turn into icons: most rows have no status at all, and a
+    /// 122 px column of empty cells would cut the names down to a few letters.
     /// </summary>
     private void OnGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -145,6 +187,14 @@ public partial class ProcessesView : UserControl
         var slim = width < 470;
         SetWidth(CpuColumn, slim ? 54 : 62);
         SetWidth(MemoryColumn, slim ? 76 : 84);
+
+        var icons = width < StatusIconsBelowWidth;
+        SetWidth(StatusColumn, icons ? 48 : 122);
+        if (FindResource(icons ? "StatusIcon" : "StatusBadge") is DataTemplate template &&
+            !ReferenceEquals(StatusColumn.CellTemplate, template))
+            StatusColumn.CellTemplate = template;
+        StatusHeaderText.Visibility = icons ? Visibility.Collapsed : Visibility.Visible;
+        StatusHeaderIcon.Visibility = icons ? Visibility.Visible : Visibility.Collapsed;
 
         static void SetWidth(DataGridColumn column, double value)
         {

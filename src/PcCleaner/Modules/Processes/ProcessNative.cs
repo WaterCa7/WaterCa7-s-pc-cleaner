@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -268,11 +269,17 @@ internal sealed class WmiDetailsProvider : IProcessDetailsProvider
     /// <summary>Above this many PIDs a single full query is cheaper than a long OR filter.</summary>
     internal const int MaxFilteredPids = 40;
 
+    /// <summary>"ProcessId = 1 OR ProcessId = 2", or null for no filter (no PIDs given, or too many of them).</summary>
+    internal static string? PidFilter(IReadOnlyCollection<int>? pids)
+        => pids is { Count: > 0 and <= MaxFilteredPids }
+            ? string.Join(" OR ", pids.Select(p => "ProcessId = " + p.ToString(CultureInfo.InvariantCulture)))
+            : null;
+
     public IReadOnlyList<WmiProcessRow> QueryProcesses(IReadOnlyCollection<int>? pids)
     {
         var query = "SELECT ProcessId, ParentProcessId, CommandLine, ExecutablePath, CreationDate FROM Win32_Process";
-        if (pids is { Count: > 0 and <= MaxFilteredPids })
-            query += " WHERE " + string.Join(" OR ", pids.Select(p => "ProcessId = " + p));
+        if (PidFilter(pids) is { } filter)
+            query += " WHERE " + filter;
         var rows = Wmi.Query(query, timeout: TimeSpan.FromSeconds(30));
         var result = new List<WmiProcessRow>(rows.Count);
         foreach (var row in rows)
@@ -286,9 +293,14 @@ internal sealed class WmiDetailsProvider : IProcessDetailsProvider
         return result;
     }
 
-    public IReadOnlyList<WmiServiceRow> QueryServices()
+    /// <summary>
+    /// Only the services of the given processes: the live list asks about the few processes that have just appeared,
+    /// so it need not marshal every service of the system on each of those refreshes.
+    /// </summary>
+    public IReadOnlyList<WmiServiceRow> QueryServices(IReadOnlyCollection<int>? pids)
     {
-        var rows = Wmi.Query("SELECT Name, DisplayName, PathName, ProcessId FROM Win32_Service WHERE ProcessId <> 0",
+        var filter = PidFilter(pids) is { } byPid ? "(" + byPid + ")" : "ProcessId <> 0";
+        var rows = Wmi.Query("SELECT Name, DisplayName, PathName, ProcessId FROM Win32_Service WHERE " + filter,
             timeout: TimeSpan.FromSeconds(30));
         var result = new List<WmiServiceRow>(rows.Count);
         foreach (var row in rows)
