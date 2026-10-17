@@ -36,6 +36,7 @@ public sealed class SecurityViewModel : PageViewModel
     private int _dangerCount;
     private int _unknownCount;
     private string _lastScanText = "";
+    private string? _findingsText;
     private ObservableCollection<SecurityCheckCard> _checks = new();
     private ObservableCollection<SecurityCheckCard> _attentionChecks = new();
     private ObservableCollection<SecurityCheckCard> _okChecks = new();
@@ -258,7 +259,11 @@ public sealed class SecurityViewModel : PageViewModel
 
     public bool HasOkChecks => OkChecks.Count > 0;
 
-    public string AttentionHeader => $"Стоит посмотреть · {AttentionChecks.Count}";
+    /// <summary>
+    /// "Стоит посмотреть · 6 проблем и 1 совет": counted like the dashboard tile and the log line. Without problems and
+    /// tips (only "к сведению" / "нет данных" cards) there is no count, so the header never says "проблем нет" above cards.
+    /// </summary>
+    public string AttentionHeader => _findingsText is null ? "Стоит посмотреть" : $"Стоит посмотреть · {_findingsText}";
 
     public string OkHeader => $"В порядке · {OkChecks.Count}";
 
@@ -341,7 +346,7 @@ public sealed class SecurityViewModel : PageViewModel
 
     public string HostsTabHeader => $"Файл hosts ({HostsEntries.Count})";
 
-    public string ThreatsTabHeader => $"Журнал угроз ({Threats.Count})";
+    public string ThreatsTabHeader => $"Найденные угрозы ({Threats.Count})";
 
     /// <summary>Defender works and has detections it did not neutralize ("Обезвредить угрозы" is shown).</summary>
     public bool HasActiveThreats => _report?.CanRemoveThreats == true;
@@ -355,8 +360,8 @@ public sealed class SecurityViewModel : PageViewModel
     public string IfeoTabHeader => $"Перехваты ({IfeoEntries.Count})";
 
     public string ThreatsEmptyText => _report?.Defender is null && _report is not null
-        ? "Журнал Microsoft Defender недоступен — возможно, используется другой антивирус."
-        : "Microsoft Defender ничего не находил — отлично!";
+        ? "Список угроз Защитника Windows недоступен — возможно, используется другой антивирус."
+        : "Защитник Windows ничего не находил — отлично!";
 
     public string ExtensionsEmptyText => OnlySuspiciousExtensions && _allExtensions.Count > 0
         ? "Подозрительных расширений нет — все расширения в порядке."
@@ -491,6 +496,8 @@ public sealed class SecurityViewModel : PageViewModel
         DangerCount = checks.Count(c => c.Status == SecurityStatus.Danger);
         UnknownCount = checks.Count(c => c.Status == SecurityStatus.Unknown);
         Score = SecurityRules.Score(checks);
+        var (problems, tips) = _service.CountFindings(report);
+        _findingsText = problems + tips > 0 ? SecurityRules.FindingsText(problems, tips) : null;
         ScoreLabel = Score >= 90 ? "Отлично" : Score >= 75 ? "Хорошо" : Score >= 50 ? "Есть проблемы" : "Плохо";
         OverallStatus = DangerCount > 0 ? SecurityStatus.Danger
             : WarningCount > 0 ? SecurityStatus.Warning
@@ -567,7 +574,7 @@ public sealed class SecurityViewModel : PageViewModel
                                   !d.PolicyDisablesRealtime;
                 if (realtimeOff)
                     actions.Add(new CardAction("Включить защиту", EnableRealtimeCommand, CardActionKind.Primary,
-                        "Включить защиту в реальном времени Microsoft Defender (нужны права администратора)"));
+                        "Включить защиту в реальном времени Защитника Windows (нужны права администратора)"));
                 // Scans and updates need a working Defender engine (on or in passive mode next to another antivirus).
                 if (report.MpCmdRunAvailable && d is not null && d.ServiceEnabled && (d.AntivirusEnabled || d.IsPassive))
                 {
@@ -577,14 +584,14 @@ public sealed class SecurityViewModel : PageViewModel
                     actions.Add(new CardAction("Полная проверка", FullScanCommand, CardActionKind.Normal,
                         "Проверить все файлы на всех дисках — может занять несколько часов"));
                     actions.Add(new CardAction("Обновить базы", UpdateSignaturesCommand, CardActionKind.Normal,
-                        "Скачать свежие антивирусные базы Microsoft Defender"));
+                        "Скачать свежие антивирусные базы Защитника Windows"));
                 }
                 if (report.CanRemoveThreats)
                     actions.Insert(0, new CardAction("Обезвредить угрозы", RemoveThreatsCommand, CardActionKind.Danger,
-                        "Microsoft Defender применит к найденным угрозам своё действие — обычно карантин (нужны права администратора)"));
+                        "Защитник Windows применит к найденным угрозам своё действие — обычно карантин (нужны права администратора)"));
                 if (report.Threats.Count > 0)
-                    actions.Add(new CardAction("Журнал угроз", ShowDetailsCommand, CardActionKind.Normal,
-                        "Показать, что находил антивирус", ThreatsTab));
+                    actions.Add(new CardAction("Найденные угрозы", ShowDetailsCommand, CardActionKind.Normal,
+                        "Показать список угроз, которые находил Защитник Windows", ThreatsTab));
                 if (report.ActiveAntivirusNames.Count >= 2)
                     actions.Add(new CardAction("Открыть «Программы»", OpenProgramsCommand, CardActionKind.Normal,
                         "Удалить лишний антивирус в разделе «Программы»"));
@@ -757,16 +764,16 @@ public sealed class SecurityViewModel : PageViewModel
     {
         var title = full ? "Полная проверка" : "Быстрая проверка";
         var question = full
-            ? "Microsoft Defender проверит все файлы на всех дисках. Это может занять несколько часов, " +
+            ? "Защитник Windows проверит все файлы на всех дисках. Это может занять несколько часов, " +
               "компьютер в это время может работать медленнее.\n\n"
-            : "Microsoft Defender проверит места, где чаще всего прячутся вирусы: запущенные программы, " +
+            : "Защитник Windows проверит места, где чаще всего прячутся вирусы: запущенные программы, " +
               "автозагрузку и системные папки. Обычно это 5–15 минут.\n\n";
-        question += "Найденные угрозы Defender обезвредит сам (их можно восстановить в «Журнале защиты»). " +
+        question += "Найденные угрозы Защитник Windows обезвредит сам (их можно восстановить в «Безопасность Windows» → «Журнал защиты»). " +
                     "Проверку можно остановить кнопкой «Отмена».\n\nНачать проверку?";
         if (!Dialogs.Confirm(title, question))
             return;
 
-        var text = full ? "Полная проверка Microsoft Defender…" : "Быстрая проверка Microsoft Defender…";
+        var text = full ? "Полная проверка Защитником Windows…" : "Быстрая проверка Защитником Windows…";
         SecurityActionResult? result = null;
         await RunBusyAsync(text, async ct =>
         {
@@ -788,7 +795,7 @@ public sealed class SecurityViewModel : PageViewModel
     private async Task UpdateSignaturesAsync()
     {
         if (!Dialogs.Confirm("Обновить базы",
-                "Microsoft Defender скачает свежие антивирусные базы с серверов Microsoft. Обычно это 1–3 минуты.\n\nОбновить базы?"))
+                "Защитник Windows скачает свежие антивирусные базы с серверов Microsoft. Обычно это 1–3 минуты.\n\nОбновить базы?"))
             return;
         await RunActionAsync("Обновляем антивирусные базы…", "Обновление баз", _service.UpdateSignaturesAsync);
     }
@@ -798,7 +805,7 @@ public sealed class SecurityViewModel : PageViewModel
         if (!Admin.RequireElevation("Включение защиты в реальном времени"))
             return;
         if (!Dialogs.Confirm("Включить защиту",
-                "Будет включена защита в реальном времени Microsoft Defender (Set-MpPreference -DisableRealtimeMonitoring $false).\n\n" +
+                "Будет включена защита в реальном времени Защитника Windows (Set-MpPreference -DisableRealtimeMonitoring $false).\n\n" +
                 "Выключить её снова можно в «Безопасность Windows» → «Защита от вирусов и угроз» → «Управление настройками».\n\nВключить?"))
             return;
         await RunActionAsync("Включаем защиту в реальном времени…", "Защита в реальном времени",
@@ -932,10 +939,12 @@ public sealed class SecurityViewModel : PageViewModel
     private async Task DisableProxyAsync()
     {
         var p = _report?.Proxy;
+        if (p is null)
+            return;
         var what = new List<string>();
-        if (p?.Enabled == true)
+        if (p.Enabled)
             what.Add($"• выключить прокси-сервер {p.Server}");
-        if (!string.IsNullOrWhiteSpace(p?.AutoConfigUrl))
+        if (!string.IsNullOrWhiteSpace(p.AutoConfigUrl))
             what.Add($"• удалить скрипт настройки {p.AutoConfigUrl}");
         if (what.Count == 0)
             what.Add("• выключить прокси-сервер");
@@ -945,7 +954,8 @@ public sealed class SecurityViewModel : PageViewModel
                 "Включить прокси снова можно в «Параметры» → «Сеть и Интернет» → «Прокси-сервер». " +
                 "Перед изменением настройки сохраняются в резервную копию.\n\nОтключить прокси?"))
             return;
-        await RunActionAsync("Отключаем прокси…", "Прокси-сервер", _service.DisableProxyAsync);
+        // Pass the confirmed settings: if they changed since the scan, nothing is modified.
+        await RunActionAsync("Отключаем прокси…", "Прокси-сервер", ct => _service.DisableProxyAsync(p, ct));
     }
 
     private async Task RemoveThreatsAsync()
@@ -962,12 +972,12 @@ public sealed class SecurityViewModel : PageViewModel
         if (names.Count > 10)
             shown.Add($"• … и ещё {names.Count - 10}");
         if (!Dialogs.Confirm("Обезвредить угрозы",
-                $"Microsoft Defender обезвредит все найденные и не обезвреженные угрозы ({active.Count}):\n" +
+                $"Защитник Windows обезвредит все найденные и не обезвреженные угрозы ({active.Count}):\n" +
                 string.Join("\n", shown) + "\n\n" +
-                "Defender применит к ним своё стандартное действие — обычно поместит файлы в карантин (команда Remove-MpThreat). " +
+                "Он применит к ним своё стандартное действие — обычно поместит файлы в карантин (команда Remove-MpThreat). " +
                 "Если файл оказался нужным, его можно восстановить в «Безопасность Windows» → «Журнал защиты».\n\nОбезвредить?"))
             return;
-        await RunActionAsync("Обезвреживаем угрозы…", "Угрозы Microsoft Defender", _service.RemoveActiveThreatsAsync);
+        await RunActionAsync("Обезвреживаем угрозы…", "Найденные угрозы", _service.RemoveActiveThreatsAsync);
     }
 
     private static string Shorten(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";

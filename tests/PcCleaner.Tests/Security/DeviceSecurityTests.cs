@@ -7,6 +7,7 @@ using Xunit;
 namespace PcCleaner.Tests.Security;
 
 /// <summary>SMBv1, Secure Boot, TPM, drive encryption, memory integrity, several antiviruses and Defender threat actions.</summary>
+[Collection(SecuritySandbox.Collection)]
 public class DeviceSecurityTests
 {
     public DeviceSecurityTests() => TestEnvironment.Init();
@@ -525,7 +526,7 @@ public class DeviceSecurityTests
 
         var names = SecurityRules.ActiveAntivirusNames(products, WorkingDefender);
 
-        Assert.Equal(new[] { "Microsoft Defender", "Avast Antivirus" }, names);
+        Assert.Equal(new[] { "Защитник Windows", "Avast Antivirus" }, names);
     }
 
     [Fact]
@@ -576,7 +577,7 @@ public class DeviceSecurityTests
         var card = vm.BuildCards(report).Single(c => c.Id == SecurityCheckIds.Antivirus);
         var labels = card.Actions.Select(a => a.Label).ToList();
         Assert.Contains("Обезвредить угрозы", labels);
-        Assert.True(labels.IndexOf("Обезвредить угрозы") < labels.IndexOf("Журнал угроз"));
+        Assert.True(labels.IndexOf("Обезвредить угрозы") < labels.IndexOf("Найденные угрозы"));
         Assert.Equal(CardActionKind.Danger, card.Actions.Single(a => a.Label == "Обезвредить угрозы").Kind);
 
         var issue = sb.Service.BuildIssues(report).Single(i => i.Title.StartsWith("Есть необезвреженные угрозы"));
@@ -594,7 +595,7 @@ public class DeviceSecurityTests
         };
         var calm = vm.BuildCards(resolved).Single(c => c.Id == SecurityCheckIds.Antivirus);
         Assert.DoesNotContain(calm.Actions, a => a.Label == "Обезвредить угрозы");
-        Assert.Contains(calm.Actions, a => a.Label == "Журнал угроз");
+        Assert.Contains(calm.Actions, a => a.Label == "Найденные угрозы");
     }
 
     [Fact]

@@ -236,7 +236,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" Foreground="{StaticResource InfoBrush}" Margin="0,0,12,0" />
                     <TextBlock Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center"
-                               Text="Без прав администратора все проверки работают, но исправления (брандмауэр, UAC, hosts, перехваты, SMBv1, угрозы Defender) и список исключений антивируса недоступны." />
+                               Text="Без прав администратора все проверки работают, но исправления (брандмауэр, UAC, hosts, перехваты, SMBv1, обезвреживание угроз) и список исключений антивируса недоступны." />
                     <Button Grid.Column="2" Content="Перезапустить с правами" Command="{Binding RestartAsAdminCommand}" Padding="12,5"
                             FontSize="12" Margin="12,0,0,0" VerticalAlignment="Center"
                             ToolTip="Перезапустить программу от имени администратора (Windows спросит разрешение)" />
@@ -377,11 +377,11 @@
                         <TabItem Header="{Binding ThreatsTabHeader}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Что находил Microsoft Defender. Угрозы «В карантине», «Удалена» и «Заблокирована» уже обезврежены — с ними ничего делать не нужно." />
+                                           Text="Что находил Защитник Windows. Угрозы «В карантине», «Удалена» и «Заблокирована» уже обезврежены — с ними ничего делать не нужно." />
                                 <WrapPanel Margin="0,10,0,10">
                                     <Button Style="{StaticResource DangerButton}" Command="{Binding RemoveThreatsCommand}" Margin="0,0,8,0"
                                             Visibility="{Binding HasActiveThreats, Converter={StaticResource BoolToVis}}"
-                                            ToolTip="Microsoft Defender применит к необезвреженным угрозам своё действие — обычно карантин (нужны права администратора)">
+                                            ToolTip="Защитник Windows применит к необезвреженным угрозам своё действие — обычно карантин (нужны права администратора)">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
                                             <TextBlock Text="{Binding RemoveThreatsText}" Margin="8,0,0,0" />

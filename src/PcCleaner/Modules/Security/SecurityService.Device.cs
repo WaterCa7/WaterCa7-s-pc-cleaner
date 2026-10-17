@@ -341,7 +341,7 @@ public sealed partial class SecurityService
         var before = await Task.Run(CountActiveThreats, ct);
         if (before == 0)
             return SecurityActionResult.Ok("Необезвреженных угроз уже нет — делать ничего не нужно.");
-        Log.Action($"Запущено обезвреживание угроз Microsoft Defender (Remove-MpThreat), активных угроз: {before}");
+        Log.Action($"Запущено обезвреживание угроз Защитником Windows (Remove-MpThreat), активных угроз: {before}");
         var r = await ProcessRunner.PowerShellAsync("Remove-MpThreat -ErrorAction Stop\r\n'OK'", TimeSpan.FromMinutes(10), ct);
         // Defender finishes the remediation in its service: give it a moment before counting again. Remove-MpThreat
         // has run by now, so "Отмена" no longer hides the outcome (the wait is only a few seconds).
@@ -355,7 +355,7 @@ public sealed partial class SecurityService
         if (after > 0)
             Log.Warn($"Remove-MpThreat: осталось активных угроз {after} из {before}. {FirstLine(r.StdErr)}");
         if (removed > 0)
-            Log.Action($"Microsoft Defender обезвредил угрозы: {removed} из {before}");
+            Log.Action($"Защитник Windows обезвредил угрозы: {removed} из {before}");
         return SecurityRules.ThreatRemovalOutcome(before, after, FirstLine(r.StdErr));
     }
 }
