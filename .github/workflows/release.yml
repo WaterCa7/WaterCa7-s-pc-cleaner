@@ -1,0 +1,42 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    name: Build, sign and publish
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Check version and notes
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          [xml]$project = Get-Content src/PcCleaner/PcCleaner.csproj
+          $projectVersion = ($project.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ }) | Select-Object -First 1
+          if ($projectVersion -ne $version) { throw "Tag v$version does not match <Version>$projectVersion</Version>" }
+          if (-not (Test-Path "docs/release-notes/$version.md")) { throw "docs/release-notes/$version.md is missing" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+      - run: dotnet build WaterCa7sPcCleaner.sln -c Release
+      - run: dotnet test WaterCa7sPcCleaner.sln -c Release --no-build
+      - name: Publish single-file exe
+        run: dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
+      # The app's own check (ScriptManifest_IsAcceptedByTheApp) verifies the signature with the key built into the app.
+      - name: Sign update.json
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          ./tools/make-update-manifest.ps1 -Version $env:VERSION -Exe publish/WaterCa7sPcCleaner.exe -NotesFile "docs/release-notes/$env:VERSION.md" -OutDir publish
+          $env:UPDATE_MANIFEST_DIR = (Resolve-Path publish).Path
+          dotnet test tests/PcCleaner.Tests -c Release --no-build --filter "FullyQualifiedName~ScriptManifest_IsAcceptedByTheApp"
+      - name: Create release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v$env:VERSION" publish/WaterCa7sPcCleaner.exe publish/update.json publish/update.json.sig --title "WaterCa7s PC Cleaner $env:VERSION" --notes-file "docs/release-notes/$env:VERSION.md"

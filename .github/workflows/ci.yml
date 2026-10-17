@@ -13,6 +13,16 @@ jobs:
       - run: dotnet test WaterCa7sPcCleaner.sln -c Release --no-build
       - name: Publish single-file exe
         run: dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
+      - name: Update manifest dry run (throwaway key)
+        shell: pwsh
+        run: |
+          $key = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+          $env:UPDATE_SIGNING_KEY = $key.ExportECPrivateKeyPem()
+          $public = $key.ExportSubjectPublicKeyInfoPem()
+          ./tools/make-update-manifest.ps1 -Version 9.9.9 -Exe publish/WaterCa7sPcCleaner.exe -NotesFile docs/release-notes/1.1.0.md -OutDir dryrun -PublicKeyPem $public
+          Set-Content dryrun/public.pem $public
+          $env:UPDATE_MANIFEST_DIR = (Resolve-Path dryrun).Path
+          dotnet test tests/PcCleaner.Tests -c Release --no-build --filter "FullyQualifiedName~ScriptManifest_IsAcceptedByTheApp"
       - uses: actions/upload-artifact@v4
         with:
           name: WaterCa7sPcCleaner-win-x64
