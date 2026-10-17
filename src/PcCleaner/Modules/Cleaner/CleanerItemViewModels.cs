@@ -39,6 +39,8 @@ public sealed class CategoryItemViewModel : ObservableObject
         _exclude = exclude;
         _folders = folders.Select(f => new FolderLinkViewModel(f)).ToList();
         ToggleExpandCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+        ExpandCommand = new RelayCommand(() => IsExpanded = true);
+        CollapseCommand = new RelayCommand(() => IsExpanded = false);
         OpenRecycleBinCommand = new RelayCommand(() => ProcessRunner.ShellOpen("shell:RecycleBinFolder"));
     }
 
@@ -262,7 +264,14 @@ public sealed class CategoryItemViewModel : ObservableObject
         _ => "Нажмите «Анализ», чтобы увидеть файлы.",
     };
 
+    /// <summary>Click on the row text, or Space/Enter on its chevron.</summary>
     public ICommand ToggleExpandCommand { get; }
+
+    /// <summary>Right arrow while the row's checkbox or chevron has keyboard focus.</summary>
+    public ICommand ExpandCommand { get; }
+
+    /// <summary>Left arrow while the row's checkbox or chevron has keyboard focus.</summary>
+    public ICommand CollapseCommand { get; }
 
     public ICommand OpenRecycleBinCommand { get; }
 
@@ -446,8 +455,15 @@ public sealed class CleanResultViewModel
             .Select(r => new CleanResultLine(r.Name, Format.Bytes(r.FreedBytes), LineNote(r)))
             .ToList();
         ErrorCount = results.Sum(r => r.Errors.Count);
+        RecycleBinChanged = results.Any(r => r.ChangedAfterConfirmation);
         Time = DateTime.Now;
     }
+
+    /// <summary>
+    /// The Recycle Bin was left alone: files were deleted into it after the confirmation, and the user did not agree to
+    /// empty it with them.
+    /// </summary>
+    public bool RecycleBinChanged { get; }
 
     public long Freed { get; }
 
@@ -471,7 +487,11 @@ public sealed class CleanResultViewModel
 
     public string Headline => Cancelled
         ? $"Очистка прервана — освобождено {Format.Bytes(Freed)}"
-        : Freed > 0 ? $"Готово! Освобождено {Format.Bytes(Freed)}" : "Готово, но место почти не освободилось";
+        : Freed > 0
+            ? $"Готово! Освобождено {Format.Bytes(Freed)}"
+            : RecycleBinChanged
+                ? "Корзина не очищена — в ней появились новые файлы"
+                : "Готово, но место почти не освободилось";
 
     public string Summary
     {
@@ -494,6 +514,9 @@ public sealed class CleanResultViewModel
         get
         {
             var parts = new List<string>();
+            if (RecycleBinChanged)
+                parts.Add("Корзина не очищена: после подтверждения в неё попали новые файлы. Проверьте её и нажмите " +
+                          "«Очистить выбранное» ещё раз — в подтверждении будет её новый размер.");
             if (Busy > 0)
                 parts.Add("Занятые файлы сейчас открыты в запущенных программах — закройте их и повторите очистку, чтобы удалить остальное.");
             if (Denied > 0)

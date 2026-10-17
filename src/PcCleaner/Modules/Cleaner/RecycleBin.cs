@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -46,7 +47,8 @@ internal sealed class ShellRecycleBin : IRecycleBin
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or COMException)
         {
-            error = ex.Message;
+            Log.Warn($"Очистка: SHEmptyRecycleBin недоступна: {ex.Message}");
+            error = ErrorText.For(ex);
             return false;
         }
     }
