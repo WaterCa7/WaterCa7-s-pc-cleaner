@@ -245,5 +245,9 @@ public sealed record ScanOutcome(bool Cancelled, int? Score, IReadOnlyList<Modul
     public IEnumerable<HealthIssue> Issues => Modules.Where(m => m.State == ModuleScanState.Done).SelectMany(m => m.Issues);
 }
 
-/// <summary>Result of "Исправить безопасное".</summary>
-public sealed record FixBatchResult(int Total, int Fixed, int Failed, bool Cancelled, long FreedBytes);
+/// <summary>
+/// Result of "Исправить безопасное". <see cref="FreedBytes"/> = the scan's estimate of the fully completed fixes.
+/// <see cref="Interrupted"/> = "Отмена" stopped a fix while it was running (it is counted neither fixed nor failed,
+/// but it may have changed part of what it promised).
+/// </summary>
+public sealed record FixBatchResult(int Total, int Fixed, int Failed, bool Cancelled, long FreedBytes, bool Interrupted = false);

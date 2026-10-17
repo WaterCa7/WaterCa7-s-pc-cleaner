@@ -9,7 +9,7 @@
              d:DesignWidth="1020" d:DesignHeight="640">
 
     <UserControl.Resources>
-        <local:ScoreToBrushConverter x:Key="ScoreToBrush" />
+        <local:ThemeBrushKeyConverter x:Key="BrushKey" />
         <local:SeverityBrushConverter x:Key="SevBrush" />
         <local:SeverityGlyphConverter x:Key="SevGlyph" />
         <local:WidthToColumnsConverter x:Key="Cols" />
@@ -288,7 +288,7 @@
                     <Grid Width="148" Height="148" VerticalAlignment="Center"
                           ToolTip="Оценка от 0 до 100. Каждая найденная проблема снижает её: критичная — на 25, важная — на 12, средняя — на 6, мелкая — на 2 балла (один раздел снижает оценку не больше чем на 40).">
                         <local:HealthGauge x:Name="Gauge" Thickness="12" TrackBrush="{StaticResource Surface3Brush}"
-                                           Value="{Binding GaugeValue}" RingBrush="{Binding Score, Converter={StaticResource ScoreToBrush}}" />
+                                           Value="{Binding GaugeValue}" RingBrush="{Binding ScoreBrushKey, Converter={StaticResource BrushKey}}" />
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                             <TextBlock Text="{Binding DisplayValue, ElementName=Gauge, StringFormat={}{0:0}}" FontSize="42" FontWeight="Bold"
                                        HorizontalAlignment="Center" Visibility="{Binding HasScore, Converter={StaticResource BoolToVis}}" />
@@ -306,7 +306,7 @@
                         <TextBlock Text="СОСТОЯНИЕ КОМПЬЮТЕРА" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
                         <WrapPanel Margin="0,3,0,4">
                             <TextBlock Text="{Binding VerdictText}" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,14,0"
-                                       VerticalAlignment="Center" Foreground="{Binding Score, Converter={StaticResource ScoreToBrush}}" />
+                                       VerticalAlignment="Center" Foreground="{Binding ScoreBrushKey, Converter={StaticResource BrushKey}}" />
                             <!-- before / after: green when the score went up, red when it went down -->
                             <Border Style="{StaticResource HeroChip}" Margin="0,4,0,4" VerticalAlignment="Center"
                                     Background="{Binding ScoreTrend, Converter={StaticResource TrendBrush}, ConverterParameter=Soft}"

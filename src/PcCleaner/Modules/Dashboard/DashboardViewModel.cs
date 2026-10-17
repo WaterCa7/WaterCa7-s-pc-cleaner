@@ -191,7 +191,16 @@ public sealed class DashboardViewModel : PageViewModel
 
     public string ScoreText => Score?.ToString(Format.Ru) ?? "—";
 
-    public string VerdictText => IsScanning ? "Идёт проверка…" : HealthScoring.Verdict(Score);
+    /// <summary>Modules of the shown scan that failed or timed out: the score only counts the others.</summary>
+    private int FailedModules => _summary?.FailedModules ?? 0;
+
+    /// <summary>The shown score is incomplete (some modules could not be checked) — it may be too high.</summary>
+    public bool IsIncomplete => FailedModules > 0;
+
+    /// <summary>Theme brush key of the gauge ring and the verdict: never green for an incomplete scan.</summary>
+    public string ScoreBrushKey => HealthScoring.ScoreBrushKey(Score, FailedModules);
+
+    public string VerdictText => IsScanning ? "Идёт проверка…" : HealthScoring.Verdict(Score, FailedModules);
 
     public string VerdictDescription
     {
@@ -203,7 +212,7 @@ public sealed class DashboardViewModel : PageViewModel
                     ? "Собираем сведения о компьютере…"
                     : $"Проверено разделов: {_completedModules} из {_moduleRows.Count}. Пока идёт проверка, ничего не меняется.";
             }
-            return HealthScoring.VerdictDescription(Score, _summary?.ProblemCount ?? 0, FixedCount > 0);
+            return HealthScoring.VerdictDescription(Score, _summary?.ProblemCount ?? 0, FixedCount > 0, FailedModules);
         }
     }
 
@@ -222,7 +231,7 @@ public sealed class DashboardViewModel : PageViewModel
 
     public bool HasReclaimable => !IsScanning && ReclaimableBytes > 0;
 
-    /// <summary>One honest line: "Можно освободить 2 ГБ (ещё до 40 ГБ — после проверки вручную)".</summary>
+    /// <summary>One honest line: "Можно освободить 2 ГБ (ещё до 40 ГБ — если решите удалить сами)".</summary>
     public string ReclaimableText => Reclaimable.SummaryText ?? "";
 
     public bool HasAutoReclaimable => !IsScanning && Reclaimable.AutoBytes > 0;
@@ -292,7 +301,11 @@ public sealed class DashboardViewModel : PageViewModel
             var problems = _summary?.ProblemCount ?? 0;
             var tips = _summary?.TipCount ?? 0;
             if (problems == 0 && tips == 0)
+            {
+                if (IsIncomplete)
+                    return FixedCount > 0 ? "Найденные проблемы исправлены" : "В проверенных разделах проблем нет";
                 return FixedCount > 0 ? "Все проблемы исправлены" : "Проблем не найдено";
+            }
             if (problems == 0)
                 return "Проблем нет · " + Format.Count(tips, "совет", "совета", "советов");
             return "Найдено: " + HealthScoring.FindingsText(problems, tips);
@@ -313,7 +326,8 @@ public sealed class DashboardViewModel : PageViewModel
 
     public bool ShowScanningPlaceholder => IsScanning && _issues.Count == 0;
 
-    public bool ShowNoProblems => State == DashboardScanState.Completed && _issues.Count == 0;
+    /// <summary>"Проблем не найдено · Компьютер в отличной форме" — never when some modules could not be checked.</summary>
+    public bool ShowNoProblems => State == DashboardScanState.Completed && _issues.Count == 0 && !IsIncomplete;
 
     public bool HasIssues => _issues.Count > 0;
 
@@ -686,6 +700,8 @@ public sealed class DashboardViewModel : PageViewModel
         OnPropertyChanged(nameof(HasScore));
         OnPropertyChanged(nameof(GaugeValue));
         OnPropertyChanged(nameof(ScoreText));
+        OnPropertyChanged(nameof(IsIncomplete));
+        OnPropertyChanged(nameof(ScoreBrushKey));
         OnPropertyChanged(nameof(VerdictText));
         OnPropertyChanged(nameof(VerdictDescription));
         OnPropertyChanged(nameof(ReclaimableBytes));
@@ -795,8 +811,11 @@ public sealed class DashboardViewModel : PageViewModel
                     score = HealthScoring.ComputeScore(issues);
                     // "Было → стало": compare with what the previous scan MEASURED. Its post-fix score is only an
                     // estimate; comparing with it would show "worse" right after fixing if a fix freed a bit less.
-                    var previous = _summary;
-                    _summary = MakeSummary(score.Value, score.Value, Now(), failed.Count, previous?.BaselineScore, previous?.Time);
+                    // An incomplete previous scan (failed modules, score possibly inflated) passes on the baseline it
+                    // inherited instead. Failed modules of THIS scan only add 0 points, so its score may be too high:
+                    // the summary is marked incomplete (verdict "Проверка неполная", no delta, never a baseline).
+                    var baseline = _summary?.NextBaseline;
+                    _summary = MakeSummary(score.Value, score.Value, Now(), failed.Count, baseline?.Score, baseline?.Time);
                     _summaryFromThisSession = true;
                     _lastScanPersisted = persist;
                     if (persist)
@@ -816,8 +835,10 @@ public sealed class DashboardViewModel : PageViewModel
             else
             {
                 var problems = issues.Count(HealthScoring.IsProblem);
-                Log.Info($"Главная: проверка завершена — оценка {score}, " +
-                         (issues.Count == 0 ? "проблем не найдено" : "найдено " + HealthScoring.FindingsText(problems, issues.Count - problems)));
+                var notChecked = results.Count(r => r.State is ModuleScanState.Failed or ModuleScanState.TimedOut);
+                Log.Info($"Главная: проверка завершена — оценка {score}" +
+                         (notChecked > 0 ? $" (неполная: не проверено {Format.Count(notChecked, "раздел", "раздела", "разделов")})" : "") +
+                         ", " + (issues.Count == 0 ? "проблем не найдено" : "найдено " + HealthScoring.FindingsText(problems, issues.Count - problems)));
             }
             return new ScanOutcome(cancelled, score, results);
         }
@@ -987,7 +1008,14 @@ public sealed class DashboardViewModel : PageViewModel
         return cut ? result + "…" + Environment.NewLine + "(полное описание — в строке проблемы на главной странице)" : result;
     }
 
-    /// <summary>Runs one fix. Returns true if it succeeded. Rethrows only cancellation.</summary>
+    /// <summary>Appended to the module's text when "Отмена" stopped a fix that then returned what it managed to do.</summary>
+    internal const string InterruptedNote =
+        "Исправление было остановлено — возможно, сделано не всё. Нажмите «Проверить снова», чтобы увидеть, что осталось.";
+
+    /// <summary>
+    /// Runs one fix. Returns true if it succeeded. Rethrows only cancellation — also when the fix itself did not throw
+    /// but returned early after "Отмена" (cleaning returns what it deleted so far): such a fix is never marked fixed.
+    /// </summary>
     internal async Task<bool> FixOneCoreAsync(IssueItem item, CancellationToken ct)
     {
         var issue = item.Issue;
@@ -998,11 +1026,19 @@ public sealed class DashboardViewModel : PageViewModel
         item.IsFixing = true;
         item.FixFailed = false;
         item.AccessDenied = false;
+        string? stoppedResult = null;
         try
         {
             // Task.Run: a module's fix must never block the UI thread.
             var result = await Task.Run(() => fix(ct), ct);
             var text = string.IsNullOrWhiteSpace(result) ? "Готово." : result.Trim();
+            if (ct.IsCancellationRequested)
+            {
+                // Several fixes stop early on cancellation and return a partial result instead of throwing: the
+                // problem may be only partly fixed, so it stays open (no "Исправлено", its penalty and size stay).
+                stoppedResult = text;
+                ct.ThrowIfCancellationRequested();
+            }
             issue.FixResult = text;
             if (HealthScoring.LooksLikeFailure(text))
             {
@@ -1017,7 +1053,15 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            issue.FixResult = "Исправление отменено.";
+            if (stoppedResult is null)
+            {
+                issue.FixResult = "Исправление отменено.";
+            }
+            else
+            {
+                issue.FixResult = stoppedResult + Environment.NewLine + InterruptedNote;
+                Log.Warn($"Главная: исправление «{issue.Title}» ({issue.Module}) остановлено, проблема не отмечена исправленной: {stoppedResult}");
+            }
             item.FixFailed = true;
             throw;
         }
@@ -1063,6 +1107,8 @@ public sealed class DashboardViewModel : PageViewModel
             int ok = 0, failed = 0;
             long freed = 0;
             var cancelled = false;
+            var interrupted = false;
+            IssueItem? running = null;
             try
             {
                 ReportProgress(-1, "Создаём точку восстановления…");
@@ -1073,8 +1119,13 @@ public sealed class DashboardViewModel : PageViewModel
                     ct.ThrowIfCancellationRequested();
                     var item = items[i];
                     ReportProgress(100.0 * i / items.Count, $"Исправляем ({i + 1} из {items.Count}): {item.Issue.Title}");
-                    if (await FixOneCoreAsync(item, ct))
+                    running = item;
+                    var fixedOk = await FixOneCoreAsync(item, ct);
+                    running = null;
+                    if (fixedOk)
                     {
+                        // Only fully completed fixes count (a fix stopped by "Отмена" throws above): the scan's
+                        // estimate of a completed fix is what "Освобождено примерно" reports.
                         ok++;
                         freed = freed > long.MaxValue - Math.Max(0, item.Issue.ReclaimableBytes)
                             ? long.MaxValue
@@ -1088,11 +1139,13 @@ public sealed class DashboardViewModel : PageViewModel
             }
             catch (OperationCanceledException)
             {
-                // "Отмена" during the restore point or between/inside fixes: report what was done so far.
+                // "Отмена" during the restore point or between/inside fixes: report what was done so far. A fix
+                // stopped while running may have changed part of what it promised — never say "ничего не изменено".
                 cancelled = true;
+                interrupted = running is not null;
             }
             ReportProgress(100);
-            batch = new FixBatchResult(items.Count, ok, failed, cancelled, freed);
+            batch = new FixBatchResult(items.Count, ok, failed, cancelled, freed, interrupted);
         });
 
         AfterFixes();
@@ -1139,7 +1192,7 @@ public sealed class DashboardViewModel : PageViewModel
 
     internal static string BatchSummaryText(FixBatchResult r)
     {
-        if (r.Cancelled && r.Fixed == 0 && r.Failed == 0)
+        if (r.Cancelled && r.Fixed == 0 && r.Failed == 0 && !r.Interrupted)
             return "Исправление отменено — ничего не изменено.";
         var sb = new StringBuilder();
         sb.Append(r.Fixed == r.Total
@@ -1149,7 +1202,10 @@ public sealed class DashboardViewModel : PageViewModel
             sb.Append($" Освобождено примерно {Format.Bytes(r.FreedBytes)}.");
         if (r.Failed > 0)
             sb.Append($" Не получилось: {r.Failed} — причина указана в строке проблемы.");
-        if (r.Cancelled)
+        if (r.Interrupted)
+            sb.Append(" Исправление, которое шло в момент отмены, остановлено на середине — часть изменений могла " +
+                      "успеть выполниться (подробности — в строке проблемы).");
+        if (r.Cancelled && r.Fixed + r.Failed + (r.Interrupted ? 1 : 0) < r.Total)
             sb.Append(" Остальные исправления отменены.");
         sb.Append(" Нажмите «Проверить снова», чтобы обновить оценку.");
         return sb.ToString();
@@ -1213,6 +1269,7 @@ public sealed class DashboardViewModel : PageViewModel
             Modules = modules,
             Groups = groups,
             Warning = warning,
+            FailedModules = summary.FailedModules,
         };
     }
 

@@ -30,6 +30,16 @@ public sealed class ScoreToBrushConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>Theme brush key (e.g. "WarningBrush", see <see cref="HealthScoring.ScoreBrushKey(int?, int)"/>) → the brush.</summary>
+public sealed class ThemeBrushKeyConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => ThemeBrushes.Get(value as string is { Length: > 0 } key ? key : "MutedBrush");
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>
 /// IssueSeverity → accent brush of the dashboard (Critical/High red, Medium amber, Low blue, Info green).
 /// ConverterParameter="Soft" returns the matching translucent background brush.
