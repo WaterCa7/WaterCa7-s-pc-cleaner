@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
@@ -166,15 +167,17 @@ public static class ProgramRules
     /// Returns <paramref name="launch"/> unchanged in every other case.
     /// </summary>
     public static UninstallLaunch? WithBundleFallback(UninstallLaunch? launch, string? bundleCachePath, bool quiet,
-        Func<string, bool>? fileExists = null)
+        Func<string, bool>? fileExists = null, Func<string, DriveType>? driveType = null)
     {
         if (launch is { IsMsi: true })
             return launch;
         fileExists ??= File.Exists;
         var cache = NormalizeFolder(bundleCachePath);
-        if (cache is null || !IsLocalRootedPath(cache) || !cache.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        if (cache is null || !IsLocalRootedPath(cache) || IsUnprobeablePath(cache, driveType) ||
+            !cache.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             return launch;
-        if (launch is not null && (!IsLocalRootedPath(launch.FileName) || fileExists(launch.FileName)))
+        if (launch is not null && (!IsLocalRootedPath(launch.FileName) || IsUnprobeablePath(launch.FileName, driveType) ||
+                                   fileExists(launch.FileName)))
             return launch; // the registered uninstaller is there (or cannot be checked): use it
         if (!fileExists(cache))
             return launch;
@@ -183,20 +186,78 @@ public static class ProgramRules
 
     /// <summary>
     /// The program's main .exe for a VirusTotal lookup: DisplayIcon if it is an existing .exe, else the uninstaller.
-    /// Network paths and Windows' own tools (rundll32, msiexec, powershell) are skipped.
+    /// Network and removable drives (see <see cref="IsUnprobeablePath"/>) and Windows' own tools (rundll32, msiexec,
+    /// powershell) are skipped.
     /// </summary>
-    public static string? FindMainExecutable(string? displayIcon, UninstallLaunch? launch, Func<string, bool>? fileExists = null)
+    public static string? FindMainExecutable(string? displayIcon, UninstallLaunch? launch, Func<string, bool>? fileExists = null,
+        Func<string, DriveType>? driveType = null)
     {
         fileExists ??= File.Exists;
         bool Usable(string? path)
             => path is not null && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && IsLocalRootedPath(path) &&
-               !IsUnderWindows(path) && fileExists(path);
+               !IsUnprobeablePath(path, driveType) && !IsUnderWindows(path) && fileExists(path);
 
         var icon = ParseIconPath(displayIcon).Path;
         if (Usable(icon))
             return icon;
         var exe = launch is { IsMsi: false } ? launch.FileName : null;
         return Usable(exe) ? exe : null;
+    }
+
+    /// <summary>
+    /// Windows' own binaries (malware imitates them; Core's list) and script hosts or interpreters (trusting one would vouch
+    /// for whatever it is told to run; the «Автозагрузка» page's list): "Доверять" never extends to such a file.
+    /// </summary>
+    private static readonly HashSet<string> NeverTrustedFileNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "svchost.exe", "csrss.exe", "lsass.exe", "winlogon.exe", "services.exe", "smss.exe", "wininit.exe",
+        "explorer.exe", "dwm.exe", "taskhostw.exe", "conhost.exe", "spoolsv.exe", "ctfmon.exe", "sihost.exe",
+        "runtimebroker.exe", "dllhost.exe", "rundll32.exe", "regsvr32.exe", "taskmgr.exe", "lsm.exe",
+        "audiodg.exe", "searchindexer.exe", "fontdrvhost.exe", "wmiprvse.exe", "msmpeng.exe", "smartscreen.exe",
+        "powershell.exe", "pwsh.exe", "powershell_ise.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+        "msiexec.exe", "schtasks.exe", "sc.exe", "reg.exe", "regedit.exe", "wmic.exe", "forfiles.exe", "certutil.exe",
+        "bitsadmin.exe", "msbuild.exe", "installutil.exe", "regasm.exe", "regsvcs.exe", "cmstp.exe", "hh.exe", "wsl.exe",
+        "bash.exe", "java.exe", "javaw.exe", "python.exe", "pythonw.exe", "py.exe", "pyw.exe", "node.exe", "autohotkey.exe",
+    };
+
+    /// <summary>
+    /// The program file that "Доверять" trusts together with the program's name. The «Процессы» and «Автозагрузка» pages
+    /// recognise programs by file path, so without it a program trusted here would still be flagged there.
+    /// Only the program's own .exe (<paramref name="mainExecutable"/>, never its uninstaller) inside its own install folder
+    /// qualifies, and only when nothing but its name could look suspicious: a file named like a Windows binary or a
+    /// look-alike of one, a script host or interpreter, a miner or remote-access tool, a random or double-extension name,
+    /// or a file in Temp, «Загрузки», the Recycle Bin or Public keeps every warning — the user trusted the program's name,
+    /// not whatever runs from its folder.
+    /// </summary>
+    public static string? TrustFileFor(string? mainExecutable, string? installLocation, UninstallLaunch? launch)
+    {
+        if (string.IsNullOrWhiteSpace(mainExecutable) || string.IsNullOrWhiteSpace(installLocation) ||
+            IsNetworkPath(mainExecutable) || IsNetworkPath(installLocation))
+            return null;
+        string exe, folder;
+        try
+        {
+            exe = Path.GetFullPath(mainExecutable);
+            folder = Path.GetFullPath(installLocation).TrimEnd('\\');
+            if (launch is { IsMsi: false } && Path.IsPathFullyQualified(launch.FileName) &&
+                string.Equals(Path.GetFullPath(launch.FileName), exe, StringComparison.OrdinalIgnoreCase))
+                return null; // the uninstaller
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or IOException)
+        {
+            return null;
+        }
+        if (!exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || IsUnderWindows(exe) ||
+            IsTooBroadToMeasure(folder) || !Suspicion.IsUnder(exe, folder))
+            return null;
+
+        var name = Path.GetFileName(exe);
+        var stem = Path.GetFileNameWithoutExtension(name);
+        if (NeverTrustedFileNames.Contains(name) || Suspicion.LookalikeOf(name) is not null ||
+            KnownPups.MatchRiskyTool(name) is not null || Suspicion.LooksRandom(stem) || stem.Contains('.') ||
+            Suspicion.DescribeRiskyLocation(exe) is not null)
+            return null;
+        return exe;
     }
 
     private static UninstallLaunch? BuildRawLaunch(string? commandLine)
@@ -229,9 +290,12 @@ public static class ProgramRules
     /// is empty or missing. MSI entries are never considered broken here. Missing drives (unplugged disks) are not broken.
     /// Conservative exceptions (the program may still be installed, so the entry must not be offered for removal):
     /// Microsoft runtimes, WiX Burn bundles and "Package Cache" setups (their MSI parts can outlive the cached setup),
-    /// and entries whose own program .exe (DisplayIcon) still exists.
+    /// and entries whose own program .exe (DisplayIcon) still exists. Nothing on a network or removable drive is checked
+    /// (<see cref="IsUnprobeablePath"/>): it could hang, and another stick under the same letter would make a program
+    /// look gone.
     /// </summary>
-    public static bool IsBroken(UninstallEntryValues v, Func<string, bool>? fileExists = null, Func<string, bool>? dirExists = null)
+    public static bool IsBroken(UninstallEntryValues v, Func<string, bool>? fileExists = null, Func<string, bool>? dirExists = null,
+        Func<string, DriveType>? driveType = null)
     {
         fileExists ??= File.Exists;
         dirExists ??= Directory.Exists;
@@ -257,6 +321,8 @@ public static class ProgramRules
         }
         if (string.IsNullOrWhiteSpace(target) || !IsLocalRootedPath(target))
             return false;
+        if (IsUnprobeablePath(target, driveType))
+            return false; // network or removable drive: not checked - never call it broken
 
         var root = SafeRoot(target);
         if (root is null || !dirExists(root))
@@ -268,13 +334,14 @@ public static class ProgramRules
             return false; // a cleaned-up setup cache does not mean the program itself is gone
 
         var location = NormalizeFolder(v.InstallLocation);
-        if (location is not null && (IsNetworkPath(location) || dirExists(location)))
+        if (location is not null && (IsUnprobeablePath(location, driveType) || dirExists(location)))
             return false; // network folders are not checked (could hang) - never call them broken
 
-        // The program's own .exe (DisplayIcon) is still there: only the uninstaller is missing.
+        // The program's own .exe (DisplayIcon) is still there (or is on a drive that is not checked): only the uninstaller
+        // is missing.
         var icon = ParseIconPath(v.DisplayIcon).Path;
-        if (icon is not null && icon.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && IsLocalRootedPath(icon) &&
-            !IsUnderWindows(icon) && fileExists(icon))
+        if (icon is not null && icon.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !IsUnderWindows(icon) &&
+            (IsUnprobeablePath(icon, driveType) || (IsLocalRootedPath(icon) && fileExists(icon))))
             return false;
         return true;
     }
@@ -285,6 +352,54 @@ public static class ProgramRules
     /// <summary>UNC paths (\\server\share) are never probed: an offline server can block for a long time.</summary>
     public static bool IsNetworkPath(string? path)
         => path is not null && (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal));
+
+    /// <summary>
+    /// True if the disk must not be touched for this path during a scan: UNC paths, and drive letters that are not local
+    /// fixed disks — mapped network drives (an offline NAS or share blocks every check until the redirector times out),
+    /// USB sticks and card readers, CD/DVD drives and letters with nothing behind them. Such paths are not checked at all
+    /// and never judged "missing", like on the «Автозагрузка» page. Relative paths count as local.
+    /// </summary>
+    /// <param name="driveType">Drive type of "X:" (tests); the real one, cached briefly, by default.</param>
+    public static bool IsUnprobeablePath(string? path, Func<string, DriveType>? driveType = null)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+        if (IsNetworkPath(path))
+            return true;
+        if (path.Length < 2 || path[1] != ':')
+            return false;
+        return (driveType ?? CachedDriveType)(path[..2]) is not (DriveType.Fixed or DriveType.Ram);
+    }
+
+    /// <summary>Drive types by letter: a list of a few hundred programs asks about the same few letters over and over.</summary>
+    private static readonly ConcurrentDictionary<char, (DriveType Type, long ValidUntil)> DriveTypes = new();
+
+    private const int DriveTypeCacheMs = 30_000;
+
+    /// <summary>
+    /// GetDriveType for "X:" (answered locally: a mapped drive is reported as a network drive even while its server is
+    /// offline). Cached for a short while, so a drive mapped or plugged in later is noticed by the next scan.
+    /// </summary>
+    private static DriveType CachedDriveType(string drive)
+    {
+        var letter = char.ToUpperInvariant(drive[0]);
+        if (letter is < 'A' or > 'Z')
+            return DriveType.Unknown;
+        var now = Environment.TickCount64;
+        if (DriveTypes.TryGetValue(letter, out var cached) && cached.ValidUntil > now)
+            return cached.Type;
+        DriveType type;
+        try
+        {
+            type = new DriveInfo(letter + @":\").DriveType;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            type = DriveType.Unknown;
+        }
+        DriveTypes[letter] = (type, now + DriveTypeCacheMs);
+        return type;
+    }
 
     /// <summary>Recently installed (or updated): within <see cref="RecentDays"/> days, not in the future.</summary>
     public static bool IsRecent(DateTime? installDate, DateTime now)
