@@ -20,9 +20,21 @@
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
 
+        <!-- Hardware card: focusable, so keyboard users get the same details as mouse users
+             (Tab shows the tooltip, Shift+F10 or the Menu key opens the context menu). -->
+        <Style x:Key="HardwareCardStyle" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- ===== Hardware card ===== -->
         <DataTemplate x:Key="HardwareCardTemplate" DataType="{x:Type local:HardwareCard}">
-            <Border Style="{StaticResource Card}" Margin="0,0,12,12" Padding="14,13" Background="{StaticResource SurfaceBrush}"
+            <Border Style="{StaticResource HardwareCardStyle}" Margin="0,0,12,12" Padding="14,13" Background="{StaticResource SurfaceBrush}"
                     ToolTipService.IsEnabled="{Binding HasToolTip}" ToolTipService.ShowDuration="20000">
                 <Border.ToolTip>
                     <ToolTip>
@@ -413,8 +425,8 @@
             <!-- ===== Hardware ===== -->
             <DockPanel Margin="0,22,0,10" Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
                 <TextBlock Style="{StaticResource H2}" Text="Ваш компьютер" Margin="0" VerticalAlignment="Center" />
-                <TextBlock Style="{StaticResource Muted}" Margin="12,3,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           TextWrapping="NoWrap" Text="Наведите на карточку, чтобы увидеть подробности; правый клик — скопировать или найти в интернете." />
+                <TextBlock Style="{StaticResource Muted}" Margin="12,3,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                           Text="Наведите на карточку, чтобы увидеть подробности; правый клик — скопировать или найти в интернете." />
             </DockPanel>
             <ItemsControl x:Name="HardwareGrid" ItemsSource="{Binding HardwareCards}" Margin="0,0,-12,0" Focusable="False"
                           ItemTemplate="{StaticResource HardwareCardTemplate}">
@@ -489,8 +501,8 @@
             <StackPanel Visibility="{Binding HasPassed, Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="0,18,0,10">
                     <TextBlock Style="{StaticResource H2}" Text="Уже в порядке" Margin="0" VerticalAlignment="Center" />
-                    <TextBlock Style="{StaticResource Muted}" Margin="12,3,0,0" VerticalAlignment="Center" TextWrapping="NoWrap"
-                               TextTrimming="CharacterEllipsis" Text="Эти проверки пройдены — здесь же можно вернуть настройки, изменённые программой." />
+                    <TextBlock Style="{StaticResource Muted}" Margin="12,3,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Text="Эти проверки пройдены — здесь же можно вернуть настройки, изменённые программой." />
                 </DockPanel>
                 <ItemsControl x:Name="PassedGrid" ItemsSource="{Binding Passed}" ItemTemplate="{StaticResource PassedTemplate}"
                               Margin="0,0,-10,0" Focusable="False">

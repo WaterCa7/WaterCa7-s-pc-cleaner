@@ -2,6 +2,7 @@ using System.IO;
 using Microsoft.Win32;
 using PcCleaner.Core;
 using PcCleaner.Modules.Optimizer;
+using PcCleaner.Modules.Processes;
 using Xunit;
 using static PcCleaner.Tests.Optimizer.OptimizerTestData;
 
@@ -105,6 +106,61 @@ public sealed class OptimizerParityServiceTests : IDisposable
         Assert.Equal("Память работает без XMP/EXPO", memory.Title);
         Assert.Equal(IssueSeverity.High, memory.Severity);
         Assert.Contains("2133 МГц из 3200 МГц", memory.Details);
+    }
+
+    // ===================== one owner per symptom / safe batch =====================
+
+    [Fact]
+    public async Task Dashboard_HighRamLoad_IsReportedOnce_ByProcesses()
+    {
+        const long total = 16L << 30;
+        var s = GoodSettings() with { MemoryLoadPercent = 90, MemoryUsedBytes = total * 9 / 10, MemoryTotalBytes = total };
+        var service = Create(GoodDesktop(), s);
+
+        // The Optimizer page still shows the advice...
+        var (_, _, items) = await service.EvaluateAsync(false, CancellationToken.None);
+        Assert.NotNull(items.Find("RamLoad"));
+
+        // ...but on the dashboard the same memory counter is reported only by "Процессы", which names the consumers.
+        var optimizer = await service.AnalyzeAsync(CancellationToken.None);
+        Assert.DoesNotContain(optimizer, i => i.Title.StartsWith("Оперативная память почти заполнена", StringComparison.Ordinal));
+        var processes = ProcessIssues.Build(Array.Empty<ProcessIssues.Evaluated>(),
+            new MemoryStatus((ulong)total, (ulong)(total / 10), 90), selfPid: 1);
+
+        var ram = Assert.Single(processes.Concat(optimizer),
+            i => i.Title.Contains("оперативн", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("Процессы", ram.Module);
+        Assert.Equal(IssueSeverity.Medium, ram.Severity);
+    }
+
+    [Fact]
+    public async Task Dashboard_GameDvrFix_IsNotInTheSafeBatch_AndItsConsequenceIsShownBeforehand()
+    {
+        var s = GoodSettings() with { GameModeValue = 0, GameDvrValue = 1, AppCaptureValue = 1 };
+        var issues = await Create(GoodDesktop(), s).AnalyzeAsync(CancellationToken.None);
+
+        var dvr = issues.Single(i => i.Title.Contains("Xbox Game Bar", StringComparison.Ordinal));
+        Assert.NotNull(dvr.FixAsync); // still fixable one by one, after its own confirmation...
+        Assert.False(dvr.AutoFixSafe); // ...but "Исправить безопасное" must not take clip recording away silently
+        Assert.Contains("Важно: Скриншоты и запись клипов через Xbox Game Bar будут недоступны", dvr.Details);
+
+        var gameMode = issues.Single(i => i.Title.Contains("игровой режим", StringComparison.OrdinalIgnoreCase));
+        Assert.True(gameMode.AutoFixSafe);
+        Assert.DoesNotContain("Важно:", gameMode.Details);
+    }
+
+    [Fact]
+    public void Dashboard_ConsequenceNote_IsShownOnlyWhenTheDashboardCanFix()
+    {
+        var service = Create(GoodDesktop(), GoodSettings()); // not elevated
+        var rec = new Recommendation
+        {
+            Id = "Hags", Title = "HAGS", Explanation = "x", Kind = RecommendationKind.AutoFix, FixId = TweakIds.Hags,
+            NeedsAdmin = true, AfterApplyNote = "Изменение вступит в силу после перезагрузки компьютера.",
+        };
+        var issue = Assert.Single(service.ToHealthIssues(new[] { rec }));
+        Assert.Null(issue.FixAsync);
+        Assert.DoesNotContain("Важно:", issue.Details);
     }
 
     // ===================== battery report =====================
