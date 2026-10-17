@@ -114,15 +114,32 @@ internal static class SystemTools
         }
     }
 
+    /// <summary>
+    /// "C:\Windows\explorer.exe". CreateProcess looks in the application's own folder first, so a bare "explorer.exe"
+    /// would let a planted explorer.exe next to our exe (e.g. in Downloads) run with our — possibly administrator —
+    /// rights. Same path as <see cref="ProcessRunner.ShowInExplorer"/> uses.
+    /// </summary>
+    internal static string ExplorerPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+
+    /// <summary>Explorer arguments that select a file or open a folder; null if the path no longer exists.</summary>
+    internal static string? ExplorerArguments(string path)
+    {
+        if (File.Exists(path))
+            return $"/select,\"{path}\"";
+        if (Directory.Exists(path))
+            return $"\"{path}\"";
+        return null;
+    }
+
     /// <summary>Selects a file (or opens a folder) in Explorer. Never throws.</summary>
     public static void ShowInExplorer(string path)
     {
         try
         {
-            if (File.Exists(path))
-                Process.Start("explorer.exe", $"/select,\"{path}\"")?.Dispose();
-            else if (Directory.Exists(path))
-                Process.Start("explorer.exe", $"\"{path}\"")?.Dispose();
+            var arguments = ExplorerArguments(path);
+            if (arguments is not null)
+                Process.Start(ExplorerPath, arguments)?.Dispose();
             else
                 Dialogs.Info("Не найдено", $"Файл или папка больше не существует:\n{path}");
         }
