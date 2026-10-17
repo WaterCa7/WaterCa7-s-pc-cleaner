@@ -12,6 +12,12 @@ namespace PcCleaner.Tests.Security;
 /// </summary>
 public sealed class SecuritySandbox : IDisposable
 {
+    /// <summary>
+    /// Test classes that create sandboxes run one after another: Dispose removes the shared parent key when it is empty,
+    /// and a sandbox created in parallel under that key failed with "marked for deletion".
+    /// </summary>
+    public const string Collection = "SecurityRegistrySandbox";
+
     public const string RootKey = @"Software\WaterCa7sPcCleanerTests\Security";
 
     public SecuritySandbox()
@@ -62,6 +68,12 @@ public sealed class SecuritySandbox : IDisposable
     }
 }
 
+[CollectionDefinition(SecuritySandbox.Collection, DisableParallelization = true)]
+public sealed class SecuritySandboxCollection
+{
+}
+
+[Collection(SecuritySandbox.Collection)]
 public class SecurityServiceSandboxTests
 {
     private static int BackupCount() => Directory.Exists(AppPaths.BackupsDir) ? Directory.GetFiles(AppPaths.BackupsDir, "*.reg").Length : 0;

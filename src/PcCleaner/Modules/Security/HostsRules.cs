@@ -56,12 +56,12 @@ public static class HostsRules
         new("360totalsecurity", MatchKind.Contains, DomainCategory.Security, "360 Total Security"),
         new("virusinfo.info", MatchKind.Suffix, DomainCategory.Security, "VirusInfo"),
         new("safezone.cc", MatchKind.Suffix, DomainCategory.Security, "SafeZone"),
-        new("wdcp.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Microsoft Defender"),
-        new("wd.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Microsoft Defender"),
-        new("definitionupdates.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "обновления Microsoft Defender"),
+        new("wdcp.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Защитника Windows"),
+        new("wd.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Защитника Windows"),
+        new("definitionupdates.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "обновлений Защитника Windows"),
         new("smartscreen.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "SmartScreen"),
         new("smartscreen-prod.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "SmartScreen"),
-        new("security.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Microsoft Defender"),
+        new("security.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Защитника Windows"),
 
         // Windows Update
         new("windowsupdate", MatchKind.Contains, DomainCategory.Update, "Центр обновления Windows"),

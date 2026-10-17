@@ -85,7 +85,7 @@ public sealed partial class SecurityService : IHealthContributor
         // Fallback -1 = "could not read" (shown as "Нет данных", not as "browsers not found").
         var extTask = Run("расширения браузеров", () => BrowserExtensionScanner.Scan(Env.BrowserRoots, ct),
             (new List<BrowserExtension>(), -1));
-        var mpTask = Run("Microsoft Defender", () => Env.IsRealSystem && FileTools.FindMpCmdRun() is not null, false);
+        var mpTask = Run("Защитник Windows", () => Env.IsRealSystem && FileTools.FindMpCmdRun() is not null, false);
         var smb1Task = Run("SMBv1", () => ReadSmb1(ct), Smb1State.Unknown);
         var secureBootTask = Run("Secure Boot", ReadSecureBoot, new SecureBootState(false, null, null));
         var tpmTask = Run("TPM", () => ReadTpm(ct), TpmState.Unknown);
@@ -161,9 +161,22 @@ public sealed partial class SecurityService : IHealthContributor
             Checks = checks,
         };
         LastReport = report;
-        var bad = checks.Count(c => c.Status is SecurityStatus.Warning or SecurityStatus.Danger);
-        Log.Info($"Безопасность: проверено {checks.Count} параметров, требуют внимания: {bad}");
+        // The same split and numbers as the page header and the dashboard tile ("6 проблем и 1 совет").
+        var (problems, tips) = CountFindings(report);
+        Log.Info($"Безопасность: проверено {Format.Count(checks.Count, "параметр", "параметра", "параметров")} — " +
+                 SecurityRules.FindingsText(problems, tips));
         return report;
+    }
+
+    /// <summary>
+    /// Problems and tips of a report, counted exactly as the dashboard counts them: from <see cref="BuildIssues"/>,
+    /// Info issues are tips, everything above is a problem. The page header and the log line use this too.
+    /// </summary>
+    internal (int Problems, int Tips) CountFindings(SecurityReport report)
+    {
+        var issues = BuildIssues(report);
+        var problems = issues.Count(i => i.Severity > IssueSeverity.Info);
+        return (problems, issues.Count - problems);
     }
 
     private sealed class DefenderData
@@ -336,10 +349,7 @@ public sealed partial class SecurityService : IHealthContributor
         var winlogon = new WinlogonState(shell.Readable && userinit.Readable,
             shell.Value?.ToString(), userinit.Value?.ToString(), userShell.Value?.ToString());
 
-        var pe = SecurityEnvironment.ReadValue(Env.InternetSettings, "ProxyEnable");
-        var ps = SecurityEnvironment.ReadValue(Env.InternetSettings, "ProxyServer");
-        var pac = SecurityEnvironment.ReadValue(Env.InternetSettings, "AutoConfigURL");
-        var proxy = new ProxyState(pe.Readable, I(pe.Value) == 1, ps.Value?.ToString(), pac.Value?.ToString());
+        var proxy = ReadProxy();
 
         var ss = SecurityEnvironment.ReadValue(Env.ExplorerKey, "SmartScreenEnabled");
         var ssPolicy = SecurityEnvironment.ReadValue(Env.SmartScreenPolicy, "EnableSmartScreen");
@@ -354,6 +364,20 @@ public sealed partial class SecurityService : IHealthContributor
             Rdp = new RdpState(I(rdp.Value)),
         };
     }
+
+    /// <summary>The WinINet proxy settings of the current user (HKCU Internet Settings).</summary>
+    private ProxyState ReadProxy()
+    {
+        var pe = SecurityEnvironment.ReadValue(Env.InternetSettings, "ProxyEnable");
+        var ps = SecurityEnvironment.ReadValue(Env.InternetSettings, "ProxyServer");
+        var pac = SecurityEnvironment.ReadValue(Env.InternetSettings, "AutoConfigURL");
+        return new ProxyState(pe.Readable, SecurityEnvironment.AsInt(pe.Value) == 1, ps.Value?.ToString(), pac.Value?.ToString());
+    }
+
+    /// <summary>Same values as <see cref="ReadProxy"/>, from a key that is already open.</summary>
+    private static ProxyState ReadProxy(RegistryKey key)
+        => new(true, SecurityEnvironment.AsInt(key.GetValue("ProxyEnable")) == 1,
+            key.GetValue("ProxyServer")?.ToString(), key.GetValue("AutoConfigURL")?.ToString());
 
     private (List<IfeoEntry> Entries, bool Partial, bool Readable) ReadIfeo()
     {
@@ -472,9 +496,9 @@ public sealed partial class SecurityService : IHealthContributor
             return SecurityActionResult.Fail("Проверка недоступна в тестовом окружении.");
         var mp = FileTools.FindMpCmdRun();
         if (mp is null)
-            return SecurityActionResult.Fail("Microsoft Defender не найден на этом компьютере.");
+            return SecurityActionResult.Fail("Защитник Windows не найден на этом компьютере.");
         var kind = full ? "полная" : "быстрая";
-        Log.Action($"Запущена {kind} проверка Microsoft Defender");
+        Log.Action($"Запущена {kind} проверка Защитником Windows");
         try
         {
             var r = await ProcessRunner.RunAsync(mp, $"-Scan -ScanType {(full ? 2 : 1)}",
@@ -483,15 +507,15 @@ public sealed partial class SecurityService : IHealthContributor
             {
                 // Killing MpCmdRun does not stop the scan inside the Defender service: cancel it there too.
                 await CancelDefenderScanAsync(mp);
-                Log.Warn($"Проверка Defender ({kind}) не завершилась вовремя");
+                Log.Warn($"Проверка Защитником Windows ({kind}) не завершилась вовремя");
                 return SecurityActionResult.Fail("Проверка идёт слишком долго и была остановлена. Попробуйте ещё раз позже.");
             }
-            Log.Info($"Проверка Defender ({kind}) завершена с кодом {r.ExitCode}");
+            Log.Info($"Проверка Защитником Windows ({kind}) завершена с кодом {r.ExitCode}");
             return r.ExitCode switch
             {
                 0 => LogResult(SecurityActionResult.Ok("Проверка завершена: угроз не найдено.")),
                 2 => LogResult(new SecurityActionResult(false,
-                    "Defender обнаружил угрозы! Откройте «Журнал защиты», чтобы посмотреть, что найдено и что с этим сделано.",
+                    "Защитник Windows обнаружил угрозы! Откройте «Безопасность Windows» → «Журнал защиты», чтобы посмотреть, что найдено и что с этим сделано.",
                     ThreatsFound: true)),
                 _ => SecurityActionResult.Fail(
                     $"Проверка завершилась с кодом {HResult(r.ExitCode)}. {FirstLine(r.StdOut)}".Trim()),
@@ -500,13 +524,13 @@ public sealed partial class SecurityService : IHealthContributor
         catch (OperationCanceledException)
         {
             await CancelDefenderScanAsync(mp);
-            Log.Info($"Проверка Defender ({kind}) отменена пользователем");
+            Log.Info($"Проверка Защитником Windows ({kind}) отменена пользователем");
             return new SecurityActionResult(false, "Проверка отменена.", Cancelled: true);
         }
 
         static SecurityActionResult LogResult(SecurityActionResult res)
         {
-            Log.Action("Результат проверки Microsoft Defender: " + res.Message);
+            Log.Action("Результат проверки Защитником Windows: " + res.Message);
             return res;
         }
     }
@@ -519,7 +543,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log.Warn($"Не удалось остановить проверку Defender: {ex.Message}");
+            Log.Warn($"Не удалось остановить проверку Защитником Windows: {ex.Message}");
         }
     }
 
@@ -529,12 +553,12 @@ public sealed partial class SecurityService : IHealthContributor
             return SecurityActionResult.Fail("Обновление недоступно в тестовом окружении.");
         var mp = FileTools.FindMpCmdRun();
         if (mp is null)
-            return SecurityActionResult.Fail("Microsoft Defender не найден на этом компьютере.");
+            return SecurityActionResult.Fail("Защитник Windows не найден на этом компьютере.");
         var r = await ProcessRunner.RunAsync(mp, "-SignatureUpdate", TimeSpan.FromMinutes(15), ct);
         if (r.Success)
         {
-            Log.Action("Обновлены антивирусные базы Microsoft Defender");
-            return SecurityActionResult.Ok("Антивирусные базы Microsoft Defender обновлены.");
+            Log.Action("Обновлены антивирусные базы Защитника Windows");
+            return SecurityActionResult.Ok("Антивирусные базы Защитника Windows обновлены.");
         }
         Log.Warn($"MpCmdRun -SignatureUpdate: код {HResult(r.ExitCode)}: {FirstLine(r.StdOut + r.StdErr)}");
         var denied = (uint)r.ExitCode == 0x80070005;
@@ -570,7 +594,7 @@ public sealed partial class SecurityService : IHealthContributor
         }, ct);
         if (enabled)
         {
-            Log.Action("Включена защита в реальном времени Microsoft Defender");
+            Log.Action("Включена защита в реальном времени Защитника Windows");
             return SecurityActionResult.Ok("Защита в реальном времени включена.");
         }
         Log.Warn($"Не удалось включить защиту в реальном времени: {FirstLine(r.StdErr)}");
@@ -831,10 +855,22 @@ public sealed partial class SecurityService : IHealthContributor
             $"Вернуть как было можно двойным щелчком по резервной копии: {backup}");
     }
 
+    internal const string ProxyChangedMessage =
+        "Настройки прокси изменились после проверки, поэтому ничего не изменено. Нажмите «Проверить снова».";
+
     /// <summary>Sets ProxyEnable=0 and deletes AutoConfigURL (HKCU, the proxy address itself is kept).</summary>
-    public async Task<SecurityActionResult> DisableProxyAsync(CancellationToken ct)
+    public Task<SecurityActionResult> DisableProxyAsync(CancellationToken ct) => DisableProxyAsync(null, ct);
+
+    /// <summary>
+    /// Same as <see cref="DisableProxyAsync(CancellationToken)"/>; with <paramref name="expected"/> (the settings the user
+    /// confirmed) nothing is changed if ProxyEnable, ProxyServer or AutoConfigURL differ now — a proxy or a script that a
+    /// VPN or the user set after the check is never removed without being named in the confirmation.
+    /// </summary>
+    public async Task<SecurityActionResult> DisableProxyAsync(ProxyState? expected, CancellationToken ct)
     {
         var loc = Env.InternetSettings;
+        if (expected is not null && !SecurityRules.SameProxySettings(ReadProxy(), expected))
+            return SecurityActionResult.Fail(ProxyChangedMessage);
         var backup = await RegistryBackup.ExportAsync(loc.FullPath, "Перед отключением прокси", ct);
         if (backup is null)
             return SecurityActionResult.Fail(BackupFailedMessage);
@@ -844,6 +880,9 @@ public sealed partial class SecurityService : IHealthContributor
             using var key = loc.Open(writable: true);
             if (key is null)
                 return SecurityActionResult.Fail("Раздел настроек интернета не найден.");
+            // Check again right before writing: exporting the backup takes a moment.
+            if (expected is not null && !SecurityRules.SameProxySettings(ReadProxy(key), expected))
+                return SecurityActionResult.Fail(ProxyChangedMessage);
             pac = key.GetValue("AutoConfigURL")?.ToString();
             key.SetValue("ProxyEnable", 0, RegistryValueKind.DWord);
             key.DeleteValue("AutoConfigURL", throwOnMissingValue: false);
@@ -1000,28 +1039,28 @@ public sealed partial class SecurityService : IHealthContributor
             {
                 var other = SecurityRules.InactiveThirdPartyText(report.Antiviruses);
                 issues.Add(Issue("Антивирус выключен",
-                    (d.PolicyDisablesAntivirus ? "Microsoft Defender отключён групповой политикой, " : "Microsoft Defender выключен, ") +
+                    (d.PolicyDisablesAntivirus ? "Защитник Windows отключён групповой политикой, " : "Защитник Windows выключен, ") +
                     (other is null ? "а другого антивируса нет." : $"а {other}.") + " Компьютер не защищён от вирусов.",
                     IssueSeverity.Critical));
             }
             else if (!d.RealTimeEnabled)
             {
                 issues.Add(Issue("Защита в реальном времени выключена",
-                    "Microsoft Defender не проверяет файлы при запуске, а другого антивируса нет. Включение безопасно.",
+                    "Защитник Windows не проверяет файлы при запуске, а другого антивируса нет. Включение безопасно.",
                     IssueSeverity.Critical, d.PolicyDisablesRealtime ? null : Wrap(EnableRealtimeProtectionAsync),
                     gain: "Файлы снова проверяются при запуске"));
             }
             if (d.SignatureAgeDays is > SecurityRules.SignatureMaxAgeDays && d.AntivirusEnabled)
             {
                 issues.Add(Issue("Антивирусные базы устарели",
-                    $"Базы Microsoft Defender не обновлялись {SecurityRules.Days(d.SignatureAgeDays.Value)}. Старые базы не знают новых вирусов.",
+                    $"Базы Защитника Windows не обновлялись {SecurityRules.Days(d.SignatureAgeDays.Value)}. Старые базы не знают новых вирусов.",
                     IssueSeverity.Medium, Wrap(UpdateSignaturesAsync), autoFix: true, gain: "Свежие базы вирусов"));
             }
             var badExclusions = d.Exclusions.Where(SecurityRules.IsDangerousExclusion).ToList();
             if (badExclusions.Count > 0)
             {
                 issues.Add(Issue("Слишком широкие исключения антивируса",
-                    $"Defender не проверяет: {string.Join(", ", badExclusions.Take(3))}. Майнеры и вирусы добавляют себе такие исключения.",
+                    $"Защитник Windows не проверяет: {string.Join(", ", badExclusions.Take(3))}. Майнеры и вирусы добавляют себе такие исключения.",
                     IssueSeverity.Medium));
             }
         }
@@ -1040,10 +1079,10 @@ public sealed partial class SecurityService : IHealthContributor
         {
             var canRemove = report.CanRemoveThreats;
             issues.Add(Issue($"Есть необезвреженные угрозы: {active.Count}",
-                $"Microsoft Defender нашёл «{active[0].Name}» и не завершил лечение." +
+                $"Защитник Windows нашёл «{active[0].Name}» и не завершил лечение." +
                 (canRemove
-                    ? " Исправление попросит Defender обезвредить угрозы (обычно — поместить в карантин, откуда файл можно вернуть)."
-                    : " Откройте журнал защиты."),
+                    ? " Исправление попросит Защитник Windows обезвредить угрозы (обычно — поместить в карантин, откуда файл можно вернуть)."
+                    : " Откройте «Безопасность Windows» → «Журнал защиты»."),
                 IssueSeverity.High, canRemove ? Wrap(RemoveActiveThreatsAsync) : null, gain: "Угрозы обезврежены"));
         }
         var antiviruses = report.ActiveAntivirusNames;

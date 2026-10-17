@@ -411,7 +411,7 @@ public static partial class SecurityRules
         var defenderActive = products.Any(p => p.IsMicrosoft && p.Enabled) &&
                              defender is { RealTimeEnabled: true } && !defender.IsPassive;
         if (names.Count > 0 && defenderActive)
-            names.Insert(0, "Microsoft Defender");
+            names.Insert(0, "Защитник Windows");
         return names;
     }
 
@@ -432,18 +432,18 @@ public static partial class SecurityRules
         if (after <= 0)
         {
             return SecurityActionResult.Ok(
-                $"Угрозы обезврежены: {before}. Microsoft Defender поместил их в карантин или удалил.\n\n" +
+                $"Угрозы обезврежены: {before}. Защитник Windows поместил их в карантин или удалил.\n\n" +
                 "Если какой-то файл нужен и вы уверены в нём, восстановите его в «Безопасность Windows» → «Журнал защиты».");
         }
         if (removed > 0)
         {
             return SecurityActionResult.Fail(
-                $"Не удалось обезвредить все угрозы: обезврежено {removed} из {before}. С остальными Defender не справился " +
-                "сам — откройте «Журнал защиты» и выберите действие вручную, а затем запустите полную проверку.");
+                $"Не удалось обезвредить все угрозы: обезврежено {removed} из {before}. С остальными Защитник Windows не справился " +
+                "сам — откройте «Безопасность Windows» → «Журнал защиты» и выберите действие вручную, а затем запустите полную проверку.");
         }
         return SecurityActionResult.Fail(
             "Не удалось обезвредить угрозы" + (string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim().TrimEnd('.')}") +
-            ". Откройте «Журнал защиты» и выберите действие вручную — или запустите полную проверку.");
+            ". Откройте «Безопасность Windows» → «Журнал защиты» и выберите действие вручную — или запустите полную проверку.");
     }
 
     // ===================== Misc =====================

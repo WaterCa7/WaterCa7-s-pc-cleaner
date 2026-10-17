@@ -33,6 +33,17 @@ public static partial class SecurityRules
 
     public static string Days(int days) => $"{days} {Format.Plural(days, "день", "дня", "дней")}";
 
+    /// <summary>"2 проблемы и 1 совет", "1 совет", "проблем нет" — the same words as the dashboard tile.</summary>
+    public static string FindingsText(int problems, int tips)
+    {
+        var parts = new List<string>(2);
+        if (problems > 0)
+            parts.Add(Format.Count(problems, "проблема", "проблемы", "проблем"));
+        if (tips > 0)
+            parts.Add(Format.Count(tips, "совет", "совета", "советов"));
+        return parts.Count == 0 ? "проблем нет" : string.Join(" и ", parts);
+    }
+
     // ===================== Antivirus =====================
 
     /// <summary>Defender ThreatStatusID: 2 cleaned, 3 quarantined, 4 removed, 6 blocked (= neutralized).</summary>
@@ -155,8 +166,8 @@ public static partial class SecurityRules
             else
             {
                 lines.Add(d is null || !d.RealTimeEnabled
-                    ? "Microsoft Defender работает в пассивном режиме — так и должно быть, когда установлен другой антивирус."
-                    : "Microsoft Defender тоже включён.");
+                    ? "Защитник Windows работает в пассивном режиме — так и должно быть, когда установлен другой антивирус."
+                    : "Защитник Windows тоже включён.");
             }
         }
         else if (d is null)
@@ -173,7 +184,7 @@ public static partial class SecurityRules
             {
                 status = SecurityStatus.Unknown;
                 state = "Не удалось узнать состояние антивируса";
-                lines.Add("Служба Microsoft Defender не ответила. Откройте «Безопасность Windows», чтобы проверить защиту.");
+                lines.Add("Служба Защитника Windows не ответила. Откройте «Безопасность Windows», чтобы проверить защиту.");
             }
         }
         else
@@ -181,13 +192,13 @@ public static partial class SecurityRules
             if (d.PolicyDisablesAntivirus)
             {
                 status = SecurityStatus.Danger;
-                state = "Defender отключён групповой политикой";
+                state = "Защитник Windows отключён групповой политикой";
                 lines.Add("Так часто делают «активаторы» и вирусы. Если компьютер не рабочий, политику стоит удалить.");
             }
             else if (!d.ServiceEnabled || !d.AntivirusEnabled)
             {
                 status = SecurityStatus.Danger;
-                state = "Антивирус Microsoft Defender выключен";
+                state = "Защитник Windows выключен";
                 lines.Add(inactiveThird is null
                     ? "Другого антивируса не найдено — компьютер не защищён от вирусов."
                     : inactiveThird + " — компьютер не защищён от вирусов.");
@@ -211,7 +222,7 @@ public static partial class SecurityRules
             else
             {
                 status = SecurityStatus.Ok;
-                state = "Microsoft Defender включён, базы актуальны";
+                state = "Защитник Windows включён, базы актуальны";
             }
 
             var facts = new List<string>
@@ -235,7 +246,7 @@ public static partial class SecurityRules
                 status = status.Worst(SecurityStatus.Warning);
                 if (status == SecurityStatus.Warning && state.EndsWith("актуальны", StringComparison.Ordinal))
                     state = "Слишком широкие исключения антивируса";
-                lines.Add($"Defender не проверяет: {string.Join(", ", badExclusions.Take(3))}. " +
+                lines.Add($"Защитник Windows не проверяет: {string.Join(", ", badExclusions.Take(3))}. " +
                           "Майнеры и вирусы добавляют себе такие исключения.");
             }
             else if (d.ExclusionsHidden && !Admin.IsElevated)
@@ -250,15 +261,15 @@ public static partial class SecurityRules
             state = $"Есть необезвреженные угрозы: {activeThreats.Count}";
             lines.Insert(0, $"Последняя: {activeThreats[0].Name}. " +
                             (CanRemoveThreats(d, threats)
-                                ? "Нажмите «Обезвредить угрозы» или выберите действие в «Журнале защиты»."
-                                : "Откройте «Журнал защиты» и выберите действие."));
+                                ? "Нажмите «Обезвредить угрозы» или выберите действие в «Безопасность Windows» → «Журнал защиты»."
+                                : "Откройте «Безопасность Windows» → «Журнал защиты» и выберите действие."));
         }
         else
         {
             var allowed = threats.Where(t => t.IsAllowed).ToList();
             if (allowed.Count > 0)
-                lines.Add($"Вы разрешили в Defender: {allowed[0].Name}" + (allowed.Count > 1 ? $" и ещё {allowed.Count - 1}" : "") +
-                          ". Если не уверены в этом файле, отмените разрешение в «Журнале защиты».");
+                lines.Add($"Вы разрешили в Защитнике Windows: {allowed[0].Name}" + (allowed.Count > 1 ? $" и ещё {allowed.Count - 1}" : "") +
+                          ". Если не уверены в этом файле, отмените разрешение в «Безопасность Windows» → «Журнал защиты».");
         }
 
         return new SecurityCheckResult(SecurityCheckIds.Antivirus, status, state, string.Join("\n", lines));
@@ -613,6 +624,16 @@ public static partial class SecurityRules
         return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Ok, "Прокси не используется",
             "Браузеры подключаются к сайтам напрямую, без посредников.");
     }
+
+    /// <summary>
+    /// The proxy settings are still the ones the user confirmed (ProxyEnable, ProxyServer and AutoConfigURL, exact text).
+    /// "Отключить прокси" changes nothing otherwise.
+    /// </summary>
+    public static bool SameProxySettings(ProxyState current, ProxyState confirmed)
+        => current.Readable &&
+           current.Enabled == confirmed.Enabled &&
+           string.Equals(current.Server, confirmed.Server, StringComparison.Ordinal) &&
+           string.Equals(current.AutoConfigUrl, confirmed.AutoConfigUrl, StringComparison.Ordinal);
 
     // ===================== DNS =====================
 
