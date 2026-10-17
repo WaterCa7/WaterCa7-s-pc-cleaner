@@ -10,6 +10,8 @@
              d:DesignWidth="1000" d:DesignHeight="640">
 
     <UserControl.Resources>
+        <local:TrustedItemLabelConverter x:Key="TrustedLabel" />
+
         <!-- Accent icon in front of a card title -->
         <Style x:Key="SectionIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
             <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
@@ -335,10 +337,10 @@
                                         <ListBox x:Name="TrustedList" ItemsSource="{Binding TrustedItems}" SelectionMode="Extended" Margin="4">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
-                                                    <DockPanel ToolTip="{Binding}">
+                                                    <DockPanel ToolTip="{Binding Converter={StaticResource TrustedLabel}, ConverterParameter=ToolTip}">
                                                         <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE73E;"
                                                                    Foreground="{StaticResource AccentBrush}" Margin="0,0,9,0" />
-                                                        <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Converter={StaticResource TrustedLabel}}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                                     </DockPanel>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
@@ -645,7 +647,7 @@
                             <TextBlock Style="{StaticResource EmptyIcon}" Text="&#xE72E;" />
                             <TextBlock Style="{StaticResource H3}" HorizontalAlignment="Center" Text="Карантин пуст" Margin="0,0,0,6" />
                             <TextBlock Style="{StaticResource EmptyText}"
-                                       Text="Карантин — это защищённая папка для подозрительных файлов. Когда вы отправляете файл в карантин (в разделах «Процессы», «Автозагрузка» или «Безопасность»), он не удаляется, а переименовывается и переносится сюда, поэтому больше не может запуститься. Если файл окажется нужным, его можно будет вернуть отсюда одним нажатием." />
+                                       Text="Карантин — это защищённая папка для подозрительных файлов. Когда вы отправляете файл в карантин (кнопка «В карантин» в разделе «Процессы»), он не удаляется, а переименовывается и переносится сюда, поэтому больше не может запуститься. Если файл окажется нужным, его можно будет вернуть отсюда одним нажатием." />
                         </StackPanel>
                     </Grid>
                 </Border>

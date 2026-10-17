@@ -86,12 +86,6 @@ public sealed class BackupEntry
     }
 }
 
-/// <summary>
-/// What importing a .reg file would touch: the first key, whether every other key lies under it,
-/// and whether it deletes keys ("[-KEY]").
-/// </summary>
-internal sealed record RegFileInfo(string? RootKey, bool SingleRoot, bool DeletesKeys);
-
 /// <summary>Lists, describes and deletes files in %LOCALAPPDATA%\WaterCa7sPcCleaner\Backups.</summary>
 internal static class BackupCatalog
 {
@@ -248,44 +242,26 @@ internal static class BackupCatalog
     }
 
     /// <summary>
-    /// Reads every "[KEY]" / "[-KEY]" header of a .reg file to find out what an import would touch.
+    /// Parses a .reg file to find out exactly what an import would touch (every key and value).
     /// RegistryBackup exports always hold one key with its subkeys; anything else means the file was edited by hand.
     /// </summary>
-    public static RegFileInfo InspectRegFile(string path)
+    public static RegFileInfo InspectRegFile(string path) => ReadForRestore(path).Info;
+
+    /// <summary>
+    /// Reads the file once and parses those bytes. The restore imports exactly these bytes (from a private locked copy),
+    /// so what was checked and shown to the user is what Windows writes, even if the file changes in the meantime.
+    /// </summary>
+    public static (byte[]? Bytes, RegFileInfo Info) ReadForRestore(string path)
     {
-        string? root = null;
-        var singleRoot = true;
-        var deletesKeys = false;
-        try
+        var bytes = RegFileParser.ReadBytes(path, out var tooBig);
+        if (bytes is null)
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            while (reader.ReadLine() is { } raw)
+            return (null, new RegFileInfo(null, false, false)
             {
-                var line = raw.Trim().Trim('\0');
-                if (line.Length < 3 || line[0] != '[' || line[^1] != ']')
-                    continue;
-                var key = line[1..^1].Trim();
-                if (key.StartsWith('-'))
-                {
-                    deletesKeys = true;
-                    key = key[1..].Trim();
-                }
-                if (key.Length == 0)
-                    continue;
-                key = ShortHive(key);
-                if (root is null)
-                    root = key;
-                else if (!SettingsLogic.IsSameOrUnder(key, root))
-                    singleRoot = false;
-            }
+                Problem = tooBig ? "Файл копии слишком большой для копии одного раздела реестра." : null,
+            });
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Log.Warn($"Не удалось прочитать резервную копию {Path.GetFileName(path)}: {ex.Message}");
-            return new RegFileInfo(null, false, false);
-        }
-        return new RegFileInfo(root, root is not null && singleRoot, deletesKeys);
+        return (bytes, RegFileParser.Parse(bytes));
     }
 
     /// <summary>

@@ -93,9 +93,14 @@ public sealed partial class SettingsViewModel
 
         // Decide from the file itself (not from the list, which may fall back to the file name) what the import will
         // write: the current state of exactly that key is exported first, so the restore can be undone.
-        var reg = await Task.Run(() => BackupCatalog.InspectRegFile(backup.FullPath));
-        if (RestoreRefusal(reg) is { } refusal)
+        // The file is read once: the checks, the list of changes shown to the user and the import all use these bytes
+        // (imported from a private locked copy), so rewriting the file in the user-writable backups folder while the
+        // confirmation is open changes nothing.
+        var (bytes, reg) = await Task.Run(() => BackupCatalog.ReadForRestore(backup.FullPath));
+        var refusal = RestoreRefusal(reg) ?? (bytes is null ? "Не удалось прочитать файл копии." : null);
+        if (refusal is not null || bytes is null)
         {
+            refusal ??= "Не удалось прочитать файл копии.";
             Log.Warn($"Восстановление из {backup.FileName} отменено: {refusal}");
             Dialogs.Info("Восстановление из резервной копии", refusal + "\n\nРеестр не изменён.");
             return;
@@ -107,23 +112,34 @@ public sealed partial class SettingsViewModel
         if (needsAdmin && !ElevatedRestart.RequireElevation("Восстановить системный раздел реестра"))
             return;
 
-        var exists = await Task.Run(() => KeyExists(key));
-        var message =
-            $"Восстановить раздел реестра из резервной копии от {backup.TimeText}?\n\n" +
-            $"{title}\n{key}\n\n" +
-            (backup.HasDescription ? $"Копия сделана перед действием: {backup.Description}\n\n" : "") +
-            "Что произойдёт:\n" +
-            "• значения, сохранённые в копии, будут заново записаны в реестр (то, что было изменено или удалено, вернётся);\n" +
-            "• значения, появившиеся позже, останутся как есть;\n" +
-            (exists
-                ? "• перед этим текущее состояние раздела сохранится в новую резервную копию — так восстановление можно отменить."
-                : "• сейчас этого раздела в реестре нет — он будет создан заново из копии.");
+        // Read-only: compare every value in the copy with the registry, so the confirmation lists the real data
+        // (and singles out values that start programs) instead of only a key name.
+        var (exists, plan) = await Task.Run(() => (KeyExists(key), RegRestorePlan.Build(reg, RegRestorePlan.ReadCurrent)));
+        if (exists && plan.ChangesNothing)
+        {
+            Dialogs.Info("Восстановление из резервной копии",
+                $"{RegRestorePlan.Visible(title, 120)}\n{RegRestorePlan.Visible(key, 200)}\n\n" +
+                $"Все значения в копии от {backup.TimeText} совпадают с текущими — восстанавливать нечего. Реестр не изменён.");
+            return;
+        }
+        if (plan.IsTruncated)
+            Log.Info($"Восстановление из {backup.FileName} изменит: {plan.DescribeAll()}");
+
+        var message = RestoreConfirmation(backup.TimeText, backup.Description, key, title, exists, plan);
         if (!Dialogs.Confirm("Восстановление из резервной копии", message))
             return;
 
         string? resultMessage = null;
         await RunBusyAsync("Восстановление раздела реестра…", async ct =>
         {
+            using var copy = await Task.Run(() => LockedRegCopy.Create(bytes, backup.FileName), ct);
+            if (copy is null)
+            {
+                resultMessage = "Не удалось подготовить файл копии к восстановлению, поэтому восстановление отменено — " +
+                                "реестр не изменён. Подробности во вкладке «Журнал».";
+                return;
+            }
+
             // Back up the current state first (if the key exists at all — after a deletion it usually doesn't).
             if (exists)
             {
@@ -136,12 +152,14 @@ public sealed partial class SettingsViewModel
                 }
             }
 
-            var ok = await RegistryBackup.ImportAsync(backup.FullPath, ct);
+            var ok = await RegistryBackup.ImportAsync(copy.FilePath, ct);
             if (ok)
             {
-                // RegistryBackup.ImportAsync has already logged the action with the file name; add the readable key.
-                Log.Info($"Раздел реестра восстановлен из резервной копии от {backup.TimeText}: {key}");
-                resultMessage = $"Готово: раздел «{title}» восстановлен из копии от {backup.TimeText}.\n\n" +
+                // RegistryBackup.ImportAsync has already logged the action with the file name; add the key and the values.
+                var changes = plan.DescribeAll();
+                Log.Info($"Раздел реестра восстановлен из резервной копии от {backup.TimeText}: {key}" +
+                         (changes.Length > 0 ? $". Записано: {changes}" : ""));
+                resultMessage = $"Готово: раздел «{RegRestorePlan.Visible(title, 120)}» восстановлен из копии от {backup.TimeText}.\n\n" +
                                 "Некоторые изменения вступят в силу после перезапуска программ или перезагрузки компьютера.";
             }
             else
@@ -161,6 +179,8 @@ public sealed partial class SettingsViewModel
     /// </summary>
     internal static string? RestoreRefusal(RegFileInfo reg)
     {
+        if (reg.Problem is not null)
+            return reg.Problem + " Программа восстанавливает только собственные копии, сохранённые без изменений.";
         if (reg.RootKey is null)
             return "Не удалось прочитать раздел реестра из файла копии — возможно, файл повреждён.";
         if (!reg.SingleRoot)
@@ -169,7 +189,38 @@ public sealed partial class SettingsViewModel
         if (reg.DeletesKeys)
             return "Файл копии удаляет разделы реестра — похоже, его изменили вручную. " +
                    "Программа восстанавливает только собственные копии.";
+        if (reg.DeletesValues)
+            return "Файл копии удаляет значения реестра — похоже, его изменили вручную. " +
+                   "Программа восстанавливает только собственные копии.";
         return null;
+    }
+
+    /// <summary>
+    /// Text of the restore confirmation: the key, then every value that starts a program (the backups folder is
+    /// writable by any program running as the user, so these are shown first and in full), then the other changes.
+    /// Everything taken from the files is escaped, so it cannot fake extra lines.
+    /// </summary>
+    internal static string RestoreConfirmation(string timeText, string? description, string key, string title, bool exists,
+        RegRestorePlan plan)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("Восстановить раздел реестра из резервной копии от ").Append(timeText).Append("?\n\n")
+          .Append(RegRestorePlan.Visible(title, 120)).Append('\n')
+          .Append(RegRestorePlan.Visible(key, 200)).Append("\n\n");
+        if (!string.IsNullOrWhiteSpace(description))
+            sb.Append("Копия сделана перед действием: ").Append(RegRestorePlan.OneLine(description, 200)).Append("\n\n");
+        if (plan.DescribeLaunchValues() is { } launch)
+            sb.Append(launch).Append("\n\n");
+        if (plan.DescribeChanges() is { Length: > 0 } changes)
+            sb.Append(changes).Append("\n\n");
+        sb.Append("Что произойдёт:\n")
+          .Append("• значения из копии будут заново записаны в реестр, а значения, появившиеся позже, останутся как есть;\n")
+          .Append(exists
+              ? "• перед этим текущее состояние раздела сохранится в новую резервную копию — так восстановление можно отменить."
+              : "• сейчас этого раздела в реестре нет — он будет создан заново из копии.");
+        if (plan.IsTruncated)
+            sb.Append("\n• полный список изменений записан во вкладку «Журнал» — нажмите «Нет», чтобы сначала просмотреть его.");
+        return sb.ToString();
     }
 
     /// <summary>
