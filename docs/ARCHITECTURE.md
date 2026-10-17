@@ -10,9 +10,16 @@ src/PcCleaner/
   MainViewModel.cs      список страниц и навигация (INavigator)
   Themes/Theme.xaml     тёмная тема и стили всех стандартных контролов
   Core/                 общие сервисы (см. ниже)
+  Core/Updates/         автообновление: подписанный update.json релиза → скачивание → замена exe при запуске
   Modules/<Key>/        один раздел приложения = Service + ViewModel + View
-tests/PcCleaner.Tests/  xUnit-тесты (Core/ и <Key>/)
+tests/PcCleaner.Tests/  xUnit-тесты (Core/, Updates/ и <Key>/)
+tools/                  make-icon.ps1 (иконка), make-update-manifest.ps1 (update.json + подпись в CI),
+                        update-signing-public.pem (открытый ключ подписи обновлений)
 ```
+
+Выпуск релиза: версия в `PcCleaner.csproj` + `docs/release-notes/<версия>.md`, затем тег `v<версия>` —
+workflow `release.yml` соберёт exe, подпишет `update.json` ключом из секрета `UPDATE_SIGNING_KEY` и опубликует релиз.
+Подробности — `docs/superpowers/specs/2026-10-17-auto-update-design.md`.
 
 ## Модули
 
