@@ -34,9 +34,12 @@ public sealed class NetworkService : IHealthContributor
 
     public TrafficSample SampleTraffic() => NetworkProbes.SampleTraffic();
 
+    /// <summary>Windows Firewall state of the connected networks (WMI, read-only).</summary>
+    public Task<FirewallReport> ReadFirewallAsync(CancellationToken ct = default) => Task.Run(NetworkProbes.ReadFirewall, ct);
+
     /// <summary>
-    /// Read-only analysis (≈ 3–12 s): adapters, a 2-second traffic sample, latency, DNS, Wi-Fi and the socket tables,
-    /// all in parallel. Parts that fail are skipped with a warning.
+    /// Read-only analysis (≈ 3–12 s): adapters, a 2-second traffic sample, latency, DNS, Wi-Fi, the socket tables and
+    /// the firewall state, all in parallel. Parts that fail are skipped with a warning.
     /// </summary>
     public async Task<IReadOnlyList<HealthIssue>> AnalyzeAsync(CancellationToken ct)
     {
@@ -50,7 +53,8 @@ public sealed class NetworkService : IHealthContributor
         var dns = Safe("DNS", () => MeasureDnsAsync(token), token);
         var wifi = Safe("Wi-Fi", () => ReadWifiAsync(adapters, token), token);
         var sockets = Safe("соединения", () => ReadSocketsAsync(token), token);
-        await Task.WhenAll(upload, latency, dns, wifi, sockets).ConfigureAwait(false);
+        var firewall = Safe("брандмауэр", () => ReadFirewallAsync(token), token);
+        await Task.WhenAll(upload, latency, dns, wifi, sockets, firewall).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
 
         var snapshot = new NetworkSnapshot
@@ -61,6 +65,7 @@ public sealed class NetworkService : IHealthContributor
             Wifi = wifi.Result,
             Sockets = sockets.Result,
             UploadBytesPerSecond = upload.Result,
+            Firewall = firewall.Result,
         };
         return NetworkRules.BuildIssues(snapshot);
     }
@@ -156,6 +161,21 @@ public sealed class NetworkService : IHealthContributor
             return (false, "Для сброса сетевых настроек нужны права администратора — ничего не изменено.");
 
         var netsh = Path.Combine(Environment.SystemDirectory, "netsh.exe");
+        return await ResetStepsAsync((args, token) => RunToolAsync(netsh, args, ResetStepTimeout, token), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Only a netsh that hangs this long is stopped (it normally finishes within seconds).</summary>
+    private static readonly TimeSpan ResetStepTimeout = TimeSpan.FromMinutes(3);
+
+    /// <summary>
+    /// Runs the reset commands one by one. A started netsh is never stopped by "Отмена": it rewrites the network
+    /// configuration in the registry, and killing it halfway could leave that half-written (DISM and SMBv1 changes are
+    /// guarded the same way). Cancelling only skips the commands that have not started yet, and the message then says what
+    /// was already reset and that a reboot is needed. Cancelled before the first command → nothing changed, throws.
+    /// </summary>
+    internal static async Task<(bool Ok, string Message)> ResetStepsAsync(
+        Func<string, CancellationToken, Task<(bool Ok, string Output, int ExitCode)>> run, CancellationToken ct)
+    {
         var steps = new (string Args, string Title)[]
         {
             ("winsock reset", "каталог Winsock сброшен (netsh winsock reset)"),
@@ -164,8 +184,17 @@ public sealed class NetworkService : IHealthContributor
         var done = new List<string>();
         foreach (var (args, title) in steps)
         {
-            ct.ThrowIfCancellationRequested();
-            var (ok, output, exitCode) = await RunToolAsync(netsh, args, TimeSpan.FromMinutes(1), ct).ConfigureAwait(false);
+            if (ct.IsCancellationRequested)
+            {
+                if (done.Count == 0)
+                    ct.ThrowIfCancellationRequested(); // nothing was changed
+                Log.Action($"Сеть: сброс сетевых настроек остановлен пользователем, выполнено: {string.Join("; ", done)}");
+                return (false, "Сброс остановлен по вашей команде. Выполнено: " + string.Join("; ", done) +
+                               $". Команда «netsh {args}» не запускалась. Перезагрузите компьютер — уже сброшенные параметры начнут " +
+                               "действовать после перезагрузки. Если после неё интернет не заработает, запустите сброс ещё раз.");
+            }
+            // CancellationToken.None: see above — a running netsh is always allowed to finish.
+            var (ok, output, exitCode) = await run(args, CancellationToken.None).ConfigureAwait(false);
             if (ok)
             {
                 Log.Action($"Сеть: {title}");

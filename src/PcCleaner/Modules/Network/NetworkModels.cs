@@ -204,8 +204,20 @@ public sealed record ProcessIdentity(int Pid, string Name, string? Path, string 
 /// <summary>TCP/UDP tables with process owners.</summary>
 public sealed record SocketSnapshot(IReadOnlyList<SocketEntry> Entries, IReadOnlyDictionary<int, ProcessIdentity> Processes, DateTime Time)
 {
+    private static readonly IReadOnlyDictionary<string, string> NoWarnings = new Dictionary<string, string>();
+
+    /// <summary>
+    /// Executable path → why the program itself looks unusual (no signature, runs from Temp…). Only filled for programs
+    /// with a connection to an unusual port, so a port alone never makes a connection look dangerous.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ProgramWarnings { get; init; } = NoWarnings;
+
     public ProcessIdentity Owner(int pid)
         => Processes.TryGetValue(pid, out var p) ? p : new ProcessIdentity(pid, $"PID {pid}", null, $"Процесс {pid}", false, true);
+
+    /// <summary>Why the program looks unusual (see <see cref="ProgramWarnings"/>), null if nothing is known against it.</summary>
+    public string? ProgramWarning(ProcessIdentity process)
+        => process.Path is { } path && ProgramWarnings.TryGetValue(path, out var warning) ? warning : null;
 }
 
 /// <summary>An established (or opening/closing) TCP connection to another computer.</summary>
@@ -221,10 +233,19 @@ public sealed record ConnectionRow
     /// <summary>What the remote port usually means if it is a red flag (botnets, miners, Tor), otherwise null.</summary>
     public string? SuspiciousReason { get; init; }
 
+    /// <summary>Why the program itself looks unusual (only for suspicious connections), see <see cref="SocketSnapshot.ProgramWarnings"/>.</summary>
+    public string? ProgramWarning { get; init; }
+
     /// <summary>How many identical connections (same program, address, port and state) this row stands for.</summary>
     public int Count { get; init; } = 1;
 
     public bool IsSuspicious => SuspiciousReason is not null;
+
+    /// <summary>
+    /// A second sign agrees with the unusual port: a port that ordinary programs practically never use, or a program that
+    /// looks unusual itself. Only then is the connection treated as dangerous.
+    /// </summary>
+    public bool IsHighRisk => IsSuspicious && (NetworkRules.IsStrongSuspiciousPort(RemotePort) || ProgramWarning is not null);
 }
 
 public enum PortKind
@@ -264,6 +285,21 @@ public enum AddressScope
     Public,
 }
 
+/// <summary>A network the computer is connected to and its Windows profile ("Private", "Public" or "Domain").</summary>
+public sealed record ConnectedNetwork(string Name, string Profile);
+
+/// <summary>Windows Firewall state for the networks the computer is connected to (read-only).</summary>
+public sealed record FirewallReport
+{
+    /// <summary>An enabled third-party firewall (Kaspersky, ESET…): the Windows Firewall state does not matter then.</summary>
+    public string? ThirdPartyFirewall { get; init; }
+
+    /// <summary>Profile name ("Domain"/"Private"/"Public") → enabled (null = unknown); Group Policy already applied.</summary>
+    public IReadOnlyDictionary<string, bool?> Profiles { get; init; } = new Dictionary<string, bool?>();
+
+    public IReadOnlyList<ConnectedNetwork> Networks { get; init; } = Array.Empty<ConnectedNetwork>();
+}
+
 /// <summary>Everything the analysis looks at. Every part is optional (null = not measured / failed).</summary>
 public sealed record NetworkSnapshot
 {
@@ -275,4 +311,6 @@ public sealed record NetworkSnapshot
 
     /// <summary>Average upload of physical adapters during a short sample, bytes/s.</summary>
     public double? UploadBytesPerSecond { get; init; }
+
+    public FirewallReport? Firewall { get; init; }
 }

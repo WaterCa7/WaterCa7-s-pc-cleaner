@@ -215,6 +215,11 @@ public sealed class FindingItem
 {
     public required HealthIssue Issue { get; init; }
     public IssueSeverity Severity => Issue.Severity;
+
+    /// <summary>Badge text ("Мелочь", "Внимание", "Важно"…): a bare "Низко" before "Высокая задержка" read as a contradiction.</summary>
+    public string SeverityText => NetworkRules.SeverityText(Issue.Severity);
+
+    public string SeverityToolTip => NetworkRules.SeverityToolTip(Issue.Severity);
     public string Title => Issue.Title;
     public string Details => Issue.Details;
     public string? ActionText { get; init; }
@@ -253,6 +258,19 @@ public abstract class ConnectionListItem : ObservableObject
     public abstract string CountToolTip { get; }
     public abstract bool HasCount { get; }
     public abstract bool IsSuspicious { get; }
+
+    /// <summary>The unusual port is not the only sign (see <see cref="ConnectionRow.IsHighRisk"/>): red badge.</summary>
+    public abstract bool IsHighRisk { get; }
+
+    /// <summary>"Необычный порт" (the port alone proves nothing) or "Подозрительно" (a second sign agrees).</summary>
+    public string SuspiciousBadgeText => IsHighRisk ? "Подозрительно" : NetworkRules.UnusualPortText;
+
+    public string SuspiciousBadgeToolTip => IsHighRisk
+        ? "Соединение с портом, который используют вирусы, майнеры и инструменты взлома, и есть ещё признаки — подробности " +
+          "в подсказке строки. Проверьте программу в разделе «Процессы»."
+        : "Соединение с портом, который часто используют вирусы, майнеры или Tor, но иногда и обычные игры и чаты. " +
+          "Если вы знаете эту программу — всё в порядке.";
+
     public abstract string ToolTip { get; }
     public abstract string CopyText { get; }
 }
@@ -268,6 +286,7 @@ public sealed class ConnectionGroupItem : ConnectionListItem
         Process = children[0].Process;
         Count = children.Sum(c => c.Count);
         Suspicious = children.Any(c => c.IsSuspicious);
+        HighRisk = children.Any(c => c.IsHighRisk);
         var established = children.Where(c => c.IsEstablished).Sum(c => c.Count);
         var opening = Count - established;
         StateText = established > 0 ? "Установлено" : "Подключается";
@@ -294,6 +313,7 @@ public sealed class ConnectionGroupItem : ConnectionListItem
     /// <summary>All connections of the program (identical ones counted separately).</summary>
     public int Count { get; }
     public bool Suspicious { get; }
+    public bool HighRisk { get; }
     public override string PrimaryText => Process.DisplayName;
     public override string SecondaryText => Process.Name;
     public override string HostText { get; }
@@ -304,6 +324,7 @@ public sealed class ConnectionGroupItem : ConnectionListItem
     public override string CountToolTip => $"У программы {Format.Count(Count, "соединение", "соединения", "соединений")}";
     public override bool HasCount => true;
     public override bool IsSuspicious => Suspicious;
+    public override bool IsHighRisk => HighRisk;
 
     /// <summary>Raised when the user expands/collapses the program (the list is rebuilt).</summary>
     public event Action<ConnectionGroupItem>? ExpandedChanged;
@@ -324,7 +345,7 @@ public sealed class ConnectionGroupItem : ConnectionListItem
     public override string ToolTip =>
         $"{Process.DisplayName} ({Process.Name}, PID {Process.Pid})" + (Process.Path is null ? "" : $"\n{Process.Path}") +
         $"\n{Format.Count(Count, "соединение", "соединения", "соединений")}" +
-        (Suspicious ? "\n\nЕсть соединения с подозрительными портами — раскройте строку." : "");
+        (Suspicious ? "\n\nЕсть соединения с необычными портами — раскройте строку." : "");
 
     public override string CopyText =>
         $"{Process.Name} (PID {Process.Pid}): {Format.Count(Count, "соединение", "соединения", "соединений")}\n" +
@@ -380,6 +401,7 @@ public sealed class ConnectionItem : ConnectionListItem
     public bool IsEstablished => Row.State == TcpState.Established;
     public bool IsPublic => Row.Scope == AddressScope.Public;
     public override bool IsSuspicious => Row.IsSuspicious;
+    public override bool IsHighRisk => Row.IsHighRisk;
 
     /// <summary>Address sort key: IPv4 before IPv6, numeric order.</summary>
     public string RemoteSortKey => string.Concat(Row.RemoteAddress.GetAddressBytes().Select(b => b.ToString("X2"))).PadLeft(32, '0') +
@@ -396,7 +418,8 @@ public sealed class ConnectionItem : ConnectionListItem
         (Row.Count > 1
             ? $"{Format.Count(Row.Count, "одинаковое соединение", "одинаковых соединения", "одинаковых соединений")} · {StateText}"
             : $"Локальный порт: {Row.LocalPort} · {StateText}") +
-        (Row.SuspiciousReason is null ? "" : $"\n\nПорт {Row.RemotePort} — {Row.SuspiciousReason}.");
+        (Row.SuspiciousReason is null ? "" : $"\n\nПорт {Row.RemotePort} — {Row.SuspiciousReason}.") +
+        (Row.ProgramWarning is null ? "" : $"\nСама программа: {Row.ProgramWarning}.");
 
     /// <summary>Reverse DNS name of the remote address (<see cref="PendingHost"/> while resolving, <see cref="NoHost"/> if it has none).</summary>
     public string HostName
