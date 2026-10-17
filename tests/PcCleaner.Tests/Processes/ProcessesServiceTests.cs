@@ -412,6 +412,72 @@ public class ProcessKillTests
     }
 
     [Fact]
+    public async Task Quarantine_CancelledAfterTheKill_SaysTheProgramWasClosedButTheFileStayed()
+    {
+        // "Отмена" while the file is still locked after the processes were terminated: it used to end silently (the
+        // cancellation escaped and no dialog said that the program was closed while its file stayed in place).
+        var dir = TestEnvironment.NewTempDir("quarantine-cancel");
+        var exe = Path.Combine(dir, "unsigned-cancel-tool.exe");
+        File.Copy(Path.Combine(Environment.SystemDirectory, "PING.EXE"), exe);
+        var ping = StartPing(exe);
+        using var cts = new CancellationTokenSource();
+        ping.EnableRaisingEvents = true;
+        ping.Exited += (_, _) =>
+        {
+            try
+            {
+                cts.Cancel(); // the user presses "Отмена" right after the kill
+            }
+            catch (ObjectDisposedException)
+            {
+                // the test is already over
+            }
+        };
+        try
+        {
+            var target = new KillTarget(ping.Id, ping.StartTime.ToFileTime(), "unsigned-cancel-tool.exe", exe);
+            // Keeps the file from being moved (no delete sharing), like a file that stays locked after the exit.
+            using (new FileStream(exe, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                var service = new ProcessesService(new NativeProcessSource(), new FakeDetails(),
+                    _ => new SignatureInfo(SignatureStatus.Unsigned, null), canMoveFile: _ => true);
+                var outcome = await service.QuarantineAsync(exe, new[] { target }, "тест", cts.Token);
+
+                Assert.False(outcome.Success);
+                Assert.True(outcome.Cancelled);
+                Assert.Single(outcome.Report.Killed);
+                Assert.Contains("отменена", outcome.Message);
+                Assert.Contains("уже завершена", outcome.Message);
+                Assert.Contains(exe, outcome.Message);
+            }
+            Assert.True(ping.WaitForExit(5000));
+            Assert.True(File.Exists(exe)); // not moved
+            Assert.DoesNotContain(Quarantine.List(), q => string.Equals(q.OriginalPath, exe, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Cleanup(ping);
+        }
+    }
+
+    [Fact]
+    public void CancelledAfterKillMessage_NamesWhatHappened()
+    {
+        var report = new KillReport();
+        report.Killed.Add(new KillTarget(1, 1, "tool.exe", @"C:\Tools\tool.exe"));
+        report.Killed.Add(new KillTarget(2, 2, "tool.exe", @"C:\Tools\tool.exe"));
+        var message = ProcessesService.CancelledAfterKillMessage(@"C:\Tools\tool.exe", report);
+        Assert.StartsWith("Операция отменена.", message);
+        Assert.Contains("Программа уже завершена (2 процесса)", message);
+        Assert.Contains(@"C:\Tools\tool.exe", message);
+
+        // Nothing was running any more: don't claim that something was terminated.
+        var none = ProcessesService.CancelledAfterKillMessage(@"C:\Tools\tool.exe", new KillReport());
+        Assert.DoesNotContain("завершена", none);
+        Assert.Contains("не перемещён в карантин", none);
+    }
+
+    [Fact]
     public void MoveProbe_IsReadOnlyAndDetectsMissingRights()
     {
         var dir = TestEnvironment.NewTempDir("probe");
@@ -479,6 +545,22 @@ public class ProcessRealSystemTests
             Assert.Equal("Processes", i.TargetPageKey);
             Assert.False(string.IsNullOrWhiteSpace(i.Details));
         });
+    }
+
+    [Fact]
+    public void WmiServices_FilteredByPid_ReturnOnlyThatProcessesServices()
+    {
+        var provider = new WmiDetailsProvider();
+        var all = provider.QueryServices(null);
+        _output.WriteLine($"{all.Count} running services");
+        if (all.Count == 0)
+            return; // WMI unavailable here: nothing to compare
+        var host = all.GroupBy(s => s.Pid).OrderByDescending(g => g.Count()).First();
+        var filtered = provider.QueryServices(new[] { host.Key });
+        Assert.NotEmpty(filtered);
+        Assert.All(filtered, s => Assert.Equal(host.Key, s.Pid));
+        // Services can start or stop in between: compare only what both answers know about.
+        Assert.Contains(filtered, s => host.Any(h => string.Equals(h.Name, s.Name, StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]

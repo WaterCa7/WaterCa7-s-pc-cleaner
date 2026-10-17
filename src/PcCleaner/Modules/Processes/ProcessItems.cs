@@ -346,6 +346,18 @@ public abstract class ProcessItem : ObservableObject
         _ => "Ничего подозрительного не найдено.",
     };
 
+    /// <summary>Tooltip of the status icon on a narrow list: the badge's caption plus its explanation (null when clean).</summary>
+    public string? StatusIconToolTip
+    {
+        get
+        {
+            if (StatusText is not { Length: > 0 } text)
+                return null;
+            var caption = char.ToUpper(text[0], System.Globalization.CultureInfo.CurrentCulture) + text[1..];
+            return caption + (caption.EndsWith('…') ? " " : ". ") + StatusToolTip;
+        }
+    }
+
     /// <summary>Sort order for the "Оценка" column (risk first when descending).</summary>
     internal int StatusRank => StatusKind switch
     {
@@ -491,6 +503,7 @@ public abstract class ProcessItem : ObservableObject
         OnPropertyChanged(nameof(StatusKind));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(StatusToolTip));
+        OnPropertyChanged(nameof(StatusIconToolTip));
     }
 }
 

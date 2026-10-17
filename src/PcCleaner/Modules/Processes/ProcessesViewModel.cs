@@ -26,6 +26,8 @@ public sealed class ProcessesViewModel : PageViewModel
     private bool _refreshing;
     private bool _loadedOnce;
     private bool _isActive;
+    private bool _liveRefresh;
+    private bool _windowHidden;
     private bool _detailsRunning;
     private int _detailsDirty;
     private bool _syncingItems;
@@ -456,6 +458,7 @@ public sealed class ProcessesViewModel : PageViewModel
 
     private void StartTimer()
     {
+        _liveRefresh = true;
         if (Application.Current is null)
             return; // unit tests
         if (_timer is null)
@@ -466,11 +469,34 @@ public sealed class ProcessesViewModel : PageViewModel
         _timer.Start();
     }
 
-    private void StopTimer() => _timer?.Stop();
+    private void StopTimer()
+    {
+        _liveRefresh = false;
+        _timer?.Stop();
+    }
+
+    /// <summary>
+    /// The live refresh is on and its result can be seen: the page is open, not paused, and the window is neither
+    /// minimized nor hidden. Otherwise every new process would still cost a WMI query and signature checks for nothing.
+    /// </summary>
+    internal bool IsLiveRefreshDue => _liveRefresh && _isActive && !IsPaused && !_windowHidden;
+
+    /// <summary>
+    /// Called by the view when the main window is minimized/hidden or shown again. While hidden the live refresh skips
+    /// its ticks; when the window comes back the list is refreshed at once instead of showing stale numbers.
+    /// </summary>
+    internal void SetWindowHidden(bool hidden)
+    {
+        if (_windowHidden == hidden)
+            return;
+        _windowHidden = hidden;
+        if (!hidden && IsLiveRefreshDue)
+            _ = SafeRefreshAsync();
+    }
 
     private async void OnTimerTick(object? sender, EventArgs e)
     {
-        if (IsPaused || !_isActive || _refreshing)
+        if (!IsLiveRefreshDue || _refreshing)
             return;
         await SafeRefreshAsync();
     }
@@ -1181,6 +1207,8 @@ public sealed class ProcessesViewModel : PageViewModel
                 "там может остаться запись о её запуске.");
         else if (outcome.NeedsElevation)
             Admin.RequireElevation($"Помещение «{item.ExeName}» в карантин");
+        else if (outcome.Cancelled)
+            Dialogs.Info("Карантин отменён", outcome.Message);
         else
             Dialogs.Error("Карантин", outcome.Message);
         await SafeRefreshAsync();
@@ -1289,6 +1317,8 @@ public sealed class ProcessesViewModel : PageViewModel
     }
 
     // ================================================================ test hooks
+
+    internal bool IsRefreshing => _refreshing;
 
     internal IReadOnlyCollection<ProcessRow> Rows
     {

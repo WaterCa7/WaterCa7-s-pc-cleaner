@@ -167,6 +167,39 @@ public class ProcessesViewModelTests
     }
 
     [Fact]
+    public async Task NewProcesses_AskWmiOnlyAboutTheirOwnServices()
+    {
+        // Every live refresh that saw a new process used to enumerate all services of the system.
+        var (vm, source, clock, details) = await LoadAsync();
+        Assert.NotEmpty(details.ServiceQueries);
+        Assert.All(details.ServiceQueries, q => Assert.NotNull(q)); // a handful of processes: always filtered
+        Assert.Contains(details.ServiceQueries, q => q!.Contains(201));
+
+        details.ServiceQueries.Clear();
+        source.Add(400, "svchost.exe", null, memory: 5_000_000);
+        details.Services.Add(new WmiServiceRow(400, "BITS", "Фоновая интеллектуальная служба передачи (BITS)",
+            SvchostPath + " -k netsvcs"));
+        clock.Advance(TimeSpan.FromSeconds(2));
+        await vm.RefreshAsync();
+        await vm.WaitForBackgroundAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { 400 }, Assert.Single(details.ServiceQueries));
+        var row = vm.Rows.Single(r => r.Pid == 400);
+        Assert.Equal(SvchostPath, row.Path);
+        Assert.Equal(new[] { "Фоновая интеллектуальная служба передачи (BITS)" }, row.Services);
+    }
+
+    [Fact]
+    public void WmiPidFilter_NamesEachPid_OrNothingWhenThereAreTooMany()
+    {
+        Assert.Equal("ProcessId = 7 OR ProcessId = 1234", WmiDetailsProvider.PidFilter(new[] { 7, 1234 }));
+        Assert.Null(WmiDetailsProvider.PidFilter(null));
+        Assert.Null(WmiDetailsProvider.PidFilter(Array.Empty<int>()));
+        Assert.Null(WmiDetailsProvider.PidFilter(Enumerable.Range(1, WmiDetailsProvider.MaxFilteredPids + 1).ToList()));
+        Assert.NotNull(WmiDetailsProvider.PidFilter(Enumerable.Range(1, WmiDetailsProvider.MaxFilteredPids).ToList()));
+    }
+
+    [Fact]
     public async Task Refresh_UpdatesRowsInPlace_AddsAndRemoves()
     {
         var (vm, source, clock, _) = await LoadAsync();
@@ -334,6 +367,73 @@ public class ProcessesViewModelTests
         {
             settings.RemoveTrusted(path);
         }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string what)
+    {
+        for (var i = 0; i < 200 && !condition(); i++)
+            await Task.Delay(25);
+        Assert.True(condition(), what);
+    }
+
+    [Fact]
+    public async Task LiveRefresh_RestsWhileTheWindowIsMinimized_AndCatchesUpWhenItIsBack()
+    {
+        var (service, source, details, clock) = CreateService();
+        AddTypicalProcesses(source);
+        var vm = new ProcessesViewModel(service) { BaselineDelay = TimeSpan.Zero };
+        await vm.OnNavigatedToAsync();
+        await WaitUntilAsync(() => vm.HasLoaded && !vm.IsBusy, "first load");
+        Assert.True(vm.IsLiveRefreshDue);
+
+        // Minimized: the 2-second ticks do nothing, so new processes cost no WMI queries or signature checks.
+        vm.SetWindowHidden(true);
+        Assert.False(vm.IsLiveRefreshDue);
+        var queries = details.ProcessQueries;
+        source.Add(600, "helper.exe", @"C:\Apps\helper.exe");
+
+        // Restored: refreshed at once (not after the next tick), including the new process's details.
+        clock.Advance(TimeSpan.FromSeconds(30));
+        vm.SetWindowHidden(false);
+        Assert.True(vm.IsLiveRefreshDue);
+        await WaitUntilAsync(() => vm.Rows.Any(r => r.Pid == 600) && !vm.IsRefreshing, "refresh after restore");
+        await vm.WaitForBackgroundAsync(CancellationToken.None);
+        Assert.True(details.ProcessQueries > queries);
+
+        // Paused by the user or another page open: restoring the window does not refresh.
+        vm.IsPaused = true;
+        vm.SetWindowHidden(true);
+        source.Add(601, "other.exe", @"C:\Apps\other.exe");
+        vm.SetWindowHidden(false);
+        Assert.False(vm.IsLiveRefreshDue);
+        vm.IsPaused = false; // un-pausing refreshes by itself
+        await WaitUntilAsync(() => vm.Rows.Any(r => r.Pid == 601) && !vm.IsRefreshing, "refresh after un-pausing");
+
+        vm.OnNavigatedFrom();
+        vm.SetWindowHidden(true);
+        source.Add(602, "late.exe", @"C:\Apps\late.exe");
+        vm.SetWindowHidden(false);
+        Assert.False(vm.IsLiveRefreshDue);
+        await Task.Delay(200);
+        Assert.DoesNotContain(vm.Rows, r => r.Pid == 602);
+    }
+
+    [Fact]
+    public void StatusIconToolTip_NamesTheStatus()
+    {
+        var low = Row(1, "b.exe", @"C:\Apps\b.exe", new SignatureInfo(SignatureStatus.Unsigned, null),
+            new SuspicionResult(20, new[] { "Нет цифровой подписи" }));
+        Assert.StartsWith("Внимание. ", low.StatusIconToolTip);
+
+        var pending = Row(2, "c.exe", @"C:\Apps\c.exe", signature: null, suspicion: null);
+        pending.Suspicion = null;
+        Assert.StartsWith("Проверка… ", pending.StatusIconToolTip);
+
+        var noAccess = Row(3, "mystery.exe", null);
+        Assert.StartsWith("Нет доступа. ", noAccess.StatusIconToolTip);
+
+        var clean = Row(4, "a.exe", @"C:\Apps\a.exe", new SignatureInfo(SignatureStatus.Valid, "Vendor"));
+        Assert.Null(clean.StatusIconToolTip);
     }
 
     [Fact]

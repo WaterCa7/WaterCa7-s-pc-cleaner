@@ -122,6 +122,47 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <!-- Narrow list: the same status as a coloured icon (the tooltip names it), so the name column gets the room -->
+        <DataTemplate x:Key="StatusIcon" DataType="{x:Type local:ProcessItem}">
+            <TextBlock x:Name="I" Style="{StaticResource Icon}" FontSize="14" Foreground="{StaticResource MutedBrush}"
+                       Background="Transparent" ToolTip="{Binding StatusIconToolTip}" Visibility="Collapsed" />
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.High}">
+                    <Setter TargetName="I" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="I" Property="Text" Value="&#xE7BA;" />
+                    <Setter TargetName="I" Property="Foreground" Value="{StaticResource DangerBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Medium}">
+                    <Setter TargetName="I" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="I" Property="Text" Value="&#xE7BA;" />
+                    <Setter TargetName="I" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Low}">
+                    <Setter TargetName="I" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="I" Property="Text" Value="&#xE946;" />
+                    <Setter TargetName="I" Property="Foreground" Value="{StaticResource InfoBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Trusted}">
+                    <Setter TargetName="I" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="I" Property="Text" Value="&#xE8FB;" />
+                    <Setter TargetName="I" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Own}">
+                    <Setter TargetName="I" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="I" Property="Text" Value="&#xE946;" />
+                    <Setter TargetName="I" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.Pending}">
+                    <Setter TargetName="I" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="I" Property="Text" Value="&#xE712;" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="{x:Static local:ProcessStatusKind.NoAccess}">
+                    <Setter TargetName="I" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="I" Property="Text" Value="&#xE72E;" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <Style x:Key="InlineLink" TargetType="Hyperlink">
             <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
             <Setter Property="TextDecorations" Value="{x:Null}" />
@@ -500,10 +541,17 @@
                                 </DataGridTextColumn.Header>
                             </DataGridTextColumn>
 
-                            <DataGridTemplateColumn SortMemberPath="Status" Width="122" CellTemplate="{StaticResource StatusBadge}">
+                            <!-- On a narrow list the badge becomes an icon (OnGridSizeChanged) -->
+                            <DataGridTemplateColumn x:Name="StatusColumn" SortMemberPath="Status" Width="122"
+                                                    CellTemplate="{StaticResource StatusBadge}">
                                 <DataGridTemplateColumn.Header>
-                                    <TextBlock Text="Оценка"
-                                               ToolTip="Проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор." />
+                                    <Grid>
+                                        <TextBlock x:Name="StatusHeaderText" Text="Оценка"
+                                                   ToolTip="Проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор." />
+                                        <TextBlock x:Name="StatusHeaderIcon" Style="{StaticResource Icon}" Text="&#xE730;" FontSize="13"
+                                                   Background="Transparent" Visibility="Collapsed"
+                                                   ToolTip="Оценка — проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор." />
+                                    </Grid>
                                 </DataGridTemplateColumn.Header>
                             </DataGridTemplateColumn>
                         </DataGrid.Columns>

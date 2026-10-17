@@ -124,7 +124,8 @@ internal interface IProcessDetailsProvider
     /// <summary>Win32_Process rows for the given PIDs (null = all processes).</summary>
     IReadOnlyList<WmiProcessRow> QueryProcesses(IReadOnlyCollection<int>? pids);
 
-    IReadOnlyList<WmiServiceRow> QueryServices();
+    /// <summary>Win32_Service rows of the services hosted by the given PIDs (null = all running services).</summary>
+    IReadOnlyList<WmiServiceRow> QueryServices(IReadOnlyCollection<int>? pids);
 }
 
 /// <summary>A process to terminate, identified precisely so a reused PID is never killed by mistake.</summary>
