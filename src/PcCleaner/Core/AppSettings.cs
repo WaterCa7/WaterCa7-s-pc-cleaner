@@ -33,6 +33,12 @@ public sealed class AppSettings
     /// <summary>Paths/names the user marked as trusted in process/startup/program checks.</summary>
     public List<string> TrustedItems { get; set; } = new();
 
+    /// <summary>Download and install new versions by itself (Settings → «Обновления»).</summary>
+    public bool AutoUpdate { get; set; } = true;
+
+    /// <summary>When update.json was last read successfully (UTC).</summary>
+    public DateTime? LastUpdateCheckUtc { get; set; }
+
     /// <summary>
     /// Free-form per-module storage: ModuleData["Optimizer"]["PowerPlan.Previous"] = "...".
     /// Use <see cref="GetModuleValue"/>/<see cref="SetModuleValue"/>; code that changes it directly must hold

@@ -1,3 +1,4 @@
+using PcCleaner.Core.Updates;
 using PcCleaner.Modules.Cleaner;
 using PcCleaner.Modules.Disk;
 using PcCleaner.Modules.Network;
@@ -45,6 +46,12 @@ public static class AppServices
     public static OptimizerService Optimizer { get; } = new();
     public static SecurityService Security { get; } = new();
     public static NetworkService Network { get; } = new();
+
+    private static readonly Lazy<UpdateService> LazyUpdates =
+        new(() => new UpdateService(UpdateEnvironment.ForCurrentProcess(), () => Settings));
+
+    /// <summary>Created on first use, after App has set AppPaths.DataDir.</summary>
+    public static UpdateService Updates => LazyUpdates.Value;
 
     /// <summary>All module analyses, used by the dashboard smart-scan.</summary>
     public static IReadOnlyList<IHealthContributor> HealthContributors => new IHealthContributor[]
