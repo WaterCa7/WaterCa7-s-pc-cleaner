@@ -113,25 +113,35 @@ public static class ProcessRunner
 
     /// <summary>
     /// Runs a PowerShell script (Windows PowerShell 5.1) and returns UTF-8 decoded output.
-    /// The script is written to a temporary .ps1 in the app's data folder and run with -File: an "-EncodedCommand"
-    /// launch looks exactly like malware to antivirus software (and to our own Processes page).
+    /// The script is written to a temporary .ps1 and run with -File: an "-EncodedCommand" launch looks exactly like
+    /// malware to antivirus software (and to our own Processes page).
+    /// Not elevated, the .ps1 lives in the app's data folder. Elevated, it is created in %WINDIR%\Temp with an
+    /// admin-only DACL (<see cref="SecureTemp"/>), so a non-elevated process cannot swap it before PowerShell reads it,
+    /// and modules are loaded only from the machine-wide module folders (not from the user-writable Documents).
     /// Falls back to -EncodedCommand only if a group policy forbids running script files.
     /// </summary>
     public static async Task<ProcessResult> PowerShellAsync(string script, TimeSpan? timeout = null, CancellationToken ct = default)
     {
-        var full = "$ProgressPreference='SilentlyContinue'\r\n" +
-                   "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8\r\n" +
-                   "$OutputEncoding=[System.Text.Encoding]::UTF8\r\n" + script;
+        var elevated = Admin.IsElevated;
+        var full = BuildPowerShellScript(script, elevated);
         var exe = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
         var utf8 = new UTF8Encoding(false);
 
         string? file = null;
         try
         {
-            var dir = AppPaths.EnsureDir(Path.Combine(AppPaths.DataDir, "Scripts"));
-            file = Path.Combine(dir, $"ps-{Guid.NewGuid():N}.ps1");
             // BOM so that Windows PowerShell 5.1 reads non-ASCII (Cyrillic) text correctly.
-            await File.WriteAllTextAsync(file, full, new UTF8Encoding(true), ct);
+            var bytes = new UTF8Encoding(true).GetPreamble().Concat(Encoding.UTF8.GetBytes(full)).ToArray();
+            if (elevated)
+            {
+                file = SecureTemp.Create(SecureTemp.ElevatedDir, "WaterCa7sPcCleaner-ps", ".ps1", bytes);
+            }
+            else
+            {
+                var dir = AppPaths.EnsureDir(Path.Combine(AppPaths.DataDir, "Scripts"));
+                file = Path.Combine(dir, $"ps-{Guid.NewGuid():N}.ps1");
+                await File.WriteAllBytesAsync(file, bytes, ct);
+            }
             var result = await RunAsync(exe, $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{file}\"",
                 timeout, ct, utf8);
             if (!IsScriptExecutionBlocked(result))
@@ -140,27 +150,29 @@ public static class ProcessRunner
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось создать временный скрипт PowerShell: {ex.Message}");
+            Log.Warn($"Не удалось создать временный скрипт PowerShell: {ErrorText.For(ex)}");
         }
         finally
         {
-            if (file is not null)
-            {
-                try
-                {
-                    File.Delete(file);
-                }
-                catch
-                {
-                    // best effort
-                }
-            }
+            SecureTemp.TryDelete(file);
         }
 
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(full));
         return await RunAsync(exe, $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}",
             timeout, ct, utf8);
     }
+
+    /// <summary>The script with the common prologue (pure, unit-tested).</summary>
+    internal static string BuildPowerShellScript(string script, bool elevated)
+        => "$ProgressPreference='SilentlyContinue'\r\n" +
+           "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8\r\n" +
+           "$OutputEncoding=[System.Text.Encoding]::UTF8\r\n" +
+           // Windows PowerShell always puts Documents\WindowsPowerShell\Modules (user-writable) first in the module
+           // path; an elevated script must not auto-load a module planted there.
+           (elevated
+               ? "$machineModules=[Environment]::GetEnvironmentVariable('PSModulePath','Machine'); if ($machineModules) { $env:PSModulePath=$machineModules }\r\n"
+               : "") +
+           script;
 
     private static bool IsScriptExecutionBlocked(ProcessResult result)
         => !result.Success &&
@@ -181,8 +193,8 @@ public static class ProcessRunner
         catch (Exception ex)
         {
             // Environment problems (no default browser, missing file) are not app bugs.
-            Log.Warn($"Не удалось открыть {target}: {ex.Message}");
-            Dialogs.Error("Не удалось открыть", $"{target}\n\n{ex.Message}");
+            Log.Warn($"Не удалось открыть {target}: {ErrorText.For(ex)}");
+            Dialogs.Error("Не удалось открыть", $"{target}\n\n{ErrorText.Sentence(ex)}");
         }
     }
 
@@ -202,7 +214,7 @@ public static class ProcessRunner
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось открыть проводник для {path}: {ex.Message}");
+            Log.Warn($"Не удалось открыть проводник для {path}: {ErrorText.For(ex)}");
         }
     }
 }

@@ -33,7 +33,7 @@ public sealed class RelayCommand : ICommand
         catch (Exception ex)
         {
             Log.Error("Ошибка выполнения команды", ex);
-            Dialogs.Error("Ошибка", ex.Message);
+            Dialogs.Error("Ошибка", ErrorText.Sentence(ex));
         }
     }
 
@@ -94,7 +94,7 @@ public sealed class AsyncRelayCommand : ObservableObject, ICommand
         catch (Exception ex)
         {
             Log.Error("Ошибка выполнения операции", ex);
-            Dialogs.Error("Ошибка", ex.Message);
+            Dialogs.Error("Ошибка", ErrorText.Sentence(ex));
         }
         finally
         {

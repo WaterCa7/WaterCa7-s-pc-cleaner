@@ -68,6 +68,52 @@ public static class RegistryBackup
         return false;
     }
 
+    /// <summary>
+    /// Imports a .reg file exactly as it was checked. The file is read once into a private snapshot
+    /// (elevated: %WINDIR%\Temp with an admin-only DACL, see <see cref="SecureTemp"/>), <paramref name="verify"/> inspects
+    /// that snapshot (its path is passed), and only that snapshot is imported. A non-elevated process can rewrite files in
+    /// the user-writable Backups folder at any moment, so checking the original file and then importing it would let the
+    /// contents change between the check (and the user's confirmation) and the elevated import.
+    /// Returns false if the snapshot could not be made, <paramref name="verify"/> refused it, or reg.exe failed.
+    /// </summary>
+    public static async Task<bool> ImportCheckedAsync(string regFile, Func<string, bool> verify, CancellationToken ct = default)
+    {
+        string? snapshot = null;
+        try
+        {
+            try
+            {
+                var content = await File.ReadAllBytesAsync(regFile, ct);
+                var dir = Admin.IsElevated ? SecureTemp.ElevatedDir : AppPaths.EnsureDir(Path.Combine(AppPaths.DataDir, "Temp"));
+                snapshot = SecureTemp.Create(dir, "WaterCa7sPcCleaner-reg", ".reg", content);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn($"Не удалось восстановить {Path.GetFileName(regFile)}: не удалось прочитать файл — {ErrorText.For(ex)}");
+                return false;
+            }
+
+            if (!verify(snapshot))
+            {
+                Log.Warn($"Восстановление из {Path.GetFileName(regFile)} отменено: файл не прошёл повторную проверку");
+                return false;
+            }
+
+            var result = await ProcessRunner.RunAsync("reg.exe", $"import \"{snapshot}\"", TimeSpan.FromSeconds(60), ct);
+            if (result.Success)
+            {
+                Log.Action($"Восстановлено из резервной копии: {Path.GetFileName(regFile)}");
+                return true;
+            }
+            Log.Warn($"Не удалось восстановить {Path.GetFileName(regFile)}: {result.StdErr.Trim()}");
+            return false;
+        }
+        finally
+        {
+            SecureTemp.TryDelete(snapshot);
+        }
+    }
+
     public static IEnumerable<FileInfo> ListBackups()
     {
         var dir = new DirectoryInfo(AppPaths.BackupsDir);
@@ -99,7 +145,7 @@ public static class RegistryBackup
         }
         catch (Exception ex)
         {
-            Log.Warn($"Нет доступа к {fullKeyPath}: {ex.Message}");
+            Log.Warn($"Нет доступа к {fullKeyPath}: {ErrorText.For(ex)}");
             return null;
         }
     }

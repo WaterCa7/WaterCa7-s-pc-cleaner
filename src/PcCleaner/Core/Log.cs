@@ -44,13 +44,18 @@ public static class Log
 
     public static void Warn(string message) => Write(LogLevel.Warning, message);
 
+    /// <summary>
+    /// The journal and the status bar get a Russian description of <paramref name="ex"/> (<see cref="ErrorText"/>);
+    /// the log file keeps the exception type, its original message and the stack trace.
+    /// </summary>
     public static void Error(string message, Exception? ex = null)
-        => Write(LogLevel.Error, ex is null ? message : $"{message}: {ex.GetType().Name}: {ex.Message}", ex);
+        => Write(LogLevel.Error, ex is null ? message : $"{message}: {ErrorText.For(ex)}", ex,
+            ex is null ? null : $"{message}: {ex.GetType().Name}: {ex.Message}");
 
     /// <summary>Records a change made to the system (deleted files, disabled startup item, etc.).</summary>
     public static void Action(string message) => Write(LogLevel.Action, message);
 
-    private static void Write(LogLevel level, string message, Exception? ex = null)
+    private static void Write(LogLevel level, string message, Exception? ex = null, string? fileMessage = null)
     {
         var entry = new LogEntry(DateTime.Now, level, message);
         Ui.Post(() =>
@@ -71,7 +76,7 @@ public static class Log
             {
                 Directory.CreateDirectory(AppPaths.LogsDir);
                 var file = Path.Combine(AppPaths.LogsDir, $"{entry.Time:yyyy-MM-dd}.log");
-                var line = $"{entry.Time:HH:mm:ss} [{level}] {message}";
+                var line = $"{entry.Time:HH:mm:ss} [{level}] {fileMessage ?? message}";
                 if (ex is not null)
                     line += Environment.NewLine + ex;
                 File.AppendAllText(file, line + Environment.NewLine, Encoding.UTF8);

@@ -90,7 +90,7 @@ public abstract class PageViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Error($"{Title}: {text}", ex);
-            Dialogs.Error(Title, ex.Message);
+            Dialogs.Error(Title, ErrorText.Sentence(ex));
         }
         finally
         {

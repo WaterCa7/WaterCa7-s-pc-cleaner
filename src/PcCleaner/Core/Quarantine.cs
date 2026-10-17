@@ -11,11 +11,19 @@ public sealed record QuarantineItem(string Id, string OriginalPath, string Store
 /// <summary>
 /// Moves suspicious files into %LOCALAPPDATA%\WaterCa7sPcCleaner\Quarantine (renamed, so they can't run)
 /// instead of deleting them. Items can be restored from the Settings page.
+/// <para>
+/// index.json (the original path of every stored file) is written atomically and the previous version is kept as
+/// index.json.bak. If the index cannot be read, changes are refused rather than overwriting it — otherwise the
+/// records of files already in quarantine would be lost and they could no longer be restored. If writing the index
+/// fails right after a file was moved in, the file is moved back.
+/// </para>
 /// </summary>
 public static class Quarantine
 {
     private static string IndexFile => Path.Combine(AppPaths.QuarantineDir, "index.json");
+    private static string BackupIndexFile => IndexFile + ".bak";
     private static readonly object Lock = new();
+    private static readonly JsonSerializerOptions IndexJson = new() { WriteIndented = true };
 
     public static IReadOnlyList<QuarantineItem> List()
     {
@@ -23,13 +31,11 @@ public static class Quarantine
         {
             try
             {
-                return File.Exists(IndexFile)
-                    ? JsonSerializer.Deserialize<List<QuarantineItem>>(File.ReadAllText(IndexFile)) ?? new()
-                    : new List<QuarantineItem>();
+                return ReadIndex(forUpdate: false);
             }
             catch (Exception ex)
             {
-                Log.Warn($"Не удалось прочитать список карантина: {ex.Message}");
+                Log.Warn($"Не удалось прочитать список карантина: {ErrorText.For(ex)}");
                 return new List<QuarantineItem>();
             }
         }
@@ -47,14 +53,34 @@ public static class Quarantine
 
         lock (Lock)
         {
+            // Read the index BEFORE moving anything: if it is unreadable, nothing is changed.
+            var list = ReadIndex(forUpdate: true);
             Directory.CreateDirectory(AppPaths.QuarantineDir);
             var id = Guid.NewGuid().ToString("N");
             var stored = Path.Combine(AppPaths.QuarantineDir, id + ".quarantine");
             File.Move(full, stored);
             var item = new QuarantineItem(id, full, stored, DateTime.Now, reason);
-            var list = List().ToList();
             list.Add(item);
-            SaveIndex(list);
+            try
+            {
+                SaveIndex(list);
+            }
+            catch (Exception ex)
+            {
+                // Without its record the file could never be restored: put it back where it was.
+                try
+                {
+                    File.Move(stored, full);
+                    Log.Warn($"Карантин: не удалось записать список карантина ({ErrorText.For(ex)}) — файл возвращён на место: {full}");
+                }
+                catch (Exception back)
+                {
+                    Log.Error($"Карантин: не удалось записать список карантина и вернуть файл на место. " +
+                              $"Файл {full} сейчас хранится как {stored}", back);
+                }
+                throw new InvalidOperationException(
+                    $"Не удалось записать список карантина: {ErrorText.For(ex)}. Файл оставлен на месте.", ex);
+            }
             Log.Action($"Файл помещён в карантин: {full}");
             return item;
         }
@@ -67,12 +93,13 @@ public static class Quarantine
     {
         lock (Lock)
         {
+            var list = ReadIndex(forUpdate: true);
             var target = Path.GetFullPath(targetPath);
             if (File.Exists(target))
                 throw new IOException($"По этому пути уже есть файл: {target}");
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Move(item.StoredPath, target);
-            SaveIndex(List().Where(i => i.Id != item.Id).ToList());
+            SaveIndex(list.Where(i => i.Id != item.Id).ToList());
             Log.Action($"Файл восстановлен из карантина: {target}");
         }
     }
@@ -82,16 +109,98 @@ public static class Quarantine
     {
         lock (Lock)
         {
+            var list = ReadIndex(forUpdate: true);
             if (File.Exists(item.StoredPath))
                 File.Delete(item.StoredPath);
-            SaveIndex(List().Where(i => i.Id != item.Id).ToList());
+            SaveIndex(list.Where(i => i.Id != item.Id).ToList());
             Log.Action($"Файл из карантина удалён навсегда: {item.OriginalPath}");
         }
     }
 
+    /// <summary>
+    /// Reads index.json. If it cannot be read: for display, the previous version (index.json.bak) is shown when
+    /// possible; for a change (<paramref name="forUpdate"/>) InvalidOperationException is thrown and the index is left
+    /// untouched — rewriting it would drop the records it still holds (even the .bak may miss the latest ones).
+    /// </summary>
+    private static List<QuarantineItem> ReadIndex(bool forUpdate)
+    {
+        if (!File.Exists(IndexFile))
+            return new List<QuarantineItem>();
+
+        try
+        {
+            return Read(IndexFile);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            if (forUpdate)
+            {
+                Log.Warn($"Список карантина не читается ({ErrorText.For(ex)}) — изменения в карантине отменены");
+                throw new InvalidOperationException(
+                    "Список карантина (index.json в папке карантина) не читается, поэтому ничего не изменено: иначе пропали бы " +
+                    "записи о файлах, которые уже лежат в карантине, и их нельзя было бы восстановить.", ex);
+            }
+            if (TryRead(BackupIndexFile) is { } previous)
+            {
+                Log.Warn($"Список карантина не читается ({ErrorText.For(ex)}) — показана его предыдущая копия");
+                return previous;
+            }
+            throw;
+        }
+    }
+
+    private static List<QuarantineItem> Read(string file)
+        => (JsonSerializer.Deserialize<List<QuarantineItem>>(ReadText(file)) ?? new List<QuarantineItem>())
+            .Where(i => i is not null)
+            .ToList();
+
+    /// <summary>An antivirus may hold the file open for a moment: retry briefly before calling it unreadable.</summary>
+    private static string ReadText(string file)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return File.ReadAllText(file);
+            }
+            catch (IOException) when (attempt < 3 && File.Exists(file))
+            {
+                Thread.Sleep(100);
+            }
+        }
+    }
+
+    private static List<QuarantineItem>? TryRead(string file)
+    {
+        try
+        {
+            return File.Exists(file) ? Read(file) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Atomic: writes index.json.tmp, then replaces index.json keeping the previous version as index.json.bak.</summary>
     private static void SaveIndex(List<QuarantineItem> items)
     {
         Directory.CreateDirectory(AppPaths.QuarantineDir);
-        File.WriteAllText(IndexFile, JsonSerializer.Serialize(items, new JsonSerializerOptions { WriteIndented = true }));
+        var tmp = IndexFile + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(items, IndexJson));
+        if (!File.Exists(IndexFile))
+        {
+            File.Move(tmp, IndexFile);
+            return;
+        }
+        try
+        {
+            File.Replace(tmp, IndexFile, BackupIndexFile, ignoreMetadataErrors: true);
+        }
+        catch (IOException)
+        {
+            // e.g. the .bak is locked by an antivirus scan: still replace the index atomically, just without a copy.
+            File.Move(tmp, IndexFile, overwrite: true);
+        }
     }
 }
