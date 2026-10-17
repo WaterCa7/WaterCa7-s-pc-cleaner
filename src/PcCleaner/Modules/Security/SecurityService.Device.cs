@@ -318,13 +318,7 @@ public sealed partial class SecurityService
         Smb1RebootPending = restart;
         Log.Action("Отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» (SMB1Protocol)" +
                    (restart ? ", нужна перезагрузка" : "") + ". " + SecurityRules.RestorePointText(restorePoint));
-        return SecurityActionResult.Ok(
-            (restart
-                ? "SMBv1 отключён. Перезагрузите компьютер, чтобы изменение вступило в силу."
-                : "SMBv1 отключён.") +
-            "\n\n" + SecurityRules.RestorePointText(restorePoint) +
-            "\n\nЕсли перестанет открываться старое сетевое хранилище (NAS), включить SMBv1 обратно можно в «Включение или " +
-            "отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».");
+        return SecurityActionResult.Ok(SecurityRules.Smb1DisabledText(restart, restorePoint));
     }
 
     /// <summary>

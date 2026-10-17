@@ -55,8 +55,21 @@ public sealed class SecurityCheckCard
 
     public bool ShowDetails => !IsCompact && !string.IsNullOrWhiteSpace(Details);
 
-    /// <summary>Tooltip of the state line: the details of a compact card.</summary>
-    public string? StateToolTip => IsCompact && !string.IsNullOrWhiteSpace(Details) ? Details : null;
+    /// <summary>
+    /// Tooltip of a compact card: its details, then what the check is about. A compact card takes keyboard focus (Tab)
+    /// and WPF shows the tooltip on keyboard focus too, so the details are reachable without a mouse.
+    /// Cards with problems show their details on the card and have no card tooltip.
+    /// </summary>
+    public string? CardToolTip
+    {
+        get
+        {
+            if (!IsCompact)
+                return null;
+            var parts = new[] { Details, Explanation }.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
+            return parts.Count == 0 ? null : string.Join("\n\n", parts);
+        }
+    }
 
     public string StatusText => Status.ToRussian();
 }

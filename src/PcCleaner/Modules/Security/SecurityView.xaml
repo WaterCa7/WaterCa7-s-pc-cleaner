@@ -63,10 +63,26 @@
             <Setter Property="Margin" Value="0,26,0,26" />
         </Style>
 
+        <!-- A card that is fine keeps its details in the tooltip: it takes keyboard focus (Tab), which shows the tooltip
+             too, and the accent border shows where the focus is. Cards with problems show everything on the card. -->
+        <Style x:Key="CheckCardBorder" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Focusable" Value="{Binding IsCompact}" />
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- One check card (left status stripe, icon, title, status badge, state, details, actions) -->
         <DataTemplate x:Key="CheckCard" DataType="{x:Type local:SecurityCheckCard}">
-            <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
-                    CornerRadius="10" ToolTip="{Binding StateToolTip}">
+            <Border Style="{StaticResource CheckCardBorder}" ToolTip="{Binding CardToolTip}" ToolTipService.ShowDuration="20000"
+                    AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding CardToolTip}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="4" />
@@ -237,7 +253,7 @@
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" Foreground="{StaticResource InfoBrush}" Margin="0,0,12,0" />
                     <TextBlock Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center"
                                Text="Без прав администратора все проверки работают, но исправления (брандмауэр, UAC, hosts, перехваты, SMBv1, обезвреживание угроз) и список исключений антивируса недоступны." />
-                    <Button Grid.Column="2" Content="Перезапустить с правами" Command="{Binding RestartAsAdminCommand}" Padding="12,5"
+                    <Button Grid.Column="2" Content="Перезапустить от имени администратора" Command="{Binding RestartAsAdminCommand}" Padding="12,5"
                             FontSize="12" Margin="12,0,0,0" VerticalAlignment="Center"
                             ToolTip="Перезапустить программу от имени администратора (Windows спросит разрешение)" />
                 </Grid>
@@ -247,8 +263,7 @@
             <DockPanel Margin="2,18,0,0" Visibility="{Binding HasAttentionChecks, Converter={StaticResource BoolToVis}}">
                 <TextBlock Style="{StaticResource H3}" Text="{Binding AttentionHeader}" />
                 <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Bottom"
-                           TextTrimming="CharacterEllipsis"
-                           Text="Сначала опасное, затем то, что стоит поправить, и советы" />
+                           TextWrapping="Wrap" Text="Сначала опасное, затем то, что стоит поправить, и советы" />
             </DockPanel>
             <ItemsControl ItemsSource="{Binding AttentionChecks}" Margin="0,10,0,0" Focusable="False"
                           ItemTemplate="{StaticResource CheckCard}" ItemContainerStyle="{StaticResource CheckCardContainer}"
@@ -263,8 +278,8 @@
             <DockPanel Margin="2,20,0,0" Visibility="{Binding HasOkChecks, Converter={StaticResource BoolToVis}}">
                 <TextBlock Style="{StaticResource H3}" Text="{Binding OkHeader}" />
                 <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Bottom"
-                           TextTrimming="CharacterEllipsis"
-                           Text="Наведите на карточку, чтобы прочитать подробности" />
+                           TextWrapping="Wrap"
+                           Text="Подробности — в подсказке: наведите на карточку или выберите её клавишей Tab" />
             </DockPanel>
             <ItemsControl ItemsSource="{Binding OkChecks}" Margin="0,10,0,0" Focusable="False"
                           ItemTemplate="{StaticResource CheckCard}" ItemContainerStyle="{StaticResource CheckCardContainer}"

@@ -678,9 +678,17 @@ public class DeviceSecurityTests
             Assert.Equal(SecurityStatus.Ok, c.Status);
             Assert.True(c.IsCompact);
             Assert.False(c.ShowDetails);
-            Assert.Equal(string.IsNullOrWhiteSpace(c.Details) ? null : c.Details, c.StateToolTip);
+            // The card tooltip (also shown on keyboard focus) holds the hidden details, then what the check is about.
+            Assert.NotNull(c.CardToolTip);
+            if (!string.IsNullOrWhiteSpace(c.Details))
+                Assert.StartsWith(c.Details.Trim(), c.CardToolTip);
+            Assert.EndsWith(c.Explanation, c.CardToolTip);
         });
-        Assert.All(vm.AttentionChecks, c => Assert.False(c.IsCompact));
+        Assert.All(vm.AttentionChecks, c =>
+        {
+            Assert.False(c.IsCompact);
+            Assert.Null(c.CardToolTip); // everything is on the card already
+        });
         Assert.Equal(vm.OkChecks.Count, vm.OkCount);
         Assert.Equal($"В порядке · {vm.OkChecks.Count}", vm.OkHeader);
         Assert.True(vm.HasAttentionChecks);

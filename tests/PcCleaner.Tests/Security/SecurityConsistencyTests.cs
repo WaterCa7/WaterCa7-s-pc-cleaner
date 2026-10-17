@@ -1,4 +1,3 @@
-using System.IO;
 using Microsoft.Win32;
 using PcCleaner.Core;
 using PcCleaner.Modules.Dashboard;
@@ -15,8 +14,6 @@ namespace PcCleaner.Tests.Security;
 public class SecurityConsistencyTests
 {
     public SecurityConsistencyTests() => TestEnvironment.Init();
-
-    private static int BackupCount() => Directory.Exists(AppPaths.BackupsDir) ? Directory.GetFiles(AppPaths.BackupsDir, "*.reg").Length : 0;
 
     private static List<SecurityCheckResult> AllOk()
         => SecurityCheckIds.All.Select(id => new SecurityCheckResult(id, SecurityStatus.Ok, "ok", "")).ToList();
@@ -73,14 +70,14 @@ public class SecurityConsistencyTests
             return string.Join("|", key!.GetValueNames().OrderBy(n => n).Select(n => $"{n}={key.GetValue(n)}"));
         }
         var before = Snapshot();
-        var backups = BackupCount();
+        var backups = sb.OwnBackups();
 
         var result = await sb.Service.DisableProxyAsync(report.Proxy, CancellationToken.None);
 
         Assert.False(result.Success, change);
         Assert.Equal(SecurityService.ProxyChangedMessage, result.Message);
         Assert.Equal(before, Snapshot());
-        Assert.Equal(backups, BackupCount()); // refused before the backup: nothing to undo
+        Assert.Equal(backups, sb.OwnBackups()); // refused before the backup: nothing to undo
     }
 
     [Fact]

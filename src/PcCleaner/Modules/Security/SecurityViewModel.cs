@@ -747,7 +747,8 @@ public sealed class SecurityViewModel : PageViewModel
             return;
         if (r.ThreatsFound)
         {
-            if (Dialogs.Confirm(title, r.Message + "\n\nОткрыть журнал защиты сейчас?"))
+            // Opening the journal changes nothing: a neutral question, not a confirmation.
+            if (Dialogs.Ask(title, r.Message + "\n\nОткрыть журнал защиты сейчас?"))
                 ProcessRunner.ShellOpen(ProtectionHistoryUri);
         }
         else if (r.Success)
@@ -880,7 +881,7 @@ public sealed class SecurityViewModel : PageViewModel
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or FileNotFoundException)
         {
             Log.Warn($"Не удалось открыть Блокнот: {ex.Message}");
-            Dialogs.Error("Файл hosts", "Не удалось открыть Блокнот: " + ex.Message);
+            Dialogs.Error("Файл hosts", $"Не удалось открыть Блокнот: {ErrorText.For(ex)}.");
         }
     }
 
@@ -1012,7 +1013,7 @@ public sealed class SecurityViewModel : PageViewModel
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             Log.Warn($"Не удалось открыть параметры BitLocker: {ex.Message}");
-            Dialogs.Error("Шифрование диска", "Не удалось открыть параметры BitLocker: " + ex.Message);
+            Dialogs.Error("Шифрование диска", $"Не удалось открыть параметры BitLocker: {ErrorText.For(ex)}.");
         }
     }
 
