@@ -178,8 +178,14 @@ public class ErrorTextTests
         Assert.StartsWith(marker + ": нет доступа", entry.Message);
         Assert.DoesNotContain("UnauthorizedAccessException", entry.Message);
 
+        // Tests running in parallel append to the same daily file (File.AppendAllText holds it open for writing), so read
+        // it sharing write access: File.ReadAllLines allows only other readers and fails while another append is under way.
         var file = Path.Combine(AppPaths.LogsDir, $"{entry.Time:yyyy-MM-dd}.log");
-        var line = File.ReadAllLines(file).Last(l => l.Contains(marker));
+        string text;
+        using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var reader = new StreamReader(stream, Encoding.UTF8))
+            text = reader.ReadToEnd();
+        var line = text.Split(Environment.NewLine).Last(l => l.Contains(marker));
         Assert.Contains("UnauthorizedAccessException: Access to the path", line);
     }
 }
