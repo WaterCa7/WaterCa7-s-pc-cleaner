@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:PcCleaner"
         Title="WaterCa7s PC Cleaner"
+        Icon="/Assets/app.ico"
         Width="1320" Height="840" MinWidth="1040" MinHeight="660"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}"
@@ -22,10 +23,16 @@
         <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,22,20,22">
-                    <Border Width="38" Height="38" CornerRadius="11" Background="{StaticResource AccentBrush}">
-                        <Path Data="M 12,2 C 12,2 4,11.5 4,16 A 8,8 0 0 0 20,16 C 20,11.5 12,2 12,2 Z"
-                              Fill="{StaticResource AccentTextBrush}" Stretch="Uniform" Width="16" Height="20" />
-                    </Border>
+                    <!-- The app icon (a drop with cat ears), same 100x100 drawing as tools/make-icon.ps1. -->
+                    <Viewbox Width="38" Height="38">
+                        <Canvas Width="100" Height="100">
+                            <Rectangle Width="100" Height="100" RadiusX="22" RadiusY="22" Fill="{StaticResource AccentBrush}" />
+                            <Path Data="M27,18 L40,35 Q50,31 60,35 L73,18 L75,45 C80,52 78,58 78,62 A28,28 0 0 1 22,62 C22,58 20,52 25,45 Z"
+                                  Fill="{StaticResource AccentTextBrush}" />
+                            <Ellipse Canvas.Left="36" Canvas.Top="54" Width="8" Height="12" Fill="{StaticResource AccentBrush}" />
+                            <Ellipse Canvas.Left="56" Canvas.Top="54" Width="8" Height="12" Fill="{StaticResource AccentBrush}" />
+                        </Canvas>
+                    </Viewbox>
                     <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="WaterCa7s" FontWeight="Bold" FontSize="15.5" />
                         <TextBlock Text="PC Cleaner" Foreground="{StaticResource MutedBrush}" FontSize="12" />
