@@ -25,4 +25,9 @@
     <ProjectReference Include="..\..\src\PcCleaner\PcCleaner.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The public update-signing key; EmbeddedKey_IsTheOneInTools compares it with UpdateKeys. -->
+    <EmbeddedResource Include="..\..\tools\update-signing-public.pem" LogicalName="update-signing-public.pem" />
+  </ItemGroup>
+
 </Project>
