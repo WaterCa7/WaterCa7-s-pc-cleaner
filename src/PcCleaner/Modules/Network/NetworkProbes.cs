@@ -6,7 +6,9 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Modules.Security;
 
 namespace PcCleaner.Modules.Network;
 
@@ -61,18 +63,23 @@ public static class NetworkProbes
             return list;
         }
 
+        var relevant = new List<NetworkInterface>();
         foreach (var nic in nics)
         {
             try
             {
-                if (IsRelevant(nic))
-                    list.Add(Read(nic));
+                if (!IsRelevant(nic))
+                    continue;
+                relevant.Add(nic);
+                list.Add(Read(nic));
             }
             catch (Exception ex) when (ex is NetworkInformationException or PlatformNotSupportedException or InvalidOperationException)
             {
                 Log.Warn($"Сеть: не удалось прочитать адаптер {nic.Name}: {ex.Message}");
             }
         }
+        // The live traffic samples now read exactly these adapters (the page compares both lists to notice changes).
+        RememberTrafficAdapters(relevant);
 
         return list
             .OrderBy(a => a.IsVirtual ? 1 : 0)
@@ -135,27 +142,65 @@ public static class NetworkProbes
         };
     }
 
-    /// <summary>Receive/send byte counters of every adapter that is up (cheap, called once a second).</summary>
+    /// <summary>
+    /// How long the adapter list of the live traffic samples is reused. Enumerating the adapters (every WAN miniport and
+    /// filter-driver instance included) costs ~15 ms of CPU, reading the counters of the few relevant ones almost nothing;
+    /// so a new or removed adapter is noticed within this time instead of within a second.
+    /// </summary>
+    internal static readonly TimeSpan TrafficAdapterLifetime = TimeSpan.FromSeconds(15);
+
+    private sealed record TrafficAdapterList(IReadOnlyList<NetworkInterface> Nics, long Timestamp);
+
+    private static TrafficAdapterList? _trafficAdapters;
+
+    private static void RememberTrafficAdapters(IReadOnlyList<NetworkInterface> nics)
+        => Volatile.Write(ref _trafficAdapters, new TrafficAdapterList(nics, Stopwatch.GetTimestamp()));
+
+    /// <summary>The relevant adapters, enumerated again only when the remembered list is older than <see cref="TrafficAdapterLifetime"/>.</summary>
+    private static IReadOnlyList<NetworkInterface> TrafficAdapters()
+    {
+        var cached = Volatile.Read(ref _trafficAdapters);
+        if (cached is not null && Stopwatch.GetElapsedTime(cached.Timestamp) < TrafficAdapterLifetime)
+            return cached.Nics;
+        var list = new List<NetworkInterface>();
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            try
+            {
+                if (IsRelevant(nic))
+                    list.Add(nic);
+            }
+            catch (NetworkInformationException)
+            {
+                // skip
+            }
+        }
+        RememberTrafficAdapters(list);
+        return list;
+    }
+
+    /// <summary>
+    /// Receive/send byte counters of every adapter that is up (called once a second). Only the counters are read each
+    /// time (GetIfEntry2 per adapter); the adapter list itself is refreshed every <see cref="TrafficAdapterLifetime"/>.
+    /// </summary>
     public static TrafficSample SampleTraffic()
     {
         var counters = new Dictionary<string, TrafficCounters>();
         var ids = new List<string>();
         try
         {
-            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            foreach (var nic in TrafficAdapters())
             {
+                // Listed even when its counters cannot be read, so the page does not take it for a new adapter.
+                ids.Add(nic.Id);
                 try
                 {
-                    if (!IsRelevant(nic))
-                        continue;
-                    // Listed even when its counters cannot be read, so the page does not take it for a new adapter.
-                    ids.Add(nic.Id);
                     var stats = nic.GetIPStatistics();
                     counters[nic.Id] = new TrafficCounters(stats.BytesReceived, stats.BytesSent);
                 }
                 catch (NetworkInformationException)
                 {
-                    // skip
+                    // statistics unavailable for some virtual adapters (or the adapter is gone until the next refresh)
                 }
             }
         }
@@ -453,12 +498,79 @@ public static class NetworkProbes
 
     // ===================================================================== sockets
 
-    /// <summary>TCP and UDP tables with process owners (read-only, no admin needed).</summary>
+    /// <summary>
+    /// TCP and UDP tables with process owners (read-only, no admin needed). Programs connected to an unusual port are
+    /// also checked themselves (digital signature, location — see <see cref="NetworkRules.ProgramWarnings"/>).
+    /// </summary>
     public static SocketSnapshot ReadSockets(ProcessIdentities identities)
     {
         var entries = IpTables.ReadAll();
         var owners = identities.GetAll(entries.Select(e => e.Pid));
-        return new SocketSnapshot(entries, owners, DateTime.Now);
+        var snapshot = new SocketSnapshot(entries, owners, DateTime.Now);
+        return snapshot with { ProgramWarnings = NetworkRules.ProgramWarnings(snapshot, path => Suspicion.Analyze(path, FileSignature.Get(path))) };
+    }
+
+    // ===================================================================== firewall (read-only)
+
+    private static readonly TimeSpan FirewallWmiTimeout = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// Windows Firewall state of the connected networks: profiles (MSFT_NetFirewallProfile + Group Policy), the networks
+    /// and their profile (MSFT_NetConnectionProfile) and an enabled third-party firewall (Security Center). Only reads.
+    /// </summary>
+    public static FirewallReport ReadFirewall()
+    {
+        var profilesQ = Task.Run(() => Wmi.Query("SELECT Name, Enabled FROM MSFT_NetFirewallProfile", Wmi.StandardCimv2, FirewallWmiTimeout));
+        var networksQ = Task.Run(() => Wmi.Query("SELECT Name, NetworkCategory FROM MSFT_NetConnectionProfile", Wmi.StandardCimv2,
+            FirewallWmiTimeout));
+        var productsQ = Task.Run(() => Wmi.Query("SELECT displayName, productState FROM FirewallProduct", Wmi.SecurityCenter2,
+            FirewallWmiTimeout));
+        try
+        {
+            Task.WaitAll(profilesQ, networksQ, productsQ);
+        }
+        catch (AggregateException ex)
+        {
+            // Unknown state: nothing is reported about the firewall (the Security page checks it as well).
+            Log.Warn($"Сеть: не удалось узнать состояние брандмауэра: {ex.InnerException?.Message ?? ex.Message}");
+            return new FirewallReport();
+        }
+
+        var local = profilesQ.Result
+            .Select(r => new FirewallProfileState(r.Str("Name") ?? "?",
+                SecurityRules.ParseGpoBoolean(r.TryGetValue("Enabled", out var v) ? v : null)));
+        var profiles = SecurityRules.ApplyFirewallPolicy(local, ReadFirewallPolicy())
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Enabled, StringComparer.OrdinalIgnoreCase);
+        var networks = networksQ.Result
+            .Select(r => (Name: r.Str("Name"), Profile: NetworkRules.ProfileOfCategory(r.Long("NetworkCategory"))))
+            .Where(n => n.Profile is not null)
+            .Select(n => new ConnectedNetwork(string.IsNullOrWhiteSpace(n.Name) ? "Сеть" : n.Name, n.Profile!))
+            .ToList();
+        var thirdParty = productsQ.Result
+            .Select(r => SecurityRules.MakeProduct(r.Str("displayName") ?? "Брандмауэр", r.Long("productState") ?? 0))
+            .FirstOrDefault(p => !p.IsMicrosoft && p.Enabled);
+        return new FirewallReport { Profiles = profiles, Networks = networks, ThirdPartyFirewall = thirdParty?.Name };
+    }
+
+    /// <summary>EnableFirewall Group Policy values per profile (null = not configured), read-only.</summary>
+    private static Dictionary<string, int?> ReadFirewallPolicy()
+    {
+        var result = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            foreach (var name in new[] { "Domain", "Private", "Public" })
+            {
+                using var key = hklm.OpenSubKey(@"SOFTWARE\Policies\Microsoft\WindowsFirewall\" + SecurityRules.FirewallPolicySubKey(name));
+                result[name] = key?.GetValue("EnableFirewall") is int value ? value : null;
+            }
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            Log.Warn($"Сеть: не удалось прочитать политику брандмауэра: {ex.Message}");
+        }
+        return result;
     }
 
     /// <summary>

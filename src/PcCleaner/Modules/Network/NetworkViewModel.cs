@@ -49,6 +49,7 @@ public sealed class NetworkViewModel : PageViewModel
     private WifiReport? _wifi;
     private SocketSnapshot? _sockets;
     private double? _upload;
+    private FirewallReport? _firewall;
     private bool _latencyPending;
     private bool _dnsPending;
     private bool _wifiPending;
@@ -122,6 +123,7 @@ public sealed class NetworkViewModel : PageViewModel
         OpenAdapterSettingsCommand = new RelayCommand(() => ProcessRunner.ShellOpen("ms-settings:network-advancedsettings"));
         OpenWifiSettingsCommand = new RelayCommand(() => ProcessRunner.ShellOpen("ms-settings:network-wifi"));
         OpenLocationSettingsCommand = new RelayCommand(() => ProcessRunner.ShellOpen("ms-settings:privacy-location"));
+        OpenSecurityCommand = new RelayCommand(() => AppServices.Navigator?.NavigateTo("Security"));
         HowToChangeDnsCommand = new RelayCommand(ShowHowToChangeDns);
         ShowInProcessesCommand = new RelayCommand(ShowInProcesses, p => p is ConnectionListItem or PortItem);
         CheckIpCommand = new RelayCommand(CheckIp, p => p is ConnectionItem { IsPublic: true });
@@ -176,6 +178,7 @@ public sealed class NetworkViewModel : PageViewModel
     public RelayCommand OpenAdapterSettingsCommand { get; }
     public RelayCommand OpenWifiSettingsCommand { get; }
     public RelayCommand OpenLocationSettingsCommand { get; }
+    public RelayCommand OpenSecurityCommand { get; }
     public RelayCommand HowToChangeDnsCommand { get; }
     public RelayCommand ShowInProcessesCommand { get; }
     public RelayCommand CheckIpCommand { get; }
@@ -579,7 +582,7 @@ public sealed class NetworkViewModel : PageViewModel
         var trafficStart = await Task.Run(_service.SampleTraffic, ct);
         var started = Stopwatch.StartNew();
         var done = 0;
-        const int parts = 4;
+        const int parts = 5;
 
         async Task Part<T>(string what, Func<Task<T>> probe, Action<T?> apply) where T : class
         {
@@ -594,7 +597,8 @@ public sealed class NetworkViewModel : PageViewModel
             Part("соединения", () => _service.ReadSocketsAsync(ct), ApplySockets),
             Part("Wi-Fi", () => _service.ReadWifiAsync(adapters, ct), ApplyWifi),
             Part("DNS", () => _service.MeasureDnsAsync(ct), ApplyDns),
-            Part("задержка", () => _service.MeasureLatencyAsync(adapters, ct), ApplyLatency));
+            Part("задержка", () => _service.MeasureLatencyAsync(adapters, ct), ApplyLatency),
+            Part("брандмауэр", () => _service.ReadFirewallAsync(ct), (FirewallReport? f) => _firewall = f));
 
         // Upload over at least 2 seconds (the checks above usually take longer).
         var remaining = UploadSample - started.Elapsed;
@@ -696,6 +700,7 @@ public sealed class NetworkViewModel : PageViewModel
         _dns = null;
         _wifi = null;
         _upload = null;
+        _firewall = null;
         StatusTitle = "Проверяю сеть…";
         StatusText = "Смотрю задержку, DNS, Wi-Fi, соединения и открытые порты. Ничего не меняется.";
         StatusTone = NetTone.Neutral;
@@ -795,7 +800,9 @@ public sealed class NetworkViewModel : PageViewModel
 
     private async void OnTimerTick(object? sender, EventArgs e)
     {
-        if (!_isActive || _sampling)
+        // Nobody sees the speeds while the window is minimized: no sampling then (the first sample after restoring shows
+        // the average over the pause, the next ones the live speed again).
+        if (!_isActive || _sampling || Application.Current?.MainWindow?.WindowState == WindowState.Minimized)
             return;
         _sampling = true;
         try
@@ -1179,13 +1186,18 @@ public sealed class NetworkViewModel : PageViewModel
         var networkPorts = _ports.Count(p => p.IsNetwork);
         var risky = _ports.Count(p => p.Kind == PortKind.Risky);
         var suspicious = all.Where(c => c.IsSuspicious).Sum(c => c.Count);
+        var highRisk = all.Where(c => c.IsHighRisk).Sum(c => c.Count);
         SocketsValue = Format.Number(total);
-        SocketsHint = suspicious > 0
-            ? Format.Count(suspicious, "подозрительное соединение", "подозрительных соединения", "подозрительных соединений")
-            : risky > 0
-                ? Format.Count(risky, "опасный порт открыт", "опасных порта открыто", "опасных портов открыто")
-                : Format.Count(networkPorts, "порт открыт", "порта открыто", "портов открыто");
-        SocketsTone = suspicious > 0 ? NetTone.Danger : risky > 0 ? NetTone.Warning : NetTone.Neutral;
+        // A port alone proves nothing (games and chats use some of them too): "необычное", and red only when a second
+        // sign agrees (see ConnectionRow.IsHighRisk).
+        SocketsHint = highRisk > 0
+            ? Format.Count(highRisk, "подозрительное соединение", "подозрительных соединения", "подозрительных соединений")
+            : suspicious > 0
+                ? Format.Count(suspicious, "необычное соединение", "необычных соединения", "необычных соединений")
+                : risky > 0
+                    ? Format.Count(risky, "опасный порт открыт", "опасных порта открыто", "опасных портов открыто")
+                    : Format.Count(networkPorts, "порт открыт", "порта открыто", "портов открыто");
+        SocketsTone = highRisk > 0 ? NetTone.Danger : suspicious > 0 || risky > 0 ? NetTone.Warning : NetTone.Neutral;
     }
 
     // ================================================================ reverse DNS (background, never blocking)
@@ -1272,6 +1284,7 @@ public sealed class NetworkViewModel : PageViewModel
             Wifi = _wifi,
             Sockets = _sockets,
             UploadBytesPerSecond = _upload,
+            Firewall = _firewall,
         };
         var findings = NetworkRules.BuildFindings(snapshot);
         Findings.Clear();
@@ -1328,6 +1341,7 @@ public sealed class NetworkViewModel : PageViewModel
         FindingKind.RiskyPort => ("Показать порт", ShowSocketsCommand, "ports:" + f.Argument),
         FindingKind.WindowsPorts => ("Показать порты", ShowSocketsCommand, "ports:"),
         FindingKind.SuspiciousConnection => ("Показать соединение", ShowSocketsCommand, "connections:" + f.Argument),
+        FindingKind.FirewallOff => ("Открыть «Безопасность»", OpenSecurityCommand, null),
         _ => (null, null, null),
     };
 

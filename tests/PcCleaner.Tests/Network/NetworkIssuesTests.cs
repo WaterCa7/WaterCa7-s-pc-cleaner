@@ -149,7 +149,7 @@ public class NetworkIssuesTests
     }
 
     [Fact]
-    public void RiskyPort_IsMedium_WindowsPorts_AreOneInfo_SuspiciousConnection_IsHigh()
+    public void RiskyPort_IsMedium_WindowsPorts_AreOneInfo_UnusualPortAlone_IsMedium()
     {
         var snapshot = Snapshot(
             Listen("0.0.0.0", 3306, MySql.Pid),
@@ -174,13 +174,213 @@ public class NetworkIssuesTests
         Assert.Contains("445", windows.Issue.Details);
         Assert.Contains("роутере", windows.Issue.Details);
 
+        // The port alone proves nothing (games and chats use some of these ports): "worth a look", not an alarm.
         var connection = Assert.Single(findings, f => f.Kind == FindingKind.SuspiciousConnection);
-        Assert.Equal(IssueSeverity.High, connection.Issue.Severity);
+        Assert.Equal(IssueSeverity.Medium, connection.Issue.Severity);
         Assert.Equal("xmr.exe подключён к 45.155.205.10:3333", connection.Issue.Title);
         Assert.Contains("майнинг", connection.Issue.Details);
         Assert.Contains("ещё 1", connection.Issue.Details);
+        Assert.Contains("игра или чат", connection.Issue.Details);
+        Assert.Contains("значком щита «Проверить IP»", connection.Issue.Details);
+        Assert.DoesNotContain("кнопкой", connection.Issue.Details);
+    }
 
-        Assert.Equal(FindingKind.SuspiciousConnection, findings[0].Kind); // most severe first
+    [Fact]
+    public void GameOnPort7777_IsMedium_AndNamedUnusualNotDangerous()
+    {
+        var game = new ProcessIdentity(7700, "Terraria.exe", @"C:\Games\Terraria\Terraria.exe", "Terraria", false);
+        var snapshot = new SocketSnapshot(new[] { Connection("51.38.10.20", 7777, game.Pid) },
+            new Dictionary<int, ProcessIdentity> { [game.Pid] = game }, DateTime.Now);
+
+        var row = Assert.Single(NetworkRules.BuildConnections(snapshot, includeLoopback: false));
+        Assert.True(row.IsSuspicious);
+        Assert.False(row.IsHighRisk);
+        Assert.Equal("Необычный порт", NetworkRules.RemoteServiceName(7777));
+        Assert.Equal("Необычный порт", new ConnectionItem(row).SuspiciousBadgeText);
+
+        var finding = Assert.Single(NetworkRules.BuildFindings(new NetworkSnapshot { Sockets = snapshot }));
+        Assert.Equal(IssueSeverity.Medium, finding.Issue.Severity);
+    }
+
+    [Fact]
+    public void StrongPort_IsHigh()
+    {
+        var snapshot = Snapshot(Connection("45.155.205.10", 4444, Chrome.Pid));
+        var row = Assert.Single(NetworkRules.BuildConnections(snapshot, includeLoopback: false));
+        Assert.True(row.IsHighRisk);
+        Assert.Equal("Подозрительно", new ConnectionItem(row).SuspiciousBadgeText);
+        var finding = Assert.Single(NetworkRules.BuildFindings(new NetworkSnapshot { Sockets = snapshot }));
+        Assert.Equal(IssueSeverity.High, finding.Issue.Severity);
+        Assert.Equal(FindingKind.SuspiciousConnection, finding.Kind);
+    }
+
+    [Fact]
+    public void UnusualPort_AndUnusualProgram_IsHigh()
+    {
+        var snapshot = Snapshot(Connection("45.155.205.10", 3333, Miner.Pid)) with
+        {
+            ProgramWarnings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [Miner.Path!] = "нет цифровой подписи; файл лежит прямо в корне AppData/ProgramData",
+            },
+        };
+
+        var row = Assert.Single(NetworkRules.BuildConnections(snapshot, includeLoopback: false));
+        Assert.True(row.IsHighRisk);
+        Assert.NotNull(row.ProgramWarning);
+
+        var finding = Assert.Single(NetworkRules.BuildFindings(new NetworkSnapshot { Sockets = snapshot }));
+        Assert.Equal(IssueSeverity.High, finding.Issue.Severity);
+        Assert.Contains("Сама программа тоже вызывает вопросы: нет цифровой подписи", finding.Issue.Details);
+        Assert.DoesNotContain("игра или чат", finding.Issue.Details);
+    }
+
+    [Fact]
+    public void ProgramWarnings_OnlyForProgramsOnUnusualPorts_AndOnlyWhenReallySuspicious()
+    {
+        var unsignedGame = new ProcessIdentity(7700, "game.exe", @"C:\Games\game.exe", "Game", false);
+        var processes = new Dictionary<int, ProcessIdentity> { [unsignedGame.Pid] = unsignedGame, [Miner.Pid] = Miner, [Chrome.Pid] = Chrome };
+        var snapshot = new SocketSnapshot(new[]
+        {
+            Connection("51.38.10.20", 7777, unsignedGame.Pid),
+            Connection("45.155.205.10", 3333, Miner.Pid),
+            Connection("142.250.74.14", 443, Chrome.Pid),
+        }, processes, DateTime.Now);
+        var asked = new List<string>();
+
+        var warnings = NetworkRules.ProgramWarnings(snapshot, path =>
+        {
+            asked.Add(path);
+            return path == Miner.Path
+                ? new SuspicionResult(50, new[] { "Нет цифровой подписи", "Файл лежит прямо в корне AppData/ProgramData" })
+                : new SuspicionResult(20, new[] { "Нет цифровой подписи" }); // unsigned alone: many games are
+        });
+
+        Assert.DoesNotContain(Chrome.Path!, asked); // port 443: not checked at all
+        var warning = Assert.Single(warnings);
+        Assert.Equal(Miner.Path, warning.Key);
+        Assert.Equal("нет цифровой подписи; файл лежит прямо в корне AppData/ProgramData", warning.Value);
+    }
+
+    [Fact]
+    public void TrustedProgram_OnUnusualPort_IsNeitherMarkedNorReported()
+    {
+        var path = Miner.Path!;
+        AppServices.Settings.AddTrusted(path);
+        try
+        {
+            var snapshot = Snapshot(Connection("45.155.205.10", 4444, Miner.Pid));
+            Assert.False(Assert.Single(NetworkRules.BuildConnections(snapshot, includeLoopback: false)).IsSuspicious);
+            Assert.Empty(NetworkRules.BuildFindings(new NetworkSnapshot { Sockets = snapshot }));
+        }
+        finally
+        {
+            AppServices.Settings.RemoveTrusted(path);
+        }
+    }
+
+    [Fact]
+    public void WindowsRemoteDesktop_IsLowAndPageOnly_OtherProgramOn3389_IsMedium()
+    {
+        var rdp = NetworkRules.BuildFindings(new NetworkSnapshot { Sockets = Snapshot(Listen("0.0.0.0", 3389, Svchost.Pid)) });
+        var finding = Assert.Single(rdp, f => f.Kind == FindingKind.RiskyPort);
+        Assert.Equal(IssueSeverity.Low, finding.Issue.Severity); // same as the Security module's "Удалённый рабочий стол включён"
+        Assert.True(finding.PageOnly);
+        Assert.Contains("«Безопасность»", finding.Issue.Details);
+        Assert.DoesNotContain(NetworkRules.BuildIssues(new NetworkSnapshot { Sockets = Snapshot(Listen("0.0.0.0", 3389, Svchost.Pid)) }),
+            i => i.Title.Contains("3389")); // the dashboard gets it once, from Security
+
+        var other = NetworkRules.BuildIssues(new NetworkSnapshot { Sockets = Snapshot(Listen("0.0.0.0", 3389, MySql.Pid)) });
+        var issue = Assert.Single(other, i => i.Title.Contains("3389"));
+        Assert.Equal(IssueSeverity.Medium, issue.Severity);
+    }
+
+    private static FirewallReport Firewall(string network, string profile, bool? enabled, string? thirdParty = null)
+        => new()
+        {
+            Profiles = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Domain"] = profile == "Domain" ? enabled : true,
+                ["Private"] = profile == "Private" ? enabled : true,
+                ["Public"] = profile == "Public" ? enabled : true,
+            },
+            Networks = new[] { new ConnectedNetwork(network, profile) },
+            ThirdPartyFirewall = thirdParty,
+        };
+
+    private static SocketSnapshot WindowsPortsSnapshot()
+        => Snapshot(Listen("0.0.0.0", 135, Svchost.Pid), Listen("0.0.0.0", 445, NetworkTestData.System.Pid));
+
+    [Fact]
+    public void FirewallOffForConnectedNetwork_ReplacesThe_ItIsNormal_Tip()
+    {
+        var snapshot = new NetworkSnapshot { Sockets = WindowsPortsSnapshot(), Firewall = Firewall("HomeNet 5G", "Private", false) };
+
+        var findings = NetworkRules.BuildFindings(snapshot);
+
+        Assert.DoesNotContain(findings, f => f.Kind == FindingKind.WindowsPorts);
+        var off = Assert.Single(findings, f => f.Kind == FindingKind.FirewallOff);
+        Assert.Equal(IssueSeverity.High, off.Issue.Severity); // the page no longer says "Сеть в порядке"
+        Assert.Equal("Брандмауэр выключен для сети «HomeNet 5G»", off.Issue.Title);
+        Assert.Contains("частной", off.Issue.Details);
+        Assert.Contains("135, 445", off.Issue.Details);
+        Assert.DoesNotContain("Это нормально", off.Issue.Details);
+        Assert.True(off.PageOnly);
+        // Security already puts "Брандмауэр Windows выключен" on the dashboard.
+        Assert.Empty(NetworkRules.BuildIssues(snapshot));
+    }
+
+    [Fact]
+    public void FirewallOn_ThirdPartyFirewall_UnknownState_OrOtherProfileOff_KeepTheTip()
+    {
+        foreach (var firewall in new[]
+                 {
+                     Firewall("HomeNet 5G", "Private", true),
+                     Firewall("HomeNet 5G", "Private", false, thirdParty: "Kaspersky Internet Security"),
+                     Firewall("HomeNet 5G", "Private", null),
+                     new FirewallReport
+                     {
+                         Profiles = new Dictionary<string, bool?> { ["Public"] = false, ["Private"] = true },
+                         Networks = new[] { new ConnectedNetwork("HomeNet 5G", "Private") },
+                     },
+                     null,
+                 })
+        {
+            var findings = NetworkRules.BuildFindings(new NetworkSnapshot { Sockets = WindowsPortsSnapshot(), Firewall = firewall });
+            Assert.DoesNotContain(findings, f => f.Kind == FindingKind.FirewallOff);
+            Assert.Equal(IssueSeverity.Info, Assert.Single(findings, f => f.Kind == FindingKind.WindowsPorts).Issue.Severity);
+        }
+    }
+
+    [Fact]
+    public void FirewallOffOnlyForDomainNetwork_IsLow()
+    {
+        var findings = NetworkRules.BuildFindings(new NetworkSnapshot
+        {
+            Sockets = WindowsPortsSnapshot(),
+            Firewall = Firewall("corp.example.com", "Domain", false),
+        });
+        Assert.Equal(IssueSeverity.Low, Assert.Single(findings, f => f.Kind == FindingKind.FirewallOff).Issue.Severity);
+    }
+
+    [Theory]
+    [InlineData(0L, "Public")]
+    [InlineData(1L, "Private")]
+    [InlineData(2L, "Domain")]
+    [InlineData(null, null)]
+    public void ProfileOfCategory(long? category, string? profile) => Assert.Equal(profile, NetworkRules.ProfileOfCategory(category));
+
+    [Fact]
+    public void SeverityBadges_AreNotBareLowHighWords()
+    {
+        // "Низко · Высокая задержка" read as a contradiction.
+        Assert.Equal("Мелочь", NetworkRules.SeverityText(IssueSeverity.Low));
+        Assert.Equal("Внимание", NetworkRules.SeverityText(IssueSeverity.Medium));
+        Assert.Equal("Важно", NetworkRules.SeverityText(IssueSeverity.High));
+        Assert.Equal("Совет", NetworkRules.SeverityText(IssueSeverity.Info));
+        var item = new FindingItem { Issue = new HealthIssue { Module = "Сеть", Title = "Высокая задержка", Severity = IssueSeverity.Low } };
+        Assert.Equal("Мелочь", item.SeverityText);
+        Assert.False(string.IsNullOrWhiteSpace(item.SeverityToolTip));
     }
 
     [Fact]

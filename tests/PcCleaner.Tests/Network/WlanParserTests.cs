@@ -160,6 +160,107 @@ public class WlanParserTests
         Assert.Null(new WifiReport { Interfaces = new[] { wifi } }.Connected);
     }
 
+    // German Windows: "Status : Verbunden" (the finding's sample).
+    private const string German = """
+        Es ist 1 Schnittstelle auf dem System vorhanden:
+
+            Name                   : WLAN
+            Beschreibung           : Intel(R) Wi-Fi 6 AX201 160MHz
+            GUID                   : 0f37372b-0046-4e4e-baad-ad669ad43102
+            Physische Adresse      : 02:00:00:00:00:01
+            Status                 : Verbunden
+            SSID                   : Heimnetz
+            AP BSSID               : 02:00:00:00:00:02
+            Band                   : 2,4 GHz
+            Kanal                  : 6
+            Funktyp                : 802.11n
+            Authentifizierung      : Offen
+            Verschlüsselung        : Keine
+            Signal                 : 92%
+            Profil                 : Heimnetz
+        """;
+
+    [Fact]
+    public void Parse_German_IsConnected()
+    {
+        var wifi = Assert.Single(WlanParser.Parse(German));
+        Assert.True(wifi.IsConnected);
+        Assert.Equal("WLAN", wifi.Name);
+        Assert.Equal("Heimnetz", wifi.Ssid);
+        Assert.Equal(92, wifi.SignalPercent);
+        Assert.Equal(2.4, wifi.BandGhz);
+        Assert.True(NetworkRules.IsWeakWifiSecurity(wifi.Authentication, wifi.Cipher)); // "Offen" = open network
+        Assert.NotNull(new WifiReport { Interfaces = new[] { wifi } }.Connected);
+    }
+
+    [Fact]
+    public void Parse_Ukrainian_FindsTheInterface()
+    {
+        const string text = """
+            У системі 1 інтерфейс:
+
+                Ім'я                   : Бездротова мережа
+                Опис                   : Realtek 8812BU Wireless LAN 802.11ac USB NIC
+                GUID                   : 0f37372b-0046-4e4e-baad-ad669ad43102
+                Стан                   : підключено
+                SSID                   : Дім
+                Канал                  : 132
+                Сигнал                 : 81%
+                Профіль                : Дім
+            """;
+
+        var wifi = Assert.Single(WlanParser.Parse(text));
+        Assert.Equal("Бездротова мережа", wifi.Name);
+        Assert.True(wifi.IsConnected);
+        Assert.Equal("Дім", wifi.Ssid);
+        Assert.Equal(81, wifi.SignalPercent);
+        Assert.Equal(5, wifi.BandGhz); // guessed from channel 132
+    }
+
+    [Fact]
+    public void Parse_UnknownLanguage_UsesTheFirstLineAsName_AndTheSignalAsConnected()
+    {
+        const string text = """
+            Il existe 2 interfaces sur le système :
+
+                Nom                    : Wi-Fi
+                Description            : Intel(R) Wi-Fi 6 AX201 160MHz
+                GUID                   : 11111111-2222-3333-4444-555555555555
+                État                   : déconnecté
+
+                Nom                    : Wi-Fi 2
+                Description            : TP-Link Wireless USB Adapter
+                Identificateur         : aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+                État                   : connecté
+                SSID                   : Maison
+                Canal                  : 36
+                Signal                 : 88 %
+            """;
+
+        var list = WlanParser.Parse(text);
+
+        Assert.Equal(2, list.Count);
+        Assert.Equal("Wi-Fi", list[0].Name);
+        Assert.False(list[0].IsConnected); // no signal line: not connected
+        Assert.Equal("Wi-Fi 2", list[1].Name);
+        Assert.Equal("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", list[1].Guid); // recognised by the value
+        Assert.True(list[1].IsConnected);
+        Assert.Equal(88, list[1].SignalPercent);
+    }
+
+    [Fact]
+    public void Parse_LocationMessage_IsNotAnInterface()
+    {
+        const string text = """
+            Network shell commands need location permission to access WLAN information. Turn on Location services on the Location page in Privacy & security settings.
+
+            Here is the URI for the Location page in the Settings app:
+                ms-settings:privacy-location
+            """;
+        Assert.Empty(WlanParser.Parse(text));
+        Assert.True(WlanParser.IsLocationBlocked(text));
+    }
+
     [Fact]
     public void Parse_EmptyOrGarbage_ReturnsNothing()
     {
@@ -181,6 +282,10 @@ public class WlanParserTests
     [InlineData("disconnected", false)]
     [InlineData("Отключено", false)]
     [InlineData("authenticating", false)]
+    [InlineData("Verbunden", true)]
+    [InlineData("Підключено", true)]
+    [InlineData("Відключено", false)]
+    [InlineData("Getrennt", false)]
     public void IsConnectedState(string state, bool expected)
         => Assert.Equal(expected, WlanParser.IsConnectedState(state));
 

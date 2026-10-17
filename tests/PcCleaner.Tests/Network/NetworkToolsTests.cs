@@ -43,6 +43,58 @@ public class NetworkToolsTests
     }
 
     [Fact]
+    public async Task ResetNetwork_CancelDuringFirstStep_LetsNetshFinish_SkipsTheRest_AndSaysWhatWasReset()
+    {
+        using var cts = new CancellationTokenSource();
+        var started = new List<string>();
+        var tokens = new List<CancellationToken>();
+
+        var (ok, message) = await NetworkService.ResetStepsAsync((args, token) =>
+        {
+            started.Add(args);
+            tokens.Add(token);
+            cts.Cancel(); // the user presses "Отмена" while netsh runs
+            return Task.FromResult((true, "Sucessfully reset the Winsock Catalog.", 0));
+        }, cts.Token);
+
+        Assert.Equal(new[] { "winsock reset" }, started); // "int ip reset" never started
+        Assert.All(tokens, t => Assert.False(t.CanBeCanceled)); // a running netsh is never killed
+        Assert.False(ok);
+        Assert.Contains("Сброс остановлен", message);
+        Assert.Contains("netsh winsock reset", message);
+        Assert.Contains("netsh int ip reset", message);
+        Assert.Contains("Перезагрузите компьютер", message);
+    }
+
+    [Fact]
+    public async Task ResetNetwork_CancelledBeforeTheFirstStep_ChangesNothing()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var started = 0;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => NetworkService.ResetStepsAsync((_, _) =>
+        {
+            started++;
+            return Task.FromResult((true, "", 0));
+        }, cts.Token));
+        Assert.Equal(0, started);
+    }
+
+    [Fact]
+    public async Task ResetNetwork_BothSteps_Succeed()
+    {
+        var started = new List<string>();
+        var (ok, message) = await NetworkService.ResetStepsAsync((args, _) =>
+        {
+            started.Add(args);
+            return Task.FromResult((true, "OK", 0));
+        }, CancellationToken.None);
+        Assert.True(ok);
+        Assert.Equal(new[] { "winsock reset", "int ip reset" }, started);
+        Assert.Contains("Перезагрузите компьютер", message);
+    }
+
+    [Fact]
     public void IsWindowsPath_ExcludesTheWindowsTempFolder()
     {
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);

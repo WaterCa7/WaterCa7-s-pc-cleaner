@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Modules.Security;
 
 namespace PcCleaner.Modules.Network;
 
@@ -21,10 +22,14 @@ public enum FindingKind
     RiskyPort,
     WindowsPorts,
     SuspiciousConnection,
+    FirewallOff,
 }
 
-/// <summary>A health issue plus what it refers to (port number, remote address…).</summary>
-public sealed record NetworkFinding(HealthIssue Issue, FindingKind Kind, string? Argument = null);
+/// <summary>
+/// A health issue plus what it refers to (port number, remote address…). <paramref name="PageOnly"/>: shown on the
+/// Network page only — the Security module already reports the same setting on the dashboard.
+/// </summary>
+public sealed record NetworkFinding(HealthIssue Issue, FindingKind Kind, string? Argument = null, bool PageOnly = false);
 
 public static class LatencyMath
 {
@@ -429,6 +434,18 @@ public static class NetworkRules
     };
 
     /// <summary>
+    /// Unusual ports that ordinary programs practically never use (hacking tools, Monero pools): a connection to one of
+    /// them is a strong sign on its own. The other ports above also have everyday uses (games, IRC chats, Android
+    /// debugging, Tor Browser), so for them the port alone only means "worth a look".
+    /// </summary>
+    private static readonly HashSet<int> StrongSuspiciousRemote = new() { 4444, 1337, 31337, 14444, 14433, 45700 };
+
+    public static bool IsStrongSuspiciousPort(int port) => StrongSuspiciousRemote.Contains(port);
+
+    /// <summary>Windows' own Remote Desktop port.</summary>
+    public const int RdpPort = 3389;
+
+    /// <summary>
     /// Torrent and other peer-to-peer clients connect to hundreds of peers that listen on random ports, so a peer on
     /// 7777 or 5555 means nothing for them.
     /// </summary>
@@ -485,8 +502,11 @@ public static class NetworkRules
         8443 => "HTTPS",
         >= 27015 and <= 27050 => "Steam",
         >= 6881 and <= 6889 => "Торрент",
-        _ => SuspiciousRemote.ContainsKey(port) ? "Подозрительный порт" : "",
+        _ => SuspiciousRemote.ContainsKey(port) ? UnusualPortText : "",
     };
+
+    /// <summary>Label of a connection to a port from <see cref="SuspiciousRemote"/> (the port alone proves nothing).</summary>
+    public const string UnusualPortText = "Необычный порт";
 
     /// <summary>
     /// Classifies a listening port: loopback-only is always safe; risky services on the network → Risky;
@@ -593,6 +613,9 @@ public static class NetworkRules
             var suspicious = scope == AddressScope.Public && outgoing && !IsPeerToPeerClient(owner)
                 ? SuspiciousRemotePortReason(e.RemotePort)
                 : null;
+            // A program the user marked as trusted is never flagged (neither in the list nor in the findings).
+            if (suspicious is not null && AppServices.Settings.IsTrusted(owner.Path))
+                suspicious = null;
             rows.Add(new ConnectionRow
             {
                 Process = owner,
@@ -602,6 +625,7 @@ public static class NetworkRules
                 State = e.State,
                 Scope = scope,
                 SuspiciousReason = suspicious,
+                ProgramWarning = suspicious is null ? null : snapshot.ProgramWarning(owner),
             });
         }
         return rows;
@@ -691,14 +715,14 @@ public static class NetworkRules
             return false;
         var a = authentication.Trim().ToLowerInvariant();
         var c = (cipher ?? "").Trim().ToLowerInvariant();
-        return a.StartsWith("open") || a.StartsWith("открыт") || a.Contains("wep") || a.StartsWith("shared") ||
-               a.StartsWith("общ") || c.Contains("wep");
+        return IsOpenWifi(a) || a.Contains("wep") || a.StartsWith("shared") || a.StartsWith("общ") || c.Contains("wep");
     }
 
+    /// <summary>"Open" / "Открытая" / "Відкрита" / "Offen" (netsh translates the value too).</summary>
     private static bool IsOpenWifi(string? authentication)
     {
         var a = (authentication ?? "").Trim().ToLowerInvariant();
-        return a.StartsWith("open") || a.StartsWith("открыт");
+        return a.StartsWith("open") || a.StartsWith("открыт") || a.StartsWith("відкрит") || a.StartsWith("offen");
     }
 
     // ===================================================================== issues
@@ -712,15 +736,19 @@ public static class NetworkRules
         TargetPageKey = PageKey,
     };
 
-    /// <summary>All findings for the dashboard, most important first. Pure: only reads the snapshot.</summary>
-    public static List<HealthIssue> BuildIssues(NetworkSnapshot s) => BuildFindings(s).Select(f => f.Issue).ToList();
+    /// <summary>
+    /// All findings for the dashboard, most important first (without the page-only ones the Security module already
+    /// reports). Pure: only reads the snapshot.
+    /// </summary>
+    public static List<HealthIssue> BuildIssues(NetworkSnapshot s)
+        => BuildFindings(s).Where(f => !f.PageOnly).Select(f => f.Issue).ToList();
 
     /// <summary>All findings with their kind, most important first. Pure: only reads the snapshot.</summary>
     public static List<NetworkFinding> BuildFindings(NetworkSnapshot s)
     {
         var issues = new List<NetworkFinding>();
-        void Add(FindingKind kind, string title, string details, IssueSeverity severity, string? argument = null)
-            => issues.Add(new NetworkFinding(Issue(title, details, severity), kind, argument));
+        void Add(FindingKind kind, string title, string details, IssueSeverity severity, string? argument = null, bool pageOnly = false)
+            => issues.Add(new NetworkFinding(Issue(title, details, severity), kind, argument, pageOnly));
         var vpn = ActiveVpn(s.Adapters);
 
         // --- Internet and latency
@@ -839,8 +867,12 @@ public static class NetworkRules
                          .GroupBy(p => (p.Port, p.Process.GroupKey)))
             {
                 var p = g.First();
+                // Remote Desktop of Windows itself: the Security module reports the same setting ("Удалённый рабочий стол
+                // включён", Low), so the dashboard gets it once and both pages rate it the same.
+                var windowsRdp = p.Port == RdpPort && p.Process.IsWindows;
                 Add(FindingKind.RiskyPort, $"Открыт порт {p.Port} ({p.Process.Name})",
-                    $"{p.Service}. {p.Explanation}", IssueSeverity.Medium, p.Port.ToString());
+                    $"{p.Service}. {p.Explanation}" + (windowsRdp ? " Об этом же сообщает раздел «Безопасность»." : ""),
+                    windowsRdp ? IssueSeverity.Low : IssueSeverity.Medium, p.Port.ToString(), pageOnly: windowsRdp);
             }
 
             var windowsPorts = ports
@@ -852,31 +884,137 @@ public static class NetworkRules
             if (windowsPorts.Count > 0)
             {
                 var list = string.Join(", ", windowsPorts.Take(8)) + (windowsPorts.Count > 8 ? "…" : "");
-                Add(FindingKind.WindowsPorts, "Открыты стандартные порты Windows",
-                    $"Порты {list} принимают подключения из локальной сети — через них работают общий доступ к файлам и принтерам " +
-                    "и службы Windows. Это нормально. Только не пробрасывайте их на роутере (проброс портов, DMZ) и не выключайте " +
-                    "брандмауэр — из интернета они должны быть закрыты.", IssueSeverity.Info);
+                var unprotected = FirewallOffNetworks(s.Firewall);
+                if (unprotected.Count > 0)
+                    AddFirewallOff(unprotected, list);
+                else
+                    Add(FindingKind.WindowsPorts, "Открыты стандартные порты Windows",
+                        $"Порты {list} принимают подключения из локальной сети — через них работают общий доступ к файлам и принтерам " +
+                        "и службы Windows. Это нормально. Только не пробрасывайте их на роутере (проброс портов, DMZ) и не выключайте " +
+                        "брандмауэр — из интернета они должны быть закрыты.", IssueSeverity.Info);
             }
 
             foreach (var g in BuildConnections(snap, includeLoopback: false)
-                         .Where(c => c.IsSuspicious && !AppServices.Settings.IsTrusted(c.Process.Path))
+                         .Where(c => c.IsSuspicious) // programs the user trusts are never suspicious
                          .GroupBy(c => (c.Process.GroupKey, c.RemotePort)))
             {
                 var c = g.First();
                 var others = g.Select(x => x.RemoteAddress).Distinct().Count() - 1;
+                var highRisk = g.Any(x => x.IsHighRisk);
+                var warning = g.Select(x => x.ProgramWarning).FirstOrDefault(w => w is not null);
                 Add(FindingKind.SuspiciousConnection, $"{c.Process.Name} подключён к {NetAddress.Endpoint(c.RemoteAddress, c.RemotePort)}",
                     $"Порт {c.RemotePort} — {c.SuspiciousReason}." +
+                    (warning is not null ? $" Сама программа тоже вызывает вопросы: {warning}." : "") +
                     (others > 0 ? $" Таких соединений у программы ещё {others}." : "") +
-                    " Если вы не знаете эту программу, проверьте её в разделе «Процессы» (VirusTotal, Защитник Windows), " +
-                    "а адрес — кнопкой «Проверить IP» в разделе «Сеть».",
-                    IssueSeverity.High, NetAddress.Text(c.RemoteAddress));
+                    (highRisk
+                        ? " Проверьте эту программу в разделе «Процессы» (VirusTotal, Защитник Windows)"
+                        : " Если это ваша игра или чат — всё в порядке. Если вы не знаете эту программу, проверьте её в разделе " +
+                          "«Процессы» (VirusTotal, Защитник Windows)") +
+                    ", а адрес — значком щита «Проверить IP» в строке соединения (или через меню правой кнопки мыши).",
+                    highRisk ? IssueSeverity.High : IssueSeverity.Medium, NetAddress.Text(c.RemoteAddress));
             }
         }
 
         return issues
             .OrderByDescending(i => i.Issue.Severity)
             .ToList();
+
+        void AddFirewallOff(IReadOnlyList<ConnectedNetwork> networks, string ports)
+        {
+            var first = networks[0];
+            var profile = new FirewallProfileState(first.Profile, null);
+            var names = string.Join(", ", networks.Select(n => $"«{n.Name}»"));
+            var onlyDomain = networks.All(n => n.Profile.Equals("Domain", StringComparison.OrdinalIgnoreCase));
+            Add(FindingKind.FirewallOff,
+                networks.Count == 1 ? $"Брандмауэр выключен для сети «{first.Name}»" : "Брандмауэр выключен для подключённых сетей",
+                (networks.Count == 1
+                    ? $"Windows считает сеть «{first.Name}» {profile.Genitive}, а брандмауэр для таких сетей выключен. "
+                    : $"Брандмауэр выключен для сетей {names}. ") +
+                $"Поэтому порты {ports} (общий доступ к файлам и принтерам, службы Windows) открыты для любого устройства " +
+                (networks.Count == 1 ? "в этой сети" : "в этих сетях") +
+                " — без брандмауэра так быть не должно. Включите брандмауэр в разделе «Безопасность» (или «Безопасность " +
+                "Windows» → «Брандмауэр и защита сети»).",
+                // Same severity as the Security module's "Брандмауэр Windows выключен", which also puts it on the dashboard.
+                onlyDomain ? IssueSeverity.Low : IssueSeverity.High, pageOnly: true);
+        }
     }
+
+    /// <summary>
+    /// Why the programs connected to an unusual port look unusual themselves (path → text): <paramref name="analyze"/>
+    /// (normally <see cref="Suspicion.Analyze"/> with the signature) must rate the program at least "Подозрительно" —
+    /// a missing signature alone is not enough, many games are unsigned. Only these few programs are checked.
+    /// </summary>
+    public static Dictionary<string, string> ProgramWarnings(SocketSnapshot snapshot, Func<string, SuspicionResult> analyze)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var paths = BuildConnections(snapshot, includeLoopback: false)
+            .Where(c => c.IsSuspicious && !string.IsNullOrWhiteSpace(c.Process.Path))
+            .Select(c => c.Process.Path!)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
+        {
+            var suspicion = analyze(path);
+            if (suspicion.IsSuspicious && ProgramWarningText(suspicion.Reasons) is { Length: > 0 } text)
+                result[path] = text;
+        }
+        return result;
+    }
+
+    /// <summary>["Нет цифровой подписи", "Файл скрыт"] → "нет цифровой подписи; файл скрыт" (used inside a sentence).</summary>
+    public static string ProgramWarningText(IEnumerable<string> reasons)
+        => string.Join("; ", reasons.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => LowerFirst(r.Trim())));
+
+    private static string LowerFirst(string text)
+        => text.Length == 0 ? text : char.ToLower(text[0], Format.Ru) + text[1..];
+
+    // ===================================================================== firewall
+
+    /// <summary>
+    /// Connected networks whose Windows Firewall profile is off. An enabled third-party firewall protects them, and an
+    /// unknown state is never reported.
+    /// </summary>
+    public static List<ConnectedNetwork> FirewallOffNetworks(FirewallReport? firewall)
+    {
+        if (firewall is null || firewall.ThirdPartyFirewall is not null)
+            return new List<ConnectedNetwork>();
+        return firewall.Networks
+            .Where(n => firewall.Profiles.Any(p => p.Key.Equals(n.Profile, StringComparison.OrdinalIgnoreCase) && p.Value == false))
+            .ToList();
+    }
+
+    /// <summary>MSFT_NetConnectionProfile.NetworkCategory → firewall profile name (0 Public, 1 Private, 2 Domain).</summary>
+    public static string? ProfileOfCategory(long? category) => category switch
+    {
+        0 => "Public",
+        1 => "Private",
+        2 => "Domain",
+        _ => null,
+    };
+
+    // ===================================================================== severity labels
+
+    /// <summary>
+    /// Badge of a finding on the page. Noun-like labels: a bare "Низко" in front of "Высокая задержка" read as a
+    /// contradiction. The dashboard groups by severity with its own headers and hints.
+    /// </summary>
+    public static string SeverityText(IssueSeverity severity) => severity switch
+    {
+        IssueSeverity.Critical => "Критично",
+        IssueSeverity.High => "Важно",
+        IssueSeverity.Medium => "Внимание",
+        IssueSeverity.Low => "Мелочь",
+        _ => "Совет",
+    };
+
+    /// <summary>What the badge means (tooltip).</summary>
+    public static string SeverityToolTip(IssueSeverity severity) => severity switch
+    {
+        IssueSeverity.Critical => "Угрожает безопасности или работе сети — исправьте в первую очередь.",
+        IssueSeverity.High => "Заметно мешает работе сети или защите компьютера.",
+        IssueSeverity.Medium => "Стоит посмотреть и исправить, когда будет минутка.",
+        IssueSeverity.Low => "Мелочь: исправление чуть-чуть улучшит работу сети.",
+        _ => "Полезная рекомендация — на ваше усмотрение.",
+    };
 
     /// <summary>Parses "866.7" / "866,7".</summary>
     internal static double? ParseNumber(string? text)

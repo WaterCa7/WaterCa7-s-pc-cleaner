@@ -440,8 +440,8 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <Border Style="{StaticResource Badge}" VerticalAlignment="Top" Margin="0,1,0,0"
-                                                Background="{Binding Severity, Converter={StaticResource ToneSoft}}">
-                                            <TextBlock Text="{Binding Severity, Converter={StaticResource SeverityToText}}" Style="{StaticResource BadgeText}"
+                                                Background="{Binding Severity, Converter={StaticResource ToneSoft}}" ToolTip="{Binding SeverityToolTip}">
+                                            <TextBlock Text="{Binding SeverityText}" Style="{StaticResource BadgeText}"
                                                        Foreground="{Binding Severity, Converter={StaticResource ToneBrush}}" />
                                         </Border>
                                         <StackPanel Grid.Column="1" Margin="0,0,12,0">
@@ -908,10 +908,31 @@
                                                             <Run Text="{Binding SecondaryText, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" FontSize="11.5"
                                                                  FontWeight="Normal" />
                                                         </TextBlock>
-                                                        <Border Grid.Column="2" Style="{StaticResource Badge}" Margin="6,0,0,0" Background="{StaticResource DangerSoftBrush}"
+                                                        <Border Grid.Column="2" Margin="6,0,0,0"
                                                                 Visibility="{Binding IsSuspicious, Converter={StaticResource BoolToVis}}"
-                                                                ToolTip="Соединение с портом, который часто используют вирусы, майнеры или Tor">
-                                                            <TextBlock Text="Опасный порт" Style="{StaticResource BadgeText}" Foreground="{StaticResource DangerBrush}" />
+                                                                ToolTip="{Binding SuspiciousBadgeToolTip}">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border" BasedOn="{StaticResource Badge}">
+                                                                    <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsHighRisk}" Value="True">
+                                                                            <Setter Property="Background" Value="{StaticResource DangerSoftBrush}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="{Binding SuspiciousBadgeText}">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource BadgeText}">
+                                                                        <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsHighRisk}" Value="True">
+                                                                                <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
                                                         </Border>
                                                     </Grid>
                                                 </DataTemplate>
