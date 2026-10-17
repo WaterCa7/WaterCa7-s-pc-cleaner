@@ -185,13 +185,32 @@ public sealed class CleanerService : IHealthContributor
 
     // ===== Cleaning (changes the system — callers confirm first) =====
 
+    /// <summary>
+    /// Asks the user a Yes/No question about a change ("Да" = go ahead), like <see cref="Dialogs.Confirm"/>. Used only
+    /// when the Recycle Bin holds more than the confirmation showed: the second question names its current size.
+    /// </summary>
+    internal Func<string, string, bool> ConfirmAgain { get; set; } = Dialogs.Confirm;
+
+    internal const string RecycleBinGrewTitle = "Очистка корзины";
+
+    private const string RecycleBinAlreadyEmpty = "Корзина уже пуста";
+
     /// <summary>Cleans one category and writes a Log.Action summary. Never throws except for cancellation.</summary>
     public Task<CategoryCleanResult> CleanCategoryAsync(CleanerCategory category, CancellationToken ct)
-        => CleanCategoryAsync(category, userFoldersOnly: false, ct);
+        => CleanCategoryAsync(category, userFoldersOnly: false, confirmedRecycleBin: null, ct);
+
+    /// <param name="confirmedRecycleBin">
+    /// What the confirmation showed for the Recycle Bin. The bin is queried again right before it is emptied: if it holds
+    /// more now, the user is asked again with the current size (<see cref="ConfirmAgain"/>), and if it cannot be
+    /// checked, it is left alone. Every caller that asked the user passes it.
+    /// </param>
+    public Task<CategoryCleanResult> CleanCategoryAsync(CleanerCategory category, RecycleBinSnapshot? confirmedRecycleBin,
+        CancellationToken ct)
+        => CleanCategoryAsync(category, userFoldersOnly: false, confirmedRecycleBin, ct);
 
     /// <param name="userFoldersOnly">Skip folders that need administrator rights even when elevated (dashboard fix).</param>
     private async Task<CategoryCleanResult> CleanCategoryAsync(CleanerCategory category, bool userFoldersOnly,
-        CancellationToken ct)
+        RecycleBinSnapshot? confirmedRecycleBin, CancellationToken ct)
     {
         CategoryCleanResult result;
         try
@@ -199,7 +218,7 @@ public sealed class CleanerService : IHealthContributor
             var rules = userFoldersOnly ? CleanerRules.FromSettings(_settings(), isElevated: false) : CurrentRules();
             result = category.Kind switch
             {
-                CategoryKind.RecycleBin => await Task.Run(() => EmptyRecycleBin(category), ct),
+                CategoryKind.RecycleBin => await Task.Run(() => EmptyRecycleBin(category, confirmedRecycleBin), ct),
                 CategoryKind.DeliveryOptimization when userFoldersOnly =>
                     new CategoryCleanResult { CategoryId = category.Id, Name = category.Name, SkippedAdminRoots = 1 },
                 CategoryKind.DeliveryOptimization => await CleanDeliveryOptimizationAsync(category, ct),
@@ -210,21 +229,23 @@ public sealed class CleanerService : IHealthContributor
         {
             Log.Warn($"Очистка «{category.Name}» не удалась: {ex.Message}");
             result = new CategoryCleanResult { CategoryId = category.Id, Name = category.Name };
-            result.Errors.Add(ex.Message);
+            result.Errors.Add(ErrorText.For(ex));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log.Error($"Очистка «{category.Name}»: непредвиденная ошибка", ex);
             result = new CategoryCleanResult { CategoryId = category.Id, Name = category.Name };
-            result.Errors.Add(ex.Message);
+            result.Errors.Add(ErrorText.For(ex));
         }
         LogResult(category, result, IsElevated);
         return result;
     }
 
     /// <summary>Cleans categories one after another; stops early (keeping the results so far) when cancelled.</summary>
+    /// <param name="confirmedRecycleBin">What the confirmation showed for the Recycle Bin (see CleanCategoryAsync).</param>
     public async Task<IReadOnlyList<CategoryCleanResult>> CleanAsync(IReadOnlyList<CleanerCategory> categories,
-        Action<int, CleanerCategory>? onStart, CancellationToken ct, bool userFoldersOnly = false)
+        Action<int, CleanerCategory>? onStart, CancellationToken ct, bool userFoldersOnly = false,
+        RecycleBinSnapshot? confirmedRecycleBin = null)
     {
         var results = new List<CategoryCleanResult>();
         for (var i = 0; i < categories.Count; i++)
@@ -234,7 +255,7 @@ public sealed class CleanerService : IHealthContributor
             onStart?.Invoke(i, categories[i]);
             try
             {
-                results.Add(await CleanCategoryAsync(categories[i], userFoldersOnly, ct));
+                results.Add(await CleanCategoryAsync(categories[i], userFoldersOnly, confirmedRecycleBin, ct));
             }
             catch (OperationCanceledException)
             {
@@ -244,28 +265,69 @@ public sealed class CleanerService : IHealthContributor
         return results;
     }
 
-    private CategoryCleanResult EmptyRecycleBin(CleanerCategory category)
+    /// <summary>Current size and object count of all Recycle Bins, or null if Windows cannot tell.</summary>
+    internal RecycleBinSnapshot? QueryRecycleBin()
+        => _recycleBin.Query() is { } q ? new RecycleBinSnapshot(q.Bytes, q.Items) : null;
+
+    /// <param name="confirmed">What the user saw when agreeing to empty the bin (null: no check, used by tests only).</param>
+    private CategoryCleanResult EmptyRecycleBin(CleanerCategory category, RecycleBinSnapshot? confirmed)
     {
         var result = new CategoryCleanResult { CategoryId = category.Id, Name = category.Name };
-        var before = _recycleBin.Query();
+        // Queried again right before emptying: the confirmation may be minutes old (the dashboard keeps its findings
+        // until the next check), and files deleted into the bin since then were never shown to the user.
+        var before = QueryRecycleBin();
+        if (confirmed is { } shown)
+        {
+            while (true)
+            {
+                if (before is null)
+                {
+                    result.Errors.Add("Windows не сообщила, что в ней сейчас лежит, поэтому ничего не удалено");
+                    return result;
+                }
+                if (before.Value.Items == 0 || !shown.IsExceededBy(before.Value))
+                    break;
+                var now = before.Value;
+                Log.Info($"Очистка: в корзине больше, чем было показано в подтверждении ({shown.Text} → {now.Text}), " +
+                         "спрашиваем ещё раз");
+                if (!ConfirmAgain(RecycleBinGrewTitle, RecycleBinGrewText(shown, now)))
+                {
+                    result.ChangedAfterConfirmation = true;
+                    result.Message = "Не очищена — в неё попали новые файлы";
+                    return result;
+                }
+                // The user has now seen these numbers; check once more in case the bin kept growing during the question.
+                shown = now;
+                before = QueryRecycleBin();
+            }
+        }
         if (before is { Items: 0 })
         {
-            result.Message = "Корзина уже пуста";
+            result.Message = RecycleBinAlreadyEmpty;
             return result;
         }
         if (_recycleBin.Empty(out var error))
         {
-            var after = _recycleBin.Query();
+            var after = QueryRecycleBin();
             result.FreedBytes = Math.Max(0, (before?.Bytes ?? 0) - (after?.Bytes ?? 0));
             result.DeletedFiles = Math.Max(0, (before?.Items ?? 0) - (after?.Items ?? 0));
             result.Message = "Корзина очищена";
         }
         else
         {
-            result.Errors.Add($"Не удалось очистить корзину ({error})");
+            result.Errors.Add($"Windows не смогла её очистить ({error})");
         }
         return result;
     }
+
+    /// <summary>The second question when the Recycle Bin grew after the user had confirmed emptying it.</summary>
+    internal static string RecycleBinGrewText(RecycleBinSnapshot shown, RecycleBinSnapshot now)
+        => "С тех пор как вы подтвердили очистку, в корзину попали новые файлы:\n\n" +
+           $"•  было показано: {shown.Text}\n" +
+           $"•  сейчас в корзине: {now.Text}\n\n" +
+           "Если очистить её сейчас, новые файлы тоже будут удалены, и восстановить их будет нельзя. " +
+           "Если не уверены, нажмите «Нет» и сначала откройте корзину.\n\n" +
+           "Очистить корзину полностью?";
 
     private async Task<CategoryCleanResult> CleanDeliveryOptimizationAsync(CleanerCategory category, CancellationToken ct)
     {
@@ -442,7 +504,9 @@ public sealed class CleanerService : IHealthContributor
             {
                 Module = ModuleName,
                 Title = $"Можно освободить {Format.Bytes(total)} мусора",
-                Details = $"Временные файлы и кэш, которые можно безопасно удалить. Больше всего: {top}. " +
+                Details = "Временные файлы и кэш, которые можно безопасно удалить " +
+                          $"({Format.Count(cleanable.Count, "категория", "категории", "категорий")}). Больше всего: {top}. " +
+                          "Категории, с которых вы снимете отметку на странице «Очистка», будут пропущены. " +
                           "Пароли, история браузеров и ваши документы не затрагиваются; занятые файлы будут пропущены.",
                 Severity = severity.Value,
                 Gain = $"Освободит до {Format.Bytes(total)}",
@@ -480,7 +544,8 @@ public sealed class CleanerService : IHealthContributor
                 Module = ModuleName,
                 Title = $"В корзине {Format.Bytes(bytes)}",
                 Details = $"В корзине {Format.Count(items, "объект", "объекта", "объектов")}. Это файлы, которые вы удалили раньше: " +
-                          "если они не нужны, корзину можно очистить. Восстановить их после этого будет нельзя.",
+                          "если они не нужны, корзину можно очистить. Восстановить их после этого будет нельзя. " +
+                          "Если к моменту очистки в корзине окажется больше файлов, программа спросит ещё раз.",
                 Severity = IssueSeverity.Info,
                 Gain = $"Освободит {Format.Bytes(bytes)}",
                 ReclaimableBytes = bytes,
@@ -489,10 +554,17 @@ public sealed class CleanerService : IHealthContributor
                 FixAsync = async token =>
                 {
                     var category = categories.First(c => c.Kind == CategoryKind.RecycleBin);
-                    var r = await CleanCategoryAsync(category, token);
-                    return r.Errors.Count > 0
-                        ? "Не удалось очистить корзину: " + r.Errors[0]
-                        : $"Корзина очищена, освобождено {Format.Bytes(r.FreedBytes)}.";
+                    // The dashboard's confirmation showed these numbers. If more has been deleted into the bin since the
+                    // check, the user is asked again with its current size before anything is emptied.
+                    var r = await CleanCategoryAsync(category, new RecycleBinSnapshot(bytes, items), token);
+                    if (r.Errors.Count > 0)
+                        return $"Не удалось очистить корзину: {r.Errors[0]}.";
+                    if (r.ChangedAfterConfirmation)
+                        return "Корзина не очищена, ничего не удалено: после проверки в неё попали новые файлы. " +
+                               "Откройте корзину, убедитесь, что они не нужны, и очистите её на странице «Очистка».";
+                    if (r.FreedBytes == 0 && r.DeletedFiles == 0 && r.Message == RecycleBinAlreadyEmpty)
+                        return "Корзина уже пуста.";
+                    return $"Корзина очищена, освобождено {Format.Bytes(r.FreedBytes)}.";
                 },
             });
         }
@@ -511,17 +583,34 @@ public sealed class CleanerService : IHealthContributor
     /// <summary>
     /// Dashboard fix: cleans the given recommended categories, user folders only. Folders that need administrator
     /// rights are skipped even when the app is elevated, so the fix does exactly what the issue promised.
+    /// Categories the user unchecked on the Cleaner page after the analysis are skipped too: the latest choice wins.
     /// </summary>
     private async Task<string> FixJunkAsync(IReadOnlySet<string> categoryIds, CancellationToken ct)
     {
-        var categories = (await Task.Run(LoadCategories, ct))
+        var found = (await Task.Run(LoadCategories, ct))
             .Where(c => categoryIds.Contains(c.Id) && c.Kind == CategoryKind.Files && !c.RequiresAdmin)
             .ToList();
+        var disabled = new HashSet<string>(_settings().CleanerDisabledCategories ?? new List<string>(), StringComparer.Ordinal);
+        var skipped = found.Where(c => disabled.Contains(c.Id)).Select(c => c.Name).ToList();
+        var categories = found.Where(c => !disabled.Contains(c.Id)).ToList();
+        if (skipped.Count > 0)
+            Log.Info($"Очистка: пропущены категории, с которых снята отметка на странице «Очистка»: {string.Join(", ", skipped)}");
         if (categories.Count == 0)
-            return "Нечего очищать: подходящие файлы уже удалены.";
+            return skipped.Count > 0
+                ? $"Ничего не удалено: вы сняли отметку с этих категорий на странице «Очистка» — {NamesText(skipped)}."
+                : "Нечего очищать: подходящие файлы уже удалены.";
         var results = await CleanAsync(categories, null, ct, userFoldersOnly: true);
-        return Summarize(results);
+        var text = Summarize(results);
+        if (skipped.Count > 0)
+            text += $" Пропущено по вашему выбору на странице «Очистка»: {NamesText(skipped)}.";
+        return text;
     }
+
+    /// <summary>"Mozilla Firefox, Discord, Steam и ещё 2" — names of the categories skipped by the user's choice.</summary>
+    private static string NamesText(IReadOnlyList<string> names)
+        => names.Count <= 3
+            ? string.Join(", ", names)
+            : string.Join(", ", names.Take(3)) + $" и ещё {Format.Number(names.Count - 3)}";
 
     /// <summary>"Освобождено 3,2 ГБ, удалено 12 345 файлов, пропущено 87 занятых."</summary>
     public static string Summarize(IReadOnlyCollection<CategoryCleanResult> results)

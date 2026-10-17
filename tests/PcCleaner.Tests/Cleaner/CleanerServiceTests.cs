@@ -14,7 +14,10 @@ internal sealed class FakeRecycleBin : IRecycleBin
 
     public int EmptyCalls { get; private set; }
 
-    public (long Bytes, long Items)? Query() => (Bytes, Items);
+    /// <summary>Simulates SHQueryRecycleBin failing.</summary>
+    public bool QueryFails { get; set; }
+
+    public (long Bytes, long Items)? Query() => QueryFails ? null : (Bytes, Items);
 
     public bool Empty(out string? error)
     {

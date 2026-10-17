@@ -149,7 +149,77 @@ public sealed class CleanerViewModel : PageViewModel
     public string? DismStatus
     {
         get => _dismStatus;
-        private set => Set(ref _dismStatus, value);
+        private set
+        {
+            if (Set(ref _dismStatus, value))
+                RaiseTips(); // while DISM runs, the busy tooltips say that it cannot be stopped
+        }
+    }
+
+    internal const string DismRunning = "Выполняется…";
+
+    // ===== Button tooltips (also shown on disabled buttons: they say why the button cannot be pressed) =====
+
+    internal const string BusyTip =
+        "Сейчас идёт анализ или очистка — дождитесь окончания или нажмите «Отмена» над страницей";
+
+    /// <summary>DISM is not cancelled on purpose (see CleanerService.RunComponentCleanupAsync): "Отмена" would not help.</summary>
+    internal const string DismBusyTip =
+        "Идёт очистка компонентов Windows (DISM) — дождитесь её окончания, прерывать её нельзя";
+
+    private string CurrentBusyTip => BusyTipFor(DismStatus);
+
+    internal static string BusyTipFor(string? dismStatus) => dismStatus == DismRunning ? DismBusyTip : BusyTip;
+
+    public string AnalyzeTip => IsBusy
+        ? CurrentBusyTip
+        : HasScanned
+            ? "Проверить ещё раз (ничего не удаляется)"
+            : "Найти временные файлы, кэш и другой мусор (ничего не удаляется)";
+
+    public string CleanTip => IsBusy ? CurrentBusyTip : IdleCleanTip(SelectedCount, HasScanned, TotalBytes);
+
+    /// <summary>"Очистить выбранное" while nothing runs. It is enabled exactly when something is selected.</summary>
+    internal static string IdleCleanTip(int selectedCount, bool hasScanned, long totalBytes)
+    {
+        // Checked first: rows sized by an analysis that was stopped half-way can already be cleaned.
+        if (selectedCount > 0)
+            return "Удалить файлы в отмеченных категориях (перед удалением появится подтверждение)";
+        if (!hasScanned)
+            return "Сначала выполните анализ — кнопка станет доступна, когда будет понятно, что удалять";
+        return totalBytes < Mb
+            ? "Удалять нечего: мусора почти нет"
+            : "Отметьте в списке ниже хотя бы одну категорию, в которой найдены файлы";
+    }
+
+    public string SelectRecommendedTip => IsBusy
+        ? CurrentBusyTip
+        : _items.Count == 0
+            ? "Список категорий ещё не готов — дождитесь анализа"
+            : "Отметить безопасные категории, которые мы рекомендуем очищать";
+
+    public string UnselectAllTip => IsBusy
+        ? CurrentBusyTip
+        : _items.Count == 0
+            ? "Список категорий ещё не готов — дождитесь анализа"
+            : "Снять отметки со всех категорий";
+
+    public string RestartAsAdminTip => IsBusy
+        ? CurrentBusyTip
+        : "Программа перезапустится с правами администратора — тогда можно будет очистить и системные папки";
+
+    public string RunDismTip => IsBusy
+        ? CurrentBusyTip
+        : "Перед запуском появится подтверждение со всеми подробностями";
+
+    private void RaiseTips()
+    {
+        OnPropertyChanged(nameof(AnalyzeTip));
+        OnPropertyChanged(nameof(CleanTip));
+        OnPropertyChanged(nameof(SelectRecommendedTip));
+        OnPropertyChanged(nameof(UnselectAllTip));
+        OnPropertyChanged(nameof(RestartAsAdminTip));
+        OnPropertyChanged(nameof(RunDismTip));
     }
 
     // ===== Commands =====
@@ -404,15 +474,22 @@ public sealed class CleanerViewModel : PageViewModel
     {
         OnPropertyChanged(nameof(TotalText));
         OnPropertyChanged(nameof(SummaryText));
+        RaiseTips();
     }
 
     private void OnSelfPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(IsBusy))
+        {
             OnPropertyChanged(nameof(SummaryText));
+            RaiseTips();
+        }
     }
 
     // ===== Cleaning =====
+
+    /// <summary>The page's Yes/No question before cleaning (<see cref="Dialogs.Confirm"/>; tests replace it).</summary>
+    internal Func<string, string, bool> Confirm { get; set; } = Dialogs.Confirm;
 
     private async Task CleanSelectedAsync()
     {
@@ -422,7 +499,26 @@ public sealed class CleanerViewModel : PageViewModel
             Dialogs.Info("Очистка", "Отметьте хотя бы одну категорию, в которой найдены файлы.");
             return;
         }
-        if (!Dialogs.Confirm("Очистка", BuildConfirmation(selected)))
+        if (selected.FirstOrDefault(i => i.IsRecycleBin) is { } binItem)
+        {
+            // The analysis may be old, and files may have been deleted into the Recycle Bin since: the confirmation
+            // shows what is in it now. The service checks once more right before emptying it and asks again if it grew.
+            await RefreshRecycleBinAsync(binItem);
+            if (IsBusy)
+                return;
+            selected = _items.Where(i => i.IsSelectedForCleaning).ToList();
+            if (selected.Count == 0)
+            {
+                // A bin whose contents cannot be read is never emptied (and is not "already empty").
+                Dialogs.Info("Очистка", binItem.Result?.Error is not null
+                    ? "Не удалось узнать, что сейчас лежит в корзине, поэтому она не будет очищена, а других отмеченных " +
+                      "категорий с файлами нет. Попробуйте ещё раз чуть позже."
+                    : "Корзина уже пуста, а других отмеченных категорий с файлами нет — удалять нечего.");
+                return;
+            }
+        }
+        var shownBin = ShownRecycleBin(selected);
+        if (!Confirm("Очистка", BuildConfirmation(selected)))
         {
             Log.Info("Очистка отменена пользователем");
             return;
@@ -434,7 +530,7 @@ public sealed class CleanerViewModel : PageViewModel
             var results = await _service.CleanAsync(categories,
                 (index, category) => ReportProgress(index * 100.0 / categories.Count,
                     $"Очистка: {category.Name} ({index + 1} из {categories.Count})"),
-                ct);
+                ct, confirmedRecycleBin: shownBin);
             LastResult = new CleanResultViewModel(results, ct.IsCancellationRequested, _service.IsElevated);
             Log.Info("Очистка завершена: " + CleanerService.Summarize(results));
 
@@ -445,13 +541,33 @@ public sealed class CleanerViewModel : PageViewModel
         });
     }
 
+    /// <summary>Re-reads the size of the Recycle Bin (read-only) and shows it on its row.</summary>
+    private async Task RefreshRecycleBinAsync(CategoryItemViewModel binItem)
+    {
+        // SHQueryRecycleBin walks the bins of every drive: keep it off the UI thread.
+        var result = await Task.Run(() => _service.ScanCategoryAsync(binItem.Category, 0, CancellationToken.None));
+        Ui.Invoke(() =>
+        {
+            binItem.ApplyResult(result);
+            Recalculate();
+        });
+    }
+
+    /// <summary>The Recycle Bin size and object count the confirmation shows (null when the bin is not selected).</summary>
+    internal static RecycleBinSnapshot? ShownRecycleBin(IEnumerable<CategoryItemViewModel> selected)
+        => selected.FirstOrDefault(i => i.IsRecycleBin)?.Result is { } r ? new RecycleBinSnapshot(r.Bytes, r.Files) : null;
+
     private string BuildConfirmation(IReadOnlyList<CategoryItemViewModel> selected)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Будут удалены ненужные файлы из выбранных категорий:");
         sb.AppendLine();
         foreach (var item in selected.Take(14))
-            sb.AppendLine($"•  {item.Name} — {Format.Bytes(item.CleanableBytes)}");
+        {
+            sb.AppendLine(item.IsRecycleBin
+                ? $"•  {item.Name} — {Format.Bytes(item.CleanableBytes)} ({CleanerText.Objects(item.Files)})"
+                : $"•  {item.Name} — {Format.Bytes(item.CleanableBytes)}");
+        }
         if (selected.Count > 14)
             sb.AppendLine($"•  и ещё {Format.Count(selected.Count - 14, "категория", "категории", "категорий")}");
         sb.AppendLine();
@@ -461,10 +577,11 @@ public sealed class CleanerViewModel : PageViewModel
                       "не затрагиваются. Файлы, занятые запущенными программами, будут пропущены, а программы при " +
                       "необходимости создадут кэш заново.");
 
-        if (selected.Any(i => i.IsRecycleBin))
+        if (ShownRecycleBin(selected) is { } bin)
         {
             sb.AppendLine();
-            sb.AppendLine("Корзина будет очищена — файлы из неё восстановить будет нельзя.");
+            sb.AppendLine($"Корзина будет очищена полностью (сейчас в ней {bin.Text}) — файлы из неё восстановить будет " +
+                          "нельзя. Если к началу её очистки в корзину попадут новые файлы, программа спросит ещё раз.");
         }
         var running = selected.Where(i => i.IsRunning).Select(i => i.Name).Distinct().ToList();
         if (running.Count > 0)
@@ -530,13 +647,13 @@ public sealed class CleanerViewModel : PageViewModel
         await RunBusyAsync("Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…",
             async ct =>
             {
-                DismStatus = "Выполняется…";
+                DismStatus = DismRunning;
                 await RestorePoint.TryCreateAsync("Очистка компонентов Windows", ct);
                 ReportProgress(-1, "Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…");
                 DismStatus = await _service.RunComponentCleanupAsync(ct);
                 Dialogs.Info("Очистка компонентов Windows", DismStatus);
             });
-        if (DismStatus == "Выполняется…")
+        if (DismStatus == DismRunning)
             DismStatus = null;
     }
 }

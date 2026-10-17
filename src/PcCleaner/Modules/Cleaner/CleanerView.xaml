@@ -9,11 +9,13 @@
              d:DesignWidth="1000" d:DesignHeight="700">
 
     <UserControl.Resources>
-        <!-- Chevron that expands the details of a category row -->
+        <!-- Chevron that expands the details of a category row. Reachable with Tab (theme focus ring); Space or Enter
+             toggles it, and Right/Left on the row open and close the details (see the row's KeyBindings). -->
         <Style x:Key="ExpandToggle" TargetType="ToggleButton">
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="ToolTip" Value="Подробнее: папки и самые большие файлы" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
+            <Setter Property="ToolTip" Value="Подробнее: папки и самые большие файлы (Пробел или Enter)" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
@@ -53,14 +55,35 @@
             <Setter Property="Margin" Value="0,0,0,6" />
         </Style>
 
-        <!-- Rows of the "largest files" list: no selection highlight, compact -->
+        <!-- Link buttons of the details ("Открыть папку", "Открыть корзину"): the theme focus ring when reached with Tab -->
+        <Style x:Key="FocusLink" TargetType="Button" BasedOn="{StaticResource LinkButton}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+        </Style>
+
+        <!-- Actions of one "largest files" row. Set on the row container (not inside it), so the context-menu key and
+             Shift+F10 open it for the row that has keyboard focus. Not shared: every row gets its own menu (the setter
+             below uses DynamicResource, so each row looks it up and gets a new instance bound to its own file). -->
+        <ContextMenu x:Key="FileMenu" x:Shared="False">
+            <MenuItem Header="Показать в Проводнике" Command="{Binding ShowInExplorerCommand}" />
+            <MenuItem Header="Копировать путь" Command="{Binding CopyPathCommand}" />
+            <Separator />
+            <MenuItem Header="Не удалять этот файл (добавить в исключения)"
+                      Command="{Binding ExcludeFileCommand}" />
+            <MenuItem Header="Не удалять эту папку (добавить в исключения)"
+                      Command="{Binding ExcludeFolderCommand}" />
+        </ContextMenu>
+
+        <!-- Rows of the "largest files" list: compact. Keyboard focus is shown by the border trigger below rather than the
+             FocusRing: the ring is drawn outside the row and the list's own scroll area would clip it. -->
         <Style x:Key="FileItem" TargetType="ListBoxItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="ContextMenu" Value="{DynamicResource FileMenu}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="8,4">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Padding="7,3"
+                                BorderThickness="1" BorderBrush="Transparent">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -69,6 +92,9 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource SelectionBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -81,6 +107,11 @@
             <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0">
                 <StackPanel>
                     <Grid Margin="16,10,10,10" MinHeight="40">
+                        <!-- Keyboard: Right/Left on the row's checkbox or chevron open and close the details -->
+                        <Grid.InputBindings>
+                            <KeyBinding Key="Right" Command="{Binding ExpandCommand}" />
+                            <KeyBinding Key="Left" Command="{Binding CollapseCommand}" />
+                        </Grid.InputBindings>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="30" />
                             <ColumnDefinition Width="42" />
@@ -107,7 +138,7 @@
                                        Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
                         </Border>
 
-                        <!-- Clicking the text area toggles the details -->
+                        <!-- Clicking the text area toggles the details (from the keyboard: the chevron on the right) -->
                         <StackPanel Grid.Column="2" Background="Transparent" Cursor="Hand" Margin="0,0,12,0"
                                     VerticalAlignment="Center">
                             <StackPanel.InputBindings>
@@ -192,7 +223,7 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type local:FolderLinkViewModel}">
                                             <DockPanel Margin="0,2">
-                                                <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Открыть папку"
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource FocusLink}" Content="Открыть папку"
                                                         Command="{Binding OpenCommand}" Margin="12,0,0,0" FontSize="12.5" />
                                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE8B7;" FontSize="12"
                                                            Foreground="{StaticResource MutedBrush}" Margin="0,0,8,0" />
@@ -208,14 +239,14 @@
                                            Visibility="{Binding MoreFoldersText, Converter={StaticResource HasValueToVis}}" />
                             </StackPanel>
 
-                            <Button Style="{StaticResource LinkButton}" Content="Открыть корзину" HorizontalAlignment="Left"
+                            <Button Style="{StaticResource FocusLink}" Content="Открыть корзину" HorizontalAlignment="Left"
                                     Command="{Binding OpenRecycleBinCommand}" Margin="0,0,0,8"
                                     Visibility="{Binding IsRecycleBin, Converter={StaticResource BoolToVis}}" />
 
                             <StackPanel Visibility="{Binding HasLargestFiles, Converter={StaticResource BoolToVis}}">
                                 <DockPanel Margin="0,0,0,2">
                                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"
-                                               Text="Правый щелчок — действия с файлом" VerticalAlignment="Bottom" Margin="0,0,0,6" />
+                                               Text="Правый щелчок или Shift+F10 — действия с файлом" VerticalAlignment="Bottom" Margin="0,0,0,6" />
                                     <TextBlock Style="{StaticResource SectionCaption}" Text="{Binding LargestCaption}" />
                                 </DockPanel>
                                 <ListBox ItemsSource="{Binding LargestFiles}" MaxHeight="290" ItemContainerStyle="{StaticResource FileItem}" Margin="-8,0,-4,0"
@@ -228,17 +259,6 @@
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <Grid.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="Показать в Проводнике" Command="{Binding ShowInExplorerCommand}" />
-                                                        <MenuItem Header="Копировать путь" Command="{Binding CopyPathCommand}" />
-                                                        <Separator />
-                                                        <MenuItem Header="Не удалять этот файл (добавить в исключения)"
-                                                                  Command="{Binding ExcludeFileCommand}" />
-                                                        <MenuItem Header="Не удалять эту папку (добавить в исключения)"
-                                                                  Command="{Binding ExcludeFolderCommand}" />
-                                                    </ContextMenu>
-                                                </Grid.ContextMenu>
                                                 <StackPanel Margin="0,0,12,0">
                                                     <TextBlock Text="{Binding FileName}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Folder}" FontSize="11.5" Foreground="{StaticResource MutedBrush}"
@@ -293,7 +313,7 @@
                         <!-- "Анализ" is the main action until something has been scanned, then "Очистить выбранное" is. -->
                         <Button Style="{StaticResource AccentButton}" Command="{Binding AnalyzeCommand}" Padding="16,9"
                                 Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"
-                                ToolTip="Найти временные файлы, кэш и другой мусор (ничего не удаляется)">
+                                ToolTipService.ShowOnDisabled="True" ToolTip="{Binding AnalyzeTip}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="14" Margin="0,0,8,0"
                                            Foreground="{StaticResource AccentTextBrush}" />
@@ -302,7 +322,7 @@
                         </Button>
                         <Button Command="{Binding AnalyzeCommand}" Padding="16,9"
                                 Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}}"
-                                ToolTip="Проверить ещё раз (ничего не удаляется)">
+                                ToolTipService.ShowOnDisabled="True" ToolTip="{Binding AnalyzeTip}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="14" Margin="0,0,8,0" />
                                 <TextBlock Text="Анализ" />
@@ -310,7 +330,7 @@
                         </Button>
                         <Button Style="{StaticResource AccentButton}" Command="{Binding CleanCommand}" Padding="16,9" Margin="10,0,0,0"
                                 Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}}"
-                                ToolTip="Удалить файлы в отмеченных категориях (перед удалением появится подтверждение)">
+                                ToolTipService.ShowOnDisabled="True" ToolTip="{Binding CleanTip}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" Margin="0,0,8,0"
                                            Foreground="{StaticResource AccentTextBrush}" />
@@ -319,7 +339,7 @@
                         </Button>
                         <Button Command="{Binding CleanCommand}" Padding="16,9" Margin="10,0,0,0"
                                 Visibility="{Binding HasScanned, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"
-                                ToolTip="Сначала выполните анализ">
+                                ToolTipService.ShowOnDisabled="True" ToolTip="{Binding CleanTip}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" Margin="0,0,8,0" />
                                 <TextBlock Text="Очистить выбранное" />
@@ -341,7 +361,8 @@
                             <TextBlock Grid.Column="1" Text="{Binding AdminHintText}" TextWrapping="Wrap" FontSize="12.5"
                                        VerticalAlignment="Center" />
                             <Button Grid.Column="2" Content="Перезапустить как администратор" Margin="12,0,0,0" Padding="12,6"
-                                    FontSize="12.5" Command="{Binding RestartAsAdminCommand}" VerticalAlignment="Center" />
+                                    FontSize="12.5" Command="{Binding RestartAsAdminCommand}" VerticalAlignment="Center"
+                                    ToolTipService.ShowOnDisabled="True" ToolTip="{Binding RestartAsAdminTip}" />
                         </Grid>
                     </Border>
                 </Grid>
@@ -396,14 +417,15 @@
             <DockPanel Margin="0,14,0,8">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button Style="{StaticResource GhostButton}" Command="{Binding SelectRecommendedCommand}"
-                            ToolTip="Отметить безопасные категории, которые мы рекомендуем очищать">
+                            ToolTipService.ShowOnDisabled="True" ToolTip="{Binding SelectRecommendedTip}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE73A;" FontSize="13" Margin="0,0,7,0"
                                        Foreground="{StaticResource AccentBrush}" />
                             <TextBlock Text="Выбрать рекомендуемое" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource GhostButton}" Command="{Binding UnselectAllCommand}" Margin="4,0,0,0">
+                    <Button Style="{StaticResource GhostButton}" Command="{Binding UnselectAllCommand}" Margin="4,0,0,0"
+                            ToolTipService.ShowOnDisabled="True" ToolTip="{Binding UnselectAllTip}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE739;" FontSize="13" Margin="0,0,7,0"
                                        Foreground="{StaticResource MutedBrush}" />
@@ -485,7 +507,7 @@
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
                                     <Button Command="{Binding RunDismCommand}" Padding="14,7"
-                                            ToolTip="Перед запуском появится подтверждение со всеми подробностями">
+                                            ToolTipService.ShowOnDisabled="True" ToolTip="{Binding RunDismTip}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE768;" FontSize="12" Margin="0,0,8,0" />
                                             <TextBlock Text="Запустить очистку" />
@@ -514,8 +536,20 @@
                         <Border Grid.Column="2" Style="{StaticResource InnerCard}" Padding="14">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
-                                    <Button Command="{Binding LaunchDiskCleanupCommand}" Padding="14,7"
-                                            ToolTip="Откроется окно «Очистка диска» Windows — в нём вы сами выберете, что удалить">
+                                    <Button Command="{Binding LaunchDiskCleanupCommand}" Padding="14,7" ToolTipService.ShowOnDisabled="True">
+                                        <!-- Disabled for a few seconds after a click while the wizard starts: say so -->
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                <Setter Property="ToolTip"
+                                                        Value="Откроется окно «Очистка диска» Windows — в нём вы сами выберете, что удалить" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding LaunchDiskCleanupCommand.IsRunning}" Value="True">
+                                                        <Setter Property="ToolTip"
+                                                                Value="Мастер очистки диска запускается — его окно появится через несколько секунд" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="12" Margin="0,0,8,0" />
                                             <TextBlock Text="Открыть" />

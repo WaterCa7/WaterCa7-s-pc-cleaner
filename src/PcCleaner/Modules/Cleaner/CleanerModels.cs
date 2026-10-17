@@ -309,7 +309,26 @@ public sealed class CategoryCleanResult
     /// <summary>Extra Russian message for special categories (Recycle Bin, Delivery Optimization).</summary>
     public string? Message { get; set; }
 
+    /// <summary>
+    /// Nothing was done because the contents grew after the user confirmed (Recycle Bin: files were deleted into it
+    /// after its size was shown, and the user did not agree to empty it with them).
+    /// </summary>
+    public bool ChangedAfterConfirmation { get; set; }
+
     public List<string> Errors { get; } = new();
 
     public long SkippedFiles => LockedFiles + DeniedFiles;
+}
+
+/// <summary>The Recycle Bin as the user saw it in a confirmation: total size and number of objects.</summary>
+public readonly record struct RecycleBinSnapshot(long Bytes, long Items)
+{
+    /// <summary>
+    /// True when <paramref name="now"/> holds more than this snapshot — something was deleted into the bin since then,
+    /// and the user has never seen it. (A smaller bin is fine: the user restored or removed something themselves.)
+    /// </summary>
+    public bool IsExceededBy(RecycleBinSnapshot now) => now.Items > Items || now.Bytes > Bytes;
+
+    /// <summary>"8,8 КБ, 2 объекта".</summary>
+    public string Text => $"{Format.Bytes(Bytes)}, {CleanerText.Objects(Items)}";
 }
