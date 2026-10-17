@@ -31,7 +31,8 @@ internal sealed record PackageManifest(string Name, string Version, string Publi
 /// signature of their own: the whole package is signed (AppxSignature.p7x), Windows verifies that signature when it
 /// installs the package, and the folder is writable only by TrustedInstaller. Such a file counts as signed only if
 /// - it really is inside the WindowsApps folder of %ProgramFiles% (normalized full path, and the path the file system
-///   reports for the opened file is the same — no junction, symlink, 8.3 short name or device path on the way);
+///   reports for the opened file is the same — no junction, symlink or device path on the way; 8.3 short names are
+///   expanded to the long names first);
 /// - the package folder name is a PackageFullName whose name, version and publisher hash match its AppxManifest.xml;
 /// - the package has an AppxSignature.p7x and its publisher has no "unsigned package" marker;
 /// - Windows has this very folder staged as that package, with a signed origin (Store, Inbox, sideloaded signed).
@@ -138,19 +139,84 @@ internal static class PackageSignature
 
     /// <summary>
     /// What to show as the signer: PublisherDisplayName, or the CN of the publisher when the display name is a resource
-    /// reference. A package that is not Microsoft's never gets a name starting with "Microsoft" (the display name is
-    /// not checked against the certificate): it is shown with its full publisher instead.
+    /// reference. A package that is not Microsoft's never gets a name that mentions Microsoft (the display name is not
+    /// checked against the certificate), in any spelling: "Корпорация Майкрософт", a Cyrillic "М", zero-width or
+    /// right-to-left characters in the middle. It is shown with its full publisher instead.
     /// </summary>
     internal static string DisplayPublisher(PackageManifest manifest)
     {
         var display = Clean(manifest.PublisherDisplayName);
         if (display is not null && display.StartsWith("ms-resource:", StringComparison.OrdinalIgnoreCase))
             display = null;
-        var publisher = display ?? Clean(DnValue(manifest.Publisher, "CN")) ?? manifest.Publisher;
-        if (!IsMicrosoftPublisher(manifest.Publisher) && publisher.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase))
-            publisher = manifest.Publisher;
+        var fullPublisher = StripInvisible(manifest.Publisher).Trim();
+        var publisher = display ?? Clean(DnValue(manifest.Publisher, "CN")) ?? fullPublisher;
+        if (!IsMicrosoftPublisher(manifest.Publisher) && MentionsMicrosoft(publisher))
+            publisher = fullPublisher;
         return publisher;
     }
+
+    /// <summary>
+    /// "Microsoft" or "Майкрософт" anywhere in the text, also when spelled with look-alike letters ("Мicrosoft" with a
+    /// Cyrillic М, "Micr0soft", full-width letters) or split by spaces, dots or invisible characters.
+    /// </summary>
+    internal static bool MentionsMicrosoft(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+        string normalized;
+        try
+        {
+            normalized = text.Normalize(NormalizationForm.FormKC);
+        }
+        catch (ArgumentException)
+        {
+            normalized = text; // invalid surrogates
+        }
+        var folded = Fold(normalized);
+        return MicrosoftSpellings.Any(spelling => folded.Contains(spelling, StringComparison.Ordinal));
+    }
+
+    /// <summary>"microsoft", "майкрософт", "микрософт" as <see cref="Fold"/> turns them (mixed alphabets match too).</summary>
+    private static readonly string[] MicrosoftSpellings = { Fold("microsoft"), Fold("майкрософт"), Fold("микрософт") };
+
+    /// <summary>Lower-case letters and digits only, each look-alike mapped to its Latin letter ("rn" read as "m").</summary>
+    private static string Fold(string text)
+    {
+        var folded = new StringBuilder(text.Length);
+        foreach (var c in text.ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(c))
+                folded.Append(LookAlikeLatin(c));
+        }
+        return folded.Replace("rn", "m").ToString();
+    }
+
+    /// <summary>The Latin letter a lower-case Cyrillic/Greek letter or digit is easily mistaken for.</summary>
+    private static char LookAlikeLatin(char c) => c switch
+    {
+        'а' or 'α' => 'a',
+        'с' or 'ϲ' => 'c',
+        'ԁ' => 'd',
+        'е' or 'ё' or 'ε' or 'є' => 'e',
+        'һ' => 'h',
+        'і' or 'ї' or 'ı' or 'ι' or 'l' or '1' or 'ӏ' => 'i',
+        'ј' => 'j',
+        'к' or 'κ' => 'k',
+        'м' => 'm',
+        'п' or 'η' => 'n',
+        'о' or 'ο' or 'σ' or '0' => 'o',
+        'р' or 'ρ' => 'p',
+        'ԛ' => 'q',
+        'г' => 'r',
+        'ѕ' or '5' => 's',
+        'т' or 'τ' => 't',
+        'υ' or 'μ' => 'u',
+        'ν' or 'ѵ' => 'v',
+        'ԝ' or 'ω' => 'w',
+        'х' or 'χ' => 'x',
+        'у' or 'γ' => 'y',
+        _ => c,
+    };
 
     /// <summary>"Name_Version_Arch_ResourceId_PublisherId" (ResourceId may be empty).</summary>
     internal static bool TryParseFullName(string fullName, out string name, out string version, out string publisherId)
@@ -343,17 +409,41 @@ internal static class PackageSignature
         return new PackageManifest(name.Trim(), version.Trim(), publisher, publisherDisplayName);
     }
 
+    /// <summary>One line of at most 128 characters without invisible characters; null if nothing is left.</summary>
     private static string? Clean(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return null;
-        var sb = new StringBuilder(text.Length);
-        foreach (var c in text)
-            sb.Append(char.IsControl(c) ? ' ' : c);
-        var cleaned = string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        var cleaned = string.Join(' ', StripInvisible(text).Split(' ', StringSplitOptions.RemoveEmptyEntries));
         if (cleaned.Length > 128)
             cleaned = cleaned[..128];
         return cleaned.Length == 0 ? null : cleaned;
+    }
+
+    /// <summary>
+    /// Line breaks and control characters become spaces; format characters (zero-width, right-to-left overrides) are
+    /// dropped: they could make a shown name read differently from what it is.
+    /// </summary>
+    internal static string StripInvisible(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            switch (char.GetUnicodeCategory(c))
+            {
+                case System.Globalization.UnicodeCategory.Format:
+                    break;
+                case System.Globalization.UnicodeCategory.Control:
+                case System.Globalization.UnicodeCategory.LineSeparator:
+                case System.Globalization.UnicodeCategory.ParagraphSeparator:
+                    sb.Append(' ');
+                    break;
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+        return sb.ToString();
     }
 
     private static bool IsDeviceOrUncPath(string path)

@@ -61,9 +61,11 @@ tests/PcCleaner.Tests/  xUnit-тесты (Core/ и <Key>/)
 - `FileSignature.Get(path)` — проверка Authenticode (встроенная и каталожная подписи), кэшируется. Файлы приложений
   Microsoft Store / MSIX в `%ProgramFiles%\WindowsApps\<PackageFullName>\` своей подписи не имеют: они считаются
   подписанными через пакет (`SignatureInfo.IsPackageSigned`, `PackagePublisher` — издатель из AppxManifest.xml), только
-  если путь действительно внутри этой папки (без junction/symlink/коротких имён), имя папки совпадает с манифестом
+  если путь действительно внутри этой папки (без junction/symlink и путей устройств), имя папки совпадает с манифестом
   (имя, версия, хеш издателя), есть AppxSignature.p7x, а Windows зарегистрировала эту папку как подписанный пакет.
   `IsMicrosoft` у таких файлов определяется по издателю пакета (`O=Microsoft Corporation`), а не по отображаемому имени.
+  Отображаемое имя с сертификатом не сверяется: если пакет не от Microsoft, а имя упоминает Microsoft в любом написании
+  («Корпорация Майкрософт», кириллическая «М», невидимые символы), в `Publisher` показывается полное имя издателя.
 - `Suspicion.Analyze(path, signature, commandLine)` / `Suspicion.AnalyzeProgram(...)` — эвристика с причинами.
   `KnownPups.Match(name, publisher)` — потенциально нежелательные программы.
 - `CommandLine.Split(cmd)` / `CommandLine.TargetFile(cmd)` — разбор командных строк.

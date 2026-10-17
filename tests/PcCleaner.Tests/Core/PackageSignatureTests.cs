@@ -270,6 +270,63 @@ public sealed class PackageSignatureTests : IDisposable
         Assert.Equal(dn, info.Publisher);
     }
 
+    [Theory]
+    [InlineData("Корпорация Майкрософт")]
+    [InlineData("Корпорация Мaйкрософт")] // Latin "a" inside the Russian word
+    [InlineData("Microsoft Corporation")]
+    [InlineData("\u200BMicrosoft Corporation")] // zero-width space in front
+    [InlineData("\u041Cicrosoft Corporation")] // Cyrillic "М"
+    [InlineData("\uFF2D\uFF49\uFF43\uFF52\uFF4F\uFF53\uFF4F\uFF46\uFF54")] // full-width letters
+    [InlineData("MICR0S0FT")]
+    [InlineData("Rnicrosoft")]
+    [InlineData("M i c r o s o f t")]
+    [InlineData("Contoso for Microsoft")]
+    public void ThirdPartyDisplayName_MentioningMicrosoft_ShowsTheFullPublisher(string displayName)
+    {
+        Assert.True(PackageSignature.MentionsMicrosoft(displayName));
+        Assert.Equal(VendorDn, PackageSignature.DisplayPublisher(new PackageManifest("Contoso.App", "2.1.0.0", VendorDn, displayName)));
+    }
+
+    [Fact]
+    public void ThirdPartyPackage_WithRussianMicrosoftDisplayName_IsShownWithItsPublisher()
+    {
+        var exe = CreatePackage("Contoso.App", "2.1.0.0", VendorDn, "Корпорация Майкрософт");
+        var info = Verify(exe);
+        Assert.NotNull(info);
+        Assert.False(info!.IsMicrosoft);
+        Assert.Equal(VendorDn, info.Publisher);
+        Assert.Equal($"Подписан: {VendorDn} (пакет приложения)", info.StatusText);
+    }
+
+    [Theory]
+    [InlineData("Корпорация Майкрософт")]
+    [InlineData("Microsoft Corporation")]
+    public void MicrosoftPackage_KeepsItsDisplayName(string displayName)
+        => Assert.Equal(displayName, PackageSignature.DisplayPublisher(new PackageManifest("Microsoft.App", "1.0.0.0", MicrosoftDn, displayName)));
+
+    [Theory]
+    [InlineData("Contoso, Ltd.")]
+    [InlineData("Mozilla")]
+    [InlineData("Sun Microsystems")]
+    [InlineData("Micro Focus")]
+    [InlineData("Softonic")]
+    [InlineData("Яндекс")]
+    [InlineData("")]
+    public void MentionsMicrosoft_LeavesOtherNamesAlone(string name)
+    {
+        Assert.False(PackageSignature.MentionsMicrosoft(name));
+        if (name.Length > 0)
+            Assert.Equal(name, PackageSignature.DisplayPublisher(new PackageManifest("Contoso.App", "2.1.0.0", VendorDn, name)));
+    }
+
+    [Fact]
+    public void DisplayName_InvisibleAndRightToLeftCharactersAreRemoved()
+    {
+        var manifest = new PackageManifest("Contoso.App", "2.1.0.0", VendorDn, "Con\u200Bto\u202Eso\u202C\r\nApps");
+        Assert.Equal("Contoso Apps", PackageSignature.DisplayPublisher(manifest));
+        Assert.Equal("ab c", PackageSignature.StripInvisible("a\u200Db\u2028c"));
+    }
+
     [Fact]
     public void PackageWithoutAppxSignature_StaysUnsigned()
     {
@@ -354,6 +411,24 @@ public sealed class PackageSignatureTests : IDisposable
         var throughJunction = Path.Combine(junction, "Sub", "App.exe");
         Assert.True(File.Exists(throughJunction));
         Assert.Null(Verify(throughJunction));
+    }
+
+    [Fact]
+    public void FileReachedThroughAShortName_IsTheSameFile()
+    {
+        // An 8.3 name is only another name of the same directory entry: it is expanded to the long name first.
+        var exe = CreatePackage("Microsoft.WindowsStore", "22608.1401.7.0", MicrosoftDn, "Microsoft Corporation");
+        var dir = Path.GetDirectoryName(exe)!;
+        var longFile = Path.Combine(dir, "LongApplicationName.exe");
+        File.WriteAllText(longFile, "not a real program");
+        Assert.NotNull(Verify(longFile));
+
+        var shortName = ShortFileName(longFile);
+        if (shortName is null || string.Equals(shortName, "LongApplicationName.exe", StringComparison.OrdinalIgnoreCase))
+            return; // 8.3 names are turned off on this volume: nothing to test here
+        var viaShortName = Path.Combine(dir, shortName);
+        Assert.True(File.Exists(viaShortName));
+        Assert.Equal(Verify(longFile), Verify(viaShortName));
     }
 
     [Fact]
@@ -451,6 +526,16 @@ public sealed class PackageSignatureTests : IDisposable
             return null;
         }
     }
+
+    private static string? ShortFileName(string path)
+    {
+        var buffer = new StringBuilder(1024);
+        var length = GetShortPathNameW(path, buffer, (uint)buffer.Capacity);
+        return length == 0 || length >= buffer.Capacity ? null : Path.GetFileName(buffer.ToString(0, (int)length));
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathNameW(string lpszLongPath, StringBuilder lpszShortPath, uint cchBuffer);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetPackagesByPackageFamily(string packageFamilyName, ref uint count,
