@@ -11,10 +11,23 @@ namespace PcCleaner.Core;
 public static class RegistryBackup
 {
     /// <summary>
+    /// Under load reg.exe now and then fails to write its file ("Не удается выполнить запись в файл"), so a failed export
+    /// is tried again. A timed-out one is not: retrying it would only keep the user waiting.
+    /// </summary>
+    internal const int ExportAttempts = 3;
+
+    /// <summary>
     /// Exports a key, e.g. @"HKCU\Software\Microsoft\Windows\CurrentVersion\Run".
     /// Returns the backup file path, or null if the export failed.
     /// </summary>
-    public static async Task<string?> ExportAsync(string fullKeyPath, string? reason = null, CancellationToken ct = default)
+    public static Task<string?> ExportAsync(string fullKeyPath, string? reason = null, CancellationToken ct = default)
+        => ExportAsync(fullKeyPath, reason,
+            (file, token) => ProcessRunner.RunAsync("reg.exe", $"export \"{fullKeyPath}\" \"{file}\" /y", TimeSpan.FromSeconds(30), token),
+            ct);
+
+    /// <summary><see cref="ExportAsync(string, string?, CancellationToken)"/> with the reg.exe run (into the given file) replaceable for tests.</summary>
+    internal static async Task<string?> ExportAsync(string fullKeyPath, string? reason,
+        Func<string, CancellationToken, Task<ProcessResult>> runExport, CancellationToken ct)
     {
         Directory.CreateDirectory(AppPaths.BackupsDir);
         var safeName = Regex.Replace(fullKeyPath, @"[^\w\-]+", "_");
@@ -32,12 +45,17 @@ public static class RegistryBackup
             }
         }
 
-        var result = await ProcessRunner.RunAsync("reg.exe", $"export \"{fullKeyPath}\" \"{file}\" /y",
-            TimeSpan.FromSeconds(30), ct);
-        if (!result.Success || !File.Exists(file))
+        for (var attempt = 1; ; attempt++)
         {
-            Log.Warn($"Не удалось сохранить резервную копию {fullKeyPath}: {result.StdErr.Trim()}");
-            return null;
+            var result = await runExport(file, ct);
+            if (result.Success && File.Exists(file))
+                break;
+            if (result.TimedOut || attempt == ExportAttempts)
+            {
+                Log.Warn($"Не удалось сохранить резервную копию {fullKeyPath}: {result.StdErr.Trim()}");
+                return null;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), ct);
         }
 
         if (!string.IsNullOrWhiteSpace(reason))
