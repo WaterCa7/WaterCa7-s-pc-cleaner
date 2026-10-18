@@ -148,6 +148,9 @@ public partial class ProcessesView : UserControl
 
     private void OnGridMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        // Two quick clicks on a row's checkbox only check and uncheck it; they do not open or close the program.
+        if (FindAncestor<CheckBox>(e.OriginalSource as DependencyObject) is not null)
+            return;
         if (FindAncestor<DataGridRow>(e.OriginalSource as DependencyObject) is { Item: ProcessItem item })
             Vm?.ToggleExpand(item);
     }

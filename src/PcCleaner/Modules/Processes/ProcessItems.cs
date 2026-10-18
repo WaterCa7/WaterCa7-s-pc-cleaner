@@ -18,11 +18,26 @@ public enum ProcessStatusKind
 }
 
 /// <summary>
+/// What a checkbox of the process list stands for: one process (<see cref="Process"/>) or a whole program
+/// (<see cref="Group"/>, the program's group key). A program's key never equals a process's key, so checking a program
+/// does not check its processes one by one (they are taken at action time instead).
+/// </summary>
+internal readonly record struct ProcessCheckKey(ProcessKey Process, string? Group)
+{
+    public static ProcessCheckKey ForProcess(ProcessKey key) => new(key, null);
+
+    public static ProcessCheckKey ForProgram(string groupKey) => new(default, groupKey);
+}
+
+/// <summary>
 /// A row of the process grid: either a program (group of processes with the same executable) or a single process.
 /// Rows are long-lived and updated in place on every refresh so the grid keeps selection and scroll position.
 /// </summary>
 public abstract class ProcessItem : ObservableObject
 {
+    /// <summary>Checkbox tooltip of a protected Windows process.</summary>
+    internal const string CannotCheckText = "Системный процесс Windows — его нельзя завершать";
+
     private static readonly string WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
     private double _cpu;
@@ -432,6 +447,40 @@ public abstract class ProcessItem : ObservableObject
             ? "Завершить процесс и переместить файл в карантин. Файл переименуется и не сможет запуститься; восстановить его можно в «Настройках»."
             : "Подождите, идёт проверка.";
 
+    // ---- checkbox ("Завершить отмеченные") ----
+
+    /// <summary>The page's checked set (null for rows made outside the page, which then stay unchecked).</summary>
+    internal CheckedSet<ProcessCheckKey>? Checks { get; init; }
+
+    internal abstract ProcessCheckKey CheckKey { get; }
+
+    /// <summary>Kept in the page's <see cref="CheckedSet{TKey}"/> by key, so the 2-second refresh never loses it.</summary>
+    public bool IsChecked
+    {
+        get => Checks?.IsChecked(CheckKey) == true;
+        set
+        {
+            // A protected process is never checked: its checkbox is disabled, and code that sets it is refused too.
+            if (Checks is null || (value && !CanCheck))
+            {
+                OnPropertyChanged();
+                return;
+            }
+            Checks.Set(CheckKey, value);
+        }
+    }
+
+    /// <summary>Only what may be terminated can be checked (for a program: none of its processes is protected).</summary>
+    public bool CanCheck => CanKill;
+
+    /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
+    public string? CheckTooltip => CanCheck
+        ? null
+        : ProtectionReason == ProcessGuard.SelfText ? ProcessGuard.SelfText : CannotCheckText;
+
+    /// <summary>The page's checked set changed: the checkbox reads it again.</summary>
+    internal void OnCheckedChanged() => OnPropertyChanged(nameof(IsChecked));
+
     public string TrustButtonText => IsTrusted ? "Не доверять" : "Доверять";
 
     /// <summary>
@@ -487,6 +536,8 @@ public abstract class ProcessItem : ObservableObject
         OnPropertyChanged(nameof(ProtectionText));
         OnPropertyChanged(nameof(KillToolTip));
         OnPropertyChanged(nameof(KillTreeToolTip));
+        OnPropertyChanged(nameof(CanCheck));
+        OnPropertyChanged(nameof(CheckTooltip));
     }
 
     internal void SetQuarantineBlockReason(string? reason)
@@ -528,6 +579,8 @@ public sealed class ProcessRow : ProcessItem
     internal ProcessStaticInfo Info { get; }
 
     internal ProcessKey Key => Info.Key;
+
+    internal override ProcessCheckKey CheckKey => ProcessCheckKey.ForProcess(Key);
 
     internal long CreateTime { get; }
 
@@ -670,6 +723,8 @@ public sealed class ProcessGroup : ProcessItem
     }
 
     internal string Key { get; }
+
+    internal override ProcessCheckKey CheckKey => ProcessCheckKey.ForProgram(Key);
 
     public IReadOnlyList<ProcessRow> Instances => _instances;
 

@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Processes"
+             xmlns:controls="clr-namespace:PcCleaner.Core.Controls"
              x:Name="Root"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:ProcessesViewModel}"
@@ -376,11 +377,22 @@
             <Border Style="{StaticResource Card}" Padding="0">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <DataGrid x:Name="ProcessGrid" Margin="6,4,6,4" SizeChanged="OnGridSizeChanged"
+                    <!-- "Отмечено: N · Завершить отмеченные · Снять отметки" while anything is checked -->
+                    <controls:BulkActionBar Margin="6,6,6,0" CheckedCount="{Binding CheckedCount}"
+                                            ClearCommand="{Binding ClearChecksCommand}">
+                        <controls:BulkActionBar.ActionsContent>
+                            <Button Style="{StaticResource AccentButton}" Padding="12,6" Content="Завершить отмеченные"
+                                    Command="{Binding KillCheckedCommand}"
+                                    ToolTip="Принудительно завершить отмеченные процессы и все процессы отмеченных программ. Перед этим программа спросит подтверждение." />
+                        </controls:BulkActionBar.ActionsContent>
+                    </controls:BulkActionBar>
+
+                    <DataGrid x:Name="ProcessGrid" Grid.Row="1" Margin="6,4,6,4" SizeChanged="OnGridSizeChanged"
                               ItemsSource="{Binding Items}"
                               SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
                               SelectionMode="Single"
@@ -472,6 +484,25 @@
                         </DataGrid.ContextMenu>
 
                         <DataGrid.Columns>
+                            <!-- Checkboxes for "Завершить отмеченные"; the header one checks or clears all visible rows.
+                                 Width 18 = the box alone (no caption gap), so it fits the 10 px cell padding on both sides. -->
+                            <DataGridTemplateColumn Width="38" CanUserSort="False" CanUserResize="False">
+                                <DataGridTemplateColumn.Header>
+                                    <CheckBox IsThreeState="True" Width="18"
+                                              IsChecked="{Binding DataContext.AllVisibleChecked, ElementName=Root, Mode=OneWay}"
+                                              Command="{Binding DataContext.ToggleAllVisibleCommand, ElementName=Root}"
+                                              ToolTip="Отметить все процессы в списке (с учётом поиска и фильтров) или снять с них отметки" />
+                                </DataGridTemplateColumn.Header>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate DataType="{x:Type local:ProcessItem}">
+                                        <CheckBox Width="18" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsEnabled="{Binding CanCheck}" ToolTip="{Binding CheckTooltip}"
+                                                  ToolTipService.ShowOnDisabled="True" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
                             <DataGridTemplateColumn SortMemberPath="Name" Width="*" MinWidth="140">
                                 <DataGridTemplateColumn.Header>
                                     <TextBlock Text="Имя" />
@@ -558,7 +589,7 @@
                     </DataGrid>
 
                     <!-- Empty state -->
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24,40,24,24" MaxWidth="360"
+                    <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24,40,24,24" MaxWidth="360"
                                 Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
                         <Border Width="52" Height="52" CornerRadius="26" Background="{StaticResource Surface2Brush}">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="22" Foreground="{StaticResource MutedBrush}"
@@ -573,7 +604,7 @@
                     </StackPanel>
 
                     <!-- Hint: what admin rights would reveal -->
-                    <Border Grid.Row="1" Margin="10,0,10,10" Padding="10,7" CornerRadius="6" Background="{StaticResource InfoSoftBrush}"
+                    <Border Grid.Row="2" Margin="10,0,10,10" Padding="10,7" CornerRadius="6" Background="{StaticResource InfoSoftBrush}"
                             Visibility="{Binding ShowAdminHint, Converter={StaticResource BoolToVis}}">
                         <Grid>
                             <Grid.ColumnDefinitions>
