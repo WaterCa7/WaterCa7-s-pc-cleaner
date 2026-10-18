@@ -578,12 +578,21 @@ public sealed class ProgramsService : IHealthContributor
     /// <summary>
     /// Uninstalls without showing the installer's window when that is possible (<see cref="ShouldUninstallQuietly"/>),
     /// otherwise with it. Used by the dashboard fix and the bulk uninstall, where the user has already confirmed.
+    /// A program that cannot be uninstalled at all (<see cref="InstalledProgram.CanUninstall"/> is false: a broken entry or
+    /// no uninstaller) is never started: the result is <see cref="UninstallStatus.NotStarted"/> and the runner is not called.
     /// </summary>
     internal Task<UninstallOutcome> UninstallQuietWhenPossibleAsync(InstalledProgram p, CancellationToken ct)
     {
+        if (!p.CanUninstall)
+            return Task.FromResult(CannotUninstall(p));
         var quiet = ShouldUninstallQuietly(p);
         return UninstallOverride is { } run ? run(p, quiet, ct) : RunUninstallerAsync(p, quiet, null, ct);
     }
+
+    /// <summary>The "nothing to run" outcome for a program with <c>CanUninstall == false</c> (same reasons as the Programs page).</summary>
+    private static UninstallOutcome CannotUninstall(InstalledProgram p) => new(UninstallStatus.NotStarted, p.IsBroken
+        ? "Деинсталлятор этой программы не найден — скорее всего, она уже удалена."
+        : "У программы не указан деинсталлятор.");
 
     // ===================================================================== broken entries
 
@@ -732,19 +741,23 @@ public sealed class ProgramsService : IHealthContributor
 
         foreach (var pup in scan.Programs.Where(p => p.IsPup).OrderBy(p => p.DisplayName, StringComparer.CurrentCultureIgnoreCase))
         {
+            var canUninstall = pup.CanUninstall; // a broken entry has no uninstaller to run: the row stays, without a button
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
                 Title = $"Нежелательная программа: {pup.DisplayName}",
-                Details = $"{pup.PupReason}. Если вы не устанавливали её сознательно, удалите её. Кнопка запустит деинсталлятор " +
-                          "самой программы (Windows может спросить разрешение); если установщик умеет удалять без окон, это пройдёт " +
-                          "без вопросов, и остановить удаление будет нельзя. Перед удалением создаётся точка восстановления " +
-                          "(если это включено в настройках и есть права администратора). Подробности о программе — в разделе «Программы».",
+                Details = $"{pup.PupReason}. " + (canUninstall
+                    ? "Если вы не устанавливали её сознательно, удалите её. Кнопка запустит деинсталлятор самой программы " +
+                      "(Windows может спросить разрешение); если установщик умеет удалять без окон, это пройдёт без вопросов, " +
+                      "и остановить удаление будет нельзя. Перед удалением создаётся точка восстановления (если это включено " +
+                      "в настройках и есть права администратора). Подробности о программе — в разделе «Программы»."
+                    : "Деинсталлятор программы не найден — скорее всего, она уже удалена, а в списке осталась только запись, " +
+                      "поэтому удалить её отсюда нельзя. Запись можно убрать в разделе «Программы»."),
                 Severity = IssueSeverity.High,
                 Gain = pup.SizeBytes > 0 ? $"Освободит ≈ {Format.Bytes(pup.SizeBytes)}" : null,
                 ReclaimableBytes = 0, // removing a program is the user's decision (InFixAll = false): not counted as "can free now"
                 TargetPageKey = "Programs",
-                FixAsync = c => FixUnwantedProgramAsync(pup, c),
+                FixAsync = canUninstall ? c => FixUnwantedProgramAsync(pup, c) : null,
                 FixLabel = "Удалить программу",
                 InFixAll = false,
             });
@@ -841,7 +854,8 @@ public sealed class ProgramsService : IHealthContributor
     /// <summary>
     /// Fix for the dashboard (already confirmed there): uninstalls the unwanted program with its own uninstaller, quietly
     /// when the installer allows it. The program is read again first: it may be gone (or trusted) since the scan.
-    /// A restore point comes first, as before any uninstall on the Programs page.
+    /// A restore point comes first, as before any uninstall on the Programs page. "Отмена" while waiting for the uninstaller
+    /// returns a text (the uninstaller itself keeps running); "Отмена" before it started throws.
     /// </summary>
     private async Task<string> FixUnwantedProgramAsync(InstalledProgram scanned, CancellationToken ct)
     {
@@ -853,11 +867,30 @@ public sealed class ProgramsService : IHealthContributor
             return $"«{program.DisplayName}» больше не считается нежелательной (возможно, вы добавили её в доверенные) — ничего не изменено.";
 
         var name = program.DisplayName;
+        UninstallOutcome outcome;
         if (!program.CanUninstall)
-            return UnwantedProgramFixText(name, UninstallStatus.NotStarted); // nothing to run: no restore point either
-
-        await CreateRestorePointAsync($"Удаление {name}", ct);
-        var outcome = await UninstallQuietWhenPossibleAsync(program, ct);
+        {
+            outcome = CannotUninstall(program); // nothing to run: no restore point either
+        }
+        else
+        {
+            await CreateRestorePointAsync($"Удаление {name}", ct);
+            ct.ThrowIfCancellationRequested(); // "Отмена" before anything was started: a plain cancellation
+            try
+            {
+                outcome = await UninstallQuietWhenPossibleAsync(program, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Only the waiting stopped (RunUninstallerAsync): the uninstaller keeps running. Return a text instead of
+                // throwing, so the Dashboard shows it with its "stopped" note rather than a bare "Исправление отменено.".
+                Log.Info($"Удаление «{name}»: ожидание деинсталлятора прервано пользователем");
+                return $"Ожидание остановлено: удаление «{name}» могло продолжиться — нажмите «Проверить снова», " +
+                       "когда окно удаления закроется.";
+            }
+        }
+        if (outcome.Status == UninstallStatus.NotStarted)
+            Log.Warn($"Главная: не удалось запустить удаление «{name}»: {outcome.Message.ReplaceLineEndings(" ")}");
         return UnwantedProgramFixText(name, outcome.Status);
     }
 
@@ -879,8 +912,15 @@ public sealed class ProgramsService : IHealthContributor
     /// still installed (the Store apps are read again; apps that appeared after the scan are left alone).
     /// </summary>
     private async Task<string> FixPreinstalledAppsAsync(IReadOnlyList<StoreApp> scanned, CancellationToken ct)
+        => await RemovePreinstalledAppsAsync(scanned, await ScanStoreAppsAsync(ct), ct);
+
+    /// <summary>The part of <see cref="FixPreinstalledAppsAsync"/> after the re-read (separate so tests can hand it a failed read).</summary>
+    internal async Task<string> RemovePreinstalledAppsAsync(IReadOnlyList<StoreApp> scanned, StoreAppsResult current, CancellationToken ct)
     {
-        var targets = (await ScanStoreAppsAsync(ct)).Apps
+        if (current.Error is not null)
+            return "Не удалось получить список приложений Microsoft Store — ничего не изменено.";
+
+        var targets = current.Apps
             .Where(a => a.IsBloatware && a.CanRemove &&
                         scanned.Any(s => string.Equals(s.PackageFullName, a.PackageFullName, StringComparison.OrdinalIgnoreCase)))
             .ToList();

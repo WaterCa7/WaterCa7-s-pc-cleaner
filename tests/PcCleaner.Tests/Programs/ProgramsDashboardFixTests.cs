@@ -232,9 +232,9 @@ public sealed class ProgramsDashboardFixTests : IDisposable
     }
 
     [Fact]
-    public async Task UnwantedProgram_WithoutAWorkingUninstaller_StartsNothing()
+    public async Task UnwantedProgram_WithoutAWorkingUninstaller_HasNoFixButton()
     {
-        // Its uninstaller and install folder are gone: the entry is "broken" and cannot be uninstalled.
+        // Its uninstaller and install folder are gone: the entry is "broken", a "Удалить программу" button could never succeed.
         AddEntry("AmigoGone", new()
         {
             ["DisplayName"] = "Амиго",
@@ -242,13 +242,47 @@ public sealed class ProgramsDashboardFixTests : IDisposable
             ["UninstallString"] = $"\"{Path.Combine(_work, "Gone", "uninstall.exe")}\"",
         });
         var service = CreateService();
+
         var issue = await UnwantedIssueAsync(service);
+
+        Assert.Null(issue.FixAsync);
+        Assert.False(issue.CanFix);
+        Assert.Contains("Деинсталлятор программы не найден", issue.Details);
+        Assert.Contains("Программы", issue.Details);
+        Assert.Equal("Programs", issue.TargetPageKey); // the row stays and opens the page
+        Assert.Empty(_calls);
+    }
+
+    [Fact]
+    public async Task UnwantedProgram_BrokenSinceTheScan_StartsNothingAndLogsTheReason()
+    {
+        AddAmigo();
+        var service = CreateService();
+        var issue = await UnwantedIssueAsync(service);
+        Assert.NotNull(issue.FixAsync);
+        Directory.Delete(Path.GetDirectoryName(_uninstallerPath)!, recursive: true); // uninstaller and install folder vanish
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
         Assert.Equal("Не удалось запустить удаление «Амиго».", text);
         AssertFailureNotAdmin(text);
         Assert.Empty(_calls); // no restore point for nothing
+        Assert.Contains(Log.Entries.ToList(),
+            e => e.Level == LogLevel.Warning && e.Message.Contains("«Амиго»") && e.Message.Contains("Деинсталлятор этой программы не найден"));
+    }
+
+    [Fact]
+    public async Task UnwantedProgram_NotStarted_LogsTheRunnersReason()
+    {
+        AddAmigo();
+        var reason = "причина-" + _id;
+        var service = CreateService(outcome: new UninstallOutcome(UninstallStatus.NotStarted, reason));
+        var issue = await UnwantedIssueAsync(service);
+
+        var text = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Equal("Не удалось запустить удаление «Амиго».", text);
+        Assert.Contains(Log.Entries.ToList(), e => e.Level == LogLevel.Warning && e.Message.Contains("«Амиго»") && e.Message.Contains(reason));
     }
 
     [Fact]
@@ -268,18 +302,76 @@ public sealed class ProgramsDashboardFixTests : IDisposable
         Assert.Empty(_calls);
     }
 
+    private const string WaitStoppedText =
+        "Ожидание остановлено: удаление «Амиго» могло продолжиться — нажмите «Проверить снова», когда окно удаления закроется.";
+
     [Fact]
-    public async Task UnwantedProgram_Cancelled_ThrowsInsteadOfReportingSuccess()
+    public async Task UnwantedProgram_CancelledWhileWaitingForTheUninstaller_SaysItMayStillRun()
     {
         AddAmigo();
-        var service = CreateService();
-        var issue = await UnwantedIssueAsync(service);
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        var service = CreateService();
+        service.UninstallOverride = (p, quiet, _) =>
+        {
+            _calls.Add($"uninstall:{p.DisplayName}:{(quiet ? "quiet" : "normal")}");
+            cts.Cancel(); // "Отмена" while waiting: RunUninstallerAsync stops waiting, the uninstaller keeps running
+            return Task.FromCanceled<UninstallOutcome>(cts.Token);
+        };
+        var issue = await UnwantedIssueAsync(service);
+
+        var text = await issue.FixAsync!(cts.Token);
+
+        Assert.Equal(WaitStoppedText, text);
+        Assert.Equal(new[] { "restore:Удаление Амиго", "uninstall:Амиго:normal" }, _calls);
+        Assert.True(cts.IsCancellationRequested); // the caller still sees the cancellation (the Dashboard keys on it)
+    }
+
+    [Fact]
+    public async Task UnwantedProgram_CancelledBeforeTheUninstallerStarts_StillCancels()
+    {
+        AddAmigo();
+        using var cts = new CancellationTokenSource();
+        var service = CreateService();
+        service.CreateRestorePointAsync = (description, _) =>
+        {
+            _calls.Add($"restore:{description}");
+            cts.Cancel(); // "Отмена" while the restore point is being made
+            return Task.FromResult(true);
+        };
+        var issue = await UnwantedIssueAsync(service);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => issue.FixAsync!(cts.Token));
 
-        Assert.Empty(_calls);
+        Assert.Equal(new[] { "restore:Удаление Амиго" }, _calls); // nothing was started
+    }
+
+    [Fact]
+    public async Task UnwantedProgram_CancelledWhileWaiting_DashboardKeepsTheTextAndDoesNotMarkItFixed()
+    {
+        AddAmigo();
+        using var cts = new CancellationTokenSource();
+        var service = CreateService();
+        service.UninstallOverride = (_, _, _) =>
+        {
+            cts.Cancel();
+            return Task.FromCanceled<UninstallOutcome>(cts.Token);
+        };
+        var vm = new DashboardViewModel(new IHealthContributor[] { service }, new AppSettings())
+        {
+            CreateRestorePointAsync = (_, _) => Task.FromResult(false),
+            ReadStaticInfo = () => new StaticSystemInfo("Windows 11 Pro", "24H2", "TEST-PC", "Test CPU", 8, 16UL << 30),
+        };
+        await vm.ScanCoreAsync(CancellationToken.None, persist: false);
+        var item = vm.Groups.Single().Items.Single();
+        Assert.Equal("Удалить программу", item.Issue.FixLabel);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.FixOneCoreAsync(item, cts.Token));
+
+        Assert.StartsWith(WaitStoppedText, item.Issue.FixResult);
+        Assert.Contains(DashboardViewModel.InterruptedNote, item.Issue.FixResult);
+        Assert.False(item.Issue.IsFixed);
+        Assert.True(item.Issue.CanFix);
+        Assert.True(item.FixFailed);
     }
 
     // ---------------------------------------------------------------- quiet when possible (reused by the bulk uninstall)
@@ -369,6 +461,35 @@ public sealed class ProgramsDashboardFixTests : IDisposable
         Assert.Contains(normalExe, normal.Message);
     }
 
+    [Fact]
+    public async Task UninstallQuietWhenPossible_ProgramThatCannotBeUninstalled_StartsNothing()
+    {
+        var service = CreateService();
+        var gone = Path.Combine(_work, "Gone", "uninstall.exe");
+        // Uninstaller and install folder are gone (broken entry), although the installer left a quiet command.
+        var broken = ProgramsService.CreateProgram(new UninstallEntryValues
+        {
+            KeyName = "Broken",
+            DisplayName = "Gone App",
+            UninstallString = $"\"{gone}\"",
+            QuietUninstallString = $"\"{gone}\" /S",
+        }, MainSource, DateTime.Now);
+        var noUninstaller = ProgramsService.CreateProgram(
+            new UninstallEntryValues { KeyName = "None", DisplayName = "No Uninstaller", InstallLocation = _work }, MainSource, DateTime.Now);
+        Assert.False(broken.CanUninstall);
+        Assert.NotNull(broken.QuietLaunch);
+        Assert.False(noUninstaller.CanUninstall);
+
+        var first = await service.UninstallQuietWhenPossibleAsync(broken, CancellationToken.None);
+        var second = await service.UninstallQuietWhenPossibleAsync(noUninstaller, CancellationToken.None);
+
+        Assert.Equal(UninstallStatus.NotStarted, first.Status);
+        Assert.Contains("не найден", first.Message);
+        Assert.Equal(UninstallStatus.NotStarted, second.Status);
+        Assert.Contains("не указан деинсталлятор", second.Message);
+        Assert.Empty(_calls); // the runner (here the fake) was never reached
+    }
+
     // ================================================================ preinstalled Store apps
 
     [Fact]
@@ -426,6 +547,21 @@ public sealed class ProgramsDashboardFixTests : IDisposable
         var text = await issue.FixAsync!(CancellationToken.None);
 
         Assert.Contains("ничего не изменено", text);
+        AssertFailureNotAdmin(text);
+        Assert.Empty(_calls);
+    }
+
+    [Fact]
+    public async Task Bloat_Fix_StoreAppListNotReceived_ChangesNothing()
+    {
+        var service = CreateService(() => Records(BingNews, CandyCrush));
+        var scanned = (await service.ScanStoreAppsAsync(CancellationToken.None)).Apps;
+        // Windows did not give the list (PowerShell failed): an empty list with an error, or even a partial one.
+        var failedScan = new StoreAppsResult(scanned, "Windows не выдала список приложений Microsoft Store.");
+
+        var text = await service.RemovePreinstalledAppsAsync(scanned, failedScan, CancellationToken.None);
+
+        Assert.Equal("Не удалось получить список приложений Microsoft Store — ничего не изменено.", text);
         AssertFailureNotAdmin(text);
         Assert.Empty(_calls);
     }
