@@ -126,7 +126,7 @@ public sealed class CleanerService : IHealthContributor
     private async Task<CategoryScanResult> ScanDeliveryOptimizationAsync(CleanerCategory category, CancellationToken ct)
     {
         var result = new CategoryScanResult { CategoryId = category.Id };
-        var snapshot = await QueryDeliveryOptimizationAsync(ct);
+        var snapshot = await QueryDeliveryOptimization(ct);
         if (snapshot is not null)
         {
             result.Bytes = snapshot.Value.Bytes;
@@ -151,6 +151,16 @@ public sealed class CleanerService : IHealthContributor
         result.AdminFiles = result.Files;
         return result;
     }
+
+    /// <summary>
+    /// Reads the size of the Delivery Optimization cache and empties it. Both go through PowerShell; tests replace them, so
+    /// they never touch the real cache.
+    /// </summary>
+    internal Func<CancellationToken, Task<(long Bytes, long Files)?>> QueryDeliveryOptimization { get; set; } =
+        QueryDeliveryOptimizationAsync;
+
+    internal Func<CancellationToken, Task<ProcessResult>> CleanDeliveryOptimizationCache { get; set; } = ct =>
+        ProcessRunner.PowerShellAsync("Delete-DeliveryOptimizationCache -Force -ErrorAction Stop; 'OK'", TimeSpan.FromMinutes(5), ct);
 
     /// <summary>Get-DeliveryOptimizationPerfSnap works without admin rights and reports the cache size.</summary>
     private static async Task<(long Bytes, long Files)?> QueryDeliveryOptimizationAsync(CancellationToken ct)
@@ -338,12 +348,11 @@ public sealed class CleanerService : IHealthContributor
             result.Message = "Нужны права администратора";
             return result;
         }
-        var before = await QueryDeliveryOptimizationAsync(ct);
-        var r = await ProcessRunner.PowerShellAsync("Delete-DeliveryOptimizationCache -Force -ErrorAction Stop; 'OK'",
-            TimeSpan.FromMinutes(5), ct);
+        var before = await QueryDeliveryOptimization(ct);
+        var r = await CleanDeliveryOptimizationCache(ct);
         if (r.Success && r.StdOut.Contains("OK"))
         {
-            var after = await QueryDeliveryOptimizationAsync(CancellationToken.None);
+            var after = await QueryDeliveryOptimization(CancellationToken.None);
             result.FreedBytes = Math.Max(0, (before?.Bytes ?? 0) - (after?.Bytes ?? 0));
             result.DeletedFiles = Math.Max(0, (before?.Files ?? 0) - (after?.Files ?? 0));
             result.Message = "Кэш оптимизации доставки очищен";
@@ -494,6 +503,7 @@ public sealed class CleanerService : IHealthContributor
             .ToList();
         var total = cleanable.Sum(x => x.Bytes);
         var systemBytes = sized.Sum(c => results[c.Id].AdminBytes);
+        var systemIds = sized.Where(c => results[c.Id].AdminBytes > 0).Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
 
         var severity = SeverityFor(total);
         if (severity is not null)
@@ -524,13 +534,15 @@ public sealed class CleanerService : IHealthContributor
                 Module = ModuleName,
                 Title = $"Ещё {Format.Bytes(systemBytes)} системного мусора",
                 Details = elevated
-                    ? "Временные файлы Windows, кэш обновлений и другие системные папки не очищаются автоматически. " +
-                      "Откройте «Очистку», проверьте список и удалите их вручную."
+                    ? "Временные файлы Windows, кэш обновлений и другие системные папки не входят в обычную очистку. " +
+                      "Кнопка удалит их сейчас: Windows создаст нужное заново, занятые файлы будут пропущены, " +
+                      "ваши документы не затрагиваются."
                     : "Временные файлы Windows, кэш обновлений и другие системные папки можно очистить только " +
-                      "с правами администратора. Перезапустите программу от имени администратора и откройте «Очистку».",
+                      "с правами администратора. Перезапустите программу от имени администратора и нажмите кнопку ещё раз.",
                 Severity = IssueSeverity.Info,
                 Gain = $"Освободит до {Format.Bytes(systemBytes)}",
                 TargetPageKey = "Cleaner",
+                FixAsync = token => FixSystemJunkAsync(systemIds, token),
             });
         }
 
@@ -550,8 +562,7 @@ public sealed class CleanerService : IHealthContributor
                 Gain = $"Освободит {Format.Bytes(bytes)}",
                 ReclaimableBytes = bytes,
                 AutoFixSafe = false,
-                // Emptying the bin cannot be undone, and "Исправить всё" promises that every action can be reverted:
-                // this fix only runs from its own button on the row.
+                // Emptying the bin cannot be undone, so it runs only from its own button on the row.
                 InFixAll = false,
                 TargetPageKey = "Cleaner",
                 FixAsync = async token =>
@@ -604,6 +615,56 @@ public sealed class CleanerService : IHealthContributor
                 : "Нечего очищать: подходящие файлы уже удалены.";
         var results = await CleanAsync(categories, null, ct, userFoldersOnly: true);
         var text = Summarize(results);
+        if (skipped.Count > 0)
+            text += $" Пропущено по вашему выбору на странице «Очистка»: {NamesText(skipped)}.";
+        return text;
+    }
+
+    /// <summary>
+    /// Dashboard fix of «Ещё N системного мусора»: cleans the folders that need administrator rights (Windows\Temp, the update
+    /// cache, report queues, crash dumps, the Delivery Optimization cache) of the categories the scan sized. Without the rights
+    /// nothing is changed. The scan may be old, so the folders are measured again first, and categories the user unchecked on
+    /// the Cleaner page since then are skipped: the latest choice wins.
+    /// </summary>
+    private async Task<string> FixSystemJunkAsync(IReadOnlySet<string> categoryIds, CancellationToken ct)
+    {
+        if (!IsElevated)
+            return "Нужны права администратора: системные папки можно очистить только с ними.";
+
+        var disabled = new HashSet<string>(_settings().CleanerDisabledCategories ?? new List<string>(), StringComparer.Ordinal);
+        var chosen = (await Task.Run(LoadCategories, ct)).Where(c => categoryIds.Contains(c.Id)).ToList();
+        var skipped = chosen.Where(c => disabled.Contains(c.Id)).Select(c => c.Name).ToList();
+        if (skipped.Count > 0)
+            Log.Info($"Очистка: пропущены категории, с которых снята отметка на странице «Очистка»: {string.Join(", ", skipped)}");
+        var parts = chosen.Where(c => !disabled.Contains(c.Id)).Select(c => c.OnlyAdminFolders()).OfType<CleanerCategory>().ToList();
+
+        var sizes = new System.Collections.Concurrent.ConcurrentDictionary<string, CategoryScanResult>();
+        await ScanAsync(parts, 0, (c, r) => sizes[c.Id] = r, ct);
+        var categories = parts.Where(c => sizes.TryGetValue(c.Id, out var r) && r.AdminBytes > 0).ToList();
+        if (categories.Count == 0)
+            return skipped.Count > 0
+                ? $"Ничего не удалено: вы сняли отметку с этих категорий на странице «Очистка» — {NamesText(skipped)}."
+                : "Нечего очищать: системный мусор уже удалён.";
+
+        var results = await CleanAsync(categories, null, ct);
+        var freed = results.Sum(r => r.FreedBytes);
+        var failed = results.Where(r => r.Errors.Count > 0).ToList();
+        var busy = results.Sum(r => r.LockedFiles);
+        var denied = results.Sum(r => r.DeniedFiles);
+        if (freed == 0 && results.Sum(r => r.DeletedFiles) == 0)
+        {
+            var why = failed.Count > 0 ? failed[0].Errors[0] : CleanerText.Skipped(busy, denied);
+            return $"Не удалось удалить системный мусор: {(why.Length > 0 ? why.TrimEnd('.', ' ') : "Windows не дала удалить файлы")}.";
+        }
+
+        var notes = new List<string>();
+        if (busy > 0 || denied > 0)
+            notes.Add(CleanerText.Skipped(busy, denied));
+        if (results.Any(r => r.Cancelled))
+            notes.Add("очистка прервана");
+        var text = $"Удалено {Format.Bytes(freed)} системного мусора" + (notes.Count > 0 ? $" ({string.Join(", ", notes)})." : ".");
+        if (failed.Count > 0)
+            text += $" Не удалось очистить: {NamesText(failed.Select(r => r.Name).ToList())}.";
         if (skipped.Count > 0)
             text += $" Пропущено по вашему выбору на странице «Очистка»: {NamesText(skipped)}.";
         return text;

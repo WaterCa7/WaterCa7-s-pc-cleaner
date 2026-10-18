@@ -309,9 +309,13 @@ public sealed partial class StartupService : IHealthContributor
                 Title = $"Подозрительная запись в автозагрузке: {item.DisplayName}",
                 Details = $"{string.Join("; ", item.Reasons)}. Источник: {item.SourceText}. Команда: {item.Command}\n" +
                           "Проверьте файл на VirusTotal или Защитником Windows; если программа вам незнакома — " +
-                          (item.IsRunOnce ? "удалите эту запись на странице «Автозагрузка»." : "отключите её."),
+                          (item.IsRunOnce
+                              ? "кнопка удалит эту запись (сначала сохранится резервная копия)."
+                              : "кнопка отключит её; включить обратно можно на странице «Автозагрузка»."),
                 Severity = item.RiskLevel == SuspicionLevel.High ? IssueSeverity.High : IssueSeverity.Medium,
                 TargetPageKey = ModuleKey,
+                FixLabel = item.IsRunOnce ? "Удалить запись" : "Отключить",
+                FixAsync = token => FixSuspiciousAsync(item, token),
             });
         }
 
@@ -353,6 +357,39 @@ public sealed partial class StartupService : IHealthContributor
         }
 
         return issues;
+    }
+
+    /// <summary>
+    /// Dashboard fix of a suspicious entry: disables it, or removes it (with a backup) when it is a RunOnce entry, which cannot
+    /// be disabled. The entries are read again first: the scan may be hours old, and an entry that is gone, that the user trusted
+    /// since or that no longer looks suspicious is left alone.
+    /// </summary>
+    internal async Task<string> FixSuspiciousAsync(StartupItem scanned, CancellationToken ct)
+    {
+        var current = (await ScanAsync(null, ct)).FirstOrDefault(i => i.Id == scanned.Id);
+        if (current is null)
+            return "Запись уже удалена — ничего не изменено.";
+        if (!current.IsSuspicious)
+            return $"Запись «{current.DisplayName}» больше не считается подозрительной — ничего не изменено.";
+
+        var removed = current.IsRunOnce;
+        var result = removed ? await DeleteAsync(current, ct) : await SetEnabledAsync(current, false, ct);
+        if (result.Success)
+            ChangedExternally?.Invoke();
+        return SuspiciousFixText(current, result, removed);
+    }
+
+    /// <summary>What the dashboard shows after the fix; failures and missing rights use the wording the dashboard recognises.</summary>
+    internal static string SuspiciousFixText(StartupItem item, StartupActionResult result, bool removed)
+    {
+        var name = item.DisplayName;
+        if (result.Success)
+            return removed
+                ? $"Запись «{name}» удалена из автозагрузки — резервная копия сохранена."
+                : $"Запись «{name}» отключена — включить её можно на странице «Автозагрузка».";
+        if (result.NeedsAdmin)
+            return $"Нужны права администратора: {result.Message}";
+        return $"Не удалось {(removed ? "удалить" : "отключить")} «{name}»: {result.Message}";
     }
 
     /// <summary>Enabled non-Microsoft programs that start at logon (Run, Startup folder, tasks). Hidden Windows items never count.</summary>

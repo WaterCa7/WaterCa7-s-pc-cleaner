@@ -124,8 +124,8 @@ public class CleanerServiceTests
     [Fact]
     public async Task Analyze_RecycleBinIssue_IsNotInFixAll()
     {
-        // Emptying the Recycle Bin cannot be undone, while «Исправить всё» promises that every action can be reverted:
-        // the issue keeps its own button on the row and is never part of the batch.
+        // Emptying the Recycle Bin cannot be undone, so it runs only from its own button on the row and is never part of
+        // the «Исправить всё» batch.
         using var t = new CleanerTestFolder("service-bin-fixall");
         var service = CreateService(t, out _, out var bin);
         bin.Bytes = 5 * Mb;

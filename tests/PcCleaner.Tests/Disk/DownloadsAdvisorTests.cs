@@ -133,7 +133,7 @@ public class DownloadsAdvisorTests
         var issue = service.OldDownloadsIssue(big);
         Assert.NotNull(issue);
         Assert.Equal(PcCleaner.Core.IssueSeverity.Low, issue!.Severity);
-        Assert.Null(issue.FixAsync);
+        Assert.NotNull(issue.FixAsync); // «В Корзину»: see DiskDashboardFixTests
         Assert.Equal("Disk", issue.TargetPageKey);
         Assert.Equal(1300L << 20, issue.ReclaimableBytes);
         Assert.Contains("Загрузк", issue.Title);

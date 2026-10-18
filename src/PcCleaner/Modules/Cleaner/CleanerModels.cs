@@ -117,6 +117,43 @@ public sealed class CleanerCategory
     /// <summary>Some (not all) folders need administrator rights.</summary>
     public bool PartlyRequiresAdmin => Kind == CategoryKind.Files && !RequiresAdmin && Roots.Any(r => r.RequiresAdmin);
 
+    /// <summary>
+    /// This category limited to the folders that need administrator rights, or null when it has none. The dashboard fix of
+    /// the system junk uses it: the user's own folders of the same category (reports, crash dumps) belong to the other fix.
+    /// </summary>
+    internal CleanerCategory? OnlyAdminFolders()
+    {
+        if (Kind == CategoryKind.DeliveryOptimization)
+            return this;
+        if (Kind != CategoryKind.Files)
+            return null;
+        var admin = Roots.Where(r => r.RequiresAdmin).ToList();
+        if (admin.Count == 0)
+            return null;
+        if (admin.Count == Roots.Count)
+            return this;
+        return new CleanerCategory
+        {
+            Id = Id,
+            Group = Group,
+            Name = Name,
+            Description = Description,
+            Glyph = Glyph,
+            Kind = Kind,
+            Roots = admin,
+            DefaultChecked = DefaultChecked,
+            Hint = Hint,
+            Warning = Warning,
+            Age = Age,
+            FixedMinAge = FixedMinAge,
+            AgeNote = AgeNote,
+            RemoveEmptyDirectories = RemoveEmptyDirectories,
+            ProcessNames = ProcessNames,
+            IsRunning = IsRunning,
+            OpenFolder = OpenFolder,
+        };
+    }
+
     /// <summary>Existing folders to show in the details view.</summary>
     public IReadOnlyList<string> DisplayFolders
     {

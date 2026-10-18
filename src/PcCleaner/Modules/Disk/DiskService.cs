@@ -132,6 +132,10 @@ public sealed class DiskService : IHealthContributor
         return _env.LaunchTool(exe, arguments);
     }
 
+    /// <summary>Opens «Очистка диска» for the system drive (once: not while its window is open). The Windows.old fix uses it.</summary>
+    internal ToolLaunchResult OpenDiskCleanup()
+        => OpenTool(SystemTools.Exe("cleanmgr.exe"), $"/d {_env.SystemDriveRoot.TrimEnd('\\').TrimEnd(':')}", "cleanmgr");
+
     public string? DownloadsDir => _env.DownloadsDir;
 
     // ===================================================================== Overview
@@ -583,22 +587,43 @@ public sealed class DiskService : IHealthContributor
         if (Directory.Exists(windowsOld))
         {
             var (bytes, complete) = await MeasureFolderAsync(windowsOld, TimeSpan.FromSeconds(8), ct).ConfigureAwait(false);
-            var sizeText = bytes > 0 ? (complete ? Format.Bytes(bytes) : "не меньше " + Format.Bytes(bytes)) : null;
-            issues.Add(new HealthIssue
-            {
-                Module = ModuleName,
-                Title = "Осталась папка Windows.old" + (sizeText is null ? "" : $" ({sizeText})"),
-                Details = "Это копия прежней версии Windows, которая остаётся после крупного обновления. Если всё работает " +
-                          "нормально, её можно удалить через «Очистку диска»: «Очистить системные файлы» → «Предыдущие установки Windows». " +
-                          "После удаления откатиться на прежнюю версию будет нельзя.",
-                Severity = IssueSeverity.Low,
-                Gain = sizeText is null ? null : $"Освободит {sizeText}",
-                ReclaimableBytes = bytes,
-                TargetPageKey = PageKey,
-            });
+            issues.Add(WindowsOldIssue(bytes, complete));
         }
 
         return issues;
+    }
+
+    internal HealthIssue WindowsOldIssue(long bytes, bool complete)
+    {
+        var sizeText = bytes > 0 ? (complete ? Format.Bytes(bytes) : "не меньше " + Format.Bytes(bytes)) : null;
+        return new HealthIssue
+        {
+            Module = ModuleName,
+            Title = "Осталась папка Windows.old" + (sizeText is null ? "" : $" ({sizeText})"),
+            Details = "Это копия прежней версии Windows, которая остаётся после крупного обновления. Если всё работает " +
+                      "нормально, её можно удалить через «Очистку диска»: «Очистить системные файлы» → «Предыдущие установки Windows». " +
+                      "После удаления откатиться на прежнюю версию будет нельзя.",
+            Severity = IssueSeverity.Low,
+            Gain = sizeText is null ? null : $"Освободит {sizeText}",
+            ReclaimableBytes = bytes,
+            TargetPageKey = PageKey,
+            FixLabel = "Открыть очистку диска",
+            // Opens a window the user has to work in: «Исправить всё» does not start it.
+            InFixAll = false,
+            FixAsync = _ => Task.FromResult(OpenDiskCleanupForWindowsOld()),
+        };
+    }
+
+    /// <summary>The Windows.old fix: the wizard deletes the folder itself, after the user ticks «Предыдущие установки Windows».</summary>
+    private string OpenDiskCleanupForWindowsOld()
+    {
+        const string steps = "нажмите «Очистить системные файлы» и отметьте «Предыдущие установки Windows».";
+        return OpenDiskCleanup() switch
+        {
+            ToolLaunchResult.Started => "Открыта «Очистка диска»: " + steps,
+            ToolLaunchResult.AlreadyOpen => "«Очистка диска» уже открыта — переключитесь на неё через панель задач: " + steps,
+            _ => "Не удалось открыть «Очистку диска».",
+        };
     }
 
     /// <summary>Free &lt; 10% → High, &lt; 15% → Medium (drives with plenty of absolute space are not flagged).</summary>
@@ -659,19 +684,95 @@ public sealed class DiskService : IHealthContributor
             DownloadKind.Archives => $"архивы — {Format.Bytes(g.TotalBytes)}",
             _ => $"образы дисков — {Format.Bytes(g.TotalBytes)}",
         });
-        var count = groups.Sum(g => g.Files.Count);
+        var scanned = groups.SelectMany(g => g.Files).ToList();
         return new HealthIssue
         {
             Module = ModuleName,
             Title = $"Старые установщики и архивы в «Загрузках»: {Format.Bytes(total)}",
-            Details = $"{Format.Count(count, "файл", "файла", "файлов")} старше {DownloadsAdvisor.DefaultAgeDays} дней " +
-                      $"({string.Join(", ", parts)}). Просмотрите список в разделе «Диски» → «Советы по месту» " +
-                      "и отправьте ненужное в корзину.",
+            Details = $"{Format.Count(scanned.Count, "файл", "файла", "файлов")} старше {DownloadsAdvisor.DefaultAgeDays} дней " +
+                      $"({string.Join(", ", parts)}). Кнопка переместит их все в Корзину — оттуда файлы можно вернуть, пока " +
+                      "она не очищена. Чтобы оставить что-то, сначала просмотрите список в разделе «Диски» → «Советы по месту».",
             Severity = IssueSeverity.Low,
             Gain = $"Освободит до {Format.Bytes(total)}",
             ReclaimableBytes = total,
             TargetPageKey = PageKey,
+            FixLabel = "В Корзину",
+            FixAsync = token => RecycleOldDownloadsAsync(scanned, token),
         };
+    }
+
+    private enum StateSinceScan
+    {
+        Unchanged,
+
+        /// <summary>The file is there, but it is not the one the scan saw (another size or last-write time).</summary>
+        Changed,
+
+        Gone,
+    }
+
+    private static StateSinceScan StateOf(FoundFile file)
+    {
+        try
+        {
+            var info = new FileInfo(file.Path);
+            if (!info.Exists)
+                return StateSinceScan.Gone;
+            return info.Length == file.Size && info.LastWriteTime == file.ModifiedLocal ? StateSinceScan.Unchanged : StateSinceScan.Changed;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return StateSinceScan.Changed;
+        }
+    }
+
+    /// <summary>
+    /// Dashboard fix of the old installers and archives: moves them to the Recycle Bin, where they can be restored. The scan may
+    /// be old, so only files that are still there with the size and last-write time the scan saw are moved: a newer download
+    /// saved under the same name, or a file the user changed, stays where it is.
+    /// </summary>
+    internal async Task<string> RecycleOldDownloadsAsync(IReadOnlyList<FoundFile> scanned, CancellationToken ct)
+    {
+        var unchanged = new List<(string Path, long Size)>();
+        var changed = 0;
+        var gone = 0;
+        foreach (var file in scanned)
+        {
+            ct.ThrowIfCancellationRequested();
+            switch (StateOf(file))
+            {
+                case StateSinceScan.Unchanged:
+                    unchanged.Add((file.Path, file.Size));
+                    break;
+                case StateSinceScan.Changed:
+                    changed++;
+                    break;
+                default:
+                    gone++;
+                    break;
+            }
+        }
+        if (unchanged.Count == 0)
+            return changed > 0
+                ? "Файлы изменились после проверки — ничего не изменено. Откройте «Диски» → «Советы по месту» и посмотрите список заново."
+                : "Файлы уже удалены — ничего не изменено.";
+
+        // Like the Disk page: the shell moves files to the Recycle Bin on an STA thread.
+        var result = await SystemTools.RunSta(() => RecycleFiles(unchanged)).ConfigureAwait(false);
+        foreach (var (path, reason) in result.Skipped)
+            Log.Warn($"Диски: не перемещено в корзину {path} — {reason}");
+        if (result.Recycled.Count == 0)
+            return $"Не удалось переместить файлы в Корзину: {(result.Skipped.Count > 0 ? result.Skipped[0].Reason : "Windows не назвала причину")}.";
+
+        var n = result.Recycled.Count;
+        Log.Action($"Диски: в корзину перемещено {Format.Count(n, "файл", "файла", "файлов")} ({Format.Bytes(result.RecycledBytes)})");
+        var text = $"В Корзину {Format.Plural(n, "перемещён", "перемещено", "перемещено")} {Format.Count(n, "файл", "файла", "файлов")} " +
+                   $"({Format.Bytes(result.RecycledBytes)}) — {Format.Plural(n, "его", "их", "их")} можно восстановить.";
+        var left = changed + gone + result.Skipped.Count;
+        if (left > 0)
+            text += $" Не тронуто: {Format.Count(left, "файл", "файла", "файлов")} " +
+                    "(уже удалены, изменились после проверки или заняты другой программой).";
+        return text;
     }
 
     // ===================================================================== Actions (change the system)
