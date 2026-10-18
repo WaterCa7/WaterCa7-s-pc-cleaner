@@ -255,7 +255,8 @@ public class SecurityDashboardSystemFixTests
         if (Admin.IsElevated)
             return; // only meaningful in a normal (non-elevated) test run
         using var sb = new SecuritySandbox();
-        // The entry points to an HKLM test key that does not exist: without the rights the action stops before opening it.
+        var restorePoints = RecordRestorePoints(sb);
+        // The entry points to an HKLM test key that does not exist: without the rights the fix stops before opening it.
         var hijack = new IfeoEntry
         {
             ImageName = "taskmgr.exe",
@@ -274,6 +275,126 @@ public class SecurityDashboardSystemFixTests
         Assert.True(HealthScoring.LooksLikeAdminRequired(text), text);
         Assert.True(HealthScoring.LooksLikeFailure(text), text);
         Assert.Equal(SecurityService.DashboardText(SecurityActionResult.Fail(SecurityService.NeedAdminMessage)), text); // said once
+        Assert.Empty(restorePoints); // no point for a fix that cannot run
+    }
+
+    /// <summary>Two Danger hijacks (taskmgr.exe and regedit.exe) in the 64-bit view.</summary>
+    private static void SetTwoHijacks(SecuritySandbox sb)
+    {
+        foreach (var image in new[] { "taskmgr.exe", "regedit.exe" })
+        {
+            using var key = sb.Create(sb.Env.Ifeo.Child(image));
+            key.SetValue("Debugger", Evil);
+        }
+    }
+
+    [Fact]
+    public async Task Ifeo_Fix_SubkeyGoneSinceTheScan_CountsAsRemoved()
+    {
+        using var sb = new SecuritySandbox();
+        SetTwoHijacks(sb);
+        RecordRestorePoints(sb);
+        var (issue, _) = await ScanIssueAsync(sb, IfeoTitle);
+        // A cleaner (or the user) deletes the whole subkey after the scan: the hijack is gone, so there is nothing to fail.
+        using (var root = sb.Env.Ifeo.Open(writable: true))
+            root!.DeleteSubKeyTree("regedit.exe");
+
+        var text = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.False(HealthScoring.LooksLikeFailure(text), text);
+        Assert.Contains("regedit.exe", text);
+        Assert.Contains("taskmgr.exe", text);
+        Assert.Null(ValueOf(sb.Env.Ifeo.Child("taskmgr.exe"), "Debugger"));
+        Assert.Null(sb.Env.Ifeo.Child("regedit.exe").Open());
+    }
+
+    [Fact]
+    public async Task RemoveIfeoDebugger_SubkeyGone_IsNotAFailure()
+    {
+        using var sb = new SecuritySandbox();
+        var gone = new IfeoEntry
+        {
+            ImageName = "regedit.exe", Debugger = Evil, Location = sb.Env.Ifeo.Child("regedit.exe"), Risk = SecurityStatus.Danger,
+        };
+
+        var result = await sb.Service.RemoveIfeoDebuggerAsync(gone, CancellationToken.None);
+
+        Assert.True(result.Success, result.Message); // the hijack the user wanted removed does not exist any more
+        Assert.Contains("regedit.exe", result.Message);
+        Assert.Empty(sb.OwnBackups()); // nothing to back up
+    }
+
+    [Fact]
+    public async Task Ifeo_Fix_StoppedAfterSomeHijacksWereRemoved_ReturnsWhatWasDone()
+    {
+        using var sb = new SecuritySandbox();
+        SetTwoHijacks(sb);
+        RecordRestorePoints(sb);
+        using var cts = new CancellationTokenSource();
+        var removeOne = sb.Service.RemoveIfeoHijackAsync;
+        sb.Service.RemoveIfeoHijackAsync = async (entry, ct) =>
+        {
+            var result = await removeOne(entry, ct);
+            cts.Cancel(); // "Отмена" right after the first hijack is gone
+            return result;
+        };
+        var (issue, _) = await ScanIssueAsync(sb, IfeoTitle);
+
+        var text = await issue.FixAsync!(cts.Token);
+
+        Assert.True(cts.IsCancellationRequested); // the Dashboard keys on it
+        Assert.True(HealthScoring.LooksLikeFailure(text), text);
+        Assert.StartsWith("Не удалось", text);
+        var images = new[] { "taskmgr.exe", "regedit.exe" };
+        var left = Assert.Single(images, i => ValueOf(sb.Env.Ifeo.Child(i), "Debugger") is not null);
+        var removed = images.Single(i => i != left);
+        Assert.Contains($"остался для: {left}", text);
+        Assert.Contains($"убран для: {removed}", text);
+    }
+
+    [Fact]
+    public async Task Ifeo_Fix_StoppedAfterSomeHijacksWereRemoved_DashboardShowsTheTextAndKeepsTheIssueOpen()
+    {
+        using var sb = new SecuritySandbox();
+        SetTwoHijacks(sb);
+        RecordRestorePoints(sb);
+        using var cts = new CancellationTokenSource();
+        var removeOne = sb.Service.RemoveIfeoHijackAsync;
+        sb.Service.RemoveIfeoHijackAsync = async (entry, ct) =>
+        {
+            var result = await removeOne(entry, ct);
+            cts.Cancel();
+            return result;
+        };
+        var vm = new DashboardViewModel(new IHealthContributor[] { sb.Service }, new AppSettings())
+        {
+            CreateRestorePointAsync = (_, _) => Task.FromResult(false),
+        };
+        await vm.ScanCoreAsync(CancellationToken.None, persist: false);
+        var item = vm.Groups.SelectMany(g => g.AllItems).Single(i => i.Issue.Title == IfeoTitle);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.FixOneCoreAsync(item, cts.Token));
+
+        Assert.StartsWith("Не удалось убрать перехват запуска", item.Issue.FixResult);
+        Assert.Contains(DashboardViewModel.InterruptedNote, item.Issue.FixResult);
+        Assert.False(item.Issue.IsFixed);
+        Assert.True(item.Issue.CanFix);
+        Assert.True(item.FixFailed);
+    }
+
+    [Fact]
+    public async Task Ifeo_Fix_StoppedBeforeAnyHijackWasRemoved_IsAPlainCancellation()
+    {
+        using var sb = new SecuritySandbox();
+        SetTwoHijacks(sb);
+        using var cts = new CancellationTokenSource();
+        RecordRestorePoints(sb, () => cts.Cancel()); // "Отмена" while the restore point is being made
+        var (issue, _) = await ScanIssueAsync(sb, IfeoTitle);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => issue.FixAsync!(cts.Token));
+
+        Assert.Equal(Evil, ValueOf(sb.Env.Ifeo.Child("taskmgr.exe"), "Debugger"));
+        Assert.Equal(Evil, ValueOf(sb.Env.Ifeo.Child("regedit.exe"), "Debugger"));
     }
 
     [Fact]
@@ -322,6 +443,84 @@ public class SecurityDashboardSystemFixTests
         }
         var after = await sb.Service.ScanAsync(null, CancellationToken.None);
         Assert.Equal(SecurityStatus.Ok, after.Check(SecurityCheckIds.Proxy)!.Status);
+    }
+
+    private static void SetProxyServer(SecuritySandbox sb, string server, string? script = null)
+    {
+        using var key = sb.Create(sb.Env.InternetSettings);
+        key.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
+        key.SetValue("ProxyServer", server);
+        if (script is not null)
+            key.SetValue("AutoConfigURL", script);
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1:10809")]
+    [InlineData("localhost:8080")]
+    [InlineData("LocalHost:3128")]
+    [InlineData("[::1]:8080")]
+    [InlineData("http=127.0.0.1:8080;https=127.0.0.1:8080")]
+    public async Task Proxy_OnThisComputer_StaysOutOfFixAll_ButKeepsItsOwnButton(string server)
+    {
+        using var sb = new SecuritySandbox();
+        SetProxyServer(sb, server);
+
+        var (issue, _) = await ScanIssueAsync(sb, "Включён прокси");
+
+        Assert.False(issue.InFixAll); // a VPN or a blocking-bypass program usually sets it: not switched off in bulk
+        Assert.NotNull(issue.FixAsync);
+        Assert.True(issue.CanFix);
+        Assert.Equal("Выключить прокси", issue.FixLabel);
+        Assert.Contains("VPN", issue.Details);
+        Assert.Contains("«Исправить всё»", issue.Details);
+        // The button itself still works.
+        var text = await issue.FixAsync!(CancellationToken.None);
+        Assert.False(HealthScoring.LooksLikeFailure(text), text);
+        using var check = sb.Env.InternetSettings.Open();
+        Assert.Equal(0, check!.GetValue("ProxyEnable"));
+    }
+
+    [Theory]
+    [InlineData("1.2.3.4:8080")]
+    [InlineData("proxy.example.com:3128")]
+    [InlineData("[2001:db8::1]:8080")] // contains "::1" but is not the loopback address
+    public async Task Proxy_OnAnotherComputer_StaysInFixAll(string server)
+    {
+        using var sb = new SecuritySandbox();
+        SetProxyServer(sb, server);
+
+        var (issue, _) = await ScanIssueAsync(sb, "Включён прокси");
+
+        Assert.True(issue.InFixAll);
+        Assert.NotNull(issue.FixAsync);
+        Assert.DoesNotContain("«Исправить всё»", issue.Details);
+    }
+
+    [Fact]
+    public async Task Proxy_SetupScript_StaysInFixAllEvenWithALocalServer()
+    {
+        // A script is not a program on this computer: the proxy check treats it first, and so does the fix.
+        using var sb = new SecuritySandbox();
+        SetProxyServer(sb, "127.0.0.1:10809", script: "http://evil.example/proxy.pac");
+
+        var (issue, _) = await ScanIssueAsync(sb, "Используется скрипт настройки прокси");
+
+        Assert.True(issue.InFixAll);
+        Assert.NotNull(issue.FixAsync);
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1:10809", true)]
+    [InlineData("[::1]:8080", true)]
+    [InlineData("localhost:8080", true)]
+    [InlineData("1.2.3.4:8080", false)]
+    [InlineData("[2001:db8::1]:8080", false)]
+    public void ProxyCheck_RecognisesAProxyOnThisComputer(string server, bool local)
+    {
+        var check = SecurityRules.EvaluateProxy(new ProxyState(true, true, server, null));
+
+        Assert.Equal(SecurityStatus.Warning, check.Status);
+        Assert.Equal(local, check.Details.Contains("на этом компьютере"));
     }
 
     [Fact]

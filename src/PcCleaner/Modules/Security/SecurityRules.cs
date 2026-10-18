@@ -616,14 +616,22 @@ public static partial class SecurityRules
         }
         if (p.Enabled && !string.IsNullOrWhiteSpace(p.Server))
         {
-            var local = p.Server.Contains("127.0.0.1") || p.Server.Contains("localhost", StringComparison.OrdinalIgnoreCase);
             return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Warning,
                 $"Включён прокси {p.Server}",
-                (local ? "Прокси работает на этом компьютере — обычно это VPN или программа обхода блокировок.\n" : "") + why);
+                (IsLocalProxy(p) ? "Прокси работает на этом компьютере — обычно это VPN или программа обхода блокировок.\n" : "") + why);
         }
         return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Ok, "Прокси не используется",
             "Браузеры подключаются к сайтам напрямую, без посредников.");
     }
+
+    /// <summary>
+    /// An enabled proxy that runs on this computer (127.0.0.1, ::1 or localhost) and no setup script: usually a VPN or a
+    /// program that bypasses blocks has set it. A setup script is checked first by <see cref="EvaluateProxy"/> and is never "local".
+    /// </summary>
+    public static bool IsLocalProxy(ProxyState p)
+        => p.Enabled && string.IsNullOrWhiteSpace(p.AutoConfigUrl) && !string.IsNullOrWhiteSpace(p.Server) &&
+           (p.Server.Contains("127.0.0.1") || p.Server.Contains("[::1]") ||
+            p.Server.Contains("localhost", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// The proxy settings are still the ones the user confirmed (ProxyEnable, ProxyServer and AutoConfigURL, exact text).

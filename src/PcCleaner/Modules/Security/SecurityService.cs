@@ -52,6 +52,7 @@ public sealed partial class SecurityService : IHealthContributor
         // Only the real system gets a restore point: a sandbox service (tests) never creates one, even when the tests run elevated.
         CreateRestorePointAsync = (description, ct) =>
             environment.IsRealSystem ? RestorePoint.TryCreateAsync(description, ct) : Task.FromResult(false);
+        RemoveIfeoHijackAsync = RemoveIfeoDebuggerAsync;
     }
 
     internal SecurityEnvironment Env { get; }
@@ -61,6 +62,9 @@ public sealed partial class SecurityService : IHealthContributor
     /// The Security page makes its own, because it also tells the user what happened to it.
     /// </summary>
     internal Func<string, CancellationToken, Task<bool>> CreateRestorePointAsync { get; set; }
+
+    /// <summary>Removes one hijack for <see cref="FixIfeoAsync"/> (tests wrap it to stop the fix in the middle).</summary>
+    internal Func<IfeoEntry, CancellationToken, Task<SecurityActionResult>> RemoveIfeoHijackAsync { get; set; }
 
     public string ModuleName => "Безопасность";
 
@@ -859,6 +863,10 @@ public sealed partial class SecurityService : IHealthContributor
         var loc = entry.Location;
         if (loc.NeedsAdmin && !Admin.IsElevated)
             return SecurityActionResult.Fail(NeedAdminMessage);
+        // The subkey may be gone since the scan (the user or a cleaner removed it): nothing to back up, nothing to delete,
+        // and not a failure - the hijack is what the user wanted removed. (A backup of a missing key would "fail" below.)
+        if (SubkeyIsGone(loc))
+            return IfeoSubkeyGone(entry);
         var backup = await RegistryBackup.ExportAsync(loc.FullPath, $"Перед удалением перехвата {entry.ImageName}", ct);
         if (backup is null)
             return SecurityActionResult.Fail(BackupFailedMessage);
@@ -866,7 +874,7 @@ public sealed partial class SecurityService : IHealthContributor
         {
             using var key = loc.Open(writable: true);
             if (key is null)
-                return SecurityActionResult.Fail("Этого раздела уже нет — перехват удалён.");
+                return IfeoSubkeyGone(entry);
             var current = key.GetValue("Debugger")?.ToString();
             if (current is null)
                 return SecurityActionResult.Ok("Перехвата уже нет — ничего менять не нужно.");
@@ -884,6 +892,23 @@ public sealed partial class SecurityService : IHealthContributor
         return SecurityActionResult.Ok(
             $"Перехват для {entry.ImageName} удалён — программа снова запускается как обычно.\n\n" +
             $"Вернуть как было можно двойным щелчком по резервной копии: {backup}");
+    }
+
+    private static SecurityActionResult IfeoSubkeyGone(IfeoEntry entry)
+        => SecurityActionResult.Ok($"Раздела для {entry.ImageName} уже нет — перехват удалён, делать ничего не нужно.");
+
+    /// <summary>The key does not exist. A key that cannot be read is not "gone": the action reports it.</summary>
+    private static bool SubkeyIsGone(RegLocation loc)
+    {
+        try
+        {
+            using var key = loc.Open();
+            return key is null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            return false;
+        }
     }
 
     internal const string ProxyChangedMessage =
@@ -1078,33 +1103,54 @@ public sealed partial class SecurityService : IHealthContributor
     /// <summary>
     /// Removes the Debugger value of every dangerous hijack after a restore point (each one with its own registry backup).
     /// One hijack that cannot be removed does not stop the others; the text then starts with "Не удалось" and names both.
+    /// "Отмена" after some hijacks are gone returns what was done (the Dashboard keeps such a text and adds its "stopped"
+    /// note); "Отмена" before the first one is a plain cancellation: nothing was changed.
     /// </summary>
     private async Task<SecurityActionResult> FixIfeoAsync(IReadOnlyList<IfeoEntry> hijacks, CancellationToken ct)
     {
+        // The same rule as RemoveIfeoDebuggerAsync, asked once up front: without the rights there is nothing to prepare.
+        if (hijacks.Any(h => h.Location.NeedsAdmin) && !Admin.IsElevated)
+            return SecurityActionResult.Fail(NeedAdminMessage);
+
         await CreateRestorePointAsync("Удаление перехвата запуска программ (IFEO)", ct);
         var removed = new List<string>();
         var removedMessages = new List<string>();
         var failed = new List<string>();
-        foreach (var hijack in hijacks)
+        var processed = 0;
+        var stopped = false;
+        try
         {
-            var result = await RemoveIfeoDebuggerAsync(hijack, ct);
-            if (result.Success)
+            foreach (var hijack in hijacks)
             {
-                removed.Add(hijack.ImageName);
-                removedMessages.Add(result.Message);
-            }
-            else if (result.Message == NeedAdminMessage)
-            {
-                return result; // the rights are the same for every entry: nothing has been changed, say it once
-            }
-            else
-            {
-                failed.Add($"{hijack.ImageName} — {result.Message}");
+                ct.ThrowIfCancellationRequested();
+                var result = await RemoveIfeoHijackAsync(hijack, ct);
+                processed++;
+                if (result.Success)
+                {
+                    removed.Add(hijack.ImageName);
+                    removedMessages.Add(result.Message);
+                }
+                else
+                {
+                    failed.Add($"{hijack.ImageName} — {result.Message}");
+                }
             }
         }
-        if (failed.Count == 0)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested && removed.Count > 0)
+        {
+            stopped = true;
+            Log.Info($"Перехват запуска: удаление остановлено пользователем, убрано {removed.Count} из {hijacks.Count}");
+        }
+        if (failed.Count == 0 && !stopped)
             return SecurityActionResult.Ok(string.Join("\n\n", removedMessages));
-        return SecurityActionResult.Fail("Не удалось убрать перехват запуска: " + string.Join(" ", failed) +
+
+        var problems = new List<string>(failed);
+        if (stopped)
+        {
+            problems.Add("Удаление остановлено — перехват остался для: " +
+                         string.Join(", ", hijacks.Skip(processed).Select(h => h.ImageName)) + ".");
+        }
+        return SecurityActionResult.Fail("Не удалось убрать перехват запуска: " + string.Join(" ", problems) +
                                          (removed.Count > 0 ? $"\n\nПерехват уже убран для: {string.Join(", ", removed)}." : ""));
     }
 
@@ -1114,7 +1160,7 @@ public sealed partial class SecurityService : IHealthContributor
 
         HealthIssue Issue(string title, string details, IssueSeverity severity,
             Func<CancellationToken, Task<string>>? fix = null, bool autoFix = false, string? gain = null,
-            string? fixLabel = null, string? settingsUri = null) => new()
+            string? fixLabel = null, string? settingsUri = null, bool inFixAll = true) => new()
             {
                 Module = ModuleName,
                 Title = title,
@@ -1122,6 +1168,7 @@ public sealed partial class SecurityService : IHealthContributor
                 Severity = severity,
                 FixAsync = fix,
                 FixLabel = fixLabel ?? HealthIssue.DefaultFixLabel,
+                InFixAll = inFixAll,
                 AutoFixSafe = autoFix,
                 Gain = gain,
                 SettingsUri = settingsUri,
@@ -1273,11 +1320,18 @@ public sealed partial class SecurityService : IHealthContributor
         var proxy = report.Check(SecurityCheckIds.Proxy);
         if (proxy is { Status: SecurityStatus.Warning })
         {
+            // A proxy on this computer is usually a VPN or a blocking-bypass program: its own button turns it off, but
+            // "Исправить всё" leaves it alone (the user may rely on it).
+            var local = SecurityRules.IsLocalProxy(report.Proxy);
+            const string effect = " Кнопка выключит прокси и уберёт скрипт настройки, адрес сервера останется в настройках, а их " +
+                                  "копия сохранится. Включить прокси снова можно в «Параметры» → «Сеть и Интернет» → «Прокси-сервер».";
             issues.Add(Issue(proxy.State,
-                "Рекламные программы подменяют прокси. Если вы не включали его сами (VPN, работа) — отключите: кнопка " +
-                "выключит прокси и уберёт скрипт настройки, адрес сервера останется в настройках, а их копия сохранится. " +
-                "Включить прокси снова можно в «Параметры» → «Сеть и Интернет» → «Прокси-сервер».",
-                IssueSeverity.Medium, Wrap(c => DisableProxyAsync(report.Proxy, c)), fixLabel: "Выключить прокси"));
+                local
+                    ? "Прокси работает на этом компьютере: его обычно ставит VPN или программа обхода блокировок. Если вы ими " +
+                      "пользуетесь, оставьте как есть — «Исправить всё» этот прокси не трогает, он выключается только своей кнопкой." + effect
+                    : "Рекламные программы подменяют прокси. Если вы не включали его сами (VPN, работа) — отключите." + effect,
+                IssueSeverity.Medium, Wrap(c => DisableProxyAsync(report.Proxy, c)), fixLabel: "Выключить прокси",
+                inFixAll: !local));
         }
 
         // Updates
