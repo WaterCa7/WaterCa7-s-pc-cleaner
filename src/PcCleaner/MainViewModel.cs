@@ -51,6 +51,9 @@ public sealed class MainViewModel : ObservableObject, INavigator
         // Admin.RestartElevated itself asks first when any page is busy (one guard for every restart button and prompt).
         RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
         Updates = AppServices.Updates;
+        // A shell made for tests (own pages) has nothing to restart with: its language switch only saves.
+        Welcome = new WelcomeViewModel(_settings, _save, pages is null ? WelcomeViewModel.RestartProgram : () => false);
+        Welcome.Chosen += _ => NavigateTo("Dashboard");
         Splash = new SplashViewModel(Updates, Environment.GetCommandLineArgs().Skip(1).ToList(),
             () => System.Windows.Application.Current.Shutdown());
         Updates.PropertyChanged += (_, _) => OnUpdateBannerChanged();
@@ -135,6 +138,12 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
     /// <summary>The startup splash over the blurred window; App starts it, screenshot mode never does.</summary>
     public SplashViewModel Splash { get; }
+
+    /// <summary>
+    /// The first-run screen (mode and language) over the blurred window; App shows it after the splash while no mode is chosen.
+    /// A mode chosen there opens the Dashboard.
+    /// </summary>
+    public WelcomeViewModel Welcome { get; }
 
     private UpdateBanner? Banner => _updateBannerDismissed ? null : UpdateBanner.For(Updates.State, Updates.Manifest, Updates.CurrentVersion);
 

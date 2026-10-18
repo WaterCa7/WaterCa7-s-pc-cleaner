@@ -9,7 +9,9 @@ namespace PcCleaner.Core;
 
 /// <summary>
 /// Non-interactive verification mode:
-///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Cleaner,Startup] [--no-scan] [--mode simple|expert] [--lang ru|en]
+///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Cleaner,Startup] [--no-scan] [--mode simple|expert] [--lang ru|en] [--welcome]
+/// With --welcome it first takes a picture of the first-run screen (00-Welcome.png) over the blurred window and closes it
+/// without choosing anything, so the pictures of the pages are the same as without the switch.
 /// Opens each page of the mode (the simple mode has four; NN is the number of the page in the full list, so a page keeps its
 /// file name in both modes), runs its read-only PreviewScanAsync, saves NN-Key.png and log.txt, then exits.
 /// All confirmations are auto-declined (Dialogs.UseSilentMode), so nothing on the system is changed.
@@ -17,7 +19,10 @@ namespace PcCleaner.Core;
 /// </summary>
 public static class ScreenshotRunner
 {
-    public static async Task<int> RunAsync(Window window, MainViewModel vm, string outDir, string[]? pageKeys, bool scan)
+    /// <summary>The picture of the first-run screen (<c>--welcome</c>); 00 puts it before the pages, which start at 01.</summary>
+    internal const string WelcomeFile = "00-Welcome.png";
+
+    public static async Task<int> RunAsync(Window window, MainViewModel vm, string outDir, string[]? pageKeys, bool scan, bool welcome = false)
     {
         Directory.CreateDirectory(outDir);
         var errors = 0;
@@ -26,6 +31,9 @@ public static class ScreenshotRunner
             if (e.Level == LogLevel.Error)
                 errors++;
         };
+
+        if (welcome)
+            await ShootWelcomeAsync(window, vm, outDir);
 
         var allPages = vm.Pages.ToList();
         foreach (var key in HiddenRequested(allPages, vm.VisiblePages, pageKeys))
@@ -66,6 +74,25 @@ public static class ScreenshotRunner
         File.WriteAllLines(Path.Combine(outDir, "log.txt"),
             Log.Entries.Select(e => $"{e.TimeText} [{e.Level}] {e.Message}"));
         return errors > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// The first-run screen, once: shown even when a mode is chosen (the settings of a screenshot run are a temp copy), given
+    /// the time to fade in over the blur, photographed, and closed without a choice (nothing is saved) with time to fade out.
+    /// </summary>
+    private static async Task ShootWelcomeAsync(Window window, MainViewModel vm, string outDir)
+    {
+        var sw = Stopwatch.StartNew();
+        Log.Info("[screenshot] Welcome: открытие");
+        vm.Welcome.ShowAtStart(screenshotRun: true, forced: true);
+        await Task.Delay(700); // the fade-in is 250 ms
+        await WaitIdleAsync();
+        var file = Path.Combine(outDir, WelcomeFile);
+        Save(window, file);
+        vm.Welcome.Hide();
+        await Task.Delay(700); // the fade-out is 250 ms; then the blur is dropped
+        await WaitIdleAsync();
+        Log.Info($"[screenshot] Welcome: готово за {sw.Elapsed.TotalSeconds:0.0} с -> {file}");
     }
 
     /// <summary>

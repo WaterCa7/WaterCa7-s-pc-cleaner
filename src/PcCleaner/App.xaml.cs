@@ -11,7 +11,7 @@ namespace PcCleaner;
 
 public partial class App : Application
 {
-    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key1,Key2] [--no-scan] [--lang ru|en] [--mode simple|expert].</summary>
+    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key1,Key2] [--no-scan] [--lang ru|en] [--mode simple|expert] [--welcome].</summary>
     internal static string? ScreenshotDir { get; private set; }
     internal static string[]? ScreenshotPages { get; private set; }
     internal static bool ScreenshotScan { get; private set; } = true;
@@ -25,6 +25,9 @@ public partial class App : Application
 
     /// <summary>--mode simple|expert: the mode of this verification run instead of Настройки; null if absent or unknown.</summary>
     internal static UiMode? ModeArg { get; private set; }
+
+    /// <summary>--welcome: the screenshot run also takes a picture of the first-run screen (00-Welcome.png), whatever the mode. A real run ignores it.</summary>
+    internal static bool WelcomeArg { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -101,21 +104,40 @@ public partial class App : Application
             }
             window.Loaded += async (_, _) =>
             {
-                var exitCode = await ScreenshotRunner.RunAsync(window, vm, ScreenshotDir, ScreenshotPages, ScreenshotScan);
+                var exitCode = await ScreenshotRunner.RunAsync(window, vm, ScreenshotDir, ScreenshotPages, ScreenshotScan, WelcomeArg);
                 Shutdown(exitCode);
             };
         }
 
         window.Show();
 
-        // Screenshot mode never starts the splash: it must not be visible or blur anything there. Right after an update the
-        // new version only cleans up; otherwise the splash looks for a newer version while the window is still blurred.
+        // Screenshot mode never starts the splash or the welcome screen (the runner shows the latter only with --welcome): they
+        // must not be visible or blur anything there. Right after an update the new version only cleans up, and the first-run
+        // screen appears at once; otherwise the splash looks for a newer version while the window is still blurred, and the
+        // first-run screen takes over when it closes.
         if (ScreenshotDir is null)
         {
-            _ = UpdatedFrom is not null
-                ? AppServices.Updates.CompleteUpdateAsync(UpdatedFrom)
-                : vm.Splash.RunAsync(CancellationToken.None);
+            if (UpdatedFrom is not null)
+            {
+                vm.Welcome.ShowAtStart(screenshotRun: false);
+                _ = AppServices.Updates.CompleteUpdateAsync(UpdatedFrom);
+            }
+            else
+            {
+                _ = RunSplashThenWelcomeAsync(vm);
+            }
         }
+    }
+
+    /// <summary>
+    /// The splash, then the first-run screen if no mode is chosen yet. A splash that stays up (a new version is installed and the
+    /// program is going away) is followed by nothing. <see cref="SplashViewModel.RunAsync"/> never throws.
+    /// </summary>
+    private static async Task RunSplashThenWelcomeAsync(MainViewModel vm)
+    {
+        await vm.Splash.RunAsync(CancellationToken.None);
+        if (!vm.Splash.IsVisible)
+            vm.Welcome.ShowAtStart(screenshotRun: false);
     }
 
     /// <summary>The UI language of this run: --lang, else Настройки, else the system (ru-* → Russian, otherwise English).</summary>
@@ -157,6 +179,7 @@ public partial class App : Application
         UpdatedFrom = null;
         LanguageArg = null;
         ModeArg = null;
+        WelcomeArg = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -182,6 +205,9 @@ public partial class App : Application
                     break;
                 case "--mode" when i + 1 < args.Length:
                     ModeArg = UiModes.TryParse(args[++i]);
+                    break;
+                case "--welcome":
+                    WelcomeArg = true;
                     break;
                 case "--size" when i + 1 < args.Length:
                     var parts = args[++i].ToLowerInvariant().Split('x');

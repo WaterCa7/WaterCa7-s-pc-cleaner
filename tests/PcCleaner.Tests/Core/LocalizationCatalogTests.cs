@@ -20,6 +20,7 @@ public class LocalizationCatalogTests
     /// </summary>
     internal static readonly string[] Enforced =
     {
+        "Core/WelcomeViewModel.cs",
     };
 
     /// <summary>

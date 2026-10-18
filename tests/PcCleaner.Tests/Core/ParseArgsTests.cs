@@ -40,6 +40,15 @@ public class ParseArgsTests
     }
 
     [Fact]
+    public void ReadsTheWelcomeSwitch_AnyCase_AndItNeedsNoValue()
+    {
+        App.ParseArgs(new[] { "--screenshots", "out", "--WELCOME", "--page", "Dashboard" });
+
+        Assert.True(App.WelcomeArg);
+        Assert.Equal(new[] { "Dashboard" }, App.ScreenshotPages);
+    }
+
+    [Fact]
     public void ReadsTheModeTogetherWithTheLanguageAndTheOtherSwitches()
     {
         App.ParseArgs(new[] { "--screenshots", "out", "--mode", "simple", "--lang", "en", "--page", "Settings" });
@@ -77,7 +86,7 @@ public class ParseArgsTests
         App.ParseArgs(new[]
         {
             "--screenshots", "out", "--page", "Settings,Network", "--no-scan", "--size", "800x600",
-            "--updated-from", "1.0.0", "--lang", "en", "--mode", "simple",
+            "--updated-from", "1.0.0", "--lang", "en", "--mode", "simple", "--welcome",
         });
         Assert.Equal("out", App.ScreenshotDir);
         Assert.Equal(new[] { "Settings", "Network" }, App.ScreenshotPages);
@@ -86,6 +95,7 @@ public class ParseArgsTests
         Assert.Equal("1.0.0", App.UpdatedFrom);
         Assert.Equal("en", App.LanguageArg);
         Assert.Equal(UiMode.Simple, App.ModeArg);
+        Assert.True(App.WelcomeArg);
 
         // ...is gone with the next call: it must not see what an earlier one (another test, another start) left behind.
         App.ParseArgs(new[] { "--page", "Cleaner", "--elevated-restart" });
@@ -102,5 +112,6 @@ public class ParseArgsTests
         Assert.Null(App.UpdatedFrom);
         Assert.Null(App.LanguageArg);
         Assert.Null(App.ModeArg);
+        Assert.False(App.WelcomeArg);
     }
 }

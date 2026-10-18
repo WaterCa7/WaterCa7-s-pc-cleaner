@@ -1,4 +1,7 @@
 {
+  "Все разделы, подробности и тонкие настройки": "All sections, details and fine-tuning",
+  "Главное в одном месте: проверка, очистка и программы": "The essentials in one place: check, clean and programs",
+  "Добро пожаловать в WaterCa7s PC Cleaner": "Welcome to WaterCa7s PC Cleaner",
   "Настройки: режим — опытный": "Settings: mode is now expert",
   "Настройки: режим — простой": "Settings: mode is now simple",
   "Настройки: язык — {0}": "Settings: language is now {0}",
@@ -12,6 +15,7 @@
   "Простой": "Simple",
   "Простой — главное в одном месте. Опытный — все разделы и подробности.": "Simple keeps the essentials in one place. Expert shows all sections and details.",
   "Режим": "Mode",
+  "Режим можно изменить позже в «Настройках»": "You can change the mode later in Settings",
   "Сейчас ещё идёт работа:\n{0}\n\nПри перезапуске она прервётся. Перезапустить программу сейчас?": "Work is still in progress:\n{0}\n\nA restart will interrupt it. Restart the program now?",
   "Этот раздел есть в опытном режиме. Переключиться на опытный режим?": "This section is in expert mode. Switch to expert mode?",
   "Язык": "Language",
