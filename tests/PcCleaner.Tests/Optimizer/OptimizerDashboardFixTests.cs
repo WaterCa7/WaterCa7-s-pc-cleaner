@@ -179,31 +179,55 @@ public sealed class OptimizerDashboardFixTests : IDisposable
             Assert.Equal("ms-settings:windowsupdate", reboot.SettingsUri);
     }
 
-    [Fact]
-    public async Task RebootFix_DoesNothingWhenTheUserSaysNo()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RebootAdvice_ShowsTheSaveYourWorkWarning_InTheDetailsOfTheDashboardQuestion(bool pendingReboot)
     {
-        var reboot = await RebootIssueAsync(pendingReboot: true);
-        using var fake = new SystemRestartFake(answer: false);
+        var reboot = await RebootIssueAsync(pendingReboot);
 
-        var text = await reboot.FixAsync!(CancellationToken.None);
-
-        Assert.Equal("Перезагрузка отменена — ничего не изменено.", text);
-        Assert.Equal(0, fake.StartCalls);
+        // The dashboard's «Исправить проблему» question shows the details: it is the only question before the restart.
+        Assert.Contains("Сохраните работу во всех программах: компьютер перезагрузится через несколько секунд.", reboot.Details);
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task RebootFix_RestartsOnceWhenTheUserSaysYes(bool pendingReboot)
+    public async Task RebootFix_RestartsOnce_WithoutAskingASecondQuestion(bool pendingReboot)
     {
         var reboot = await RebootIssueAsync(pendingReboot);
-        using var fake = new SystemRestartFake(answer: true);
+        using var fake = new SystemRestartFake(answer: false); // a second question would be answered "Нет"
 
         var text = await reboot.FixAsync!(CancellationToken.None);
 
         Assert.Equal("Компьютер перезагружается…", text);
         Assert.Equal(1, fake.StartCalls);
-        Assert.Equal("Перезагрузить компьютер", Assert.Single(fake.Questions).Title);
+        Assert.Empty(fake.Questions);
+    }
+
+    [Fact]
+    public async Task RebootFix_ThatCannotStart_IsAFailureText()
+    {
+        var reboot = await RebootIssueAsync(pendingReboot: true);
+        using var fake = new SystemRestartFake(answer: true, startSucceeds: false);
+
+        var text = await reboot.FixAsync!(CancellationToken.None);
+
+        Assert.Equal("Не удалось перезагрузить компьютер.", text);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+    }
+
+    [Fact]
+    public async Task RebootFix_CancelledByTheUser_DoesNotRestart()
+    {
+        var reboot = await RebootIssueAsync(pendingReboot: false);
+        using var fake = new SystemRestartFake(answer: true);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reboot.FixAsync!(cts.Token));
+
+        Assert.Equal(0, fake.StartCalls);
     }
 
     [Fact]
@@ -225,6 +249,7 @@ public sealed class OptimizerDashboardFixTests : IDisposable
                 var restartTip = shown[i].Id is "PendingReboot" or "Uptime";
                 Assert.Equal(restartTip, shown[i].OffersRestart);
                 Assert.True(restartTip == (issues[i].FixAsync is not null), $"«{issues[i].Title}»: a fix only for the restart tips");
+                Assert.Equal(restartTip, issues[i].Details.Contains("Сохраните работу", StringComparison.Ordinal));
             }
         }
         Assert.True(manual >= 10, $"only {manual} manual tips were checked");

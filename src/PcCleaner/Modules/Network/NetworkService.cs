@@ -28,7 +28,7 @@ public sealed class NetworkService : IHealthContributor
     public Task<LatencyReport> MeasureLatencyAsync(IReadOnlyList<AdapterInfo> adapters, CancellationToken ct)
         => NetworkProbes.MeasureLatencyAsync(adapters, ct);
 
-    public Task<DnsReport> MeasureDnsAsync(CancellationToken ct) => NetworkProbes.MeasureDnsAsync(ct);
+    public Task<DnsReport> MeasureDnsAsync(CancellationToken ct) => DnsProbe(ct);
 
     public Task<WifiReport> ReadWifiAsync(IReadOnlyList<AdapterInfo> adapters, CancellationToken ct)
         => NetworkProbes.ReadWifiAsync(adapters, ct);
@@ -75,10 +75,31 @@ public sealed class NetworkService : IHealthContributor
     internal IReadOnlyList<HealthIssue> BuildIssues(NetworkSnapshot snapshot) => NetworkRules.BuildIssues(snapshot, FlushDnsFixAsync);
 
     /// <summary>
-    /// The dashboard fix of the DNS issue: <see cref="FlushDnsAsync"/>, with its message as the result. Clearing the cache
-    /// is harmless and repeatable, so there is no scan data to compare with the system first.
+    /// The dashboard fix of the DNS issue: <see cref="FlushDnsAsync"/>, then the same name lookups as the analysis. Clearing
+    /// the cache only helps against stale entries; a DNS server that does not answer is still broken afterwards, and the
+    /// row must not be marked fixed (and the score must not rise) then. Clearing the cache is harmless and repeatable, so
+    /// there is no scan data to compare with the system first. If the check cannot say anything, the DNS counts as not restored.
     /// </summary>
-    private async Task<string> FlushDnsFixAsync(CancellationToken ct) => (await FlushDnsAsync(ct).ConfigureAwait(false)).Message;
+    private async Task<string> FlushDnsFixAsync(CancellationToken ct)
+    {
+        var (ok, message) = await FlushDnsAsync(ct).ConfigureAwait(false);
+        if (!ok)
+            return message;
+
+        var dns = await Safe("DNS", () => MeasureDnsAsync(ct), ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested(); // "Отмена" during the check is a cancellation, not "DNS still broken"
+        if (dns is { Lookups.Count: > 0, AllFailed: false })
+        {
+            Log.Action("Сеть: после очистки кэша DNS адреса сайтов находятся");
+            return "Кэш DNS очищен — адреса сайтов снова находятся.";
+        }
+        Log.Warn("Сеть: кэш DNS очищен, но адреса сайтов по-прежнему не находятся");
+        return "Не удалось восстановить DNS: кэш очищен, но адреса сайтов по-прежнему не находятся — " +
+               "смените DNS-сервер в настройках сети.";
+    }
+
+    /// <summary>The name lookups of <see cref="MeasureDnsAsync"/>. Tests replace it, so that no real lookup runs.</summary>
+    internal Func<CancellationToken, Task<DnsReport>> DnsProbe { get; set; } = NetworkProbes.MeasureDnsAsync;
 
     /// <summary>Runs a console tool (ipconfig, netsh). Tests replace it, so that no real tool runs.</summary>
     internal Func<string, string, TimeSpan, CancellationToken, Task<(bool Ok, string Output, int ExitCode)>> RunTool { get; set; } = RunToolAsync;

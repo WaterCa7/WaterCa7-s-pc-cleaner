@@ -335,7 +335,10 @@ public enum RecommendationKind
     /// <summary>One-click Apply / Revert.</summary>
     AutoFix,
 
-    /// <summary>Step-by-step instructions (BIOS, hardware, settings the app should not touch).</summary>
+    /// <summary>
+    /// Step-by-step instructions (BIOS, hardware, settings the app should not touch). The only exception that gets a
+    /// dashboard button is the pair of restart tips (<see cref="Recommendation.OffersRestart"/>).
+    /// </summary>
     Manual,
 
     /// <summary>Good to know, nothing to change right now.</summary>

@@ -799,10 +799,15 @@ public static class NetworkRules
         {
             if (dns.AllFailed)
             {
+                // With a fix (the dashboard) the text describes the button; without one (the page) it points to the cache tool.
+                var advice = flushDns is not null
+                    ? "Кнопка «Сбросить кэш DNS» очистит кэш и проверит адреса ещё раз. Если это не поможет, нужно сменить " +
+                      "DNS-сервер: укажите 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера."
+                    : "Укажите DNS 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера, " +
+                      "затем очистите кэш DNS в разделе «Сеть».";
                 Add(FindingKind.DnsFailed, "DNS не отвечает — сайты не открываются",
-                    "Компьютер не смог узнать адреса сайтов (example.com, wikipedia.org…), хотя связь с интернетом есть. " +
-                    "Укажите DNS 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера, " +
-                    "затем очистите кэш DNS в разделе «Сеть».", IssueSeverity.High);
+                    "Компьютер не смог узнать адреса сайтов (example.com, wikipedia.org…), хотя связь с интернетом есть. " + advice,
+                    IssueSeverity.High);
             }
             else if (dns.MedianMs is { } dnsMs && dnsMs > SlowDnsMs)
             {

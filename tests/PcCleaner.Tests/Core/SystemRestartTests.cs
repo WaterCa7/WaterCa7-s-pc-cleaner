@@ -29,7 +29,7 @@ public sealed class SystemRestartTests
     {
         using var fake = new SystemRestartFake(answer: false);
 
-        await SystemRestart.RestartAsync(CancellationToken.None);
+        await SystemRestart.RestartAsync(CancellationToken.None, askFirst: true);
 
         var (title, question) = Assert.Single(fake.Questions);
         Assert.Equal("Перезагрузить компьютер", title);
@@ -81,6 +81,45 @@ public sealed class SystemRestartTests
         using var fake = new SystemRestartFake(answer: true, onConfirm: cts.Cancel); // "Отмена" pressed, then "Да" clicked
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SystemRestart.RestartAsync(cts.Token));
+
+        Assert.Equal(0, fake.StartCalls);
+    }
+
+    // ===== askFirst: false = the caller (the dashboard's «Исправить проблему» question) has already asked =====
+
+    [Fact]
+    public async Task AlreadyAsked_RestartsOnceWithoutAskingAgain()
+    {
+        using var fake = new SystemRestartFake(answer: false); // would refuse if it were asked
+
+        var text = await SystemRestart.RestartAsync(CancellationToken.None, askFirst: false);
+
+        Assert.Equal("Компьютер перезагружается…", text);
+        Assert.Equal(1, fake.StartCalls);
+        Assert.Empty(fake.Questions);
+        Assert.False(HealthScoring.LooksLikeFailure(text));
+    }
+
+    [Fact]
+    public async Task AlreadyAsked_RestartCannotStart_IsAFailure()
+    {
+        using var fake = new SystemRestartFake(answer: true, startSucceeds: false);
+
+        var text = await SystemRestart.RestartAsync(CancellationToken.None, askFirst: false);
+
+        Assert.Equal("Не удалось перезагрузить компьютер.", text);
+        Assert.Empty(fake.Questions);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+    }
+
+    [Fact]
+    public async Task AlreadyAsked_CancelledByTheUser_DoesNotRestart()
+    {
+        using var fake = new SystemRestartFake(answer: true);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SystemRestart.RestartAsync(cts.Token, askFirst: false));
 
         Assert.Equal(0, fake.StartCalls);
     }

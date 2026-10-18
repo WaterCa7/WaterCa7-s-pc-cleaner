@@ -409,20 +409,38 @@ public class NetworkIssuesTests
     private static NetworkSnapshot DnsFailedSnapshot()
         => new() { Latency = Latency(20), Dns = new DnsReport(new[] { new DnsLookup("a", null), new DnsLookup("b", null) }) };
 
-    /// <summary>A service whose console tool (ipconfig) is a fake that records what it was asked to run.</summary>
-    private static (NetworkService Service, List<(string Exe, string Args)> Calls) ServiceWithFakeIpconfig(bool ok, string output, int exitCode)
+    private static readonly DnsReport DnsAnswers = new(new[] { new DnsLookup("example.com", 15), new DnsLookup("wikipedia.org", 20) });
+    private static readonly DnsReport DnsSilent = new(new[] { new DnsLookup("example.com", null), new DnsLookup("wikipedia.org", null) });
+
+    private static readonly string IpconfigFlush = Path.Combine(Environment.SystemDirectory, "ipconfig.exe") + " /flushdns";
+    private const string DnsProbeRan = "name resolution probe";
+
+    /// <summary>
+    /// A service whose ipconfig and name-resolution probe are fakes (nothing real runs); <c>Calls</c> lists what was run,
+    /// in order. <paramref name="dnsAfterFlush"/> is what the probe finds.
+    /// </summary>
+    private static (NetworkService Service, List<string> Calls) ServiceWithFakes(bool flushOk, string flushOutput, int exitCode,
+        DnsReport? dnsAfterFlush)
     {
-        var calls = new List<(string Exe, string Args)>();
+        var calls = new List<string>();
         var service = new NetworkService
         {
             RunTool = (exe, args, _, _) =>
             {
-                calls.Add((exe, args));
-                return Task.FromResult((ok, output, exitCode));
+                calls.Add(exe + " " + args);
+                return Task.FromResult((flushOk, flushOutput, exitCode));
+            },
+            DnsProbe = _ =>
+            {
+                calls.Add(DnsProbeRan);
+                return Task.FromResult(dnsAfterFlush ?? DnsAnswers);
             },
         };
         return (service, calls);
     }
+
+    private static async Task<string> RunDnsFixAsync(NetworkService service, CancellationToken ct = default)
+        => await Assert.Single(service.BuildIssues(DnsFailedSnapshot())).FixAsync!(ct);
 
     [Fact]
     public void NoInternet_LinksToTheNetworkStatusPage()
@@ -457,9 +475,9 @@ public class NetworkIssuesTests
     }
 
     [Fact]
-    public async Task DnsFailed_OnTheDashboard_FlushesTheDnsCache()
+    public async Task DnsFailed_OnTheDashboard_FlushesTheCache_ThenChecksTheNamesAgain()
     {
-        var (service, calls) = ServiceWithFakeIpconfig(true, "Windows IP Configuration\r\nSuccessfully flushed the DNS Resolver Cache.", 0);
+        var (service, calls) = ServiceWithFakes(true, "Windows IP Configuration\r\nSuccessfully flushed the DNS Resolver Cache.", 0, DnsAnswers);
 
         var issue = Assert.Single(service.BuildIssues(DnsFailedSnapshot()));
 
@@ -472,31 +490,101 @@ public class NetworkIssuesTests
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        var call = Assert.Single(calls);
-        Assert.Equal(Path.Combine(Environment.SystemDirectory, "ipconfig.exe"), call.Exe);
-        Assert.Equal("/flushdns", call.Args);
-        Assert.StartsWith("Кэш DNS очищен", text);
+        Assert.Equal(new[] { IpconfigFlush, DnsProbeRan }, calls); // the check comes after the flush
+        Assert.Equal("Кэш DNS очищен — адреса сайтов снова находятся.", text);
         Assert.False(HealthScoring.LooksLikeFailure(text));
     }
 
     [Fact]
-    public async Task DnsFlushThatFails_IsReadAsAFailureByTheDashboard()
+    public async Task DnsStillSilentAfterTheFlush_IsAFailure_NotFixed()
     {
-        var (service, calls) = ServiceWithFakeIpconfig(false, "Не удается очистить кэш сопоставителя DNS: Ошибка при выполнении функции.", 1);
-        var issue = Assert.Single(service.BuildIssues(DnsFailedSnapshot()));
+        var (service, calls) = ServiceWithFakes(true, "Successfully flushed the DNS Resolver Cache.", 0, DnsSilent);
 
-        var text = await issue.FixAsync!(CancellationToken.None);
+        var text = await RunDnsFixAsync(service);
 
-        Assert.Single(calls);
+        Assert.Equal(new[] { IpconfigFlush, DnsProbeRan }, calls);
+        Assert.Equal("Не удалось восстановить DNS: кэш очищен, но адреса сайтов по-прежнему не находятся — " +
+                     "смените DNS-сервер в настройках сети.", text);
+        Assert.True(HealthScoring.LooksLikeFailure(text)); // the row is not marked fixed and the score does not rise
+        Assert.False(HealthScoring.LooksLikeAdminRequired(text));
+    }
+
+    [Fact]
+    public async Task DnsOnlyOneNameResolves_CountsAsRestored()
+    {
+        var some = new DnsReport(new[] { new DnsLookup("example.com", null), new DnsLookup("wikipedia.org", 40) });
+        var (service, _) = ServiceWithFakes(true, "", 0, some);
+        Assert.Equal("Кэш DNS очищен — адреса сайтов снова находятся.", await RunDnsFixAsync(service));
+    }
+
+    [Fact]
+    public async Task DnsCheckThatCannotSayAnything_IsNotReportedAsRestored()
+    {
+        // No lookups at all, or a probe that fails: "when in doubt, not fixed".
+        var (empty, _) = ServiceWithFakes(true, "", 0, new DnsReport(Array.Empty<DnsLookup>()));
+        Assert.True(HealthScoring.LooksLikeFailure(await RunDnsFixAsync(empty)));
+
+        var broken = new NetworkService
+        {
+            RunTool = (_, _, _, _) => Task.FromResult((true, "", 0)),
+            DnsProbe = _ => throw new InvalidOperationException("no network stack"),
+        };
+        var text = await RunDnsFixAsync(broken);
+        Assert.StartsWith("Не удалось восстановить DNS", text);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+    }
+
+    [Fact]
+    public async Task DnsCheck_CancelledByTheUser_IsACancellation_NotAFailureText()
+    {
+        using var cts = new CancellationTokenSource();
+        var service = new NetworkService
+        {
+            RunTool = (_, _, _, _) => Task.FromResult((true, "", 0)),
+            DnsProbe = _ =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            },
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => RunDnsFixAsync(service, cts.Token));
+    }
+
+    [Fact]
+    public async Task DnsFlushThatFails_IsReadAsAFailure_AndTheNamesAreNotChecked()
+    {
+        var (service, calls) = ServiceWithFakes(false, "Не удается очистить кэш сопоставителя DNS: Ошибка при выполнении функции.", 1, DnsAnswers);
+
+        var text = await RunDnsFixAsync(service);
+
+        Assert.Equal(new[] { IpconfigFlush }, calls);
         Assert.StartsWith("Не удалось очистить кэш DNS:", text);
         Assert.True(HealthScoring.LooksLikeFailure(text));
         Assert.False(HealthScoring.LooksLikeAdminRequired(text));
     }
 
     [Fact]
+    public void DnsFailed_DetailsDescribeTheButton_OnlyWhereThereIsOne()
+    {
+        var (service, _) = ServiceWithFakes(true, "", 0, null);
+        var dashboard = Assert.Single(service.BuildIssues(DnsFailedSnapshot())).Details;
+        Assert.Contains("«Сбросить кэш DNS»", dashboard);
+        Assert.Contains("проверит", dashboard); // the button checks again after clearing
+        Assert.Contains("сменить", dashboard); // and if it does not help, the server must be changed
+        Assert.Contains("1.1.1.1", dashboard);
+        Assert.DoesNotContain("в разделе «Сеть»", dashboard); // the dashboard is not that section
+
+        // The Network page has no such button: its text still sends the user to the cache tool of the page.
+        var page = Assert.Single(NetworkRules.BuildIssues(DnsFailedSnapshot())).Details;
+        Assert.Contains("в разделе «Сеть»", page);
+        Assert.DoesNotContain("«Сбросить кэш DNS»", page);
+    }
+
+    [Fact]
     public void SlowDns_StaysAdvice_WithoutAFlushButton()
     {
-        var (service, _) = ServiceWithFakeIpconfig(true, "", 0);
+        var (service, _) = ServiceWithFakes(true, "", 0, null);
         var issue = Assert.Single(service.BuildIssues(new NetworkSnapshot
         {
             Latency = Latency(20),

@@ -18,11 +18,15 @@ public sealed class SystemRestartCollection
 /// </summary>
 internal sealed class SystemRestartFake : IDisposable
 {
-    private readonly Func<string, string, bool> _previousConfirm = SystemRestart.Confirm;
-    private readonly Func<bool> _previousStart = SystemRestart.Start;
+    private readonly Func<string, string, bool> _previousConfirm;
+    private readonly Func<bool> _previousStart;
 
     public SystemRestartFake(bool answer, bool startSucceeds = true, Action? onConfirm = null)
     {
+        // Init() first: it installs the harmless Start that Dispose restores, never the real shutdown.exe call.
+        TestEnvironment.Init();
+        _previousConfirm = SystemRestart.Confirm;
+        _previousStart = SystemRestart.Start;
         SystemRestart.Confirm = (title, text) =>
         {
             Questions.Add((title, text));

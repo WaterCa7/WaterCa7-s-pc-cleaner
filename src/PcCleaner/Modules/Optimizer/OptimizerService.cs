@@ -236,6 +236,9 @@ public sealed class OptimizerService : IHealthContributor
     /// <summary>Text of the dashboard button of the two "restart Windows" tips.</summary>
     internal const string RestartFixLabel = "Перезагрузить";
 
+    /// <summary>Shown in the details of the restart tips, i.e. in the dashboard's question before the restart.</summary>
+    internal const string RestartWarning = "Сохраните работу во всех программах: компьютер перезагрузится через несколько секунд.";
+
     internal IReadOnlyList<HealthIssue> ToHealthIssues(IEnumerable<Recommendation> items)
     {
         var issues = new List<HealthIssue>();
@@ -250,6 +253,7 @@ public sealed class OptimizerService : IHealthContributor
             var fixLabel = HealthIssue.DefaultFixLabel;
             var inFixAll = true;
             var appliesTweak = rec.Kind == RecommendationKind.AutoFix && (!rec.NeedsAdmin || _isElevated());
+            var consequence = appliesTweak ? rec.AfterApplyNote : null;
             if (appliesTweak)
             {
                 var captured = rec;
@@ -268,19 +272,21 @@ public sealed class OptimizerService : IHealthContributor
             }
             else if (rec.OffersRestart)
             {
-                // Manual advice is never fixed by the program, except "restart Windows": SystemRestart asks first. A restart
-                // loses unsaved work in other programs, so «Исправить всё» does not press it.
-                fix = SystemRestart.RestartAsync;
+                // Manual advice is never fixed by the program, except "restart Windows". A restart loses unsaved work in
+                // other programs, so «Исправить всё» does not press it. The dashboard's own «Исправить проблему» question
+                // (it shows the warning below) is the only one: SystemRestart does not ask a second time.
+                fix = ct => SystemRestart.RestartAsync(ct, askFirst: false);
                 fixLabel = RestartFixLabel;
                 inFixAll = false;
+                consequence = RestartWarning;
             }
 
             var details = rec.Explanation;
             if (!string.IsNullOrWhiteSpace(rec.CurrentValue))
                 details += $"\nСейчас: {rec.CurrentValue}.";
             // The consequence of the fix must be visible BEFORE it runs (the dashboard's confirmation shows these details).
-            if (appliesTweak && !string.IsNullOrWhiteSpace(rec.AfterApplyNote))
-                details += $"\nВажно: {rec.AfterApplyNote}";
+            if (!string.IsNullOrWhiteSpace(consequence))
+                details += $"\nВажно: {consequence}";
 
             issues.Add(new HealthIssue
             {

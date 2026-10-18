@@ -17,13 +17,15 @@ public static class SystemRestart
     internal static Func<bool> Start { get; set; } = StartRestart;
 
     /// <summary>
-    /// Asks the user, then restarts. Returns the result for the dashboard row: «Компьютер перезагружается…» after the
-    /// restart was requested, otherwise a text that says nothing was changed or that the restart did not start.
+    /// Asks the user (unless <paramref name="askFirst"/> is false because the caller has just asked, like the dashboard's
+    /// «Исправить проблему» question that already shows the warning), then restarts. Returns the result for the dashboard
+    /// row: «Компьютер перезагружается…» after the restart was requested, otherwise a text that says nothing was changed or
+    /// that the restart did not start.
     /// </summary>
-    public static async Task<string> RestartAsync(CancellationToken ct)
+    public static async Task<string> RestartAsync(CancellationToken ct, bool askFirst = true)
     {
         ct.ThrowIfCancellationRequested();
-        if (!Confirm("Перезагрузить компьютер",
+        if (askFirst && !Confirm("Перезагрузить компьютер",
                 "Сохраните работу во всех программах. Компьютер перезагрузится через несколько секунд. Продолжить?"))
         {
             Log.Info("Перезагрузка: пользователь отказался");
