@@ -4,6 +4,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Startup"
+             xmlns:controls="clr-namespace:PcCleaner.Core.Controls"
+             x:Name="Root"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:StartupViewModel}"
              d:DesignWidth="1020" d:DesignHeight="640">
@@ -359,7 +361,28 @@
 
             <Border Style="{StaticResource Card}" Padding="4,2,4,4">
                 <Grid>
-                    <DataGrid x:Name="ItemsGrid" ItemsSource="{Binding ItemsView}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- "Отмечено: N · Отключить · Включить · Удалить · Снять отметки" while anything is checked -->
+                    <controls:BulkActionBar Margin="2,4,2,2" CheckedCount="{Binding CheckedCount}"
+                                            ClearCommand="{Binding ClearChecksCommand}">
+                        <controls:BulkActionBar.ActionsContent>
+                            <WrapPanel>
+                                <Button Padding="12,6" Margin="0,2,8,2" Content="Отключить" Command="{Binding DisableCheckedCommand}"
+                                        ToolTip="Отключить автозапуск отмеченных записей. Записи остаются в списке, включить их обратно можно в любой момент. Перед этим программа спросит подтверждение." />
+                                <Button Padding="12,6" Margin="0,2,8,2" Content="Включить" Command="{Binding EnableCheckedCommand}"
+                                        ToolTip="Снова включить автозапуск отмеченных записей. Перед этим программа спросит подтверждение." />
+                                <Button Style="{StaticResource DangerButton}" Padding="12,6" Margin="0,2,8,2" Content="Удалить"
+                                        Command="{Binding DeleteCheckedCommand}"
+                                        ToolTip="Удалить отмеченные записи из автозагрузки (с резервной копией). Службы не удаляются. Перед этим программа спросит подтверждение." />
+                            </WrapPanel>
+                        </controls:BulkActionBar.ActionsContent>
+                    </controls:BulkActionBar>
+
+                    <DataGrid x:Name="ItemsGrid" Grid.Row="1" ItemsSource="{Binding ItemsView}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
                               SelectionMode="Single" RowHeight="50" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <DataGrid.CellStyle>
                             <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
@@ -392,6 +415,28 @@
                         </DataGrid.ContextMenu>
 
                         <DataGrid.Columns>
+                            <!-- Checkboxes for the bulk bar; the header one checks or clears all visible rows. Clicks go to the
+                                 view-model, which decides the new state. A protected entry's box is disabled and never checked.
+                                 Width 36 = the box (18) and the 8 px cell padding on both sides. -->
+                            <DataGridTemplateColumn Width="36" CanUserSort="False" CanUserResize="False">
+                                <DataGridTemplateColumn.Header>
+                                    <CheckBox IsThreeState="True" Width="18"
+                                              IsChecked="{Binding DataContext.AllVisibleChecked, ElementName=Root, Mode=OneWay}"
+                                              Command="{Binding DataContext.ToggleAllVisibleCommand, ElementName=Root}"
+                                              ToolTip="Отметить все записи в списке (с учётом поиска и фильтров) или снять с них отметки" />
+                                </DataGridTemplateColumn.Header>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate DataType="{x:Type local:StartupItem}">
+                                        <CheckBox Width="18" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsChecked, Mode=OneWay}"
+                                                  Command="{Binding DataContext.ToggleCheckCommand, ElementName=Root}"
+                                                  CommandParameter="{Binding}"
+                                                  IsEnabled="{Binding CanCheck}" ToolTip="{Binding CheckTooltip}"
+                                                  ToolTipService.ShowOnDisabled="True" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
                             <DataGridTemplateColumn Header="Вкл." Width="66" SortMemberPath="IsEnabled" CanUserResize="False">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -476,7 +521,7 @@
                     </DataGrid>
 
                     <!-- Empty state -->
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360" Margin="16"
+                    <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360" Margin="16"
                                 Visibility="{Binding IsEmptyStateVisible, Converter={StaticResource BoolToVis}}">
                         <TextBlock Style="{StaticResource Icon}" Text="{Binding EmptyGlyph}" FontSize="30" Foreground="{StaticResource AccentBrush}"
                                    HorizontalAlignment="Center" />

@@ -226,6 +226,38 @@ public sealed class StartupItem : ObservableObject
 
     public bool CanDelete => !IsService && !IsProtected;
 
+    // ---- checkbox ("Отключить / Включить / Удалить" for several entries) ----
+
+    /// <summary>
+    /// The page's checked entries, by <see cref="Id"/> (null for items made outside the page, which then stay unchecked).
+    /// A rescan builds new objects for the same entries: they read their check from here, so the checks survive it.
+    /// </summary>
+    internal CheckedSet<string>? Checks { get; set; }
+
+    /// <summary>Only what the app may change can be checked: switched, or deleted (a service can't be, a run-once entry can't be switched).</summary>
+    public bool CanCheck => CanToggle || CanDelete;
+
+    /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
+    public string? CheckTooltip => CanCheck ? null : ToggleBlockedReason;
+
+    public bool IsChecked
+    {
+        get => Checks?.IsChecked(Id) == true;
+        set
+        {
+            // What can't be changed is never checked: its checkbox is disabled, and code that sets it is refused too.
+            if (Checks is null || (value && !CanCheck))
+            {
+                OnPropertyChanged();
+                return;
+            }
+            Checks.Set(Id, value);
+        }
+    }
+
+    /// <summary>The page's checked set changed: the checkbox reads it again.</summary>
+    internal void OnCheckedChanged() => OnPropertyChanged(nameof(IsChecked));
+
     /// <summary>Changing the item needs administrator rights (HKLM, common Startup folder, services, system tasks).</summary>
     public bool RequiresAdmin => Kind switch
     {
@@ -437,6 +469,7 @@ public sealed class StartupItem : ObservableObject
         nameof(Reasons), nameof(ToggleActionText), nameof(TrustActionText), nameof(ToggleTooltip), nameof(DisabledTimeText), nameof(Advice),
         nameof(IsTrusted), nameof(Suspicion), nameof(CanToggle), nameof(CanDelete),
         nameof(IsWindowsTask), nameof(IsMicrosoftService), nameof(IsProtected), nameof(ToggleBlockedReason),
+        nameof(CanCheck), nameof(CheckTooltip), nameof(IsChecked),
     };
 
     /// <summary>Microsoft-signed file inside the Windows folder (protected even if the item is not flagged as Microsoft).</summary>
