@@ -570,6 +570,14 @@ public class SecurityServiceSandboxTests
         SetStatus(SecurityCheckIds.Proxy, SecurityStatus.Warning, "Включён прокси 1.2.3.4:80");
         SetStatus(SecurityCheckIds.Updates, SecurityStatus.Warning, "Обновлений не было 90 дней");
         SetStatus(SecurityCheckIds.Extensions, SecurityStatus.Warning);
+        // The hosts and IFEO fixes work on the hijacks of the scan: the report has one of each (in memory, never on disk).
+        var hijackedLines = HostsFile.Parse("203.0.113.9 github.com");
+        hijackedLines.ForEach(HostsRules.Classify);
+        var hijack = new IfeoEntry
+        {
+            ImageName = "taskmgr.exe", Debugger = @"C:\Users\Public\evil.exe", Location = sb.Env.Ifeo.Child("taskmgr.exe"),
+            Risk = SecurityStatus.Danger,
+        };
 
         var report = new SecurityReport
         {
@@ -577,6 +585,8 @@ public class SecurityServiceSandboxTests
             {
                 ServiceEnabled = true, AntivirusEnabled = true, RealTimeEnabled = false, SignatureAgeDays = 10,
             },
+            Hosts = new HostsReport { Path = "hosts", Entries = hijackedLines },
+            Ifeo = new[] { hijack },
             Checks = checks,
         };
         var issues = sb.Service.BuildIssues(report);
@@ -602,10 +612,16 @@ public class SecurityServiceSandboxTests
         Assert.Equal(IssueSeverity.High, issues.Single(i => i.Title.StartsWith("Контроль учётных записей")).Severity);
         var hosts = issues.Single(i => i.Title.StartsWith("Файл hosts"));
         Assert.Equal(IssueSeverity.High, hosts.Severity);
-        Assert.Null(hosts.FixAsync);
-        Assert.Equal(IssueSeverity.Critical, issues.Single(i => i.Title.StartsWith("Подменён запуск")).Severity);
-        Assert.Equal(IssueSeverity.Critical, issues.Single(i => i.Title.StartsWith("Перехвачен запуск")).Severity);
-        Assert.Equal(IssueSeverity.Medium, issues.Single(i => i.Title.StartsWith("Включён прокси")).Severity);
+        Assert.NotNull(hosts.FixAsync);
+        var winlogon = issues.Single(i => i.Title.StartsWith("Подменён запуск"));
+        Assert.Equal(IssueSeverity.Critical, winlogon.Severity);
+        Assert.NotNull(winlogon.FixAsync);
+        var ifeo = issues.Single(i => i.Title.StartsWith("Перехвачен запуск"));
+        Assert.Equal(IssueSeverity.Critical, ifeo.Severity);
+        Assert.NotNull(ifeo.FixAsync);
+        var proxy = issues.Single(i => i.Title.StartsWith("Включён прокси"));
+        Assert.Equal(IssueSeverity.Medium, proxy.Severity);
+        Assert.NotNull(proxy.FixAsync);
         Assert.Equal(IssueSeverity.Medium, issues.Single(i => i.Title == "Windows давно не обновлялась").Severity);
         Assert.Equal(IssueSeverity.Low, issues.Single(i => i.Title == "Подозрительные расширения в браузере").Severity);
     }

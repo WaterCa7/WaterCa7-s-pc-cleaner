@@ -38,8 +38,11 @@ public sealed class HealthIssue : ObservableObject
     /// <summary>True if the fix is low-risk: the row shows the «Безопасно исправить» badge. «Исправить всё» is gated by InFixAll.</summary>
     public bool AutoFixSafe { get; init; }
 
+    /// <summary>The fix button's text when a module does not say what exactly the fix does.</summary>
+    public const string DefaultFixLabel = "Исправить";
+
     /// <summary>Text of the fix button: "Исправить", or what exactly happens ("Перезагрузить", "Удалить программу").</summary>
-    public string FixLabel { get; init; } = "Исправить";
+    public string FixLabel { get; init; } = DefaultFixLabel;
 
     /// <summary>False for fixes that open their own windows, restart the PC or remove programs: they are not run by "Исправить всё".</summary>
     public bool InFixAll { get; init; } = true;

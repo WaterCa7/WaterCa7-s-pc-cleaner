@@ -35,14 +35,32 @@ public sealed partial class SecurityService : IHealthContributor
     internal const string FirewallEnabledMessage =
         "Брандмауэр включён для всех типов сетей. Выключить его снова можно в «Безопасность Windows» → «Брандмауэр и защита сети».";
 
+    // Windows pages behind "Открыть настройки" on the dashboard (issues that the user finishes in Windows itself).
+    private const string WindowsSecurityUri = "windowsdefender:";
+    private const string ThreatSettingsUri = "windowsdefender://threatsettings";
+    private const string AppBrowserControlUri = "windowsdefender://appbrowser";
+    private const string CoreIsolationUri = "windowsdefender://coreisolation";
+    private const string WindowsUpdateUri = "ms-settings:windowsupdate";
+    private const string RemoteDesktopUri = "ms-settings:remotedesktop";
+    private const string DeviceEncryptionUri = "ms-settings:deviceencryption";
+
     public SecurityService() : this(SecurityEnvironment.CreateDefault()) { }
 
     internal SecurityService(SecurityEnvironment environment)
     {
         Env = environment;
+        // Only the real system gets a restore point: a sandbox service (tests) never creates one, even when the tests run elevated.
+        CreateRestorePointAsync = (description, ct) =>
+            environment.IsRealSystem ? RestorePoint.TryCreateAsync(description, ct) : Task.FromResult(false);
     }
 
     internal SecurityEnvironment Env { get; }
+
+    /// <summary>
+    /// Creates the restore point before a dashboard fix changes Winlogon or the IFEO hijacks (tests replace it to see the call).
+    /// The Security page makes its own, because it also tells the user what happened to it.
+    /// </summary>
+    internal Func<string, CancellationToken, Task<bool>> CreateRestorePointAsync { get; set; }
 
     public string ModuleName => "Безопасность";
 
@@ -1042,20 +1060,71 @@ public sealed partial class SecurityService : IHealthContributor
         return message.Length == 0 ? DashboardFailurePrefix : DashboardFailurePrefix + " " + message;
     }
 
+    // The fixes below get what the scan showed (the lines, values and hijacks the user saw). The actions behind them
+    // compare it with the system again and change nothing that differs now, so a stale scan never removes anything unseen.
+
+    /// <summary>
+    /// Restores Winlogon after a restore point, like the Security page: only the machine-wide Shell and Userinit get one,
+    /// a wrong Shell of the current user alone (HKCU) needs neither the point nor administrator rights.
+    /// </summary>
+    private async Task<SecurityActionResult> FixWinlogonAsync(WinlogonState scanned, CancellationToken ct)
+    {
+        var win = Env.WindowsDir;
+        if (!SecurityRules.IsShellDefault(scanned.Shell, win) || !SecurityRules.IsUserinitDefault(scanned.Userinit, win))
+            await CreateRestorePointAsync("Восстановление параметров входа (Winlogon)", ct);
+        return await RestoreWinlogonAsync(scanned, ct);
+    }
+
+    /// <summary>
+    /// Removes the Debugger value of every dangerous hijack after a restore point (each one with its own registry backup).
+    /// One hijack that cannot be removed does not stop the others; the text then starts with "Не удалось" and names both.
+    /// </summary>
+    private async Task<SecurityActionResult> FixIfeoAsync(IReadOnlyList<IfeoEntry> hijacks, CancellationToken ct)
+    {
+        await CreateRestorePointAsync("Удаление перехвата запуска программ (IFEO)", ct);
+        var removed = new List<string>();
+        var removedMessages = new List<string>();
+        var failed = new List<string>();
+        foreach (var hijack in hijacks)
+        {
+            var result = await RemoveIfeoDebuggerAsync(hijack, ct);
+            if (result.Success)
+            {
+                removed.Add(hijack.ImageName);
+                removedMessages.Add(result.Message);
+            }
+            else if (result.Message == NeedAdminMessage)
+            {
+                return result; // the rights are the same for every entry: nothing has been changed, say it once
+            }
+            else
+            {
+                failed.Add($"{hijack.ImageName} — {result.Message}");
+            }
+        }
+        if (failed.Count == 0)
+            return SecurityActionResult.Ok(string.Join("\n\n", removedMessages));
+        return SecurityActionResult.Fail("Не удалось убрать перехват запуска: " + string.Join(" ", failed) +
+                                         (removed.Count > 0 ? $"\n\nПерехват уже убран для: {string.Join(", ", removed)}." : ""));
+    }
+
     internal IReadOnlyList<HealthIssue> BuildIssues(SecurityReport report)
     {
         var issues = new List<HealthIssue>();
 
         HealthIssue Issue(string title, string details, IssueSeverity severity,
-            Func<CancellationToken, Task<string>>? fix = null, bool autoFix = false, string? gain = null) => new()
+            Func<CancellationToken, Task<string>>? fix = null, bool autoFix = false, string? gain = null,
+            string? fixLabel = null, string? settingsUri = null) => new()
             {
                 Module = ModuleName,
                 Title = title,
                 Details = details,
                 Severity = severity,
                 FixAsync = fix,
+                FixLabel = fixLabel ?? HealthIssue.DefaultFixLabel,
                 AutoFixSafe = autoFix,
                 Gain = gain,
+                SettingsUri = settingsUri,
                 TargetPageKey = "Security",
             };
 
@@ -1074,7 +1143,7 @@ public sealed partial class SecurityService : IHealthContributor
                 issues.Add(Issue("Антивирус выключен",
                     (d.PolicyDisablesAntivirus ? "Защитник Windows отключён групповой политикой, " : "Защитник Windows выключен, ") +
                     (other is null ? "а другого антивируса нет." : $"а {other}.") + " Компьютер не защищён от вирусов.",
-                    IssueSeverity.Critical));
+                    IssueSeverity.Critical, settingsUri: WindowsSecurityUri));
             }
             else if (!d.RealTimeEnabled)
             {
@@ -1094,13 +1163,14 @@ public sealed partial class SecurityService : IHealthContributor
             {
                 issues.Add(Issue("Слишком широкие исключения антивируса",
                     $"Защитник Windows не проверяет: {string.Join(", ", badExclusions.Take(3))}. Майнеры и вирусы добавляют себе такие исключения.",
-                    IssueSeverity.Medium));
+                    IssueSeverity.Medium, settingsUri: ThreatSettingsUri));
             }
         }
         else if (!thirdParty && d is null && report.Antiviruses.Count > 0 && report.Antiviruses.All(a => !a.Enabled))
         {
             issues.Add(Issue("Антивирус выключен",
-                $"{report.Antiviruses[0].Name} установлен, но защита не работает.", IssueSeverity.Critical));
+                $"{report.Antiviruses[0].Name} установлен, но защита не работает.", IssueSeverity.Critical,
+                settingsUri: WindowsSecurityUri));
         }
         else if (thirdParty && report.Antiviruses.Where(a => !a.IsMicrosoft && a.Enabled).All(a => !a.UpToDate))
         {
@@ -1163,11 +1233,15 @@ public sealed partial class SecurityService : IHealthContributor
         var hosts = report.Check(SecurityCheckIds.Hosts);
         if (hosts is { Status: SecurityStatus.Danger })
         {
-            var site = report.Hosts.Entries.Where(e => e.Risk == SecurityStatus.Danger).SelectMany(e => e.Hostnames).FirstOrDefault();
+            var hijacked = report.Hosts.Entries.Where(e => e.Risk == SecurityStatus.Danger).ToList();
+            var site = hijacked.SelectMany(e => e.Hostnames).FirstOrDefault();
             issues.Add(Issue("Файл hosts подменяет адреса сайтов",
                 hosts.State + (site is null ? "" : $", например {site}") +
-                ". Так вирусы уводят на поддельные страницы. Нажмите «Подробнее», чтобы проверить и удалить эти строки.",
-                IssueSeverity.High));
+                ". Так вирусы уводят на поддельные страницы. Кнопка удалит только такие строки: копия файла сохраняется, " +
+                "после этого очищается кэш DNS, остальные строки не меняются. Чтобы проверить каждую строку и выбрать, " +
+                "что удалять, нажмите «Подробнее».",
+                IssueSeverity.High, hijacked.Count > 0 ? Wrap(c => RemoveHostsLinesAsync(hijacked, c)) : null,
+                fixLabel: "Убрать подмену"));
         }
         else if (hosts is { Status: SecurityStatus.Warning })
             issues.Add(Issue("В файле hosts есть записи, которые стоит проверить", hosts.Details, IssueSeverity.Low));
@@ -1175,24 +1249,42 @@ public sealed partial class SecurityService : IHealthContributor
         // Winlogon / IFEO
         var winlogon = report.Check(SecurityCheckIds.Winlogon);
         if (winlogon is { Status: SecurityStatus.Danger })
-            issues.Add(Issue("Подменён запуск при входе в Windows", winlogon.Details, IssueSeverity.Critical));
+        {
+            issues.Add(Issue("Подменён запуск при входе в Windows",
+                winlogon.Details + " Кнопка вернёт стандартные значения: перед этим создаётся точка восстановления (если она " +
+                "включена в настройках) и сохраняется копия раздела реестра. Потом перезагрузите компьютер и проверьте его антивирусом.",
+                IssueSeverity.Critical, Wrap(c => FixWinlogonAsync(report.Winlogon, c)), fixLabel: "Восстановить"));
+        }
         var ifeo = report.Check(SecurityCheckIds.Ifeo);
         if (ifeo is { Status: SecurityStatus.Danger })
-            issues.Add(Issue("Перехвачен запуск системных программ", ifeo.State + ". " + ifeo.Details, IssueSeverity.Critical));
+        {
+            var hijacks = report.Ifeo.Where(e => e.Risk == SecurityStatus.Danger).ToList();
+            issues.Add(Issue("Перехвачен запуск системных программ",
+                ifeo.State + ". " + ifeo.Details + " Кнопка удалит значение Debugger у опасных перехватов (остальные настройки " +
+                "разделов не меняются, а перехваты, которые вы могли настроить сами, остаются). Перед этим создаётся " +
+                "точка восстановления (если она включена в настройках), а каждый раздел сохраняется в копию реестра.",
+                IssueSeverity.Critical, hijacks.Count > 0 ? Wrap(c => FixIfeoAsync(hijacks, c)) : null,
+                fixLabel: "Убрать перехват"));
+        }
         else if (ifeo is { Status: SecurityStatus.Warning })
             issues.Add(Issue("Найден перехват запуска программ", ifeo.Details, IssueSeverity.Low));
 
         // Proxy
         var proxy = report.Check(SecurityCheckIds.Proxy);
         if (proxy is { Status: SecurityStatus.Warning })
-            issues.Add(Issue(proxy.State, "Рекламные программы подменяют прокси. Если вы не включали его сами (VPN, работа) — отключите.",
-                IssueSeverity.Medium));
+        {
+            issues.Add(Issue(proxy.State,
+                "Рекламные программы подменяют прокси. Если вы не включали его сами (VPN, работа) — отключите: кнопка " +
+                "выключит прокси и уберёт скрипт настройки, адрес сервера останется в настройках, а их копия сохранится. " +
+                "Включить прокси снова можно в «Параметры» → «Сеть и Интернет» → «Прокси-сервер».",
+                IssueSeverity.Medium, Wrap(c => DisableProxyAsync(report.Proxy, c)), fixLabel: "Выключить прокси"));
+        }
 
         // Updates
         var updates = report.Check(SecurityCheckIds.Updates);
         if (updates is { Status: SecurityStatus.Warning })
             issues.Add(Issue(updates.State.StartsWith("Служба", StringComparison.Ordinal) ? "Служба обновлений Windows отключена" : "Windows давно не обновлялась",
-                updates.Details, IssueSeverity.Medium));
+                updates.Details, IssueSeverity.Medium, settingsUri: WindowsUpdateUri));
 
         // Extensions
         var ext = report.Check(SecurityCheckIds.Extensions);
@@ -1208,10 +1300,10 @@ public sealed partial class SecurityService : IHealthContributor
         // SmartScreen / RDP
         var ss = report.Check(SecurityCheckIds.SmartScreen);
         if (ss is { Status: SecurityStatus.Warning })
-            issues.Add(Issue(ss.State, ss.Details, IssueSeverity.Low));
+            issues.Add(Issue(ss.State, ss.Details, IssueSeverity.Low, settingsUri: AppBrowserControlUri));
         var rdp = report.Check(SecurityCheckIds.Rdp);
         if (rdp is { Status: SecurityStatus.Warning })
-            issues.Add(Issue(rdp.State, rdp.Details, IssueSeverity.Low));
+            issues.Add(Issue(rdp.State, rdp.Details, IssueSeverity.Low, settingsUri: RemoteDesktopUri));
 
         // SMBv1: the server part lets worms like WannaCry in; the client part alone is a smaller risk.
         var smb1 = report.Check(SecurityCheckIds.Smb1);
@@ -1241,7 +1333,8 @@ public sealed partial class SecurityService : IHealthContributor
             issues.Add(Issue(report.BitLocker.Encryption == DriveEncryption.Suspended
                     ? "Защита BitLocker на ноутбуке приостановлена"
                     : "Системный диск ноутбука не зашифрован",
-                bitLocker?.Details ?? "Если ноутбук украдут, файлы можно будет прочитать.", IssueSeverity.Low));
+                bitLocker?.Details ?? "Если ноутбук украдут, файлы можно будет прочитать.", IssueSeverity.Low,
+                settingsUri: DeviceEncryptionUri));
         }
 
         var memory = report.Check(SecurityCheckIds.MemoryIntegrity);
@@ -1251,7 +1344,7 @@ public sealed partial class SecurityService : IHealthContributor
             issues.Add(Issue("Можно включить «Целостность памяти»",
                 "Изоляция ядра не даёт вредоносным драйверам проникнуть в ядро Windows. Включается в «Безопасность Windows» → " +
                 "«Безопасность устройства» → «Изоляция ядра». В отдельных играх может немного снизить FPS.",
-                IssueSeverity.Info));
+                IssueSeverity.Info, settingsUri: CoreIsolationUri));
         }
 
         return issues;
