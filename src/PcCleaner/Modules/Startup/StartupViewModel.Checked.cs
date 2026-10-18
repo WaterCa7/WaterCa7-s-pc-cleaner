@@ -34,8 +34,8 @@ internal sealed class StartupCheckedPlan
     /// <summary>Checked entries the action leaves alone, with the reason.</summary>
     public List<(StartupItem Item, string Reason)> Skipped { get; } = new();
 
-    /// <summary>Everything the action changes: the listed entries, then the hidden ones.</summary>
-    public IEnumerable<StartupItem> Items => Listed.Concat(Hidden);
+    /// <summary>Everything the action changes, in the order of the question: the hidden entries first, then the listed ones.</summary>
+    public IEnumerable<StartupItem> Items => Hidden.Concat(Listed);
 
     public int Count => Listed.Count + Hidden.Count;
 
@@ -399,25 +399,7 @@ public sealed partial class StartupViewModel
         };
 
         var sb = new StringBuilder();
-        if (plan.Hidden.Count == 0)
-        {
-            sb.AppendLine(total + ":");
-            sb.AppendLine(BulkText.BulletList(plan.Listed.Select(EntryLine)));
-        }
-        else
-        {
-            // They are changed too, so they come first and are never folded into "…и ещё N".
-            sb.AppendLine(total + ".");
-            sb.AppendLine();
-            sb.AppendLine("Не видны в списке сейчас:");
-            sb.AppendLine(BulkText.BulletList(plan.Hidden.Select(EntryLine), plan.Hidden.Count));
-            if (plan.Listed.Count > 0)
-            {
-                sb.AppendLine();
-                sb.AppendLine("В списке:");
-                sb.AppendLine(BulkText.BulletList(plan.Listed.Select(EntryLine)));
-            }
-        }
+        sb.AppendLine(BulkText.TargetList(total, plan.Hidden.Select(EntryLine).ToList(), plan.Listed.Select(EntryLine).ToList()));
         if (plan.Skipped.Count > 0)
         {
             sb.AppendLine();

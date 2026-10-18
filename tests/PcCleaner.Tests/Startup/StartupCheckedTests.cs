@@ -588,6 +588,24 @@ public class StartupCheckedTests
     });
 
     [Fact]
+    public void CheckedEntries_AreChangedInTheOrderTheQuestionNamesThem_HiddenOnesFirst() => UiThread.Run(() =>
+    {
+        using var sandbox = new StartupSandbox();
+        foreach (var name in new[] { "Shown1", "Hidden2", "Shown2", "Hidden1" })
+            AddRun(sandbox, name);
+        var vm = NewVm(sandbox, new Seams());
+        Check(vm, "Shown1", "Hidden2", "Shown2", "Hidden1");
+        vm.SearchText = "shown";
+        var listed = vm.ItemsView.Cast<StartupItem>().Select(i => i.Name).ToList();
+
+        var plan = vm.PlanChecked(StartupBulkAction.Disable);
+
+        // Hidden ones by name, as the question names them first, then the listed ones in list order.
+        Assert.Equal(new[] { "Hidden1", "Hidden2" }.Concat(listed), plan.Items.Select(i => i.Name));
+        return Task.CompletedTask;
+    });
+
+    [Fact]
     public void EntriesHiddenByTheSourceTabAndTheStatusCard_AreNamedAsHiddenToo() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();

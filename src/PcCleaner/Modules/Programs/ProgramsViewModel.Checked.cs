@@ -168,24 +168,7 @@ public sealed partial class ProgramsViewModel
 
     /// <summary>"Удалить 3 программы:" and the names; rows the list does not show come first, under their own heading, never folded.</summary>
     private static void AppendTargets<T>(StringBuilder sb, string total, CheckedRows<T> plan, Func<T, string> line)
-    {
-        if (plan.Hidden.Count == 0)
-        {
-            sb.AppendLine(total + ":");
-            sb.AppendLine(BulkText.BulletList(plan.Listed.Select(line)));
-            return;
-        }
-        sb.AppendLine(total + ".");
-        sb.AppendLine();
-        sb.AppendLine("Не видны в списке сейчас:");
-        sb.AppendLine(BulkText.BulletList(plan.Hidden.Select(line), plan.Hidden.Count));
-        if (plan.Listed.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("В списке:");
-            sb.AppendLine(BulkText.BulletList(plan.Listed.Select(line)));
-        }
-    }
+        => sb.AppendLine(BulkText.TargetList(total, plan.Hidden.Select(line).ToList(), plan.Listed.Select(line).ToList()));
 
     /// <summary>A section of a summary: the heading and every line as a bullet; nothing when there are no lines.</summary>
     private static void AddSection(List<string> sections, string heading, IReadOnlyCollection<string> lines, bool fold = false)
