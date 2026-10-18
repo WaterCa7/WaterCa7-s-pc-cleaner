@@ -6,9 +6,24 @@ namespace PcCleaner.Tests.Cleaner;
 
 public class CatalogTests
 {
+    /// <summary>
+    /// Puts an empty browser .exe at <paramref name="relativeExe"/> under LocalAppData (where per-user browsers install
+    /// themselves), so the browser counts as installed and not as a profile left after uninstalling.
+    /// </summary>
+    internal static void InstallFakeBrowser(CleanerEnvironment env, string relativeExe)
+    {
+        var exe = Path.Combine(env.Browsers.LocalAppData, relativeExe);
+        Directory.CreateDirectory(Path.GetDirectoryName(exe)!);
+        File.WriteAllText(exe, "");
+    }
+
     /// <summary>Lays out a fake Chrome/Firefox/Opera/Discord installation (cache and private data) inside the test folder.</summary>
     internal static void CreateFakeInstallation(CleanerTestFolder t, CleanerEnvironment env)
     {
+        InstallFakeBrowser(env, @"Google\Chrome\Application\chrome.exe");
+        InstallFakeBrowser(env, @"Mozilla Firefox\firefox.exe");
+        InstallFakeBrowser(env, @"Programs\Opera\launcher.exe");
+
         var chrome = Path.Combine(env.LocalAppData, @"Google\Chrome\User Data");
         foreach (var profile in new[] { "Default", "Profile 1", "Guest Profile", "System Profile" })
         {
@@ -90,6 +105,25 @@ public class CatalogTests
         Assert.DoesNotContain(categories, c => c.Group == CleanerCategory.GroupApps);
         Assert.Contains(categories, c => c.Id == "win.usertemp");
         Assert.Contains(categories, c => c.Id == "win.recyclebin");
+    }
+
+    [Fact]
+    public void UninstalledBrowsers_LeftoverProfilesWithCache_AreNotListed()
+    {
+        // Opera and Firefox keep the profile (cache included) after they are uninstalled; no browser .exe is left.
+        using var t = new CleanerTestFolder("catalog-uninstalled");
+        var env = CleanerEnvironment.ForTests(t.Root);
+        var operaCache = Path.Combine(env.LocalAppData, @"Opera Software\Opera Stable\Cache");
+        Directory.CreateDirectory(operaCache);
+        File.WriteAllText(Path.Combine(operaCache, "data_0"), "x");
+        var firefoxCache = Path.Combine(env.LocalAppData, @"Mozilla\Firefox\Profiles\abc.default-release\cache2\entries");
+        Directory.CreateDirectory(firefoxCache);
+        File.WriteAllText(Path.Combine(firefoxCache, "entry"), "x");
+        Directory.CreateDirectory(Path.Combine(env.LocalAppData, @"Programs\Opera\78.0.4093.147"));
+
+        var categories = CleanerCatalog.Build(env, 24);
+
+        Assert.DoesNotContain(categories, c => c.Group == CleanerCategory.GroupBrowsers);
     }
 
     [Fact]

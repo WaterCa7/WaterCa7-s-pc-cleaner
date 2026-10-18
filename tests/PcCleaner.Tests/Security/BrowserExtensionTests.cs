@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using PcCleaner.Core;
 using PcCleaner.Modules.Security;
 using Xunit;
 
@@ -94,7 +95,7 @@ public class BrowserExtensionTests
         File.WriteAllText(Path.Combine(userData, "Local State"),
             """{ "profile": { "info_cache": { "Default": { "name": "Работа" } } } }""");
 
-        var (list, browsers) = BrowserExtensionScanner.Scan(new[] { new BrowserRoot("Chrome", userData, BrowserKind.Chromium) });
+        var (list, browsers) = BrowserExtensionScanner.Scan(new[] { new BrowserRoot("Chrome", userData, BrowserKind.Chromium, BrowserProgram.Chrome) });
 
         Assert.Equal(1, browsers);
         Assert.Equal(3, list.Count);
@@ -165,7 +166,7 @@ public class BrowserExtensionTests
             """);
         File.WriteAllText(Path.Combine(userData, "Local State"), """{ "profile": [ 1 ] }""");
 
-        var (list, browsers) = BrowserExtensionScanner.Scan(new[] { new BrowserRoot("Chrome", userData, BrowserKind.Chromium) });
+        var (list, browsers) = BrowserExtensionScanner.Scan(new[] { new BrowserRoot("Chrome", userData, BrowserKind.Chromium, BrowserProgram.Chrome) });
 
         Assert.Equal(1, browsers);
         Assert.Equal(2, list.Count);

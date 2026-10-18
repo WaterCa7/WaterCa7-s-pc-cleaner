@@ -165,6 +165,9 @@ public class CleanerReviewTests
     {
         using var t = new CleanerTestFolder("review-browser-leftover");
         var env = CleanerEnvironment.ForTests(t.Root);
+        CatalogTests.InstallFakeBrowser(env, @"Yandex\YandexBrowser\Application\browser.exe");
+        CatalogTests.InstallFakeBrowser(env, @"Mozilla Firefox\firefox.exe");
+        CatalogTests.InstallFakeBrowser(env, @"Microsoft\Edge\Application\msedge.exe");
         Directory.CreateDirectory(Path.Combine(env.LocalAppData, @"Yandex\YandexBrowser\User Data"));
         Directory.CreateDirectory(Path.Combine(env.LocalAppData, @"Mozilla\Firefox\Profiles\abc.default\storage"));
         Directory.CreateDirectory(Path.Combine(env.LocalAppData, @"Microsoft\Edge\User Data\Default\Code Cache"));

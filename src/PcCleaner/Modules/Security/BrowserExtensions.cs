@@ -21,7 +21,7 @@ public enum ExtensionSource
 }
 
 /// <summary>A browser "User Data" (Chromium) or "Profiles" (Firefox) folder to scan.</summary>
-public sealed record BrowserRoot(string Browser, string Path, BrowserKind Kind);
+public sealed record BrowserRoot(string Browser, string Path, BrowserKind Kind, BrowserProgram Program);
 
 public sealed class BrowserExtension
 {
@@ -101,15 +101,22 @@ public static class BrowserExtensionScanner
         var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         return new[]
         {
-            new BrowserRoot("Chrome", System.IO.Path.Combine(local, @"Google\Chrome\User Data"), BrowserKind.Chromium),
-            new BrowserRoot("Edge", System.IO.Path.Combine(local, @"Microsoft\Edge\User Data"), BrowserKind.Chromium),
-            new BrowserRoot("Яндекс Браузер", System.IO.Path.Combine(local, @"Yandex\YandexBrowser\User Data"), BrowserKind.Chromium),
-            new BrowserRoot("Opera", System.IO.Path.Combine(roaming, @"Opera Software\Opera Stable"), BrowserKind.Chromium),
-            new BrowserRoot("Opera GX", System.IO.Path.Combine(roaming, @"Opera Software\Opera GX Stable"), BrowserKind.Chromium),
-            new BrowserRoot("Brave", System.IO.Path.Combine(local, @"BraveSoftware\Brave-Browser\User Data"), BrowserKind.Chromium),
-            new BrowserRoot("Vivaldi", System.IO.Path.Combine(local, @"Vivaldi\User Data"), BrowserKind.Chromium),
-            new BrowserRoot("Chromium", System.IO.Path.Combine(local, @"Chromium\User Data"), BrowserKind.Chromium),
-            new BrowserRoot("Firefox", System.IO.Path.Combine(roaming, @"Mozilla\Firefox\Profiles"), BrowserKind.Firefox),
+            new BrowserRoot("Chrome", System.IO.Path.Combine(local, @"Google\Chrome\User Data"), BrowserKind.Chromium,
+                BrowserProgram.Chrome),
+            new BrowserRoot("Edge", System.IO.Path.Combine(local, @"Microsoft\Edge\User Data"), BrowserKind.Chromium, BrowserProgram.Edge),
+            new BrowserRoot("Яндекс Браузер", System.IO.Path.Combine(local, @"Yandex\YandexBrowser\User Data"), BrowserKind.Chromium,
+                BrowserProgram.Yandex),
+            new BrowserRoot("Opera", System.IO.Path.Combine(roaming, @"Opera Software\Opera Stable"), BrowserKind.Chromium,
+                BrowserProgram.Opera),
+            new BrowserRoot("Opera GX", System.IO.Path.Combine(roaming, @"Opera Software\Opera GX Stable"), BrowserKind.Chromium,
+                BrowserProgram.OperaGx),
+            new BrowserRoot("Brave", System.IO.Path.Combine(local, @"BraveSoftware\Brave-Browser\User Data"), BrowserKind.Chromium,
+                BrowserProgram.Brave),
+            new BrowserRoot("Vivaldi", System.IO.Path.Combine(local, @"Vivaldi\User Data"), BrowserKind.Chromium, BrowserProgram.Vivaldi),
+            new BrowserRoot("Chromium", System.IO.Path.Combine(local, @"Chromium\User Data"), BrowserKind.Chromium,
+                BrowserProgram.Chromium),
+            new BrowserRoot("Firefox", System.IO.Path.Combine(roaming, @"Mozilla\Firefox\Profiles"), BrowserKind.Firefox,
+                BrowserProgram.Firefox),
         };
     }
 

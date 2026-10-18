@@ -89,7 +89,9 @@ public sealed partial class SecurityService : IHealthContributor
         var dnsTask = Run("DNS", ReadDns, (new List<DnsServerInfo>(), false));
         var updatesTask = Run("обновления", ReadUpdates, new UpdatesState(null, 0, null, null));
         // Fallback -1 = "could not read" (shown as "Нет данных", not as "browsers not found").
-        var extTask = Run("расширения браузеров", () => BrowserExtensionScanner.Scan(Env.BrowserRoots, ct),
+        // Only installed browsers: Opera and Firefox keep the profile after uninstalling, and its extensions cannot run.
+        var extTask = Run("расширения браузеров",
+            () => BrowserExtensionScanner.Scan(Env.BrowserRoots.Where(r => Env.Browsers.IsInstalled(r.Program)), ct),
             (new List<BrowserExtension>(), -1));
         var mpTask = Run("Защитник Windows", () => Env.IsRealSystem && FileTools.FindMpCmdRun() is not null, false);
         var smb1Task = Run("SMBv1", () => ReadSmb1(ct), Smb1State.Unknown);

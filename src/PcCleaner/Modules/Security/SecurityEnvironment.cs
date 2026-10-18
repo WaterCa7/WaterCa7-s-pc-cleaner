@@ -79,6 +79,10 @@ public sealed class SecurityEnvironment
     public required RegLocation WindowsVersion { get; init; }
 
     public required IReadOnlyList<BrowserRoot> BrowserRoots { get; init; }
+
+    /// <summary>Which browsers are really installed: extensions left in the profile of an uninstalled browser are not scanned.</summary>
+    public required InstalledBrowsers Browsers { get; init; }
+
     public required string WindowsDir { get; init; }
 
     /// <summary>True for the real system: enables WMI queries, external tools and change notifications.</summary>
@@ -109,6 +113,7 @@ public sealed class SecurityEnvironment
                 @"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity"),
             WindowsVersion = new(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion"),
             BrowserRoots = BrowserExtensionScanner.DefaultRoots(),
+            Browsers = InstalledBrowsers.FromSystem(),
             WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             IsRealSystem = true,
         };
@@ -143,9 +148,10 @@ public sealed class SecurityEnvironment
             WindowsVersion = Sub("WindowsVersion"),
             BrowserRoots = new[]
             {
-                new BrowserRoot("Chrome", Path.Combine(tempDir, "Chrome", "User Data"), BrowserKind.Chromium),
-                new BrowserRoot("Firefox", Path.Combine(tempDir, "Firefox", "Profiles"), BrowserKind.Firefox),
+                new BrowserRoot("Chrome", Path.Combine(tempDir, "Chrome", "User Data"), BrowserKind.Chromium, BrowserProgram.Chrome),
+                new BrowserRoot("Firefox", Path.Combine(tempDir, "Firefox", "Profiles"), BrowserKind.Firefox, BrowserProgram.Firefox),
             },
+            Browsers = InstalledBrowsers.ForTests(tempDir),
             WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             IsRealSystem = false,
         };

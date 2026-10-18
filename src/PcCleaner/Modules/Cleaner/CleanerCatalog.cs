@@ -180,28 +180,28 @@ internal static class CleanerCatalog
 
     private static IEnumerable<CleanerCategory> BrowserCategories(CleanerEnvironment env)
     {
-        var chromium = new (string Id, string Name, string[] UserData, bool UserDataIsProfile, string[] Processes)[]
+        var chromium = new (string Id, BrowserProgram Program, string Name, string[] UserData, bool UserDataIsProfile, string[] Processes)[]
         {
-            ("browser.chrome", "Google Chrome", new[] { Path.Combine(env.LocalAppData, @"Google\Chrome\User Data") }, false,
-                new[] { "chrome" }),
-            ("browser.edge", "Microsoft Edge", new[] { Path.Combine(env.LocalAppData, @"Microsoft\Edge\User Data") }, false,
-                new[] { "msedge" }),
-            ("browser.yandex", "Яндекс Браузер", new[] { Path.Combine(env.LocalAppData, @"Yandex\YandexBrowser\User Data") },
-                false, new[] { "browser" }),
-            ("browser.opera", "Opera", new[]
+            ("browser.chrome", BrowserProgram.Chrome, "Google Chrome",
+                new[] { Path.Combine(env.LocalAppData, @"Google\Chrome\User Data") }, false, new[] { "chrome" }),
+            ("browser.edge", BrowserProgram.Edge, "Microsoft Edge",
+                new[] { Path.Combine(env.LocalAppData, @"Microsoft\Edge\User Data") }, false, new[] { "msedge" }),
+            ("browser.yandex", BrowserProgram.Yandex, "Яндекс Браузер",
+                new[] { Path.Combine(env.LocalAppData, @"Yandex\YandexBrowser\User Data") }, false, new[] { "browser" }),
+            ("browser.opera", BrowserProgram.Opera, "Opera", new[]
             {
                 Path.Combine(env.RoamingAppData, @"Opera Software\Opera Stable"),
                 Path.Combine(env.LocalAppData, @"Opera Software\Opera Stable"),
             }, true, new[] { "opera" }),
-            ("browser.operagx", "Opera GX", new[]
+            ("browser.operagx", BrowserProgram.OperaGx, "Opera GX", new[]
             {
                 Path.Combine(env.RoamingAppData, @"Opera Software\Opera GX Stable"),
                 Path.Combine(env.LocalAppData, @"Opera Software\Opera GX Stable"),
             }, true, new[] { "opera" }),
-            ("browser.brave", "Brave", new[] { Path.Combine(env.LocalAppData, @"BraveSoftware\Brave-Browser\User Data") }, false,
-                new[] { "brave" }),
-            ("browser.vivaldi", "Vivaldi", new[] { Path.Combine(env.LocalAppData, @"Vivaldi\User Data") }, false,
-                new[] { "vivaldi" }),
+            ("browser.brave", BrowserProgram.Brave, "Brave",
+                new[] { Path.Combine(env.LocalAppData, @"BraveSoftware\Brave-Browser\User Data") }, false, new[] { "brave" }),
+            ("browser.vivaldi", BrowserProgram.Vivaldi, "Vivaldi",
+                new[] { Path.Combine(env.LocalAppData, @"Vivaldi\User Data") }, false, new[] { "vivaldi" }),
         };
 
         foreach (var b in chromium)
@@ -209,6 +209,8 @@ internal static class CleanerCatalog
             var installed = b.UserData.Where(DirExists).ToList();
             if (installed.Count == 0)
                 continue;
+            if (!env.Browsers.IsInstalled(b.Program))
+                continue; // the profile of an uninstalled browser (Opera keeps it): not a browser to show
             var roots = ChromiumCacheRoots(installed, b.UserDataIsProfile);
             if (roots.Count == 0)
                 continue; // an empty leftover folder of an uninstalled browser: nothing to show or clean
@@ -227,7 +229,7 @@ internal static class CleanerCatalog
         }
 
         var firefoxProfiles = Path.Combine(env.LocalAppData, @"Mozilla\Firefox\Profiles");
-        if (DirExists(firefoxProfiles))
+        if (DirExists(firefoxProfiles) && env.Browsers.IsInstalled(BrowserProgram.Firefox))
         {
             var roots = SafeSubdirectories(firefoxProfiles)
                 .Select(p => Path.Combine(p, "cache2"))

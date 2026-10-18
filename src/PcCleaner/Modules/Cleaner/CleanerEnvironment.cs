@@ -22,6 +22,9 @@ public sealed class CleanerEnvironment
 
     public required string UserProfile { get; init; }
 
+    /// <summary>Which browsers are really installed: a profile folder left by an uninstalled browser is not shown.</summary>
+    public Core.InstalledBrowsers Browsers { get; init; } = Core.InstalledBrowsers.FromSystem();
+
     /// <summary>Returns the names (no .exe, case-insensitive) of running processes.</summary>
     public Func<IReadOnlySet<string>> RunningProcessNames { get; init; } = GetRunningProcessNames;
 
@@ -76,6 +79,7 @@ public sealed class CleanerEnvironment
             ProgramData = Path.Combine(root, "ProgramData"),
             WindowsDir = Path.Combine(root, "Windows"),
             UserProfile = profile,
+            Browsers = Core.InstalledBrowsers.ForTests(root, localAppData: local),
             RunningProcessNames = () => running ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             StartDiskCleanup = startDiskCleanup ?? (_ => false),
             IsDiskCleanupRunning = isDiskCleanupRunning ?? (() => false),

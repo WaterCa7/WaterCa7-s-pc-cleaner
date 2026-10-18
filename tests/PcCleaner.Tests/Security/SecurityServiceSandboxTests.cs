@@ -466,6 +466,9 @@ public class SecurityServiceSandboxTests
     public async Task BuildIssues_HostsAndExtensions_TextsFitTheDashboard()
     {
         using var sb = new SecuritySandbox();
+        var chromeExe = Path.Combine(sb.Env.Browsers.ProgramFiles, @"Google\Chrome\Application\chrome.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(chromeExe)!);
+        File.WriteAllText(chromeExe, "");
         var ext = Path.Combine(sb.Env.BrowserRoots[0].Path, "Default", "Extensions", new string('a', 32), "1.0_0");
         Directory.CreateDirectory(ext);
         File.WriteAllText(Path.Combine(ext, "manifest.json"), """{ "name": "Search Manager Plus", "version": "1.0" }""");
@@ -491,6 +494,24 @@ public class SecurityServiceSandboxTests
         var extIssue = issues.Single(i => i.Title == "Подозрительные расширения в браузере");
         Assert.Contains("Search Manager Plus", extIssue.Details);
         Assert.DoesNotContain("«Как удалить»", extIssue.Details);
+    }
+
+    [Fact]
+    public async Task Scan_ExtensionsOfUninstalledBrowser_AreNotReported()
+    {
+        // Firefox keeps its profile after it is uninstalled: the old extensions cannot run and must not raise a warning.
+        using var sb = new SecuritySandbox();
+        var profile = Path.Combine(sb.Env.BrowserRoots[1].Path, "abc.default-release");
+        Directory.CreateDirectory(profile);
+        File.WriteAllText(Path.Combine(profile, "extensions.json"), """
+            { "addons": [ { "id": "sovetnik@yandex.ru", "type": "extension", "location": "app-profile",
+                            "defaultLocale": { "name": "Советник Яндекс.Маркета" }, "active": true } ] }
+            """);
+
+        var scanned = await sb.Service.ScanAsync(null, CancellationToken.None);
+
+        Assert.Empty(scanned.Extensions);
+        Assert.Equal(0, scanned.BrowsersFound);
     }
 
     [Fact]
