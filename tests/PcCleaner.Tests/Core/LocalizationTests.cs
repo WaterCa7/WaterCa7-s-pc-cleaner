@@ -239,18 +239,6 @@ public class LocalizationSwitchTests
         Assert.Equal("Проверить снова", russian);
         Assert.Equal("Check again", english);
     }
-
-    [Theory]
-    [InlineData(new[] { "--lang", "en" }, "en")]
-    [InlineData(new[] { "--LANG", "EN" }, "en")]
-    [InlineData(new[] { "--lang", "ru" }, "ru")]
-    [InlineData(new[] { "--lang", "de" }, null)]
-    public void ParseArgs_ReadsTheLanguage(string[] args, string? expected)
-    {
-        App.ParseArgs(args);
-
-        Assert.Equal(expected, App.LanguageArg);
-    }
 }
 
 /// <summary>Format follows the UI language; in Russian its output is exactly what it always was.</summary>

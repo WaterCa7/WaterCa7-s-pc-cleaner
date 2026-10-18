@@ -144,8 +144,20 @@ public partial class App : Application
             new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(T.Culture.IetfLanguageTag)));
     }
 
+    /// <summary>
+    /// Reads the command line into the static properties above. Every call starts from the defaults, so the properties describe
+    /// exactly these arguments and nothing an earlier call (another start, another test) left behind.
+    /// </summary>
     internal static void ParseArgs(string[] args)
     {
+        ScreenshotDir = null;
+        ScreenshotPages = null;
+        ScreenshotScan = true;
+        ScreenshotSize = null;
+        UpdatedFrom = null;
+        LanguageArg = null;
+        ModeArg = null;
+
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i].ToLowerInvariant())

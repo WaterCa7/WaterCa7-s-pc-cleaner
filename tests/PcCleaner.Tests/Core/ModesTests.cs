@@ -162,28 +162,7 @@ public class ModesRulesTests
         Assert.Equal(24, settings.CleanerMinFileAgeHours);
     }
 
-    // ----- command line -----
-
-    [Theory]
-    [InlineData(new[] { "--mode", "simple" }, UiMode.Simple)]
-    [InlineData(new[] { "--MODE", "Expert" }, UiMode.Expert)]
-    [InlineData(new[] { "--mode", "tiny" }, null)]
-    public void ParseArgs_ReadsTheMode(string[] args, UiMode? expected)
-    {
-        App.ParseArgs(args);
-
-        Assert.Equal(expected, App.ModeArg);
-    }
-
-    [Fact]
-    public void ParseArgs_ReadsTheModeTogetherWithTheLanguageAndTheOtherSwitches()
-    {
-        App.ParseArgs(new[] { "--screenshots", "out", "--mode", "simple", "--lang", "en", "--page", "Settings" });
-
-        Assert.Equal(UiMode.Simple, App.ModeArg);
-        Assert.Equal("en", App.LanguageArg);
-        Assert.Equal(new[] { "Settings" }, App.ScreenshotPages);
-    }
+    // ----- command line (App.ParseArgs itself is tested in ParseArgsTests) -----
 
     [Theory]
     [InlineData(UiMode.Simple, null, true, UiMode.Simple)]    // screenshot run: the argument wins over the saved setting
@@ -491,8 +470,89 @@ public class ModesShellTests
         await vm.ScanCoreAsync(CancellationToken.None, persist: false);
 
         Assert.All(contributors, c => Assert.Equal(1, c.Calls));
-        // The real list does not depend on the sidebar either: every module of the program takes part.
-        Assert.Equal(8, AppServices.HealthContributors.Count);
+        // The real list does not depend on the sidebar either: the modules of the pages the simple mode hides are in it.
+        var real = AppServices.HealthContributors;
+        var ofHiddenPages = new IHealthContributor[]
+        {
+            AppServices.Processes, AppServices.Startup, AppServices.Disk, AppServices.Optimizer, AppServices.Network, AppServices.Security,
+        };
+        Assert.All(ofHiddenPages, c => Assert.Contains(c, real));
+    }
+
+    // ----- a hidden page is reached only through the question -----
+
+    [Fact]
+    public void TheSelectedPageSetter_IgnoresAHiddenPage()
+    {
+        var main = Create(UiMode.Simple, answer: true);
+
+        main.SelectedPage = _pages.Single(p => p.Key == "Network");
+
+        Assert.Equal("Dashboard", main.SelectedPage!.Key);
+        Assert.Empty(_questions); // a binding write is not the user asking for the page: no question either
+        Assert.Equal(UiMode.Simple, _settings.UiMode);
+        Assert.Equal(0, _saves);
+    }
+
+    [Fact]
+    public void TheSelectedPageSetter_StillOpensAVisiblePage()
+    {
+        var main = Create(UiMode.Simple);
+
+        main.SelectedPage = _pages.Single(p => p.Key == "Programs");
+
+        Assert.Equal("Programs", main.SelectedPage!.Key);
+        Assert.Empty(_questions);
+    }
+
+    [Fact]
+    public async Task NavigateAsync_OfAHiddenPage_AsksTheSameQuestion_AndStaysWhenTheAnswerIsNo()
+    {
+        var main = Create(UiMode.Simple, answer: false);
+
+        await main.NavigateAsync(_pages.Single(p => p.Key == "Security"));
+
+        var (title, message) = Assert.Single(_questions);
+        Assert.Equal("Раздел Security", title);
+        Assert.Equal("Этот раздел есть в опытном режиме. Переключиться на опытный режим?", message);
+        Assert.Equal("Dashboard", main.SelectedPage!.Key);
+        Assert.Equal(UiMode.Simple, _settings.UiMode);
+        Assert.Equal(4, main.VisiblePages.Count);
+    }
+
+    [Fact]
+    public async Task NavigateAsync_OfAHiddenPage_SwitchesToExpertModeAndOpensIt_WhenTheAnswerIsYes()
+    {
+        var main = Create(UiMode.Simple, answer: true);
+
+        await main.NavigateAsync(_pages.Single(p => p.Key == "Security"));
+
+        Assert.Single(_questions);
+        Assert.Equal(UiMode.Expert, _settings.UiMode);
+        Assert.Equal(Ten, Keys(main.VisiblePages));
+        Assert.Equal("Security", main.SelectedPage!.Key);
+    }
+
+    [Fact]
+    public async Task NavigateAsync_OfAPageThatIsNotOneOfThePages_Refuses()
+    {
+        var main = Create(UiMode.Simple, answer: true);
+
+        await main.NavigateAsync(new FakePage("Stranger"));
+
+        Assert.Empty(_questions);
+        Assert.Equal("Dashboard", main.SelectedPage!.Key);
+        Assert.Equal(UiMode.Simple, _settings.UiMode);
+    }
+
+    [Fact]
+    public void TheShellStartsOnTheFirstVisiblePage()
+    {
+        var pages = new[] { "Network", "Dashboard", "Programs" }.Select(k => new FakePage(k)).ToList();
+
+        var main = new MainViewModel(pages, () => new AppSettings { UiMode = UiMode.Simple }, _ => { });
+
+        Assert.Equal("Dashboard", main.SelectedPage!.Key); // not Pages[0]: that one is hidden in this mode
     }
 
     // ----- the Dashboard reaches hidden pages through the shell's question -----

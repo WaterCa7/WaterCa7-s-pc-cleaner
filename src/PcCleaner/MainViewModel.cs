@@ -65,7 +65,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         if (OtherAccountWarning is { } warning)
             Log.Warn(warning);
 
-        SelectedPage = Pages[0];
+        SelectedPage = VisiblePages.FirstOrDefault();
     }
 
     private static IEnumerable<PageViewModel> CreatePages() => new PageViewModel[]
@@ -102,12 +102,17 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
     public bool HasOtherAccountWarning => OtherAccountWarning is not null;
 
+    /// <summary>
+    /// The open page. The sidebar's binding writes here, and it can only write what <see cref="VisiblePages"/> offers: a page the
+    /// mode hides is ignored (no question — a binding write is not the user asking for it). A hidden page is reached through
+    /// <see cref="NavigateTo"/> or <see cref="NavigateAsync"/>, which ask first.
+    /// </summary>
     public PageViewModel? SelectedPage
     {
         get => _selectedPage;
         set
         {
-            if (value is not null && !ReferenceEquals(value, _selectedPage))
+            if (value is not null && !ReferenceEquals(value, _selectedPage) && VisiblePages.Contains(value))
                 _ = NavigateAsync(value);
         }
     }
@@ -151,18 +156,24 @@ public sealed class MainViewModel : ObservableObject, INavigator
     public void NavigateTo(string pageKey)
     {
         var page = Pages.FirstOrDefault(p => string.Equals(p.Key, pageKey, StringComparison.OrdinalIgnoreCase));
-        if (page is null)
-            return;
-        if (!VisiblePages.Contains(page))
-        {
-            if (!Ask(page.Title, T._("Этот раздел есть в опытном режиме. Переключиться на опытный режим?")))
-                return;
-            UiModes.Choose(_settings(), UiMode.Expert, _save);
-            RefreshMode(); // the same as the event, in case it did not reach this shell
-            if (!VisiblePages.Contains(page))
-                return;
-        }
-        SelectedPage = page;
+        if (page is not null && IsReachable(page))
+            SelectedPage = page;
+    }
+
+    /// <summary>
+    /// True when the page is in the sidebar. A page of <see cref="Pages"/> that the mode hides is offered together with the
+    /// expert mode: «Да» switches the mode (saved) and the page is then reachable, «Нет» leaves everything as it was. A page
+    /// that is not one of <see cref="Pages"/> is never reachable.
+    /// </summary>
+    private bool IsReachable(PageViewModel page)
+    {
+        if (VisiblePages.Contains(page))
+            return true;
+        if (!Pages.Contains(page) || !Ask(page.Title, T._("Этот раздел есть в опытном режиме. Переключиться на опытный режим?")))
+            return false;
+        UiModes.Choose(_settings(), UiMode.Expert, _save);
+        RefreshMode(); // the same as the event, in case it did not reach this shell
+        return VisiblePages.Contains(page);
     }
 
     /// <summary>
@@ -190,7 +201,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         }
 
         if (_selectedPage is null || !VisiblePages.Contains(_selectedPage))
-            SelectedPage = Pages.FirstOrDefault(p => p.Key == "Dashboard") ?? VisiblePages.FirstOrDefault();
+            SelectedPage = VisiblePages.FirstOrDefault(p => p.Key == "Dashboard") ?? VisiblePages.FirstOrDefault();
     }
 
     /// <summary>Makes <see cref="VisiblePages"/> the pages of the shown mode by removing and inserting only what differs (the selection stays).</summary>
@@ -234,9 +245,14 @@ public sealed class MainViewModel : ObservableObject, INavigator
         }
     }
 
-    /// <summary>Selects a page and awaits its activation.</summary>
+    /// <summary>
+    /// Selects a page and awaits its activation. A page the mode hides is offered together with the expert mode first (the
+    /// question of <see cref="NavigateTo"/>); when the answer is «Нет», or the page is not one of <see cref="Pages"/>, nothing happens.
+    /// </summary>
     public async Task NavigateAsync(PageViewModel page)
     {
+        if (!IsReachable(page))
+            return;
         var previous = _selectedPage;
         if (!Set(ref _selectedPage, page, nameof(SelectedPage)))
             return;

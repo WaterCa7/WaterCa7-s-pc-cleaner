@@ -144,16 +144,7 @@ public class StartupElevationTests
         Assert.False(StartupElevation.ShouldElevate(false, true, false, Assert.Single(starts.Infos).ArgumentList.ToList()));
     }
 
-    [Fact]
-    public void ParseArgs_IgnoresTheMarker_AndStillReadsTheOtherArguments()
-    {
-        // The restarted copy gets "<original arguments> --elevated-restart"; the command line parser must not trip over it.
-        App.ParseArgs(new[] { "--page", "Cleaner", "--elevated-restart" });
-
-        Assert.Equal(new[] { "Cleaner" }, App.ScreenshotPages);
-        Assert.Null(App.ScreenshotDir);
-        Assert.Null(App.UpdatedFrom);
-    }
+    // ParseArgs ignoring the marker is tested in ParseArgsTests (its tests share one sequential collection).
 
     [Fact]
     public void AdminRestartButtons_NeverCarryTheMarker()
