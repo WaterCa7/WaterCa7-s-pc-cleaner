@@ -177,7 +177,7 @@ public sealed class SplashViewModelTests : IDisposable
         Assert.Equal(0, _shutdownCalls);
 
         _http.Release();
-        await Until(updates, () => updates.State == UpdateState.Ready);
+        await UntilDownloadEnds(updates);
         Assert.Equal(0, _installCalls);
         Assert.Equal(0, _shutdownCalls);
         Assert.Equal(_oldExe, File.ReadAllBytes(ExePath)); // installed by the next start, as before
@@ -268,7 +268,7 @@ public sealed class SplashViewModelTests : IDisposable
         Assert.Contains(TimeSpan.FromSeconds(5), _delay.Requested);
 
         _http.Release();
-        await Until(updates, () => updates.State == UpdateState.Ready);
+        await UntilDownloadEnds(updates);
         Assert.Equal(0, _installCalls);
         Assert.Equal(0, _shutdownCalls);
     }
@@ -370,6 +370,16 @@ public sealed class SplashViewModelTests : IDisposable
 
         Assert.False(splash.IsVisible);
         _http.Release();
+    }
+
+    /// <summary>
+    /// Waits until the background download ends and requires it to have succeeded. A failed download ends the wait at once
+    /// with the service's own reason (it used to show up only as a timeout, with nothing to go on).
+    /// </summary>
+    private static async Task UntilDownloadEnds(UpdateService updates)
+    {
+        await Until(updates, () => updates.State is UpdateState.Ready or UpdateState.Failed or UpdateState.ManualRequired);
+        Assert.True(updates.State == UpdateState.Ready, $"The download ended in {updates.State}: {updates.StatusText}");
     }
 
     private static async Task Until(ObservableObject source, Func<bool> condition)
