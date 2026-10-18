@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -66,7 +67,7 @@ public sealed partial class SecurityService : IHealthContributor
     /// <summary>Removes one hijack for <see cref="FixIfeoAsync"/> (tests wrap it to stop the fix in the middle).</summary>
     internal Func<IfeoEntry, CancellationToken, Task<SecurityActionResult>> RemoveIfeoHijackAsync { get; set; }
 
-    public string ModuleName => "Безопасность";
+    public string ModuleName => T._("Безопасность");
 
     /// <summary>The most recent scan (from the page or the dashboard).</summary>
     public SecurityReport? LastReport { get; private set; }

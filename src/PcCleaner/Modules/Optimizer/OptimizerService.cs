@@ -1,4 +1,5 @@
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Optimizer;
 
@@ -39,7 +40,7 @@ public sealed class OptimizerService : IHealthContributor
         _isElevated = isElevated ?? (() => Admin.IsElevated);
     }
 
-    public string ModuleName => "Ускорение";
+    public string ModuleName => T._("Ускорение");
 
     internal RegistryTweakEngine Registry { get; }
 

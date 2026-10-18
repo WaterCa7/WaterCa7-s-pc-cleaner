@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using PcCleaner.Modules.Security;
 
 namespace PcCleaner.Modules.Network;
@@ -98,7 +99,7 @@ public static class LatencyMath
 /// </summary>
 public static class NetworkRules
 {
-    public const string ModuleName = "Сеть";
+    public static string ModuleName => T._("Сеть");
     public const string PageKey = "Network";
 
     public const double HighLatencyMs = 100;

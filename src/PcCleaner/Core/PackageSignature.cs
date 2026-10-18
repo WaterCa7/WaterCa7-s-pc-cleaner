@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Xml;
 using Microsoft.Win32.SafeHandles;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -129,7 +130,7 @@ internal static class PackageSignature
         }
         catch (Exception ex)
         {
-            Log.Warn($"Проверка подписи пакета для {path}: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Проверка подписи пакета для {0}: {1}", path, ErrorText.For(ex)));
             return null;
         }
     }
@@ -177,7 +178,9 @@ internal static class PackageSignature
     }
 
     /// <summary>"microsoft", "майкрософт", "микрософт" as <see cref="Fold"/> turns them (mixed alphabets match too).</summary>
+    // l10n:data-begin — the Russian spellings of Microsoft, matched in a publisher's name and never shown
     private static readonly string[] MicrosoftSpellings = { Fold("microsoft"), Fold("майкрософт"), Fold("микрософт") };
+    // l10n:data-end
 
     /// <summary>Lower-case letters and digits only, each look-alike mapped to its Latin letter ("rn" read as "m").</summary>
     private static string Fold(string text)
@@ -349,7 +352,7 @@ internal static class PackageSignature
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or XmlException)
             {
-                Log.Warn($"Не удалось прочитать манифест пакета {file.FullName}: {ErrorText.For(ex)}");
+                Log.Warn(T.F("Не удалось прочитать манифест пакета {0}: {1}", file.FullName, ErrorText.For(ex)));
                 return null;
             }
         });

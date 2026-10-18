@@ -9,7 +9,9 @@ public static class Format
     /// <summary>Russian culture for parsing and for texts that must stay Russian; UI text follows <see cref="T.Culture"/>.</summary>
     public static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
+    // l10n:data-begin — the Russian side of a language switch in code (units and abbreviations), not a text of the catalog
     private static readonly string[] RussianUnits = { "Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ" };
+    // l10n:data-end
     private static readonly string[] EnglishUnits = { "B", "KB", "MB", "GB", "TB", "PB" };
 
     /// <summary>1536 -> "1,5 КБ" ("1.5 KB" in English).</summary>
@@ -43,7 +45,9 @@ public static class Format
     /// </summary>
     public static string Duration(TimeSpan span)
     {
+        // l10n:data-begin — the Russian side of a language switch in code (units and abbreviations), not a text of the catalog
         var (days, hours, minutes, seconds) = T.IsEnglish ? ("d", "h", "min", "s") : ("д", "ч", "мин", "с");
+        // l10n:data-end
         if (span.TotalDays >= 1)
             return $"{(int)span.TotalDays} {days} {span.Hours} {hours}";
         if (span.TotalHours >= 1)

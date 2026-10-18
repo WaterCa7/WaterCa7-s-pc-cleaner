@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -17,7 +18,7 @@ public static class FileTools
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось прочитать {path}: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Не удалось прочитать {0}: {1}", path, ErrorText.For(ex)));
             return null;
         }
     }
@@ -28,7 +29,7 @@ public static class FileTools
         var hash = await Sha256Async(path, ct);
         if (hash is null)
         {
-            Dialogs.Error("VirusTotal", "Не удалось прочитать файл для вычисления хеша.");
+            Dialogs.Error("VirusTotal", T._("Не удалось прочитать файл для вычисления хеша."));
             return;
         }
         ProcessRunner.ShellOpen($"https://www.virustotal.com/gui/file/{hash.ToLowerInvariant()}");
@@ -43,15 +44,15 @@ public static class FileTools
     {
         var mpCmd = FindMpCmdRun();
         if (mpCmd is null)
-            return "Microsoft Defender не найден на этом компьютере.";
+            return T._("Microsoft Defender не найден на этом компьютере.");
         var result = await ProcessRunner.RunAsync(mpCmd, $"-Scan -ScanType 3 -File \"{path}\"",
             TimeSpan.FromMinutes(10), ct);
-        Log.Info($"Проверка Defender: {path} -> код {result.ExitCode}");
+        Log.Info(T.F("Проверка Defender: {0} -> код {1}", path, result.ExitCode));
         return result.ExitCode switch
         {
-            0 => "Угроз не найдено.",
-            2 => "Defender обнаружил угрозу! Откройте «Безопасность Windows» → «Журнал защиты».",
-            _ => $"Проверка завершилась с кодом {result.ExitCode}. {result.StdOut.Trim()}",
+            0 => T._("Угроз не найдено."),
+            2 => T._("Defender обнаружил угрозу! Откройте «Безопасность Windows» → «Журнал защиты»."),
+            _ => T.F("Проверка завершилась с кодом {0}. {1}", result.ExitCode, result.StdOut.Trim()),
         };
     }
 
@@ -96,9 +97,9 @@ public static class FileTools
         var rc = SHFileOperation(ref op);
         var ok = rc == 0 && !op.fAnyOperationsAborted && !File.Exists(path) && !Directory.Exists(path);
         if (ok)
-            Log.Action($"Перемещено в корзину: {path}");
+            Log.Action(T.F("Перемещено в корзину: {0}", path));
         else
-            Log.Warn($"Не удалось переместить в корзину: {path} (код {rc})");
+            Log.Warn(T.F("Не удалось переместить в корзину: {0} (код {1})", path, rc));
         return ok;
     }
 

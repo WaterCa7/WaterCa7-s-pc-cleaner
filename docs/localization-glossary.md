@@ -172,3 +172,39 @@ names of languages stay in their own language (Русский / English).
 
 The names of Microsoft Store apps keep the English names Windows itself uses (Новости → News, Калькулятор → Calculator,
 Безопасность Windows → Windows Security); product names stay as they are.
+
+## Core: errors, reasons, restart, report
+
+| Русский | English |
+|---|---|
+| нет доступа — нужны права администратора, или объект защищён Windows | access denied — administrator rights are needed, or Windows protects the item |
+| файл занят другой программой | the file is in use by another program |
+| файл или папка не найдены | file or folder not found |
+| на диске недостаточно места | not enough space on the disk |
+| ошибка Windows (код N) | Windows error (code N) |
+| непредвиденная ошибка — подробности записаны в журнал | unexpected error — details are in the log |
+| Потенциально нежелательная программа | Potentially unwanted program |
+| Высокий риск / Подозрительно / Внимание (verdict of a file) | High risk / Suspicious / Warning |
+| Нет цифровой подписи / Без подписи | No digital signature / Unsigned |
+| Подписан / Недоверенная подпись | Signed / Untrusted signature |
+| Запускается из … / Установлена в … (a risky folder) | Runs from … / Installed in … |
+| ставится «в нагрузку» | installed along with other programs |
+| угонщик поиска / домашней страницы | search hijacker / home page hijacker |
+| навязчивый «оптимизатор» / «антивирус» | pushy “optimizer” / “antivirus” |
+| «оптимизатор» с запугиванием | scare-tactic “optimizer” |
+| Перезагрузить компьютер | Restart the computer |
+| Карантин / в карантин | quarantine / put in quarantine |
+| Резервная копия реестра | Registry backup |
+| Отчёт о проверке компьютера | Computer check report |
+| Проверенные разделы / Найденные проблемы | Checked sections / Problems found |
+| Результат исправления / Попытка исправления | Fix result / Fix attempt |
+| Не исправлено | Not fixed |
+| Что даст | What you gain |
+| Отмечено: N / Снять отметки (bulk bar) | Checked: N / Uncheck all |
+
+How the code treats them:
+
+- A text of an exception that the app wrote itself is passed through `T._` where it is thrown and marked with `ErrorText.Own(…)`;
+  `ErrorText.For/Sentence` then shows it as it is. An unmarked exception of an unknown type gets the general phrase in English.
+- A reason of suspicion is text for the user; what the program decides from it (score, level, unwanted program already found,
+  kind of install folder) comes from `SuspicionFlags` / `RiskyLocation`, never from the words.

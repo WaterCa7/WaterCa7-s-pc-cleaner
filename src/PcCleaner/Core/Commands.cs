@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -32,8 +33,8 @@ public sealed class RelayCommand : ICommand
         }
         catch (Exception ex)
         {
-            Log.Error("Ошибка выполнения команды", ex);
-            Dialogs.Error("Ошибка", ErrorText.Sentence(ex));
+            Log.Error(T._("Ошибка выполнения команды"), ex);
+            Dialogs.Error(T._("Ошибка"), ErrorText.Sentence(ex));
         }
     }
 
@@ -89,12 +90,12 @@ public sealed class AsyncRelayCommand : ObservableObject, ICommand
         }
         catch (OperationCanceledException)
         {
-            Log.Info("Операция отменена");
+            Log.Info(T._("Операция отменена"));
         }
         catch (Exception ex)
         {
-            Log.Error("Ошибка выполнения операции", ex);
-            Dialogs.Error("Ошибка", ErrorText.Sentence(ex));
+            Log.Error(T._("Ошибка выполнения операции"), ex);
+            Dialogs.Error(T._("Ошибка"), ErrorText.Sentence(ex));
         }
         finally
         {

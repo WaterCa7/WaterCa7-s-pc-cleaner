@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Security;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Startup;
 
@@ -89,7 +90,7 @@ public sealed partial class StartupService : IHealthContributor
         _env = environment;
     }
 
-    public string ModuleName => "Автозагрузка";
+    public string ModuleName => T._("Автозагрузка");
 
     /// <summary>Raised when entries were changed outside the Startup page (e.g. a dashboard fix).</summary>
     public event Action? ChangedExternally;

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -78,7 +79,7 @@ public sealed class AppSettings
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось прочитать настройки, используются значения по умолчанию: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Не удалось прочитать настройки, используются значения по умолчанию: {0}", ErrorText.For(ex)));
         }
         return new AppSettings();
     }
@@ -110,7 +111,7 @@ public sealed class AppSettings
         }
         catch (Exception ex)
         {
-            Log.Error("Не удалось сохранить настройки", ex);
+            Log.Error(T._("Не удалось сохранить настройки"), ex);
         }
     }
 
@@ -173,7 +174,7 @@ public sealed class AppSettings
         lock (TrustedLock)
             TrustedItems = new List<string>(TrustedItems) { pathOrName };
         Save();
-        Log.Action($"Добавлено в доверенные: {pathOrName}");
+        Log.Action(T.F("Добавлено в доверенные: {0}", pathOrName));
     }
 
     /// <summary>Removes an item from the trusted list (copy-on-write, thread-safe) and saves.</summary>
@@ -182,7 +183,7 @@ public sealed class AppSettings
         lock (TrustedLock)
             TrustedItems = TrustedItems.Where(t => !string.Equals(t, pathOrName, StringComparison.OrdinalIgnoreCase)).ToList();
         Save();
-        Log.Action($"Удалено из доверенных: {pathOrName}");
+        Log.Action(T.F("Удалено из доверенных: {0}", pathOrName));
     }
 
     private static readonly object TrustedLock = new();

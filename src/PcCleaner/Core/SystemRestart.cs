@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -31,20 +32,20 @@ public static class SystemRestart
     private static async Task<string> RestartCoreAsync(CancellationToken ct, bool askFirst)
     {
         ct.ThrowIfCancellationRequested();
-        if (askFirst && !Confirm("Перезагрузить компьютер",
-                "Сохраните работу во всех программах. Компьютер перезагрузится через несколько секунд. Продолжить?"))
+        if (askFirst && !Confirm(T._("Перезагрузить компьютер"),
+                T._("Сохраните работу во всех программах. Компьютер перезагрузится через несколько секунд. Продолжить?")))
         {
-            Log.Info("Перезагрузка: пользователь отказался");
-            return "Перезагрузка отменена — ничего не изменено.";
+            Log.Info(T._("Перезагрузка: пользователь отказался"));
+            return T._("Перезагрузка отменена — ничего не изменено.");
         }
         // "Отмена" pressed while the question was open: the computer must not restart behind the user's back.
         ct.ThrowIfCancellationRequested();
 
         var start = Start;
         if (!await Task.Run(start, CancellationToken.None).ConfigureAwait(false))
-            return "Не удалось перезагрузить компьютер.";
-        Log.Action("Перезагрузка: Windows перезагрузится через несколько секунд (по просьбе пользователя)");
-        return "Компьютер перезагружается…";
+            return T._("Не удалось перезагрузить компьютер.");
+        Log.Action(T._("Перезагрузка: Windows перезагрузится через несколько секунд (по просьбе пользователя)"));
+        return T._("Компьютер перезагружается…");
     }
 
     /// <summary>shutdown.exe /r /t 5: restart in 5 seconds. Works for any signed-in user.</summary>
@@ -61,12 +62,14 @@ public static class SystemRestart
             // shutdown.exe only schedules the restart and exits at once.
             if (process is not null && process.WaitForExit(10_000) && process.ExitCode == 0)
                 return true;
-            Log.Warn($"Перезагрузка: shutdown.exe не принял запрос{(process is { HasExited: true } ? $" (код {process.ExitCode})" : "")}");
+            Log.Warn(process is { HasExited: true }
+                ? T.F("Перезагрузка: shutdown.exe не принял запрос (код {0})", process.ExitCode)
+                : T._("Перезагрузка: shutdown.exe не принял запрос"));
             return false;
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            Log.Warn($"Перезагрузка: не удалось запустить shutdown.exe: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Перезагрузка: не удалось запустить shutdown.exe: {0}", ErrorText.For(ex)));
             return false;
         }
     }

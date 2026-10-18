@@ -1,5 +1,6 @@
 using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Disk;
 
@@ -112,7 +113,7 @@ public sealed class DiskService : IHealthContributor
         _env = environment;
     }
 
-    public string ModuleName => "Диски";
+    public string ModuleName => T._("Диски");
 
     internal DiskEnvironment Env => _env;
 

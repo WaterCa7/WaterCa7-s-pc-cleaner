@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Processes;
 
@@ -63,7 +64,7 @@ public sealed class ProcessesService : IHealthContributor
         AnalysisInterval = analysisInterval ?? TimeSpan.FromSeconds(1.5);
     }
 
-    public string ModuleName => "Процессы";
+    public string ModuleName => T._("Процессы");
 
     /// <summary>Timestamp source in Stopwatch ticks (replaceable in tests).</summary>
     internal Func<long> Clock { get; }
