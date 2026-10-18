@@ -27,6 +27,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     public SettingsViewModel()
         : this(() => AppServices.Settings, s => s.Save(), Log.Entries)
     {
+        RestartProgram = AppRestart.RestartNow;
     }
 
     /// <summary>Test seam: custom settings instance, save action and log source.</summary>

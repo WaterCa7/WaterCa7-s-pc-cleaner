@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:core="clr-namespace:PcCleaner.Core"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              xmlns:local="clr-namespace:PcCleaner.Modules.Settings"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:SettingsViewModel}"
@@ -23,6 +24,40 @@
         <Style x:Key="ButtonIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Margin" Value="0,0,8,0" />
+        </Style>
+
+        <!-- Option button of «Режим» and «Язык»: one of two, the chosen one is blue -->
+        <Style x:Key="OptionButton" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="MinWidth" Value="130" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource LineBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="18,9">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource MutedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- Grey hint text drawn over an empty TextBox -->
@@ -130,13 +165,61 @@
         <TabItem Header="Основные">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                 <Grid Margin="0,0,2,4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="14" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel>
+                    <!-- Mode: simple (four pages) or expert (all pages); applies at once -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,12">
+                                <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE71D;" />
+                                <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Режим'}" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource OptionButton}" GroupName="UiMode"
+                                             IsChecked="{Binding IsSimpleMode, Mode=TwoWay}" Content="{loc:T 'Простой'}" />
+                                <RadioButton Style="{StaticResource OptionButton}" GroupName="UiMode"
+                                             IsChecked="{Binding IsExpertMode, Mode=TwoWay}" Content="{loc:T 'Опытный'}" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Text="{loc:T 'Простой — главное в одном месте. Опытный — все разделы и подробности.'}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Language: read once at start, so a change applies after a restart -->
+                    <Border Grid.Column="2" Style="{StaticResource Card}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,12">
+                                <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE774;" />
+                                <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Язык'}" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <!-- The names of the languages are written in their own language in both. -->
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource OptionButton}" GroupName="UiLanguage"
+                                             IsChecked="{Binding IsRussian, Mode=TwoWay}" Content="Русский" />
+                                <RadioButton Style="{StaticResource OptionButton}" GroupName="UiLanguage"
+                                             IsChecked="{Binding IsEnglish, Mode=TwoWay}" Content="English" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Text="{loc:T 'Язык изменится после перезапуска'}" />
+                            <Button Margin="0,10,0,0" HorizontalAlignment="Left" Command="{Binding RestartNowCommand}"
+                                    Visibility="{Binding LanguageNeedsRestart, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE72C;" />
+                                    <TextBlock Text="{loc:T 'Перезапустить сейчас'}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Row="1">
                         <!-- Restore point before changes -->
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
@@ -258,7 +341,7 @@
                         </Border>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2">
+                    <StackPanel Grid.Row="1" Grid.Column="2">
                         <!-- Cleaner exclusions -->
                         <Border Style="{StaticResource Card}">
                             <StackPanel>

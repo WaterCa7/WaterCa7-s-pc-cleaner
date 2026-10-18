@@ -46,7 +46,8 @@ public sealed class UpdateEnvironment
         CurrentVersion = typeof(AppInfo).Assembly.GetName().Version ?? new Version(1, 0, 0),
     };
 
-    private static bool Start(string exe, IReadOnlyList<string> args)
+    /// <summary>Starts the exe the way the updater does (not through the shell: an elevated copy hands its rights on); false when it did not start.</summary>
+    internal static bool Start(string exe, IReadOnlyList<string> args)
     {
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
         foreach (var arg in args)

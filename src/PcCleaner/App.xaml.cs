@@ -11,7 +11,7 @@ namespace PcCleaner;
 
 public partial class App : Application
 {
-    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key1,Key2] [--no-scan] [--lang ru|en].</summary>
+    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key1,Key2] [--no-scan] [--lang ru|en] [--mode simple|expert].</summary>
     internal static string? ScreenshotDir { get; private set; }
     internal static string[]? ScreenshotPages { get; private set; }
     internal static bool ScreenshotScan { get; private set; } = true;
@@ -23,6 +23,9 @@ public partial class App : Application
     /// <summary>--lang ru|en: the UI language of this run instead of Настройки (screenshots in both languages); null if absent or unknown.</summary>
     internal static string? LanguageArg { get; private set; }
 
+    /// <summary>--mode simple|expert: the mode of this verification run instead of Настройки; null if absent or unknown.</summary>
+    internal static UiMode? ModeArg { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -31,6 +34,9 @@ public partial class App : Application
         // Verification runs must never touch the user's real settings, logs, backups or quarantine.
         if (ScreenshotDir is not null)
             AppPaths.DataDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "WaterCa7sPcCleaner-verify");
+
+        // The settings are loaded here for the first time, from the redirected folder in screenshot mode.
+        AppServices.Settings.UiMode = StartupMode(ModeArg, AppServices.Settings.UiMode, ScreenshotDir is not null);
 
         // Before any text is made: the system UI language is read before UseLanguage replaces it.
         UseLanguage(StartupLanguage(LanguageArg, AppServices.Settings.Language, CultureInfo.CurrentUICulture));
@@ -117,6 +123,13 @@ public partial class App : Application
         => T.ResolveLanguage(T.IsSupported(argument) ? argument : setting, system);
 
     /// <summary>
+    /// The mode of this run: Настройки, except that --mode replaces it in a screenshot run (its settings are in a temp folder).
+    /// A real run ignores --mode: the next change of any setting would save it for good.
+    /// </summary>
+    internal static UiMode? StartupMode(UiMode? argument, UiMode? setting, bool screenshotRun)
+        => screenshotRun && argument is not null ? argument : setting;
+
+    /// <summary>
     /// Texts (<see cref="T"/>), and numbers and dates formatted by code and by XAML bindings, follow the language for the
     /// whole run; a change in Настройки applies after a restart.
     /// </summary>
@@ -154,6 +167,9 @@ public partial class App : Application
                 case "--lang" when i + 1 < args.Length:
                     var language = args[++i].Trim().ToLowerInvariant();
                     LanguageArg = T.IsSupported(language) ? language : null;
+                    break;
+                case "--mode" when i + 1 < args.Length:
+                    ModeArg = UiModes.TryParse(args[++i]);
                     break;
                 case "--size" when i + 1 < args.Length:
                     var parts = args[++i].ToLowerInvariant().Split('x');

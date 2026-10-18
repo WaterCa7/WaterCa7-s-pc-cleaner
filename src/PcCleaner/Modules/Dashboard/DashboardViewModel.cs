@@ -28,6 +28,7 @@ public sealed class DashboardViewModel : PageViewModel
     private readonly AppSettings? _settingsOverride;
 
     private bool _initialized;
+    private UiMode _shownMode;
     private Task<StaticSystemInfo?>? _staticTask;
     private CancellationTokenSource? _liveCts;
 
@@ -90,19 +91,41 @@ public sealed class DashboardViewModel : PageViewModel
         SaveReportCommand = new AsyncRelayCommand(SaveReportAsync, () => !IsBusy && HasReport);
         CopyReportCommand = new AsyncRelayCommand(CopyReportAsync, () => !IsBusy && HasReport);
 
-        // The first link is drawn as a wide tile above the others: 1 + 6 tiles fill every row with 3 or 2 columns.
-        QuickLinks = new[]
-        {
-            new QuickLink("Cleaner", "Очистка", "Временные файлы, кэш браузеров и программ, корзина — освободите место без риска", ""),
-            new QuickLink("Startup", "Автозагрузка", "Что запускается вместе с Windows", ""),
-            new QuickLink("Processes", "Процессы", "Что работает в фоне прямо сейчас", ""),
-            new QuickLink("Programs", "Программы", "Установленные и нежелательные", ""),
-            new QuickLink("Optimizer", "Ускорение", "Настройки Windows и железо", ""),
-            // U+2011 (non-breaking hyphen): a narrow tile must not wrap "Wi-" / "Fi".
-            new QuickLink("Network", "Сеть", "Скорость, задержки, Wi\u2011Fi и порты", ""),
-            new QuickLink("Security", "Безопасность", "Антивирус, брандмауэр, hosts", ""),
-        };
-        MoreLinks = QuickLinks.Skip(1).ToList();
+        _shownMode = UiModes.Of(Settings);
+        (QuickLinks, MoreLinks) = LinksFor(_shownMode);
+    }
+
+    // The first link is drawn as a wide tile above the others: 1 + 6 tiles fill every row with 3 or 2 columns.
+    private static readonly QuickLink[] AllLinks =
+    {
+        new("Cleaner", "Очистка", "Временные файлы, кэш браузеров и программ, корзина — освободите место без риска", ""),
+        new("Startup", "Автозагрузка", "Что запускается вместе с Windows", ""),
+        new("Processes", "Процессы", "Что работает в фоне прямо сейчас", ""),
+        new("Programs", "Программы", "Установленные и нежелательные", ""),
+        new("Optimizer", "Ускорение", "Настройки Windows и железо", ""),
+        // U+2011 (non-breaking hyphen): a narrow tile must not wrap "Wi-" / "Fi".
+        new("Network", "Сеть", "Скорость, задержки, Wi\u2011Fi и порты", ""),
+        new("Security", "Безопасность", "Антивирус, брандмауэр, hosts", ""),
+    };
+
+    /// <summary>The tiles of the mode: only the pages the sidebar shows (the simple mode has just two besides Главная and Настройки).</summary>
+    private static (IReadOnlyList<QuickLink> Links, IReadOnlyList<QuickLink> More) LinksFor(UiMode mode)
+    {
+        var links = AllLinks.Where(l => UiModes.IsVisible(mode, l.Key)).ToList();
+        return (links, links.Skip(1).ToList());
+    }
+
+    /// <summary>The mode was switched: the tiles of the pages that are no longer there go, the others come back.</summary>
+    public override void OnModeChanged()
+    {
+        var mode = UiModes.Of(Settings);
+        if (mode == _shownMode)
+            return;
+        _shownMode = mode;
+        (QuickLinks, MoreLinks) = LinksFor(mode);
+        OnPropertyChanged(nameof(QuickLinks));
+        OnPropertyChanged(nameof(FeaturedLink));
+        OnPropertyChanged(nameof(MoreLinks));
     }
 
     public override string Title => "Главная";
@@ -162,13 +185,14 @@ public sealed class DashboardViewModel : PageViewModel
 
     public AsyncRelayCommand CopyReportCommand { get; }
 
-    public IReadOnlyList<QuickLink> QuickLinks { get; }
+    /// <summary>The tiles of the pages of the current mode (all seven in the expert mode).</summary>
+    public IReadOnlyList<QuickLink> QuickLinks { get; private set; }
 
     /// <summary>Wide tile above the grid ("Очистка").</summary>
     public QuickLink FeaturedLink => QuickLinks[0];
 
-    /// <summary>The other six tiles: 3 × 2 or 2 × 3, every row full.</summary>
-    public IReadOnlyList<QuickLink> MoreLinks { get; }
+    /// <summary>The other tiles: in the expert mode six, 3 × 2 or 2 × 3, every row full.</summary>
+    public IReadOnlyList<QuickLink> MoreLinks { get; private set; }
 
     // ===================== Hero card =====================
 

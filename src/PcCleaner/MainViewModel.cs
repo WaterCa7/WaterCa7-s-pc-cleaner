@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core.Updates;
 using PcCleaner.Modules.Cleaner;
 using PcCleaner.Modules.Dashboard;
@@ -16,27 +17,36 @@ namespace PcCleaner;
 
 public sealed class MainViewModel : ObservableObject, INavigator
 {
+    private readonly Func<AppSettings> _settings;
+    private readonly Action<AppSettings> _save;
     private PageViewModel? _selectedPage;
+    private UiMode _shownMode;
     private string _statusText = "Готово";
     private bool _updateBannerDismissed;
 
     public MainViewModel()
+        : this(null, null, null)
     {
-        AppServices.Navigator = this;
+    }
 
-        Pages = new ObservableCollection<PageViewModel>
-        {
-            new DashboardViewModel(),
-            new CleanerViewModel(AppServices.Cleaner),
-            new ProcessesViewModel(AppServices.Processes),
-            new StartupViewModel(AppServices.Startup),
-            new ProgramsViewModel(AppServices.Programs),
-            new DiskViewModel(AppServices.Disk),
-            new OptimizerViewModel(AppServices.Optimizer),
-            new NetworkViewModel(AppServices.Network),
-            new SecurityViewModel(AppServices.Security),
-            new SettingsViewModel(),
-        };
+    /// <param name="pages">
+    /// Null — the real pages, and this view model becomes <see cref="AppServices.Navigator"/> (the shell). Tests pass their own
+    /// pages and leave the global navigator alone.
+    /// </param>
+    /// <param name="settings">Where the mode is kept (null — <see cref="AppServices.Settings"/>).</param>
+    /// <param name="save">Saves the settings after the mode was switched (null — settings.json).</param>
+    internal MainViewModel(IEnumerable<PageViewModel>? pages, Func<AppSettings>? settings, Action<AppSettings>? save)
+    {
+        _settings = settings ?? (() => AppServices.Settings);
+        _save = save ?? (s => s.Save());
+        if (pages is null)
+            AppServices.Navigator = this;
+
+        Pages = new ObservableCollection<PageViewModel>(pages ?? CreatePages());
+        VisiblePages = new ObservableCollection<PageViewModel>();
+        _shownMode = UiModes.Of(_settings());
+        SyncVisiblePages();
+        UiModes.Changed += RefreshMode;
 
         // Admin.RestartElevated itself asks first when any page is busy (one guard for every restart button and prompt).
         RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
@@ -58,7 +68,32 @@ public sealed class MainViewModel : ObservableObject, INavigator
         SelectedPage = Pages[0];
     }
 
+    private static IEnumerable<PageViewModel> CreatePages() => new PageViewModel[]
+    {
+        new DashboardViewModel(),
+        new CleanerViewModel(AppServices.Cleaner),
+        new ProcessesViewModel(AppServices.Processes),
+        new StartupViewModel(AppServices.Startup),
+        new ProgramsViewModel(AppServices.Programs),
+        new DiskViewModel(AppServices.Disk),
+        new OptimizerViewModel(AppServices.Optimizer),
+        new NetworkViewModel(AppServices.Network),
+        new SecurityViewModel(AppServices.Security),
+        new SettingsViewModel(),
+    };
+
+    /// <summary>
+    /// Every page of the program. Not what the sidebar shows (<see cref="VisiblePages"/>): screenshots, the busy check of a
+    /// restart and the pages that look for each other use the whole list, and the hidden pages go on taking part in the
+    /// Dashboard check (they are IHealthContributors of <see cref="AppServices"/>, not sidebar items).
+    /// </summary>
     public ObservableCollection<PageViewModel> Pages { get; }
+
+    /// <summary>The pages of the sidebar: those of the current mode (<see cref="UiModes"/>), in the order of <see cref="Pages"/>.</summary>
+    public ObservableCollection<PageViewModel> VisiblePages { get; }
+
+    /// <summary>The question about a page the simple mode hides (<see cref="Dialogs.Ask"/>; tests replace it).</summary>
+    internal Func<string, string, bool> Ask { get; set; } = Dialogs.Ask;
 
     IEnumerable<PageViewModel> INavigator.Pages => Pages;
 
@@ -108,11 +143,67 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
     public RelayCommand DismissUpdateBannerCommand { get; }
 
+    /// <summary>
+    /// Opens a page by key. Every link to a page — the Dashboard's tiles and «Подробнее», the hints of the other pages — comes
+    /// here. A page the simple mode hides is offered together with the expert mode: «Да» switches the mode (saved) and opens
+    /// the page, «Нет» stays where it is.
+    /// </summary>
     public void NavigateTo(string pageKey)
     {
         var page = Pages.FirstOrDefault(p => string.Equals(p.Key, pageKey, StringComparison.OrdinalIgnoreCase));
-        if (page is not null)
-            SelectedPage = page;
+        if (page is null)
+            return;
+        if (!VisiblePages.Contains(page))
+        {
+            if (!Ask(page.Title, T._("Этот раздел есть в опытном режиме. Переключиться на опытный режим?")))
+                return;
+            UiModes.Choose(_settings(), UiMode.Expert, _save);
+            RefreshMode(); // the same as the event, in case it did not reach this shell
+            if (!VisiblePages.Contains(page))
+                return;
+        }
+        SelectedPage = page;
+    }
+
+    /// <summary>
+    /// The mode was switched (Настройки, the question above): the sidebar follows at once, the pages are told, and if the open
+    /// page is not in the new mode the Dashboard opens. Nothing happens when this shell's own mode is the same.
+    /// </summary>
+    private void RefreshMode()
+    {
+        var mode = UiModes.Of(_settings());
+        if (mode == _shownMode)
+            return;
+        _shownMode = mode;
+        SyncVisiblePages();
+
+        foreach (var page in Pages)
+        {
+            try
+            {
+                page.OnModeChanged();
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Ошибка при смене режима на странице «{page.Title}»", ex);
+            }
+        }
+
+        if (_selectedPage is null || !VisiblePages.Contains(_selectedPage))
+            SelectedPage = Pages.FirstOrDefault(p => p.Key == "Dashboard") ?? VisiblePages.FirstOrDefault();
+    }
+
+    /// <summary>Makes <see cref="VisiblePages"/> the pages of the shown mode by removing and inserting only what differs (the selection stays).</summary>
+    private void SyncVisiblePages()
+    {
+        var wanted = Pages.Where(p => UiModes.IsVisible(_shownMode, p.Key)).ToList();
+        foreach (var page in VisiblePages.Where(p => !wanted.Contains(p)).ToList())
+            VisiblePages.Remove(page);
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            if (i >= VisiblePages.Count || !ReferenceEquals(VisiblePages[i], wanted[i]))
+                VisiblePages.Insert(i, wanted[i]);
+        }
     }
 
     private void OnUpdateBannerChanged()

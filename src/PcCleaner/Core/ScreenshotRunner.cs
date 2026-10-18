@@ -9,8 +9,9 @@ namespace PcCleaner.Core;
 
 /// <summary>
 /// Non-interactive verification mode:
-///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Cleaner,Startup] [--no-scan]
-/// Opens each page, runs its read-only PreviewScanAsync, saves NN-Key.png and log.txt, then exits.
+///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Cleaner,Startup] [--no-scan] [--mode simple|expert] [--lang ru|en]
+/// Opens each page of the mode (the simple mode has four; NN is the number of the page in the full list, so a page keeps its
+/// file name in both modes), runs its read-only PreviewScanAsync, saves NN-Key.png and log.txt, then exits.
 /// All confirmations are auto-declined (Dialogs.UseSilentMode), so nothing on the system is changed.
 /// Exit code: 0 = no errors logged, 1 = errors were logged (see log.txt).
 /// </summary>
@@ -26,14 +27,12 @@ public static class ScreenshotRunner
                 errors++;
         };
 
-        var index = 0;
-        foreach (var page in vm.Pages.ToList())
-        {
-            index++;
-            if (pageKeys is { Length: > 0 } &&
-                !pageKeys.Any(k => string.Equals(k, page.Key, StringComparison.OrdinalIgnoreCase)))
-                continue;
+        var allPages = vm.Pages.ToList();
+        foreach (var key in HiddenRequested(allPages, vm.VisiblePages, pageKeys))
+            Log.Info($"[screenshot] {key}: пропущено — в этом режиме раздела нет");
 
+        foreach (var (index, page) in PagesToShoot(allPages, vm.VisiblePages, pageKeys))
+        {
             var sw = Stopwatch.StartNew();
             Log.Info($"[screenshot] {page.Key}: открытие");
             await vm.NavigateAsync(page);
@@ -68,6 +67,33 @@ public static class ScreenshotRunner
             Log.Entries.Select(e => $"{e.TimeText} [{e.Level}] {e.Message}"));
         return errors > 0 ? 1 : 0;
     }
+
+    /// <summary>
+    /// The pages to photograph: the visible ones of the current mode (the simple mode hides most pages), only those named in
+    /// <paramref name="pageKeys"/> when it is given. <c>Number</c> is the place in <paramref name="all"/> (1-based), so a page keeps
+    /// its file name (NN-Key.png) in every mode and the pictures of the two modes can be compared by name.
+    /// </summary>
+    internal static List<(int Number, PageViewModel Page)> PagesToShoot(IReadOnlyList<PageViewModel> all, IEnumerable<PageViewModel> visible, string[]? pageKeys)
+    {
+        var shown = visible.ToList();
+        return all
+            .Select((page, index) => (Number: index + 1, Page: page))
+            .Where(p => shown.Contains(p.Page) && (pageKeys is not { Length: > 0 } || IsNamed(pageKeys, p.Page.Key)))
+            .ToList();
+    }
+
+    /// <summary>The keys that were asked for (<c>--page</c>) and name a page that exists but is hidden in this mode.</summary>
+    internal static List<string> HiddenRequested(IReadOnlyList<PageViewModel> all, IEnumerable<PageViewModel> visible, string[]? pageKeys)
+    {
+        var shown = visible.ToList();
+        return (pageKeys ?? Array.Empty<string>())
+            .Where(key => all.Any(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)) &&
+                          !shown.Any(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private static bool IsNamed(string[] keys, string key)
+        => keys.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
 
     private static async Task WaitIdleAsync()
     {

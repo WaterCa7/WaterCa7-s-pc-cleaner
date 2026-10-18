@@ -65,7 +65,8 @@
                         </StackPanel>
                     </Border>
 
-                    <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+                    <!-- The pages of the current mode (simple: four; expert: all). -->
+                    <ListBox ItemsSource="{Binding VisiblePages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
                              ItemContainerStyle="{StaticResource NavItem}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>

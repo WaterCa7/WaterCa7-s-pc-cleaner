@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -44,6 +45,105 @@ public sealed partial class SettingsViewModel
                 ? "Настройки: запуск с правами администратора — включён"
                 : "Настройки: запуск с правами администратора — выключен");
         }
+    }
+
+    // ----- «Режим» and «Язык» -----
+    // Two option buttons each (RadioButtons in one group). Choosing writes "false" into the other one too, so a setter only reacts to
+    // "true". Nothing is kept here: the settings are the one truth, and LoadGeneral tells the buttons to read them again.
+
+    /// <summary>«Простой»: the sidebar shows four pages (<see cref="UiModes"/>). Applies at once, no restart.</summary>
+    public bool IsSimpleMode
+    {
+        get => UiModes.Of(Settings) == UiMode.Simple;
+        set => ChooseMode(value, UiMode.Simple);
+    }
+
+    /// <summary>«Опытный»: every page. Also what is shown while no mode is chosen yet.</summary>
+    public bool IsExpertMode
+    {
+        get => UiModes.Of(Settings) == UiMode.Expert;
+        set => ChooseMode(value, UiMode.Expert);
+    }
+
+    private void ChooseMode(bool selected, UiMode mode)
+    {
+        if (!selected || _loadingGeneral)
+            return;
+        if (UiModes.Choose(Settings, mode, _save))
+            RaiseModeChanged();
+    }
+
+    private void RaiseModeChanged()
+    {
+        OnPropertyChanged(nameof(IsSimpleMode));
+        OnPropertyChanged(nameof(IsExpertMode));
+    }
+
+    /// <summary>The language of the buttons: the saved choice, else the one this run started with (the system's).</summary>
+    private string SelectedLanguage => Settings.Language ?? T.Language;
+
+    /// <summary>«Русский».</summary>
+    public bool IsRussian
+    {
+        get => SelectedLanguage == T.Russian;
+        set => ChooseLanguage(value, T.Russian, "Русский");
+    }
+
+    /// <summary>«English».</summary>
+    public bool IsEnglish
+    {
+        get => SelectedLanguage == T.English;
+        set => ChooseLanguage(value, T.English, "English");
+    }
+
+    /// <summary>The chosen language is not the one this run shows: «Перезапустить сейчас» is offered.</summary>
+    public bool LanguageNeedsRestart => SelectedLanguage != T.Language;
+
+    private void ChooseLanguage(bool selected, string language, string name)
+    {
+        if (!selected || _loadingGeneral || Settings.Language == language)
+            return;
+        Settings.Language = language;
+        SaveSettings(T.F("Настройки: язык — {0}", name));
+        RaiseLanguageChanged();
+    }
+
+    private void RaiseLanguageChanged()
+    {
+        OnPropertyChanged(nameof(IsRussian));
+        OnPropertyChanged(nameof(IsEnglish));
+        OnPropertyChanged(nameof(LanguageNeedsRestart));
+    }
+
+    /// <summary>
+    /// Restarts the program (<see cref="AppRestart"/>). The public constructor puts the real one here; the constructor of the
+    /// tests leaves one that starts nothing, so no test can ever start the program.
+    /// </summary>
+    internal Func<bool> RestartProgram { get; set; } = () => false;
+
+    /// <summary>The pages whose work a restart would interrupt (all pages of the shell).</summary>
+    internal Func<IEnumerable<PageViewModel>> OpenPages { get; set; } = () => AppServices.Navigator?.Pages ?? Enumerable.Empty<PageViewModel>();
+
+    /// <summary>The Yes/No question (<see cref="Dialogs.Confirm"/>); tests replace it.</summary>
+    internal Func<string, string, bool> Confirm { get; set; } = Dialogs.Confirm;
+
+    public RelayCommand RestartNowCommand { get; private set; } = null!;
+
+    /// <summary>«Перезапустить сейчас»: asks first if a page is still working, then starts the program again with the same arguments.</summary>
+    private void RestartNow()
+    {
+        var busy = OpenPages().Where(p => p.IsBusy).ToList();
+        if (busy.Count > 0)
+        {
+            var list = string.Join("\n", busy.Select(p => $"• «{p.Title}»"));
+            if (!Confirm(T._("Перезапуск программы"),
+                    T.F("Сейчас ещё идёт работа:\n{0}\n\nПри перезапуске она прервётся. Перезапустить программу сейчас?", list)))
+                return;
+        }
+        if (RestartProgram())
+            return;
+        Log.Warn(T._("Не удалось перезапустить программу"));
+        Dialogs.Error(T._("Перезапуск программы"), T._("Не удалось перезапустить программу. Закройте её и откройте снова."));
     }
 
     public string RunAsAdminHint =>
@@ -145,6 +245,7 @@ public sealed partial class SettingsViewModel
         RemoveTrustedCommand = new RelayCommand(p => RemoveTrusted(ItemsFrom<string>(p)),
             p => ItemsFrom<string>(p).Count > 0);
         ResetSettingsCommand = new RelayCommand(ResetSettings);
+        RestartNowCommand = new RelayCommand(RestartNow);
         SelectTabCommand = new RelayCommand(p =>
         {
             if (int.TryParse(p?.ToString(), out var tab) && tab is >= TabGeneral and <= TabAbout)
@@ -171,6 +272,8 @@ public sealed partial class SettingsViewModel
             _autoUpdate = s.AutoUpdate;
             OnPropertyChanged(nameof(AutoUpdate));
             OnPropertyChanged(nameof(LastCheckText));
+            RaiseModeChanged();
+            RaiseLanguageChanged();
 
             var options = SettingsLogic.BuildAgeOptions(s.CleanerMinFileAgeHours);
             if (!options.SequenceEqual(AgeOptions))

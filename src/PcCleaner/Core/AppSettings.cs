@@ -48,6 +48,14 @@ public sealed class AppSettings
     /// </summary>
     public string? Language { get; set; }
 
+    /// <summary>
+    /// The mode of the program: Simple (four pages) or Expert (all pages); null — not chosen yet, every page is shown
+    /// (<see cref="UiModes.Effective"/>). Stored as "simple" / "expert"; <see cref="UiModes.Choose"/> changes it, anything else
+    /// is reset by SettingsLogic.Sanitize.
+    /// </summary>
+    [JsonConverter(typeof(UiModeJsonConverter))]
+    public UiMode? UiMode { get; set; }
+
     /// <summary>When update.json was last read successfully (UTC).</summary>
     public DateTime? LastUpdateCheckUtc { get; set; }
 

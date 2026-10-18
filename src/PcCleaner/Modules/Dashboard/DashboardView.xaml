@@ -795,6 +795,16 @@
                         </Button>
 
                         <ItemsControl ItemsSource="{Binding MoreLinks}" Margin="-4,0,-4,-8" Focusable="False">
+                            <!-- The grid fills the card, so tiles grow with it; one tile (the simple mode) keeps its own height. -->
+                            <ItemsControl.Style>
+                                <Style TargetType="ItemsControl">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding MoreLinks.Count}" Value="1">
+                                            <Setter Property="VerticalAlignment" Value="Top" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ItemsControl.Style>
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <UniformGrid>

@@ -175,6 +175,19 @@ public sealed class UpdateService : ObservableObject
 
     internal static List<string> RestartArgs(IReadOnlyList<string> args, Version from)
     {
+        var result = WithoutStartMarkers(args);
+        result.Add(UpdatedFromArg);
+        result.Add(from.ToString(3));
+        return result;
+    }
+
+    /// <summary>
+    /// The arguments of this start without the ones that belong to this very start: <c>--updated-from &lt;version&gt;</c> and
+    /// <c>--elevated-restart</c> (only the restart at startup uses it, and only for the copy it starts). Every restart builds
+    /// the arguments of the next copy from this list.
+    /// </summary>
+    internal static List<string> WithoutStartMarkers(IReadOnlyList<string> args)
+    {
         var result = new List<string>();
         for (var i = 0; i < args.Count; i++)
         {
@@ -183,13 +196,10 @@ public sealed class UpdateService : ObservableObject
                 i++;
                 continue;
             }
-            // Only the restart at startup uses it, and only for the copy it starts: the new version must not inherit it.
             if (string.Equals(args[i], StartupElevation.ElevatedRestartArg, StringComparison.OrdinalIgnoreCase))
                 continue;
             result.Add(args[i]);
         }
-        result.Add(UpdatedFromArg);
-        result.Add(from.ToString(3));
         return result;
     }
 

@@ -221,7 +221,7 @@ internal static class SettingsLogic
     }
 
     /// <summary>
-    /// Repairs values loaded from a hand-edited settings.json (out-of-range age, unknown language, null/blank/duplicate entries).
+    /// Repairs values loaded from a hand-edited settings.json (out-of-range age, unknown language or mode, null/blank/duplicate entries).
     /// Returns the number of corrections. Does not save, except that a repaired trusted list is saved by
     /// AppSettings.AddTrusted/RemoveTrusted (the only safe way to change it).
     /// </summary>
@@ -239,6 +239,13 @@ internal static class SettingsLogic
         if (settings.Language is not null && !T.IsSupported(settings.Language))
         {
             settings.Language = null;
+            fixes++;
+        }
+
+        // A value that is neither Simple nor Expert (a bad cast; the file itself is read leniently) means "not chosen yet".
+        if (settings.UiMode is { } mode && !Enum.IsDefined(mode))
+        {
+            settings.UiMode = null;
             fixes++;
         }
 
