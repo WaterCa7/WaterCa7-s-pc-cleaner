@@ -72,7 +72,7 @@ public static class ReportBuilder
         if (r.Reclaimable.AutoText is { } auto)
             sb.Append("<span class=\"chip chip-accent\">").Append(E(auto)).Append("</span>");
         if (r.Reclaimable.ManualText is { } manual)
-            sb.Append("<span class=\"chip\" title=\"Старые загрузки, Windows.old и т. п. — программа не удаляет их сама\">")
+            sb.Append("<span class=\"chip\" title=\"Windows.old и другое, что удаляете вы сами в «Очистке диска»\">")
                 .Append(E(manual)).Append("</span>");
         sb.Append("</div>\n</div>\n</section>\n");
 

@@ -123,7 +123,7 @@
                 </Border>
                 <Border Style="{StaticResource HeroChip}"
                         Visibility="{Binding HasManualReclaimable, Converter={StaticResource BoolToVis}}"
-                        ToolTip="Старые установщики и архивы в «Загрузках», папка Windows.old и т. п. Программа не удаляет их сама: просмотрите их в разделах «Очистка» и «Диски» и решите, что вам не нужно.">
+                        ToolTip="Папка Windows.old и другое, что удаляете вы сами в «Очистке диска»: кнопка у проблемы только открывает это окно, а что удалить — решаете вы.">
                     <DockPanel>
                         <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8B7;" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
                         <TextBlock Text="{Binding ManualReclaimableText}" FontSize="12.5" Margin="7,0,0,0" TextWrapping="Wrap" />

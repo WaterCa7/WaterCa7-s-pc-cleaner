@@ -44,6 +44,9 @@ public sealed class HealthIssue : ObservableObject
     /// <summary>False for fixes that open their own windows, restart the PC or remove programs: they are not run by "Исправить всё".</summary>
     public bool InFixAll { get; init; } = true;
 
+    /// <summary>The fix only opens a tool where the user finishes the job (Disk Cleanup): the row is not marked fixed and its size stays in the "free it yourself" part.</summary>
+    public bool OnlyOpensTool { get; init; }
+
     /// <summary>Windows settings page or web page that helps with the issue ("Открыть настройки" / "Открыть страницу").</summary>
     public string? SettingsUri { get; init; }
 

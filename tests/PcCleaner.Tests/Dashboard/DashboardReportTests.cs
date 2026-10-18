@@ -332,7 +332,7 @@ public class ScoreDeltaAndReclaimableTests
         Assert.DoesNotContain("вчера", html);
     }
 
-    private static HealthIssue Space(long bytes, bool fixable, bool isFixed = false)
+    private static HealthIssue Space(long bytes, bool fixable, bool isFixed = false, bool onlyOpensTool = false)
     {
         var issue = new HealthIssue
         {
@@ -341,9 +341,44 @@ public class ScoreDeltaAndReclaimableTests
             Severity = IssueSeverity.Low,
             ReclaimableBytes = bytes,
             FixAsync = fixable ? _ => Task.FromResult("ok") : null,
+            OnlyOpensTool = onlyOpensTool,
         };
         issue.IsFixed = isFixed;
         return issue;
+    }
+
+    [Fact]
+    public void Split_FixThatOnlyOpensATool_CountsAsManual()
+    {
+        // Windows.old: its button opens Disk Cleanup, the user finishes the job, so the space is not "freed right here".
+        var split = ReclaimableSplit.From(new[]
+        {
+            Space(1000, fixable: true),                           // a button that frees the space (Recycle Bin, old downloads)
+            Space(40000, fixable: true, onlyOpensTool: true),     // Windows.old
+        });
+
+        Assert.Equal(1000, split.AutoBytes);
+        Assert.Equal(40000, split.ManualBytes);
+        Assert.Equal(41000, split.TotalBytes);
+    }
+
+    [Fact]
+    public void Report_ManualChip_ExplainsWhoFreesWhat()
+    {
+        const long gb = 1024L * 1024 * 1024;
+        var html = ReportBuilder.BuildHtml(new DashboardReport
+        {
+            CreatedAt = new DateTime(2026, 10, 16, 12, 0, 0),
+            ScanTime = new DateTime(2026, 10, 16, 11, 0, 0),
+            Score = 60,
+            Reclaimable = new ReclaimableSplit(2 * gb, 40 * gb),
+        });
+
+        // Old downloads have a button now; only Windows.old and similar are finished by the user in «Очистка диска».
+        Assert.Contains("Windows.old", html);
+        Assert.Contains("Очистке диска", html);
+        Assert.DoesNotContain("Старые загрузки", html);
+        Assert.DoesNotContain("не удаляет их сама", html);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using PcCleaner.Core;
 using PcCleaner.Modules.Dashboard;
+using PcCleaner.Modules.Disk;
 using Xunit;
 
 namespace PcCleaner.Tests.Dashboard;
@@ -26,16 +27,19 @@ public class FixAllTests
         };
 
     private static HealthIssue NewIssue(string title, Func<CancellationToken, Task<string>>? fix = null,
-        bool autoFixSafe = false, bool inFixAll = true, string? settingsUri = null, string fixLabel = "Исправить")
+        bool autoFixSafe = false, bool inFixAll = true, string? settingsUri = null, string fixLabel = "Исправить",
+        bool onlyOpensTool = false, long reclaimable = 0)
         => new()
         {
             Module = "Ускорение",
             Title = title,
             Details = "Описание проблемы",
             Severity = IssueSeverity.Medium,
+            ReclaimableBytes = reclaimable,
             FixAsync = fix,
             AutoFixSafe = autoFixSafe,
             InFixAll = inFixAll,
+            OnlyOpensTool = onlyOpensTool,
             SettingsUri = settingsUri,
             FixLabel = fixLabel,
             TargetPageKey = "Optimizer",
@@ -77,7 +81,124 @@ public class FixAllTests
 
         Assert.Equal("Исправить", issue.FixLabel);
         Assert.True(issue.InFixAll);
+        Assert.False(issue.OnlyOpensTool);
         Assert.Null(issue.SettingsUri);
+    }
+
+    [Fact]
+    public async Task FixOne_ThatOnlyOpensATool_IsNotMarkedFixed_AndShowsItsText()
+    {
+        const string opened = "Открыта «Очистка диска»: нажмите «Очистить системные файлы».";
+        var calls = new Counter();
+        var vm = await ScannedAsync(
+            NewIssue("Осталась папка Windows.old", Counting(calls, opened), inFixAll: false, onlyOpensTool: true));
+        var score = vm.Score;
+        var row = RowOf(vm, "Осталась папка Windows.old");
+
+        await WithConfirm((_, _) => true, async () =>
+        {
+            await vm.FixIssueAsync(row);
+            return true;
+        });
+
+        Assert.Equal(1, calls.Value);
+        Assert.False(row.Issue.IsFixed);
+        Assert.True(row.Issue.CanFix);                   // the button stays: the user may open the wizard again
+        Assert.Equal(opened, row.Issue.FixResult);       // the row still shows what happened...
+        Assert.False(row.FixFailed);                     // ...and it is not drawn as a failure
+        Assert.Equal(0, vm.FixedCount);
+        Assert.Equal(score, vm.Score);
+        Assert.DoesNotContain("Исправлено", vm.ActionSummary);
+        Assert.DoesNotContain("Не исправлено", vm.ActionSummary);
+        Assert.Contains(opened, vm.ActionSummary);
+    }
+
+    [Fact]
+    public async Task FixOne_ThatOnlyOpensATool_StillFailsWhenTheToolCannotBeOpened()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Осталась папка Windows.old", _ => Task.FromResult("Не удалось открыть «Очистку диска»."), inFixAll: false,
+                onlyOpensTool: true));
+        var row = RowOf(vm, "Осталась папка Windows.old");
+
+        await WithConfirm((_, _) => true, async () =>
+        {
+            await vm.FixIssueAsync(row);
+            return true;
+        });
+
+        Assert.False(row.Issue.IsFixed);
+        Assert.True(row.FixFailed);
+        Assert.StartsWith("Не исправлено", vm.ActionSummary);
+    }
+
+    [Fact]
+    public async Task FixOne_Ordinary_IsMarkedFixed()
+    {
+        var vm = await ScannedAsync(NewIssue("Обычное", Counting(new Counter(), "Готово: всё исправлено.")));
+        var row = RowOf(vm, "Обычное");
+
+        await WithConfirm((_, _) => true, async () =>
+        {
+            await vm.FixIssueAsync(row);
+            return true;
+        });
+
+        Assert.True(row.Issue.IsFixed);
+        Assert.False(row.Issue.CanFix);
+        Assert.False(row.FixFailed);
+        Assert.Equal(1, vm.FixedCount);
+        Assert.StartsWith("Исправлено: Обычное", vm.ActionSummary);
+    }
+
+    [Fact]
+    public async Task WindowsOldIssue_RunThroughTheDashboard_OnlyOpensTheWizard()
+    {
+        // The real issue of the Disk module; the tool launcher is a fake, nothing is started.
+        var launches = new List<(string Exe, string Args)>();
+        var disk = new DiskService(new DiskEnvironment
+        {
+            SystemDriveRoot = @"C:\",
+            LaunchTool = (exe, args) =>
+            {
+                launches.Add((exe, args));
+                return ToolLaunchResult.Started;
+            },
+            IsToolRunning = _ => false,
+            Recycler = _ => throw new InvalidOperationException("recycler must not be called"),
+        });
+        const long size = 40L << 30;
+        var issue = disk.WindowsOldIssue(size, complete: true);
+        Assert.True(issue.OnlyOpensTool);
+        var vm = await ScannedAsync(issue);
+        var row = RowOf(vm, issue.Title);
+
+        await WithConfirm((_, _) => true, async () =>
+        {
+            await vm.FixIssueAsync(row);
+            return true;
+        });
+
+        Assert.Single(launches);
+        Assert.False(issue.IsFixed);
+        Assert.False(row.FixFailed);
+        Assert.StartsWith("Открыта «Очистка диска»", issue.FixResult);
+        Assert.Equal(0, vm.FixedCount);
+        // its size still counts, and it stays in the "free it yourself" part
+        Assert.Equal(new ReclaimableSplit(0, size), vm.Reclaimable);
+        Assert.True(vm.HasManualReclaimable);
+        Assert.False(vm.HasAutoReclaimable);
+    }
+
+    [Fact]
+    public async Task FixOneCore_ThatOnlyOpensATool_ReturnsNotFixed()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Только открывает", Counting(new Counter(), "Открыта «Очистка диска»."), inFixAll: false, onlyOpensTool: true),
+            NewIssue("Обычное", Counting(new Counter())));
+
+        Assert.False(await vm.FixOneCoreAsync(RowOf(vm, "Только открывает"), CancellationToken.None));
+        Assert.True(await vm.FixOneCoreAsync(RowOf(vm, "Обычное"), CancellationToken.None));
     }
 
     [Fact]

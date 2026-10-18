@@ -44,8 +44,9 @@ public sealed record ScoreDelta(int Previous, int Current, DateTime? PreviousTim
 }
 
 /// <summary>
-/// Reclaimable space split honestly: what the fixes on the dashboard free right away (issues with a FixAsync)
-/// and what only the user can free after reviewing it (old downloads, Windows.old, ...).
+/// Reclaimable space split honestly: what the fix buttons on the dashboard free right away (issues with a FixAsync that
+/// does the freeing: the Recycle Bin, old downloads moved to it) and what the user still frees themselves (Windows.old:
+/// its button only opens «Очистка диска»; findings without a fix).
 /// </summary>
 public readonly record struct ReclaimableSplit(long AutoBytes, long ManualBytes)
 {
@@ -61,7 +62,8 @@ public readonly record struct ReclaimableSplit(long AutoBytes, long ManualBytes)
         {
             if (issue is null || issue.IsFixed || issue.ReclaimableBytes <= 0)
                 continue;
-            if (issue.FixAsync is not null)
+            // A fix that only opens a tool (Windows.old -> Disk Cleanup) frees nothing by itself: the user does that part.
+            if (issue.FixAsync is not null && !issue.OnlyOpensTool)
                 auto = Add(auto, issue.ReclaimableBytes);
             else
                 manual = Add(manual, issue.ReclaimableBytes);
@@ -73,7 +75,7 @@ public readonly record struct ReclaimableSplit(long AutoBytes, long ManualBytes)
     public string? AutoText => AutoBytes > 0 ? "Можно освободить " + Format.Bytes(AutoBytes) : null;
 
     // Not "после проверки вручную": everywhere else in the app "проверка" means the scan, while this space is freed
-    // only if the user looks through it and decides to delete it (old downloads, Windows.old...).
+    // only if the user decides to delete it and does it themselves (Windows.old in «Очистка диска», ...).
     private const string ManualHint = "если решите удалить сами";
 
     /// <summary>"Ещё до 41 ГБ — если решите удалить сами" (or a standalone wording when nothing is freed automatically).</summary>

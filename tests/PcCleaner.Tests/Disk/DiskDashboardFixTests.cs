@@ -129,9 +129,44 @@ public class DiskDashboardFixTests
         var text = await issue.FixAsync!(CancellationToken.None);
 
         Assert.StartsWith("Не удалось переместить файлы в Корзину: ", text);
-        Assert.Contains("открыт в другой программе", text);
+        Assert.Contains("заняты или защищены", text);
         Assert.True(HealthScoring.LooksLikeFailure(text));
         Assert.True(File.Exists(setup));
+    }
+
+    [Fact]
+    public async Task Fix_WhenWindowsCannotMoveAnything_NeverLooksLikeAMissingAdminRight()
+    {
+        // The per-file reason ("нет прав на удаление этого файла") would make the Dashboard offer a restart as administrator
+        // for a file the administrator could not move either. The reason goes to the log, the text is fixed.
+        using var tree = new DiskTestTree("downloads-fix-denied");
+        var setup = tree.File(@"Downloads\setup.exe", 1000, Old);
+        var issue = DownloadsIssue(Service(_ => new RecycleOutcome(RecycleFailure.AccessDenied)), Scanned(setup), Ghost());
+
+        var text = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Equal("Не удалось переместить файлы в Корзину: файлы заняты или защищены. Подробности — в журнале.", text);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+        Assert.False(HealthScoring.LooksLikeAdminRequired(text));
+        Assert.True(File.Exists(setup));
+    }
+
+    [Fact]
+    public async Task Fix_CountsAFileThatTheRecycleBinRefusedAsNotTouched()
+    {
+        // Both files are exactly as the scan saw them; Windows moves one and refuses the other (open in another program).
+        using var tree = new DiskTestTree("downloads-fix-refused");
+        var moved = tree.File(@"Downloads\setup.exe", 1000, Old);
+        var busy = tree.File(@"Downloads\busy.zip", 2000, Old);
+        var service = Service(path => path == busy ? new RecycleOutcome(RecycleFailure.InUse) : RecycleOutcome.Ok);
+
+        // the issue itself needs over 1 GB of files; the fix is what is tested here
+        var text = await service.RecycleOldDownloadsAsync(new[] { Scanned(moved), Scanned(busy) }, CancellationToken.None);
+
+        Assert.StartsWith($"В Корзину перемещён 1 файл ({Format.Bytes(1000)}) — его можно восстановить.", text);
+        Assert.Contains("Не тронуто: 1 файл", text);
+        Assert.False(HealthScoring.LooksLikeFailure(text));
+        Assert.True(File.Exists(busy));
     }
 
     // ---------- Windows.old ----------
@@ -148,6 +183,22 @@ public class DiskDashboardFixTests
         Assert.False(issue.InFixAll);
         Assert.False(issue.AutoFixSafe);
         Assert.Equal("Disk", issue.TargetPageKey);
+    }
+
+    [Fact]
+    public void WindowsOldIssue_OnlyOpensATool_ButOldDownloadsFreeTheirSpace()
+    {
+        var service = Service();
+        var windowsOld = service.WindowsOldIssue(40L << 30, complete: true);
+        var downloads = DownloadsIssue(service, Ghost());
+
+        Assert.True(windowsOld.OnlyOpensTool);
+        Assert.False(downloads.OnlyOpensTool);
+
+        // The Dashboard shows the split: the Windows.old space is freed by the user in Disk Cleanup, not by the button.
+        var split = ReclaimableSplit.From(new[] { windowsOld, downloads });
+        Assert.Equal(40L << 30, split.ManualBytes);
+        Assert.Equal(downloads.ReclaimableBytes, split.AutoBytes);
     }
 
     [Fact]

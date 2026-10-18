@@ -32,12 +32,12 @@ public sealed record ScanSummary
 
     public int FixableCount { get; init; }
 
-    /// <summary>Everything the remaining findings could free (fixable from the dashboard + manual review).</summary>
+    /// <summary>Everything the remaining findings could free (freed by the fix buttons + finished by the user).</summary>
     public long ReclaimableBytes { get; init; }
 
     /// <summary>
-    /// Part of <see cref="ReclaimableBytes"/> that only the user can free after reviewing it (findings without a fix,
-    /// e.g. old downloads or Windows.old). 0 in summaries saved by older versions.
+    /// Part of <see cref="ReclaimableBytes"/> that the user frees themselves: findings without a fix and fixes that only
+    /// open a tool (Windows.old -> «Очистка диска»). 0 in summaries saved by older versions.
     /// </summary>
     public long ManualReclaimableBytes { get; init; }
 

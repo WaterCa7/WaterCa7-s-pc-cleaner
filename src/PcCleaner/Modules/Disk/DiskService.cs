@@ -132,7 +132,10 @@ public sealed class DiskService : IHealthContributor
         return _env.LaunchTool(exe, arguments);
     }
 
-    /// <summary>Opens «Очистка диска» for the system drive (once: not while its window is open). The Windows.old fix uses it.</summary>
+    /// <summary>
+    /// Opens «Очистка диска» for the system drive (once: not while its window is open). The Disk page button and the
+    /// Windows.old fix on the Dashboard both use it.
+    /// </summary>
     internal ToolLaunchResult OpenDiskCleanup()
         => OpenTool(SystemTools.Exe("cleanmgr.exe"), $"/d {_env.SystemDriveRoot.TrimEnd('\\').TrimEnd(':')}", "cleanmgr");
 
@@ -608,8 +611,9 @@ public sealed class DiskService : IHealthContributor
             ReclaimableBytes = bytes,
             TargetPageKey = PageKey,
             FixLabel = "Открыть очистку диска",
-            // Opens a window the user has to work in: «Исправить всё» does not start it.
+            // Opens a window the user has to work in: «Исправить всё» does not start it, and the button alone fixes nothing.
             InFixAll = false,
+            OnlyOpensTool = true,
             FixAsync = _ => Task.FromResult(OpenDiskCleanupForWindowsOld()),
         };
     }
@@ -761,8 +765,10 @@ public sealed class DiskService : IHealthContributor
         var result = await SystemTools.RunSta(() => RecycleFiles(unchanged)).ConfigureAwait(false);
         foreach (var (path, reason) in result.Skipped)
             Log.Warn($"Диски: не перемещено в корзину {path} — {reason}");
+        // Fixed wording, not the per-file reason: "нет прав на удаление этого файла" would make the Dashboard offer a restart
+        // as administrator (HealthScoring.LooksLikeAdminRequired) for a file that is locked or protected for everybody.
         if (result.Recycled.Count == 0)
-            return $"Не удалось переместить файлы в Корзину: {(result.Skipped.Count > 0 ? result.Skipped[0].Reason : "Windows не назвала причину")}.";
+            return "Не удалось переместить файлы в Корзину: файлы заняты или защищены. Подробности — в журнале.";
 
         var n = result.Recycled.Count;
         Log.Action($"Диски: в корзину перемещено {Format.Count(n, "файл", "файла", "файлов")} ({Format.Bytes(result.RecycledBytes)})");

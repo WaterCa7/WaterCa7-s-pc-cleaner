@@ -130,10 +130,10 @@ public sealed class DiskViewModel : PageViewModel
         RecycleSuggestionCommand = new AsyncRelayCommand(
             p => p is SuggestionItem s ? RecycleSuggestionAsync(s) : Task.CompletedTask, _ => !IsBusy);
         DisableHibernationCommand = new AsyncRelayCommand(DisableHibernationAsync, () => !IsBusy);
-        DiskCleanupCommand = new AsyncRelayCommand(() => OpenToolAsync("cleanmgr.exe",
-            $"/d {_service.SystemDriveRoot.TrimEnd('\\').TrimEnd(':')}", "cleanmgr", "«Очистка диска»"));
-        SystemProtectionCommand = new AsyncRelayCommand(() => OpenToolAsync("SystemPropertiesProtection.exe", "",
-            "SystemPropertiesProtection", "«Защита системы»"));
+        DiskCleanupCommand = new AsyncRelayCommand(() => OpenToolAsync(_service.OpenDiskCleanup, "«Очистка диска»"));
+        SystemProtectionCommand = new AsyncRelayCommand(() => OpenToolAsync(
+            () => _service.OpenTool(SystemTools.Exe("SystemPropertiesProtection.exe"), "", "SystemPropertiesProtection"),
+            "«Защита системы»"));
         OpenRecycleBinCommand = new RelayCommand(() => SystemTools.Open("shell:RecycleBinFolder"));
 
         OptimizeDriveCommand = new AsyncRelayCommand(p => p is DriveItem d ? OptimizeDriveAsync(d) : Task.CompletedTask, _ => !IsBusy);
@@ -1221,9 +1221,9 @@ public sealed class DiskViewModel : PageViewModel
     }
 
     /// <summary>Opens a Windows tool once: not again while its window is open, and not twice on a double click.</summary>
-    private async Task OpenToolAsync(string exe, string arguments, string processName, string displayName)
+    private async Task OpenToolAsync(Func<ToolLaunchResult> open, string displayName)
     {
-        var result = await Task.Run(() => _service.OpenTool(SystemTools.Exe(exe), arguments, processName));
+        var result = await Task.Run(open);
         switch (result)
         {
             case ToolLaunchResult.Started:

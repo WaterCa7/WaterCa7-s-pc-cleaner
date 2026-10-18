@@ -239,7 +239,7 @@ public sealed class DashboardViewModel : PageViewModel
     /// <summary>Everything the remaining findings could free (see <see cref="Reclaimable"/> for the honest split).</summary>
     public long ReclaimableBytes => _summary?.ReclaimableBytes ?? 0;
 
-    /// <summary>Fixable right here vs. only after the user reviews it (old downloads, Windows.old...).</summary>
+    /// <summary>Freed by the fix buttons right here vs. finished by the user themselves (Windows.old: the button only opens «Очистка диска»).</summary>
     public ReclaimableSplit Reclaimable => _summary?.Reclaimable ?? default;
 
     public bool HasReclaimable => !IsScanning && ReclaimableBytes > 0;
@@ -1004,7 +1004,9 @@ public sealed class DashboardViewModel : PageViewModel
         AfterFixes();
         ActionSummary = issue.IsFixed
             ? $"Исправлено: {issue.Title}. {issue.FixResult}"
-            : $"Не исправлено: {issue.Title}. {issue.FixResult}";
+            : issue.OnlyOpensTool && !item.FixFailed
+                ? $"{issue.Title}. {issue.FixResult}"
+                : $"Не исправлено: {issue.Title}. {issue.FixResult}";
     }
 
     /// <summary>Confirmation text of a single fix: the problem, its explanation, the expected result and who does it.</summary>
@@ -1047,6 +1049,7 @@ public sealed class DashboardViewModel : PageViewModel
     /// <summary>
     /// Runs one fix. Returns true if it succeeded. Rethrows only cancellation — also when the fix itself did not throw
     /// but returned early after "Отмена" (cleaning returns what it deleted so far): such a fix is never marked fixed.
+    /// A fix that only opens a tool (<see cref="HealthIssue.OnlyOpensTool"/>) returns false without failing: nothing is fixed yet.
     /// </summary>
     internal async Task<bool> FixOneCoreAsync(IssueItem item, CancellationToken ct)
     {
@@ -1077,6 +1080,13 @@ public sealed class DashboardViewModel : PageViewModel
                 item.FixFailed = true;
                 item.RaiseNeedsAdmin();
                 Log.Warn($"Главная: «{issue.Title}» ({issue.Module}) не исправлено: {text}");
+                return false;
+            }
+            if (issue.OnlyOpensTool)
+            {
+                // The fix only opened a tool (Disk Cleanup) where the user finishes the job: the problem is still there,
+                // so no "Исправлено", its penalty and size stay. The text stays on the row; it is not drawn as a failure.
+                Log.Info($"Главная: «{issue.Title}» ({issue.Module}) — {text}");
                 return false;
             }
             issue.IsFixed = true;
