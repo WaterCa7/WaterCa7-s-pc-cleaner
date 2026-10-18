@@ -35,6 +35,18 @@ public class LocalizationCatalogTests
         "MainViewModel.cs",
         "MainWindow.xaml",
         "MainWindow.xaml.cs",
+        "Modules/Dashboard/DashboardConverters.cs",
+        "Modules/Dashboard/DashboardItems.cs",
+        "Modules/Dashboard/DashboardView.xaml",
+        "Modules/Dashboard/DashboardView.xaml.cs",
+        "Modules/Dashboard/DashboardViewModel.cs",
+        "Modules/Dashboard/HealthGauge.cs",
+        "Modules/Dashboard/HealthScoring.cs",
+        "Modules/Dashboard/ReportModels.cs",
+        "Modules/Dashboard/ScanSummary.cs",
+        "Modules/Dashboard/SmartScanner.cs",
+        "Modules/Dashboard/SystemInfo.cs",
+        "Modules/Dashboard/TextOverflow.cs",
         "Modules/Settings/",
     };
 

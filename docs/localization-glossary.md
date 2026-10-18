@@ -84,6 +84,34 @@ names of languages stay in their own language (Русский / English).
 | Действие | Action |
 | Ошибка | Error |
 
+## Home (the scan, the score, the fixes)
+
+| Русский | English |
+|---|---|
+| оценка (0–100) | score |
+| проблема / совет | problem / tip |
+| раздел (a part of the scan: a module) | section(s) |
+| Критично / Важно / Средне / Низко / Советы (groups) | Critical / Important / Medium / Low / Tips |
+| Отлично / Хорошо / Нужно внимание / Плохо | Excellent / Good / Needs attention / Poor |
+| Проверка неполная | Check incomplete |
+| Проверить компьютер / Проверить снова | Check computer / Check again |
+| Исправить / Исправить всё | Fix / Fix all |
+| Безопасно исправить | Safe to fix |
+| Освободит … / Можно освободить … | Frees up … / You can free up … |
+| Очистка диска (the Windows tool) | Disk Cleanup |
+| Системный диск | System drive |
+| Оперативная память | Memory (RAM) |
+| Время работы | Uptime |
+| Видеокарта / Видеокарты | Graphics card / Graphics cards |
+| Права (administrator or standard user) | Rights |
+| Сохранить отчёт / Скопировать отчёт | Save report / Copy report |
+| Быстрый переход | Quick links |
+| Об этом компьютере | About this computer |
+| сегодня в 14:32 / вчера в 09:05 | today at 14:32 / yesterday at 09:05 |
+| 12 октября в 14:32 / 12 октября 2025 г. в 14:32 | Oct 12 at 14:32 / Oct 12, 2025 at 14:32 |
+| Главная: … (log line prefix) | Home: … |
+| Windows 11 Домашняя (edition from the registry) | Windows 11 Home (the registry name as it is) |
+
 ## Rules that are easy to get wrong
 
 - Quotes: `«…»` in Russian text becomes `“…”` in English text. A name put in quotes by code goes through `T.Quote(name)`.

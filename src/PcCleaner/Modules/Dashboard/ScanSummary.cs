@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -118,7 +119,7 @@ public sealed record ScanSummary
         }
         catch (JsonException ex)
         {
-            Log.Warn($"Главная: не удалось прочитать результат прошлой проверки: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось прочитать результат прошлой проверки: {0}", ex.Message));
             return null;
         }
     }

@@ -58,7 +58,7 @@ public sealed class DashboardViewModel : PageViewModel
     private double _diskPercent;
     private string _diskText = "…";
     private string _diskDetail = "";
-    private string _diskTitle = "Системный диск";
+    private string _diskTitle = T._("Системный диск");
     private string _uptimeText = "…";
     private string _uptimeDetail = "";
     private bool _isLongUptime;
@@ -87,7 +87,7 @@ public sealed class DashboardViewModel : PageViewModel
         FixAllCommand = new AsyncRelayCommand(FixAllAsync, () => !IsBusy && FixAllCount > 0);
         NavigateCommand = new RelayCommand(p => Navigate(p as string));
         // Restarting closes the app: never offer it while a scan or a batch of fixes is running.
-        RequestAdminCommand = new RelayCommand(() => Admin.RequireElevation("полная проверка компьютера"),
+        RequestAdminCommand = new RelayCommand(() => Admin.RequireElevation(T._("полная проверка компьютера")),
             () => !Admin.IsElevated && !IsBusy);
 
         SaveReportCommand = new AsyncRelayCommand(SaveReportAsync, () => !IsBusy && HasReport);
@@ -98,22 +98,22 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     // The first link is drawn as a wide tile above the others: 1 + 6 tiles fill every row with 3 or 2 columns.
-    private static readonly QuickLink[] AllLinks =
+    private static QuickLink[] AllLinks() => new QuickLink[]
     {
-        new("Cleaner", "Очистка", "Временные файлы, кэш браузеров и программ, корзина — освободите место без риска", ""),
-        new("Startup", "Автозагрузка", "Что запускается вместе с Windows", ""),
-        new("Processes", "Процессы", "Что работает в фоне прямо сейчас", ""),
-        new("Programs", "Программы", "Установленные и нежелательные", ""),
-        new("Optimizer", "Ускорение", "Настройки Windows и железо", ""),
+        new("Cleaner", T._("Очистка"), T._("Временные файлы, кэш браузеров и программ, корзина — освободите место без риска"), ""),
+        new("Startup", T._("Автозагрузка"), T._("Что запускается вместе с Windows"), ""),
+        new("Processes", T._("Процессы"), T._("Что работает в фоне прямо сейчас"), ""),
+        new("Programs", T._("Программы"), T._("Установленные и нежелательные"), ""),
+        new("Optimizer", T._("Ускорение"), T._("Настройки Windows и железо"), ""),
         // U+2011 (non-breaking hyphen): a narrow tile must not wrap "Wi-" / "Fi".
-        new("Network", "Сеть", "Скорость, задержки, Wi\u2011Fi и порты", ""),
-        new("Security", "Безопасность", "Антивирус, брандмауэр, hosts", ""),
+        new("Network", T._("Сеть"), T._("Скорость, задержки, Wi\u2011Fi и порты"), ""),
+        new("Security", T._("Безопасность"), T._("Антивирус, брандмауэр, hosts"), ""),
     };
 
     /// <summary>The tiles of the mode: only the pages the sidebar shows (the simple mode has just two besides Главная and Настройки).</summary>
     private static (IReadOnlyList<QuickLink> Links, IReadOnlyList<QuickLink> More) LinksFor(UiMode mode)
     {
-        var links = AllLinks.Where(l => UiModes.IsVisible(mode, l.Key)).ToList();
+        var links = AllLinks().Where(l => UiModes.IsVisible(mode, l.Key)).ToList();
         return (links, links.Skip(1).ToList());
     }
 
@@ -262,7 +262,7 @@ public sealed class DashboardViewModel : PageViewModel
     /// <summary>Theme brush key of the gauge ring and the verdict: never green for an incomplete scan.</summary>
     public string ScoreBrushKey => HealthScoring.ScoreBrushKey(Score, FailedModules);
 
-    public string VerdictText => IsScanning ? "Идёт проверка…" : HealthScoring.Verdict(Score, FailedModules);
+    public string VerdictText => IsScanning ? T._("Идёт проверка…") : HealthScoring.Verdict(Score, FailedModules);
 
     public string VerdictDescription
     {
@@ -271,16 +271,16 @@ public sealed class DashboardViewModel : PageViewModel
             if (IsScanning)
             {
                 return _moduleRows.Count == 0
-                    ? "Собираем сведения о компьютере…"
-                    : $"Проверено разделов: {_completedModules} из {_moduleRows.Count}. Пока идёт проверка, ничего не меняется.";
+                    ? T._("Собираем сведения о компьютере…")
+                    : T.F("Проверено разделов: {0} из {1}. Пока идёт проверка, ничего не меняется.", _completedModules, _moduleRows.Count);
             }
             return HealthScoring.VerdictDescription(Score, _summary?.ProblemCount ?? 0, FixedCount > 0, FailedModules);
         }
     }
 
     public string LastScanText => _summary is null
-        ? "Проверка ещё не проводилась"
-        : "Последняя проверка: " + HealthScoring.RelativeTime(_summary.Time, Now());
+        ? T._("Проверка ещё не проводилась")
+        : T.F("Последняя проверка: {0}", HealthScoring.RelativeTime(_summary.Time, Now()));
 
     /// <summary>Last scan is older than a week — nudge the user (not while a new scan is running).</summary>
     public bool IsScanOld => !IsScanning && _summary is not null && Now() - _summary.Time > TimeSpan.FromDays(7);
@@ -365,32 +365,32 @@ public sealed class DashboardViewModel : PageViewModel
             if (problems == 0 && tips == 0)
             {
                 if (IsIncomplete)
-                    return FixedCount > 0 ? "Найденные проблемы исправлены" : "В проверенных разделах проблем нет";
-                return FixedCount > 0 ? "Все проблемы исправлены" : "Проблем не найдено";
+                    return FixedCount > 0 ? T._("Найденные проблемы исправлены") : T._("В проверенных разделах проблем нет");
+                return FixedCount > 0 ? T._("Все проблемы исправлены") : T._("Проблем не найдено");
             }
             if (problems == 0)
-                return "Проблем нет · " + Format.Count(tips, "совет", "совета", "советов");
-            return "Найдено: " + HealthScoring.FindingsText(problems, tips);
+                return T.F("Проблем нет · {0}", Format.Count(tips, "совет", "совета", "советов"));
+            return T.F("Найдено: {0}", HealthScoring.FindingsText(problems, tips));
         }
     }
 
     public string ScanButtonText => IsSimpleMode
         ? T._("Проверить и исправить")
-        : _summary is null ? "Проверить компьютер" : "Проверить снова";
+        : _summary is null ? T._("Проверить компьютер") : T._("Проверить снова");
 
     public string ScanButtonToolTip => IsSimpleMode
         ? T._("Проверит компьютер и предложит исправить найденное. Перед исправлением покажет список и спросит подтверждение.")
-        : "Проверит все разделы: мусор, автозагрузку, процессы, программы, диски, настройки, сеть и защиту";
+        : T._("Проверит все разделы: мусор, автозагрузку, процессы, программы, диски, настройки, сеть и защиту");
 
     /// <summary>Under the big button.</summary>
     public string ScanHintText => IsSimpleMode
         ? T._("Около минуты · ничего не изменим без вашего согласия")
-        : "Около минуты · только чтение, ничего не меняет";
+        : T._("Около минуты · только чтение, ничего не меняет");
 
     /// <summary>What the check does, before the first one (names the big button, so it follows the mode).</summary>
     public string IntroText => IsSimpleMode
         ? T._("Кнопка «Проверить и исправить» найдёт проблемы и предложит их исправить — после вашего подтверждения.")
-        : "Кнопка «Проверить компьютер» заглянет во все разделы программы и соберёт найденное в один понятный список с объяснениями.";
+        : T._("Кнопка «Проверить компьютер» заглянет во все разделы программы и соберёт найденное в один понятный список с объяснениями.");
 
     public bool IsAdmin => Admin.IsElevated;
 
@@ -416,14 +416,18 @@ public sealed class DashboardViewModel : PageViewModel
             if (_summary is null)
                 return "";
             var sb = new StringBuilder();
-            sb.Append($"Прошлая проверка ({HealthScoring.RelativeTime(_summary.Time, Now())}): ");
-            sb.Append(_summary.IssueCount == 0
-                ? "проблем не найдено."
-                : $"найдено {HealthScoring.FindingsText(_summary.ProblemCount, _summary.TipCount)}"
-                  + (_summary.ImportantCount > 0 ? $", из них важных — {_summary.ImportantCount}." : "."));
+            var when = HealthScoring.RelativeTime(_summary.Time, Now());
+            if (_summary.IssueCount == 0)
+                sb.Append(T.F("Прошлая проверка ({0}): проблем не найдено.", when));
+            else if (_summary.ImportantCount > 0)
+                sb.Append(T.F("Прошлая проверка ({0}): найдено {1}, из них важных — {2}.", when,
+                    HealthScoring.FindingsText(_summary.ProblemCount, _summary.TipCount), _summary.ImportantCount));
+            else
+                sb.Append(T.F("Прошлая проверка ({0}): найдено {1}.", when,
+                    HealthScoring.FindingsText(_summary.ProblemCount, _summary.TipCount)));
             if (_summary.FailedModules > 0)
-                sb.Append(" Часть разделов тогда проверить не удалось.");
-            sb.Append(" Список проблем не сохраняется между запусками — проверьте компьютер снова, чтобы увидеть подробности и исправить их.");
+                sb.Append(' ').Append(T._("Часть разделов тогда проверить не удалось."));
+            sb.Append(' ').Append(T._("Список проблем не сохраняется между запусками — проверьте компьютер снова, чтобы увидеть подробности и исправить их."));
             return sb.ToString();
         }
     }
@@ -451,17 +455,17 @@ public sealed class DashboardViewModel : PageViewModel
         get
         {
             if (IsScanning)
-                return $"Проверено разделов: {_completedModules} из {_moduleRows.Count}";
+                return T.F("Проверено разделов: {0} из {1}", _completedModules, _moduleRows.Count);
             if (_issues.Count == 0)
-                return IsCancelled ? "Проверка остановлена до завершения"
-                    : _moduleRows.All(r => r.State == ModuleScanState.Done) ? "Все разделы проверены" : "Проверка завершена";
+                return IsCancelled ? T._("Проверка остановлена до завершения")
+                    : _moduleRows.All(r => r.State == ModuleScanState.Done) ? T._("Все разделы проверены") : T._("Проверка завершена");
             var problems = _issues.Count(HealthScoring.IsProblem);
-            var text = $"Найдено {HealthScoring.FindingsText(problems, _issues.Count - problems)}";
+            var text = T.F("Найдено {0}", HealthScoring.FindingsText(problems, _issues.Count - problems));
             if (FixedCount > 0)
-                text += $", исправлено {FixedCount}";
+                text += ", " + T.F("исправлено {0}", FixedCount);
             var fixable = _issues.Count(i => i.CanFix);
             if (fixable > 0)
-                text += $" · можно исправить отсюда: {fixable}";
+                text += " · " + T.F("можно исправить отсюда: {0}", fixable);
             return text;
         }
     }
@@ -471,7 +475,7 @@ public sealed class DashboardViewModel : PageViewModel
 
     public bool HasFixAll => !IsScanning && FixAllCount > 0;
 
-    public string FixAllText => $"Исправить всё ({FixAllCount})";
+    public string FixAllText => T.F("Исправить всё ({0})", FixAllCount);
 
     public int FixedCount
     {
@@ -520,7 +524,7 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     public string CpuDetail => _info is null
-        ? "Загрузка всех ядер"
+        ? T._("Загрузка всех ядер")
         : Format.Count(_info.LogicalProcessors, "логический процессор", "логических процессора", "логических процессоров");
 
     public double MemoryPercent
@@ -598,11 +602,11 @@ public sealed class DashboardViewModel : PageViewModel
 
     public string RamText => _info is null ? "…" : Format.Bytes(_info.InstalledRamBytes);
 
-    public string GpuLabel => _info?.Gpus.Count > 1 ? "Видеокарты" : "Видеокарта";
+    public string GpuLabel => _info?.Gpus.Count > 1 ? T._("Видеокарты") : T._("Видеокарта");
 
-    public string GpuText => _info is null ? "…" : _info.Gpus.Count == 0 ? "Нет данных" : string.Join("\n", _info.Gpus);
+    public string GpuText => _info is null ? "…" : _info.Gpus.Count == 0 ? T._("Нет данных") : string.Join("\n", _info.Gpus);
 
-    public string AccessText => Admin.IsElevated ? "Администратор — доступны все проверки" : "Обычный пользователь — часть проверок ограничена";
+    public string AccessText => Admin.IsElevated ? T._("Администратор — доступны все проверки") : T._("Обычный пользователь — часть проверок ограничена");
 
     // ===================== Navigation lifecycle =====================
 
@@ -617,7 +621,7 @@ public sealed class DashboardViewModel : PageViewModel
             }
             catch (Exception ex)
             {
-                Log.Warn($"Главная: не удалось загрузить результат прошлой проверки: {ex.Message}");
+                Log.Warn(T.F("Главная: не удалось загрузить результат прошлой проверки: {0}", ex.Message));
             }
             RaiseHero();
             OnPropertyChanged(nameof(ShowIntro));
@@ -639,7 +643,7 @@ public sealed class DashboardViewModel : PageViewModel
         await EnsureStaticInfoAsync();
         // Read-only: AnalyzeAsync of every module is read-only by contract. The result is not persisted, so
         // verification runs never overwrite the user's real "last scan".
-        await RunBusyAsync("Проверяем компьютер…", async busyCt =>
+        await RunBusyAsync(T._("Проверяем компьютер…"), async busyCt =>
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(busyCt, ct);
             await ScanCoreAsync(linked.Token, persist: false);
@@ -673,7 +677,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: не удалось прочитать сведения о компьютере: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось прочитать сведения о компьютере: {0}", ex.Message));
             return null;
         }
     }
@@ -715,7 +719,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: обновление показателей остановлено: {ex.Message}");
+            Log.Warn(T.F("Главная: обновление показателей остановлено: {0}", ex.Message));
         }
     }
 
@@ -728,39 +732,39 @@ public sealed class DashboardViewModel : PageViewModel
         }
         else
         {
-            CpuText = "н/д";
+            CpuText = T._("н/д");
         }
 
         if (s.Memory is { } m && m.TotalBytes > 0)
         {
             MemoryPercent = 100.0 * m.UsedBytes / m.TotalBytes;
             MemoryText = Format.Percent(Math.Round(MemoryPercent));
-            MemoryDetail = $"Занято {Format.Bytes(m.UsedBytes)} из {Format.Bytes(m.TotalBytes)}";
+            MemoryDetail = T.F("Занято {0} из {1}", Format.Bytes(m.UsedBytes), Format.Bytes(m.TotalBytes));
         }
         else
         {
-            MemoryText = "н/д";
-            MemoryDetail = "Не удалось получить данные";
+            MemoryText = T._("н/д");
+            MemoryDetail = T._("Не удалось получить данные");
         }
 
         if (s.SystemDriveName is not null && s.SystemDriveTotal > 0)
         {
-            DiskTitle = $"Системный диск ({s.SystemDriveName})";
+            DiskTitle = T.F("Системный диск ({0})", s.SystemDriveName);
             DiskPercent = 100.0 * (s.SystemDriveTotal - s.SystemDriveFree) / s.SystemDriveTotal;
             DiskText = Format.Bytes(s.SystemDriveFree);
-            DiskDetail = $"свободно из {Format.Bytes(s.SystemDriveTotal)} · занято {Format.Percent(Math.Round(DiskPercent))}";
+            DiskDetail = T.F("свободно из {0} · занято {1}", Format.Bytes(s.SystemDriveTotal), Format.Percent(Math.Round(DiskPercent)));
         }
         else
         {
-            DiskText = "н/д";
-            DiskDetail = "Не удалось прочитать диск";
+            DiskText = T._("н/д");
+            DiskDetail = T._("Не удалось прочитать диск");
         }
 
         UptimeText = Format.Duration(s.Uptime);
         IsLongUptime = s.Uptime > TimeSpan.FromDays(7);
         UptimeDetail = IsLongUptime
-            ? "Давно без перезагрузки — перезагрузите компьютер"
-            : "Включён " + HealthScoring.RelativeTime(Now() - s.Uptime, Now());
+            ? T._("Давно без перезагрузки — перезагрузите компьютер")
+            : T.F("Включён {0}", HealthScoring.RelativeTime(Now() - s.Uptime, Now()));
         HasLiveData = true;
         RaiseTimeTexts();
     }
@@ -818,7 +822,7 @@ public sealed class DashboardViewModel : PageViewModel
 
     // ===================== Smart scan =====================
 
-    private Task ScanAsync() => RunBusyAsync("Проверяем компьютер…", ct => ScanCoreAsync(ct, persist: true));
+    private Task ScanAsync() => RunBusyAsync(T._("Проверяем компьютер…"), ct => ScanCoreAsync(ct, persist: true));
 
     /// <summary>
     /// «Проверить и исправить» (simple mode): the scan, then — when something can be fixed from here — the usual
@@ -875,8 +879,8 @@ public sealed class DashboardViewModel : PageViewModel
             State = DashboardScanState.Scanning;
             RaiseResults();
         });
-        Log.Info($"Главная: проверка компьютера запущена ({Format.Count(total, "раздел", "раздела", "разделов")})");
-        ReportProgress(total == 0 ? -1 : 0, "Проверяем компьютер…");
+        Log.Info(T.F("Главная: проверка компьютера запущена ({0})", Format.Count(total, "раздел", "раздела", "разделов")));
+        ReportProgress(total == 0 ? -1 : 0, T._("Проверяем компьютер…"));
 
         var completed = 0;
 
@@ -893,7 +897,7 @@ public sealed class DashboardViewModel : PageViewModel
                 OnPropertyChanged(nameof(ResultsSummaryText));
             });
             if (!ct.IsCancellationRequested)
-                ReportProgress(100.0 * done / Math.Max(1, total), $"Проверяем компьютер: готово {done} из {total} — {result.ModuleName}");
+                ReportProgress(100.0 * done / Math.Max(1, total), T.F("Проверяем компьютер: готово {0} из {1} — {2}", done, total, result.ModuleName));
             return result;
         }
 
@@ -913,7 +917,7 @@ public sealed class DashboardViewModel : PageViewModel
                     .Select(r => r.ModuleName).ToList();
                 if (cancelled)
                 {
-                    ScanWarning = "Проверка остановлена. Показаны только проблемы из уже проверенных разделов, оценка не обновлена.";
+                    ScanWarning = T._("Проверка остановлена. Показаны только проблемы из уже проверенных разделов, оценка не обновлена.");
                     State = DashboardScanState.Cancelled;
                 }
                 else
@@ -931,7 +935,7 @@ public sealed class DashboardViewModel : PageViewModel
                     if (persist)
                         SaveSummary();
                     if (failed.Count > 0)
-                        ScanWarning = $"Не удалось проверить: {string.Join(", ", failed)}. Оценка может быть неточной — откройте эти разделы, чтобы посмотреть подробности.";
+                        ScanWarning = T.F("Не удалось проверить: {0}. Оценка может быть неточной — откройте эти разделы, чтобы посмотреть подробности.", string.Join(", ", failed));
                     State = DashboardScanState.Completed;
                 }
                 RaiseHero();
@@ -940,15 +944,19 @@ public sealed class DashboardViewModel : PageViewModel
 
             if (cancelled)
             {
-                Log.Info("Главная: проверка остановлена пользователем");
+                Log.Info(T._("Главная: проверка остановлена пользователем"));
             }
             else
             {
                 var problems = issues.Count(HealthScoring.IsProblem);
                 var notChecked = results.Count(r => r.State is ModuleScanState.Failed or ModuleScanState.TimedOut);
-                Log.Info($"Главная: проверка завершена — оценка {score}" +
-                         (notChecked > 0 ? $" (неполная: не проверено {Format.Count(notChecked, "раздел", "раздела", "разделов")})" : "") +
-                         ", " + (issues.Count == 0 ? "проблем не найдено" : "найдено " + HealthScoring.FindingsText(problems, issues.Count - problems)));
+                var incomplete = notChecked > 0
+                    ? " (" + T.F("неполная: не проверено {0}", Format.Count(notChecked, "раздел", "раздела", "разделов")) + ")"
+                    : "";
+                var found = issues.Count == 0
+                    ? T._("проблем не найдено")
+                    : T.F("найдено {0}", HealthScoring.FindingsText(problems, issues.Count - problems));
+                Log.Info(T.F("Главная: проверка завершена — оценка {0}{1}, {2}", score, incomplete, found));
             }
             return new ScanOutcome(cancelled, score, results);
         }
@@ -971,7 +979,7 @@ public sealed class DashboardViewModel : PageViewModel
                     row.SetResult(new ModuleScanResult(row.ModuleName, ModuleScanState.Cancelled, Array.Empty<HealthIssue>(), null, TimeSpan.Zero));
                 if (State != DashboardScanState.Scanning)
                     return;
-                ScanWarning = "Проверка прервалась из-за внутренней ошибки, оценка не обновлена. Попробуйте проверить компьютер ещё раз.";
+                ScanWarning = T._("Проверка прервалась из-за внутренней ошибки, оценка не обновлена. Попробуйте проверить компьютер ещё раз.");
                 State = DashboardScanState.Cancelled;
                 RaiseHero();
                 RaiseResults();
@@ -979,7 +987,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: не удалось восстановить состояние после ошибки проверки: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось восстановить состояние после ошибки проверки: {0}", ex.Message));
         }
     }
 
@@ -1024,7 +1032,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: не удалось сохранить результат проверки: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось сохранить результат проверки: {0}", ex.Message));
         }
     }
 
@@ -1054,7 +1062,7 @@ public sealed class DashboardViewModel : PageViewModel
         item.SearchCommand = new RelayCommand(() => FileTools.SearchWeb(issue.Title ?? ""));
         // The UAC prompt must name what actually needs the rights (this fix), not the whole check.
         item.RequestAdminCommand = new RelayCommand(
-            () => Admin.RequireElevation($"исправление «{issue.Title}»"),
+            () => Admin.RequireElevation(T.F("исправление «{0}»", issue.Title)),
             () => !Admin.IsElevated && !IsBusy);
         return item;
     }
@@ -1073,8 +1081,8 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: не удалось открыть {uri}: {ErrorText.For(ex)}");
-            Dialogs.Error("Не удалось открыть", $"{uri}\n\n{ErrorText.Sentence(ex)}");
+            Log.Warn(T.F("Главная: не удалось открыть {0}: {1}", uri, ErrorText.For(ex)));
+            Dialogs.Error(T._("Не удалось открыть"), $"{uri}\n\n{ErrorText.Sentence(ex)}");
         }
     }
 
@@ -1087,23 +1095,23 @@ public sealed class DashboardViewModel : PageViewModel
         if (IsBusy || item.IsFixing || !issue.CanFix)
             return;
 
-        if (!Dialogs.Confirm("Исправить проблему", FixConfirmText(item)))
+        if (!Dialogs.Confirm(T._("Исправить проблему"), FixConfirmText(item)))
         {
-            Log.Info($"Главная: исправление «{issue.Title}» отменено пользователем");
+            Log.Info(T.F("Главная: исправление «{0}» отменено пользователем", issue.Title));
             return;
         }
 
-        await RunBusyAsync($"Исправляем: {issue.Title}", async ct =>
+        await RunBusyAsync(T.F("Исправляем: {0}", issue.Title), async ct =>
         {
             ReportProgress(-1);
             await FixOneCoreAsync(item, ct);
         });
         AfterFixes();
         ActionSummary = issue.IsFixed
-            ? $"Исправлено: {issue.Title}. {issue.FixResult}"
+            ? T.F("Исправлено: {0}. {1}", issue.Title, issue.FixResult)
             : issue.OnlyOpensTool && !item.FixFailed
                 ? $"{issue.Title}. {issue.FixResult}"
-                : $"Не исправлено: {issue.Title}. {issue.FixResult}";
+                : T.F("Не исправлено: {0}. {1}", issue.Title, issue.FixResult);
     }
 
     /// <summary>Confirmation text of a single fix: the problem, its explanation, the expected result and who does it.</summary>
@@ -1111,23 +1119,22 @@ public sealed class DashboardViewModel : PageViewModel
     {
         var issue = item.Issue;
         var message = new StringBuilder();
-        message.AppendLine($"Проблема: {issue.Title}");
+        message.AppendLine(T.F("Проблема: {0}", issue.Title));
         if (!string.IsNullOrWhiteSpace(issue.Details))
             message.AppendLine().AppendLine(ShortenForDialog(issue.Details));
         if ((issue.OnlyOpensTool ? OpensToolText(issue) : item.GainText) is { } change)
-            message.AppendLine().AppendLine($"Что изменится: {change}");
+            message.AppendLine().AppendLine(T.F("Что изменится: {0}", change));
         message.AppendLine()
-            .AppendLine($"Исправление выполнит раздел «{issue.Module}» — только то, что описано выше. " +
-                        "Всё сделанное запишется в журнал («Настройки» → журнал действий).")
-            .AppendLine().Append("Исправить сейчас?");
+            .AppendLine(T.F("Исправление выполнит раздел «{0}» — только то, что описано выше. Всё сделанное запишется в журнал («Настройки» → журнал действий).", issue.Module))
+            .AppendLine().Append(T._("Исправить сейчас?"));
         return message.ToString();
     }
 
     /// <summary>A fix that only opens «Очистка диска» frees nothing by itself: the question says where the space is freed.</summary>
     private static string OpensToolText(HealthIssue issue)
-        => "Откроется «Очистка диска» — " + (issue.ReclaimableBytes > 0
-            ? $"освободить до {Format.Bytes(issue.ReclaimableBytes)} можно там"
-            : "освободить место можно там");
+        => issue.ReclaimableBytes > 0
+            ? T.F("Откроется «Очистка диска» — освободить до {0} можно там", Format.Bytes(issue.ReclaimableBytes))
+            : T._("Откроется «Очистка диска» — освободить место можно там");
 
     /// <summary>
     /// Keeps a message box on the screen: very long module texts are cut (the full text stays visible on the issue row).
@@ -1142,7 +1149,7 @@ public sealed class DashboardViewModel : PageViewModel
             result = result[..maxChars].TrimEnd();
             cut = true;
         }
-        return cut ? result + "…" + Environment.NewLine + "(полное описание — в строке проблемы на главной странице)" : result;
+        return cut ? result + "…" + Environment.NewLine + T._("(полное описание — в строке проблемы на главной странице)") : result;
     }
 
     /// <summary>Appended to the module's text when "Отмена" stopped a fix that then returned what it managed to do.</summary>
@@ -1169,7 +1176,7 @@ public sealed class DashboardViewModel : PageViewModel
         {
             // Task.Run: a module's fix must never block the UI thread.
             var result = await Task.Run(() => fix(ct), ct);
-            var text = string.IsNullOrWhiteSpace(result) ? "Готово." : result.Trim();
+            var text = string.IsNullOrWhiteSpace(result) ? T._("Готово.") : result.Trim();
             if (ct.IsCancellationRequested)
             {
                 // Several fixes stop early on cancellation and return a partial result instead of throwing: the
@@ -1182,44 +1189,44 @@ public sealed class DashboardViewModel : PageViewModel
             {
                 item.FixFailed = true;
                 item.RaiseNeedsAdmin();
-                Log.Warn($"Главная: «{issue.Title}» ({issue.Module}) не исправлено: {text}");
+                Log.Warn(T.F("Главная: «{0}» ({1}) не исправлено: {2}", issue.Title, issue.Module, text));
                 return false;
             }
             if (issue.OnlyOpensTool)
             {
                 // The fix only opened a tool (Disk Cleanup) where the user finishes the job: the problem is still there,
                 // so no "Исправлено", its penalty and size stay. The text stays on the row; it is not drawn as a failure.
-                Log.Info($"Главная: «{issue.Title}» ({issue.Module}) — {text}");
+                Log.Info(T.F("Главная: «{0}» ({1}) — {2}", issue.Title, issue.Module, text));
                 return false;
             }
             issue.IsFixed = true;
-            Log.Action($"Главная: исправлено «{issue.Title}» ({issue.Module}) — {text}");
+            Log.Action(T.F("Главная: исправлено «{0}» ({1}) — {2}", issue.Title, issue.Module, text));
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             if (stoppedResult is null)
             {
-                issue.FixResult = "Исправление отменено.";
+                issue.FixResult = T._("Исправление отменено.");
             }
             else
             {
-                issue.FixResult = stoppedResult + Environment.NewLine + InterruptedNote;
-                Log.Warn($"Главная: исправление «{issue.Title}» ({issue.Module}) остановлено, проблема не отмечена исправленной: {stoppedResult}");
+                issue.FixResult = stoppedResult + Environment.NewLine + T._(InterruptedNote);
+                Log.Warn(T.F("Главная: исправление «{0}» ({1}) остановлено, проблема не отмечена исправленной: {2}", issue.Title, issue.Module, stoppedResult));
             }
             item.FixFailed = true;
             throw;
         }
         catch (Exception ex)
         {
-            issue.FixResult = $"Не удалось исправить: {ErrorText.For(ex)}.";
+            issue.FixResult = T.F("Не удалось исправить: {0}.", ErrorText.For(ex));
             item.AccessDenied = ex is UnauthorizedAccessException or SecurityException;
             item.FixFailed = true;
             item.RaiseNeedsAdmin();
             if (ex is UnauthorizedAccessException or SecurityException or Win32Exception or IOException)
-                Log.Warn($"Главная: не удалось исправить «{issue.Title}» ({issue.Module}): {ex.Message}");
+                Log.Warn(T.F("Главная: не удалось исправить «{0}» ({1}): {2}", issue.Title, issue.Module, ex.Message));
             else
-                Log.Error($"Главная: ошибка при исправлении «{issue.Title}» ({issue.Module})", ex);
+                Log.Error(T.F("Главная: ошибка при исправлении «{0}» ({1})", issue.Title, issue.Module), ex);
             return false;
         }
         finally
@@ -1241,14 +1248,14 @@ public sealed class DashboardViewModel : PageViewModel
         if (items.Count == 0)
             return null;
 
-        if (!Dialogs.Confirm("Исправить всё", FixAllConfirmText(items)))
+        if (!Dialogs.Confirm(T._("Исправить всё"), FixAllConfirmText(items)))
         {
-            Log.Info("Главная: «Исправить всё» отменено пользователем");
+            Log.Info(T._("Главная: «Исправить всё» отменено пользователем"));
             return null;
         }
 
         FixBatchResult? batch = null;
-        await RunBusyAsync("Исправляем…", async ct =>
+        await RunBusyAsync(T._("Исправляем…"), async ct =>
         {
             int ok = 0, failed = 0, needAdmin = 0;
             long freed = 0;
@@ -1257,14 +1264,14 @@ public sealed class DashboardViewModel : PageViewModel
             IssueItem? running = null;
             try
             {
-                ReportProgress(-1, "Создаём точку восстановления…");
-                await CreateRestorePointAsync("Исправления с главной страницы", ct);
+                ReportProgress(-1, T._("Создаём точку восстановления…"));
+                await CreateRestorePointAsync(T._("Исправления с главной страницы"), ct);
 
                 for (var i = 0; i < items.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
                     var item = items[i];
-                    ReportProgress(100.0 * i / items.Count, $"Исправляем ({i + 1} из {items.Count}): {item.Issue.Title}");
+                    ReportProgress(100.0 * i / items.Count, T.F("Исправляем ({0} из {1}): {2}", i + 1, items.Count, item.Issue.Title));
                     running = item;
                     var fixedOk = await FixOneCoreAsync(item, ct);
                     running = null;
@@ -1301,11 +1308,11 @@ public sealed class DashboardViewModel : PageViewModel
         {
             var text = BatchSummaryText(batch);
             ActionSummary = text;
-            Log.Info("Главная: " + text);
-            Dialogs.Info(batch.Cancelled ? "Исправление остановлено" : "Исправление завершено", text);
+            Log.Info(T.F("Главная: {0}", text));
+            Dialogs.Info(batch.Cancelled ? T._("Исправление остановлено") : T._("Исправление завершено"), text);
             // The rights are asked for once, after the summary: the restart closes the program.
             if (batch.NeedAdmin > 0 && !Admin.IsElevated)
-                RequestElevation("исправления, которым нужны права администратора");
+                RequestElevation(T._("исправления, которым нужны права администратора"));
         }
         return batch;
     }
@@ -1321,8 +1328,8 @@ public sealed class DashboardViewModel : PageViewModel
         const int maxListLines = 20;
         var message = new StringBuilder();
         message.AppendLine(items.Count == 1
-            ? "Будет исправлено:"
-            : $"Будут исправлены проблемы ({items.Count}):");
+            ? T._("Будет исправлено:")
+            : T.F("Будут исправлены проблемы ({0}):", items.Count));
         message.AppendLine();
         var detailed = items.SelectMany(FixAllLines).ToList();
         if (detailed.Count <= maxListLines)
@@ -1336,15 +1343,13 @@ public sealed class DashboardViewModel : PageViewModel
             {
                 message.AppendLine($"• {module.Key} ({module.Count()}): " + string.Join("; ", module.Select(i => i.Issue.Title)));
                 foreach (var issue in module.Select(i => i.Issue).Where(i => !string.IsNullOrWhiteSpace(i.Consequence)))
-                    message.AppendLine($"  Важно: {issue.Title} — {issue.Consequence!.Trim()}");
+                    message.AppendLine("  " + T.F("Важно: {0} — {1}", issue.Title, issue.Consequence!.Trim()));
             }
         }
         message.AppendLine()
             .AppendLine(FixAllEffectsText(items))
-            .AppendLine("Перед изменениями программа попробует создать точку восстановления Windows (если это включено " +
-                        "в настройках и есть права администратора). Если в Windows выключена защита системы, точка не " +
-                        "создаётся — программа её не включает сама. Всё сделанное запишется в журнал.")
-            .AppendLine().Append("Продолжить?");
+            .AppendLine(T._("Перед изменениями программа попробует создать точку восстановления Windows (если это включено в настройках и есть права администратора). Если в Windows выключена защита системы, точка не создаётся — программа её не включает сама. Всё сделанное запишется в журнал."))
+            .AppendLine().Append(T._("Продолжить?"));
         return message.ToString();
     }
 
@@ -1357,7 +1362,7 @@ public sealed class DashboardViewModel : PageViewModel
             : $" → {issue.FixLabel.Trim()}";
         yield return $"• {issue.Title}{action}" + (item.GainText is { } g ? $" — {g}" : "") + $" ({issue.Module})";
         if (!string.IsNullOrWhiteSpace(issue.Consequence))
-            yield return "  Важно: " + issue.Consequence.Trim();
+            yield return "  " + T.F("Важно: {0}", issue.Consequence.Trim());
     }
 
     /// <summary>What happens to files and settings — only for the kinds of fixes in the batch — and what is never in it.</summary>
@@ -1366,35 +1371,34 @@ public sealed class DashboardViewModel : PageViewModel
         var kinds = items.Select(i => i.Issue.FixKind).ToHashSet();
         var sentences = new List<string>();
         if (kinds.Contains(FixKind.DeletesJunk))
-            sentences.Add("Временные файлы и кэш удаляются насовсем — документы, пароли и история браузеров не затрагиваются.");
+            sentences.Add(T._("Временные файлы и кэш удаляются насовсем — документы, пароли и история браузеров не затрагиваются."));
         if (kinds.Contains(FixKind.MovesToRecycleBin))
-            sentences.Add("Файлы из «Загрузок» уходят в Корзину — их можно восстановить.");
+            sentences.Add(T._("Файлы из «Загрузок» уходят в Корзину — их можно восстановить."));
         if (kinds.Contains(FixKind.Settings))
-            sentences.Add("Изменённые настройки Windows можно вернуть обратно.");
-        sentences.Add("Удаление программ, очистка Корзины и перезагрузка сюда не входят — для них есть отдельные кнопки.");
+            sentences.Add(T._("Изменённые настройки Windows можно вернуть обратно."));
+        sentences.Add(T._("Удаление программ, очистка Корзины и перезагрузка сюда не входят — для них есть отдельные кнопки."));
         return string.Join(" ", sentences);
     }
 
     internal static string BatchSummaryText(FixBatchResult r)
     {
         if (r.Cancelled && r.Fixed == 0 && r.Failed == 0 && !r.Interrupted)
-            return "Исправление отменено — ничего не изменено.";
+            return T._("Исправление отменено — ничего не изменено.");
         var sb = new StringBuilder();
         sb.Append(r.Fixed == r.Total
-            ? $"Исправлено {HealthScoring.ProblemsText(r.Fixed)}."
-            : $"Исправлено {r.Fixed} из {r.Total}.");
+            ? T.F("Исправлено {0}.", HealthScoring.ProblemsText(r.Fixed))
+            : T.F("Исправлено {0} из {1}.", r.Fixed, r.Total));
         if (r.FreedBytes > 0)
-            sb.Append($" Освобождено примерно {Format.Bytes(r.FreedBytes)}.");
+            sb.Append(' ').Append(T.F("Освобождено примерно {0}.", Format.Bytes(r.FreedBytes)));
         if (r.Failed > 0)
-            sb.Append($" Не получилось: {r.Failed} — причина указана в строке проблемы.");
+            sb.Append(' ').Append(T.F("Не получилось: {0} — причина указана в строке проблемы.", r.Failed));
         if (r.NeedAdmin > 0)
-            sb.Append($" Для {r.NeedAdmin} нужны права администратора.");
+            sb.Append(' ').Append(T.F("Для {0} нужны права администратора.", r.NeedAdmin));
         if (r.Interrupted)
-            sb.Append(" Исправление, которое шло в момент отмены, остановлено на середине — часть изменений могла " +
-                      "успеть выполниться (подробности — в строке проблемы).");
+            sb.Append(' ').Append(T._("Исправление, которое шло в момент отмены, остановлено на середине — часть изменений могла успеть выполниться (подробности — в строке проблемы)."));
         if (r.Cancelled && r.Fixed + r.Failed + (r.Interrupted ? 1 : 0) < r.Total)
-            sb.Append(" Остальные исправления отменены.");
-        sb.Append(" Нажмите «Проверить снова», чтобы обновить оценку.");
+            sb.Append(' ').Append(T._("Остальные исправления отменены."));
+        sb.Append(' ').Append(T._("Нажмите «Проверить снова», чтобы обновить оценку."));
         return sb.ToString();
     }
 
@@ -1472,7 +1476,7 @@ public sealed class DashboardViewModel : PageViewModel
         var path = PickReportPath(ReportBuilder.DefaultFileName(Now()));
         if (string.IsNullOrWhiteSpace(path))
         {
-            Log.Info("Главная: сохранение отчёта отменено");
+            Log.Info(T._("Главная: сохранение отчёта отменено"));
             return null;
         }
 
@@ -1488,28 +1492,26 @@ public sealed class DashboardViewModel : PageViewModel
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException
                                        or NotSupportedException or ArgumentException)
         {
-            Log.Warn($"Главная: не удалось сохранить отчёт в «{path}»: {ex.Message}");
-            SetReportStatus("Отчёт не сохранён — выберите другую папку", ok: false);
-            Dialogs.Error("Не удалось сохранить отчёт",
-                $"{path}\n\n{ErrorText.Sentence(ex)}\n\nПопробуйте сохранить отчёт в другую папку, например в «Документы».");
+            Log.Warn(T.F("Главная: не удалось сохранить отчёт в «{0}»: {1}", path, ex.Message));
+            SetReportStatus(T._("Отчёт не сохранён — выберите другую папку"), ok: false);
+            Dialogs.Error(T._("Не удалось сохранить отчёт"),
+                T.F("{0}\n\n{1}\n\nПопробуйте сохранить отчёт в другую папку, например в «Документы».", path, ErrorText.Sentence(ex)));
             return null;
         }
 
-        Log.Action($"Главная: отчёт о проверке сохранён — {path}");
-        SetReportStatus("Отчёт сохранён", toolTip: path);
-        ActionSummary = $"Отчёт о проверке сохранён: {path}";
+        Log.Action(T.F("Главная: отчёт о проверке сохранён — {0}", path));
+        SetReportStatus(T._("Отчёт сохранён"), toolTip: path);
+        ActionSummary = T.F("Отчёт о проверке сохранён: {0}", path);
         if (!IsHtmlFile(path))
         {
             // The user typed another extension (.txt, .bat, ...): never hand such a file to the shell — it would not
             // open in a browser and could even be run as a script (issue details contain program paths).
-            Dialogs.Info("Отчёт сохранён",
-                $"Отчёт о проверке сохранён в файл:\n{path}\n\nЭто веб-страница: чтобы открыть её в браузере, " +
-                "сохраните отчёт с расширением .html.");
+            Dialogs.Info(T._("Отчёт сохранён"),
+                T.F("Отчёт о проверке сохранён в файл:\n{0}\n\nЭто веб-страница: чтобы открыть её в браузере, сохраните отчёт с расширением .html.", path));
             return path;
         }
-        if (Dialogs.Ask("Отчёт сохранён",
-                $"Отчёт о проверке сохранён в файл:\n{path}\n\nЕго можно открыть в любом браузере, распечатать или отправить. " +
-                "Открыть отчёт в браузере?"))
+        if (Dialogs.Ask(T._("Отчёт сохранён"),
+                T.F("Отчёт о проверке сохранён в файл:\n{0}\n\nЕго можно открыть в любом браузере, распечатать или отправить. Открыть отчёт в браузере?", path)))
             ProcessRunner.ShellOpen(path);
         return path;
     }
@@ -1531,16 +1533,15 @@ public sealed class DashboardViewModel : PageViewModel
         catch (Exception ex)
         {
             // Another program may hold the clipboard open (CLIPBRD_E_CANT_OPEN) — an environment problem, not a bug.
-            Log.Warn($"Главная: не удалось скопировать отчёт в буфер обмена: {ex.Message}");
-            SetReportStatus("Буфер обмена занят — попробуйте ещё раз", ok: false);
-            Dialogs.Error("Не удалось скопировать отчёт",
-                "Буфер обмена сейчас занят другой программой. Подождите пару секунд и нажмите «Скопировать отчёт» ещё раз " +
-                "или сохраните отчёт в файл.");
+            Log.Warn(T.F("Главная: не удалось скопировать отчёт в буфер обмена: {0}", ex.Message));
+            SetReportStatus(T._("Буфер обмена занят — попробуйте ещё раз"), ok: false);
+            Dialogs.Error(T._("Не удалось скопировать отчёт"),
+                T._("Буфер обмена сейчас занят другой программой. Подождите пару секунд и нажмите «Скопировать отчёт» ещё раз или сохраните отчёт в файл."));
             return false;
         }
 
-        Log.Info("Главная: отчёт о проверке скопирован в буфер обмена");
-        SetReportStatus("Отчёт скопирован — вставьте его клавишами Ctrl+V");
+        Log.Info(T._("Главная: отчёт о проверке скопирован в буфер обмена"));
+        SetReportStatus(T._("Отчёт скопирован — вставьте его клавишами Ctrl+V"));
         return true;
     }
 
@@ -1556,11 +1557,11 @@ public sealed class DashboardViewModel : PageViewModel
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Сохранить отчёт о проверке",
+            Title = T._("Сохранить отчёт о проверке"),
             FileName = defaultFileName,
             DefaultExt = ".html",
             AddExtension = true,
-            Filter = "Веб-страница HTML (*.html)|*.html",
+            Filter = T._("Веб-страница HTML (*.html)|*.html"),
             OverwritePrompt = true,
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         };
@@ -1578,7 +1579,7 @@ public sealed class DashboardViewModel : PageViewModel
         var navigator = AppServices.Navigator;
         if (navigator is null)
         {
-            Log.Warn($"Главная: навигация недоступна (страница «{key}»)");
+            Log.Warn(T.F("Главная: навигация недоступна (страница «{0}»)", key));
             return;
         }
         navigator.NavigateTo(key);
@@ -1593,7 +1594,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось скопировать в буфер обмена: {ex.Message}");
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
         }
     }
 }
