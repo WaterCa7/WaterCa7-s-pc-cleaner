@@ -46,6 +46,19 @@ public partial class App : Application
         Log.Info($"Запуск WaterCa7s PC Cleaner {typeof(App).Assembly.GetName().Version?.ToString(3)}" +
                  (Admin.IsElevated ? " (администратор)" : ""));
 
+        // Always as administrator (Настройки can switch it off): restart elevated before anything else happens, so the
+        // update below is installed and started by the elevated copy and no second question is asked. «Нет» in the Windows
+        // prompt keeps this process: the program opens with limited rights, as it always did.
+        if (StartupElevation.ShouldElevate(Admin.IsElevated, AppServices.Settings.RunAsAdmin, ScreenshotDir is not null, e.Args))
+        {
+            if (StartupElevation.TryRelaunchElevated(e.Args, StartupElevation.Start))
+            {
+                Shutdown();
+                return;
+            }
+            Log.Info("Программа открыта без прав администратора: часть проверок и исправлений недоступна");
+        }
+
         // Install an already downloaded update before any window appears; the new version starts and this one exits.
         if (ScreenshotDir is null && UpdatedFrom is null && AppServices.Updates.TryInstallStaged(e.Args))
         {
@@ -80,15 +93,17 @@ public partial class App : Application
 
         window.Show();
 
+        // Screenshot mode never starts the splash: it must not be visible or blur anything there. Right after an update the
+        // new version only cleans up; otherwise the splash looks for a newer version while the window is still blurred.
         if (ScreenshotDir is null)
         {
             _ = UpdatedFrom is not null
                 ? AppServices.Updates.CompleteUpdateAsync(UpdatedFrom)
-                : AppServices.Updates.CheckAsync(manual: false, CancellationToken.None);
+                : vm.Splash.RunAsync(CancellationToken.None);
         }
     }
 
-    private static void ParseArgs(string[] args)
+    internal static void ParseArgs(string[] args)
     {
         for (var i = 0; i < args.Length; i++)
         {
@@ -106,6 +121,8 @@ public partial class App : Application
                 case UpdateService.UpdatedFromArg when i + 1 < args.Length:
                     UpdatedFrom = args[++i];
                     break;
+                case StartupElevation.ElevatedRestartArg:
+                    break; // our own restart with rights: only StartupElevation.ShouldElevate looks at it
                 case "--size" when i + 1 < args.Length:
                     var parts = args[++i].ToLowerInvariant().Split('x');
                     if (parts.Length == 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h) && w > 200 && h > 200)

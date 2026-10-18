@@ -13,145 +13,163 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display">
 
-    <Grid x:Name="Root" Background="{StaticResource BackgroundBrush}">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="236" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+    <Grid x:Name="Shell">
+        <Grid x:Name="Root" Background="{StaticResource BackgroundBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="236" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-        <!-- ===== Sidebar ===== -->
-        <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,22,20,22">
-                    <!-- The app icon (a drop with cat ears), same 100x100 drawing as tools/make-icon.ps1. -->
-                    <Viewbox Width="38" Height="38">
-                        <Canvas Width="100" Height="100">
-                            <Rectangle Width="100" Height="100" RadiusX="22" RadiusY="22" Fill="{StaticResource AccentBrush}" />
-                            <Path Data="M27,18 L40,35 Q50,31 60,35 L73,18 L75,45 C80,52 78,58 78,62 A28,28 0 0 1 22,62 C22,58 20,52 25,45 Z"
-                                  Fill="{StaticResource AccentTextBrush}" />
-                            <Ellipse Canvas.Left="36" Canvas.Top="54" Width="8" Height="12" Fill="{StaticResource AccentBrush}" />
-                            <Ellipse Canvas.Left="56" Canvas.Top="54" Width="8" Height="12" Fill="{StaticResource AccentBrush}" />
-                        </Canvas>
-                    </Viewbox>
-                    <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="WaterCa7s" FontWeight="Bold" FontSize="15.5" />
-                        <TextBlock Text="PC Cleaner" Foreground="{StaticResource MutedBrush}" FontSize="12" />
-                    </StackPanel>
-                </StackPanel>
-
-                <Border DockPanel.Dock="Bottom" Margin="14,6,14,14" Style="{StaticResource InnerCard}" Padding="12,10">
-                    <StackPanel>
-                        <DockPanel ToolTipService.InitialShowDelay="300">
-                            <DockPanel.ToolTip>
-                                <TextBlock MaxWidth="320" TextWrapping="Wrap"
-                                           Text="Без прав администратора программа всё проверяет, но часть действий недоступна: системные папки, службы, раздел реестра HKLM, брандмауэр и другие настройки Windows." />
-                            </DockPanel.ToolTip>
-                            <!-- Without admin rights is the normal mode, not an error: blue dot, green with admin rights. -->
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center">
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{StaticResource InfoBrush}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsAdmin}" Value="True">
-                                                <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock Text="{Binding AdminText}" Margin="8,0,6,0" FontSize="12.5" FontWeight="SemiBold"
-                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                        </DockPanel>
-                        <Button Command="{Binding RestartAsAdminCommand}" Margin="0,8,0,0"
-                                Padding="10,5" FontSize="12" HorizontalAlignment="Stretch"
-                                AutomationProperties.Name="Перезапустить от имени администратора"
-                                ToolTip="Перезапустить программу с правами администратора — откроется окно контроля учётных записей"
-                                Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
-                            <TextBlock Text="Перезапустить от имени администратора" TextWrapping="Wrap" TextAlignment="Center" />
-                        </Button>
-                    </StackPanel>
-                </Border>
-
-                <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
-                         ItemContainerStyle="{StaticResource NavItem}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource Icon}" Text="{Binding IconGlyph}"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
-                                <TextBlock Text="{Binding Title}" Margin="13,0,0,0" FontSize="13.5" VerticalAlignment="Center"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </DockPanel>
-        </Border>
-
-        <!-- ===== Content ===== -->
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <StackPanel Margin="32,24,32,10">
-                <TextBlock Style="{StaticResource H1}" Text="{Binding SelectedPage.Title}" />
-                <TextBlock Style="{StaticResource Muted}" FontSize="13" Margin="0,4,0,0" Text="{Binding SelectedPage.Subtitle}" />
-                <!-- The program runs under another account than the signed-in user (e.g. an administrator's password was
-                     typed on a standard account): per-user checks then look at that account's profile. -->
-                <Border Margin="0,10,0,0" Padding="10,7" CornerRadius="6" Background="{StaticResource WarningSoftBrush}"
-                        Visibility="{Binding HasOtherAccountWarning, Converter={StaticResource BoolToVis}}">
-                    <DockPanel>
-                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="14" Foreground="{StaticResource WarningBrush}"
-                                   VerticalAlignment="Top" Margin="0,1,8,0" />
-                        <TextBlock Text="{Binding OtherAccountWarning}" TextWrapping="Wrap" FontSize="12.5" />
-                    </DockPanel>
-                </Border>
-                <!-- Update strip: downloaded / installed / needs a manual download (Core/Updates/UpdateBanner). -->
-                <Border Margin="0,10,0,0" Padding="10,6" CornerRadius="6" Background="{StaticResource AccentSoftBrush}"
-                        Visibility="{Binding ShowUpdateBanner, Converter={StaticResource BoolToVis}}">
-                    <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="10" Padding="8,5"
-                                Margin="6,0,0,0" ToolTip="Скрыть" Command="{Binding DismissUpdateBannerCommand}" />
-                        <Button DockPanel.Dock="Right" Content="{Binding UpdateBannerAction}" Padding="12,4" Margin="12,0,0,0"
-                                Command="{Binding UpdateBannerCommand}" />
-                        <TextBlock Style="{StaticResource Icon}" Text="&#xE895;" FontSize="14" Foreground="{StaticResource AccentBrush}"
-                                   VerticalAlignment="Center" Margin="0,0,8,0" />
-                        <TextBlock Text="{Binding UpdateBannerText}" TextWrapping="Wrap" FontSize="12.5" VerticalAlignment="Center" />
-                    </DockPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Shared busy strip for the current page -->
-            <Border Grid.Row="1" Margin="32,0,32,8" Style="{StaticResource InnerCard}" Padding="12,8"
-                    Visibility="{Binding SelectedPage.IsBusy, Converter={StaticResource BoolToVis}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SelectedPage.BusyText}" FontSize="12.5" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
-                        <ProgressBar Value="{Binding SelectedPage.Progress, Mode=OneWay}" Maximum="100"
-                                     IsIndeterminate="{Binding SelectedPage.IsProgressIndeterminate, Mode=OneWay}" />
-                    </StackPanel>
-                    <Button Grid.Column="1" Content="Отмена" Margin="12,0,0,0" Padding="12,5"
-                            Command="{Binding SelectedPage.CancelCommand}" />
-                </Grid>
-            </Border>
-
-            <ContentControl Grid.Row="2" Margin="32,4,32,16" Content="{Binding SelectedPage}" Focusable="False" />
-
-            <Border Grid.Row="3" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="32,7">
+            <!-- ===== Sidebar ===== -->
+            <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"><Run Text="{Binding VersionText, Mode=OneWay}" /><Run Text=" · Сделано для WaterCa7" /></TextBlock>
-                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" FontSize="11.5" TextTrimming="CharacterEllipsis"
-                               TextWrapping="NoWrap" />
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,22,20,22">
+                        <!-- The app icon (a drop with cat ears): the AppLogo resource in Themes/Theme.xaml. -->
+                        <Image Source="{StaticResource AppLogo}" Width="38" Height="38" />
+                        <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="WaterCa7s" FontWeight="Bold" FontSize="15.5" />
+                            <TextBlock Text="PC Cleaner" Foreground="{StaticResource MutedBrush}" FontSize="12" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border DockPanel.Dock="Bottom" Margin="14,6,14,14" Style="{StaticResource InnerCard}" Padding="12,10">
+                        <StackPanel>
+                            <DockPanel ToolTipService.InitialShowDelay="300">
+                                <DockPanel.ToolTip>
+                                    <TextBlock MaxWidth="320" TextWrapping="Wrap"
+                                               Text="Без прав администратора программа всё проверяет, но часть действий недоступна: системные папки, службы, раздел реестра HKLM, брандмауэр и другие настройки Windows." />
+                                </DockPanel.ToolTip>
+                                <!-- Without admin rights is the normal mode, not an error: blue dot, green with admin rights. -->
+                                <Ellipse Width="8" Height="8" VerticalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource InfoBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsAdmin}" Value="True">
+                                                    <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding AdminText}" Margin="8,0,6,0" FontSize="12.5" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <Button Command="{Binding RestartAsAdminCommand}" Margin="0,8,0,0"
+                                    Padding="10,5" FontSize="12" HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="Перезапустить от имени администратора"
+                                    ToolTip="Перезапустить программу с правами администратора — откроется окно контроля учётных записей"
+                                    Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                                <TextBlock Text="Перезапустить от имени администратора" TextWrapping="Wrap" TextAlignment="Center" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+                             ItemContainerStyle="{StaticResource NavItem}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="{Binding IconGlyph}"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                    <TextBlock Text="{Binding Title}" Margin="13,0,0,0" FontSize="13.5" VerticalAlignment="Center"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </DockPanel>
             </Border>
+
+            <!-- ===== Content ===== -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Margin="32,24,32,10">
+                    <TextBlock Style="{StaticResource H1}" Text="{Binding SelectedPage.Title}" />
+                    <TextBlock Style="{StaticResource Muted}" FontSize="13" Margin="0,4,0,0" Text="{Binding SelectedPage.Subtitle}" />
+                    <!-- The program runs under another account than the signed-in user (e.g. an administrator's password was
+                         typed on a standard account): per-user checks then look at that account's profile. -->
+                    <Border Margin="0,10,0,0" Padding="10,7" CornerRadius="6" Background="{StaticResource WarningSoftBrush}"
+                            Visibility="{Binding HasOtherAccountWarning, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="14" Foreground="{StaticResource WarningBrush}"
+                                       VerticalAlignment="Top" Margin="0,1,8,0" />
+                            <TextBlock Text="{Binding OtherAccountWarning}" TextWrapping="Wrap" FontSize="12.5" />
+                        </DockPanel>
+                    </Border>
+                    <!-- Update strip: downloaded / installed / needs a manual download (Core/Updates/UpdateBanner). -->
+                    <Border Margin="0,10,0,0" Padding="10,6" CornerRadius="6" Background="{StaticResource AccentSoftBrush}"
+                            Visibility="{Binding ShowUpdateBanner, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="10" Padding="8,5"
+                                    Margin="6,0,0,0" ToolTip="Скрыть" Command="{Binding DismissUpdateBannerCommand}" />
+                            <Button DockPanel.Dock="Right" Content="{Binding UpdateBannerAction}" Padding="12,4" Margin="12,0,0,0"
+                                    Command="{Binding UpdateBannerCommand}" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE895;" FontSize="14" Foreground="{StaticResource AccentBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding UpdateBannerText}" TextWrapping="Wrap" FontSize="12.5" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Shared busy strip for the current page -->
+                <Border Grid.Row="1" Margin="32,0,32,8" Style="{StaticResource InnerCard}" Padding="12,8"
+                        Visibility="{Binding SelectedPage.IsBusy, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding SelectedPage.BusyText}" FontSize="12.5" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+                            <ProgressBar Value="{Binding SelectedPage.Progress, Mode=OneWay}" Maximum="100"
+                                         IsIndeterminate="{Binding SelectedPage.IsProgressIndeterminate, Mode=OneWay}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Отмена" Margin="12,0,0,0" Padding="12,5"
+                                Command="{Binding SelectedPage.CancelCommand}" />
+                    </Grid>
+                </Border>
+
+                <ContentControl Grid.Row="2" Margin="32,4,32,16" Content="{Binding SelectedPage}" Focusable="False" />
+
+                <Border Grid.Row="3" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="32,7">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"><Run Text="{Binding VersionText, Mode=OneWay}" /><Run Text=" · Сделано для WaterCa7" /></TextBlock>
+                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" FontSize="11.5" TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap" />
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- ===== Startup splash (Core/Updates/SplashViewModel) =====
+             Over the blurred window while the program looks for a newer version. Collapsed by default, so screenshots and
+             everything else never see it; MainWindow.xaml.cs shows it, blurs Root and fades both out. -->
+        <Grid x:Name="SplashOverlay" Visibility="Collapsed" Focusable="True" FocusVisualStyle="{x:Null}"
+              KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
+            <Grid.Background>
+                <SolidColorBrush Color="{StaticResource BackgroundColor}" Opacity="0.35" />
+            </Grid.Background>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
+                <Image Source="{StaticResource AppLogo}" Width="120" Height="120" />
+                <TextBlock Text="WaterCa7s PC Cleaner" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,22,0,0" />
+                <TextBlock Style="{StaticResource Muted}" Text="{Binding Splash.StatusText}" FontSize="13" TextAlignment="Center"
+                           Margin="0,8,0,0" />
+                <!-- Fixed height: the logo and the texts stay put when the bar and «Пропустить» appear. -->
+                <StackPanel Height="90" Margin="0,16,0,0">
+                    <ProgressBar Maximum="1" Value="{Binding Splash.Progress, Mode=OneWay}" Margin="48,0"
+                                 Visibility="{Binding Splash.ShowProgress, Converter={StaticResource BoolToVis}}" />
+                    <Button Content="Пропустить" Command="{Binding Splash.SkipCommand}" HorizontalAlignment="Center" Margin="0,22,0,0"
+                            Padding="20,7" ToolTip="Открыть программу сразу; обновление установится при следующем запуске"
+                            Visibility="{Binding Splash.CanSkip, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

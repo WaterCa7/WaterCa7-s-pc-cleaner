@@ -41,6 +41,8 @@ public sealed class MainViewModel : ObservableObject, INavigator
         // Admin.RestartElevated itself asks first when any page is busy (one guard for every restart button and prompt).
         RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated);
         Updates = AppServices.Updates;
+        Splash = new SplashViewModel(Updates, Environment.GetCommandLineArgs().Skip(1).ToList(),
+            () => System.Windows.Application.Current.Shutdown());
         Updates.PropertyChanged += (_, _) => OnUpdateBannerChanged();
         UpdateBannerCommand = new RelayCommand(RunUpdateBannerAction);
         DismissUpdateBannerCommand = new RelayCommand(() =>
@@ -90,6 +92,9 @@ public sealed class MainViewModel : ObservableObject, INavigator
     public RelayCommand RestartAsAdminCommand { get; }
 
     public UpdateService Updates { get; }
+
+    /// <summary>The startup splash over the blurred window; App starts it, screenshot mode never does.</summary>
+    public SplashViewModel Splash { get; }
 
     private UpdateBanner? Banner => _updateBannerDismissed ? null : UpdateBanner.For(Updates.State, Updates.Manifest, Updates.CurrentVersion);
 

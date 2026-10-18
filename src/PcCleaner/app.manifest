@@ -4,7 +4,7 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <!-- Starts without elevation; the app offers "restart as administrator" for full access. -->
+        <!-- Starts without elevation; StartupElevation restarts the app as administrator (Windows asks), unless Settings turn it off or the user says no. -->
         <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>

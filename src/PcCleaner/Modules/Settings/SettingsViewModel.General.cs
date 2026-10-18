@@ -7,6 +7,7 @@ namespace PcCleaner.Modules.Settings;
 public sealed partial class SettingsViewModel
 {
     private bool _createRestorePoint = true;
+    private bool _runAsAdmin = true;
     private List<AgeOption> _ageOptions = SettingsLogic.BuildAgeOptions(SettingsLogic.DefaultMinAgeHours);
     private AgeOption? _selectedAgeOption;
     private ObservableCollection<string> _exclusions = new();
@@ -29,6 +30,24 @@ public sealed partial class SettingsViewModel
                 : "Настройки: точка восстановления перед изменениями системы — выключено");
         }
     }
+
+    /// <summary>«Запускать с правами администратора»: the program restarts itself elevated at every start (<see cref="StartupElevation"/>).</summary>
+    public bool RunAsAdmin
+    {
+        get => _runAsAdmin;
+        set
+        {
+            if (!Set(ref _runAsAdmin, value) || _loadingGeneral)
+                return;
+            Settings.RunAsAdmin = value;
+            SaveSettings(value
+                ? "Настройки: запуск с правами администратора — включён"
+                : "Настройки: запуск с правами администратора — выключен");
+        }
+    }
+
+    public string RunAsAdminHint =>
+        "Windows будет спрашивать разрешение при каждом запуске; без прав часть проверок и исправлений недоступна.";
 
     public List<AgeOption> AgeOptions
     {
@@ -147,6 +166,8 @@ public sealed partial class SettingsViewModel
             // Backing fields + explicit notifications: loading must never trigger a save.
             _createRestorePoint = s.CreateRestorePoint;
             OnPropertyChanged(nameof(CreateRestorePoint));
+            _runAsAdmin = s.RunAsAdmin;
+            OnPropertyChanged(nameof(RunAsAdmin));
             _autoUpdate = s.AutoUpdate;
             OnPropertyChanged(nameof(AutoUpdate));
             OnPropertyChanged(nameof(LastCheckText));
