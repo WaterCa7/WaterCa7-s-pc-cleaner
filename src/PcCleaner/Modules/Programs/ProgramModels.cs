@@ -160,6 +160,43 @@ public sealed class InstalledProgram : ObservableObject
     /// <summary>"Тихое удаление" is never offered for runtimes: removing one without any window is too easy to regret.</summary>
     public bool ShowQuietUninstall => CanQuietUninstall && !IsRuntime;
 
+    // ---- checkbox ("Удалить отмеченные") ----
+
+    /// <summary>
+    /// The page's checked programs, by <see cref="CheckKey"/> (null for programs made outside the page, which then stay unchecked).
+    /// A rescan builds new objects for the same entries: they read their check from here, so the checks survive it.
+    /// </summary>
+    internal CheckedSet<string>? Checks { get; set; }
+
+    /// <summary>The registry key, upper-cased: registry keys are case-insensitive, the checked set is not.</summary>
+    internal string CheckKey => RegistryKeyPath.ToUpperInvariant();
+
+    /// <summary>Runtimes are never removed in a batch: other programs need them, so they are removed one by one, with the warning.</summary>
+    public bool CanCheck => !IsRuntime;
+
+    /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
+    public string? CheckTooltip => CanCheck
+        ? null
+        : "Компоненты .NET, Visual C++ и т. п. нужны другим программам — удаляйте их по одной";
+
+    public bool IsChecked
+    {
+        get => Checks?.IsChecked(CheckKey) == true;
+        set
+        {
+            // A runtime is never checked: its checkbox is disabled, and code that sets it is refused too.
+            if (Checks is null || (value && !CanCheck))
+            {
+                OnPropertyChanged();
+                return;
+            }
+            Checks.Set(CheckKey, value);
+        }
+    }
+
+    /// <summary>The page's checked set changed: the checkbox reads it again.</summary>
+    internal void OnCheckedChanged() => OnPropertyChanged(nameof(IsChecked));
+
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
 
     public string PublisherText => HasPublisher ? Publisher!.Trim() : "Не указан";
@@ -410,6 +447,41 @@ public sealed class StoreApp : ObservableObject
     public bool IsProtected => Kind == StoreAppKind.Protected;
 
     public bool CanRemove => Kind != StoreAppKind.Protected;
+
+    // ---- checkbox ("Удалить отмеченные") ----
+
+    /// <summary>
+    /// The page's checked apps, by <see cref="CheckKey"/> (null for apps made outside the page, which then stay unchecked).
+    /// A rescan builds new objects for the same packages: they read their check from here, so the checks survive it.
+    /// </summary>
+    internal CheckedSet<string>? Checks { get; set; }
+
+    /// <summary>The package full name, upper-cased: Windows compares package names without case, the checked set does not.</summary>
+    internal string CheckKey => PackageFullName.ToUpperInvariant();
+
+    /// <summary>Only what may be removed can be checked: apps Windows needs never are.</summary>
+    public bool CanCheck => CanRemove;
+
+    /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
+    public string? CheckTooltip => CanCheck ? null : ProtectReason ?? "Это приложение нужно Windows — удалять его не стоит.";
+
+    public bool IsChecked
+    {
+        get => Checks?.IsChecked(CheckKey) == true;
+        set
+        {
+            // A protected app is never checked: its checkbox is disabled, and code that sets it is refused too.
+            if (Checks is null || (value && !CanCheck))
+            {
+                OnPropertyChanged();
+                return;
+            }
+            Checks.Set(CheckKey, value);
+        }
+    }
+
+    /// <summary>The page's checked set changed: the checkbox reads it again.</summary>
+    internal void OnCheckedChanged() => OnPropertyChanged(nameof(IsChecked));
 
     public string VersionText => string.IsNullOrWhiteSpace(Version) ? "—" : Version!;
 

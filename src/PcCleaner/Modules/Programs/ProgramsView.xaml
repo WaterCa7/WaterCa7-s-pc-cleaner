@@ -4,6 +4,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Programs"
+             xmlns:controls="clr-namespace:PcCleaner.Core.Controls"
+             x:Name="Root"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:ProgramsViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700"
@@ -466,7 +468,24 @@
 
                         <Border Style="{StaticResource Card}" Padding="4,4,4,4">
                             <Grid>
-                                <DataGrid x:Name="ProgramsGrid" ItemsSource="{Binding ProgramsView}"
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <!-- "Отмечено: N · Удалить отмеченные · Снять отметки" while any program is checked -->
+                                <controls:BulkActionBar Margin="2,2,2,4" CheckedCount="{Binding CheckedProgramsCount}"
+                                                        ClearCommand="{Binding ClearProgramChecksCommand}">
+                                    <controls:BulkActionBar.ActionsContent>
+                                        <WrapPanel>
+                                            <Button Style="{StaticResource DangerButton}" Padding="12,6" Margin="0,2,8,2" Content="Удалить отмеченные"
+                                                    Command="{Binding UninstallCheckedCommand}"
+                                                    ToolTip="Удалить отмеченные программы по очереди: без окон, если программа это умеет, иначе её собственным деинсталлятором. Перед этим программа спросит подтверждение." />
+                                        </WrapPanel>
+                                    </controls:BulkActionBar.ActionsContent>
+                                </controls:BulkActionBar>
+
+                                <DataGrid x:Name="ProgramsGrid" Grid.Row="1" ItemsSource="{Binding ProgramsView}"
                                           SelectedItem="{Binding SelectedProgram, Mode=TwoWay}"
                                           SelectionMode="Single" RowHeight="38"
                                           PreviewMouseRightButtonDown="Grid_PreviewMouseRightButtonDown"
@@ -491,6 +510,26 @@
                                         </ContextMenu>
                                     </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
+                                        <!-- Checkboxes for the bulk bar; the header one checks or clears all visible rows. Clicks go to the
+                                             view-model, which decides the new state. A runtime's box is disabled and never checked. -->
+                                        <DataGridTemplateColumn Width="36" CanUserSort="False" CanUserResize="False">
+                                            <DataGridTemplateColumn.Header>
+                                                <CheckBox IsThreeState="True" Width="18"
+                                                          IsChecked="{Binding DataContext.AllVisibleProgramsChecked, ElementName=Root, Mode=OneWay}"
+                                                          Command="{Binding DataContext.ToggleAllVisibleProgramsCommand, ElementName=Root}"
+                                                          ToolTip="Отметить все программы в списке (с учётом поиска и фильтра) или снять с них отметки" />
+                                            </DataGridTemplateColumn.Header>
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type local:InstalledProgram}">
+                                                    <CheckBox Width="18" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                              IsChecked="{Binding IsChecked, Mode=OneWay}"
+                                                              Command="{Binding DataContext.ToggleProgramCheckCommand, ElementName=Root}"
+                                                              CommandParameter="{Binding}"
+                                                              IsEnabled="{Binding CanCheck}" ToolTip="{Binding CheckTooltip}"
+                                                              ToolTipService.ShowOnDisabled="True" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                         <DataGridTemplateColumn Header="Программа" Width="2*" MinWidth="150" SortMemberPath="DisplayName" CanUserSort="True">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
@@ -530,7 +569,7 @@
                                 </DataGrid>
 
                                 <!-- Empty state -->
-                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="380"
+                                <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="380"
                                             Visibility="{Binding IsProgramsEmpty, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding ProgramsEmptyGlyph}" FontSize="30" HorizontalAlignment="Center">
                                         <TextBlock.Style>
@@ -814,7 +853,24 @@
 
                         <Border Style="{StaticResource Card}" Padding="4">
                             <Grid>
-                                <DataGrid x:Name="StoreGrid" ItemsSource="{Binding StoreAppsView}"
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <!-- "Отмечено: N · Удалить отмеченные · Снять отметки" while any app is checked -->
+                                <controls:BulkActionBar Margin="2,2,2,4" CheckedCount="{Binding CheckedStoreAppsCount}"
+                                                        ClearCommand="{Binding ClearStoreChecksCommand}">
+                                    <controls:BulkActionBar.ActionsContent>
+                                        <WrapPanel>
+                                            <Button Style="{StaticResource DangerButton}" Padding="12,6" Margin="0,2,8,2" Content="Удалить отмеченные"
+                                                    Command="{Binding RemoveCheckedStoreAppsCommand}"
+                                                    ToolTip="Удалить отмеченные приложения для вашей учётной записи. Перед этим программа спросит подтверждение." />
+                                        </WrapPanel>
+                                    </controls:BulkActionBar.ActionsContent>
+                                </controls:BulkActionBar>
+
+                                <DataGrid x:Name="StoreGrid" Grid.Row="1" ItemsSource="{Binding StoreAppsView}"
                                           SelectedItem="{Binding SelectedStoreApp, Mode=TwoWay}"
                                           SelectionMode="Single" RowHeight="38"
                                           PreviewMouseRightButtonDown="Grid_PreviewMouseRightButtonDown"
@@ -832,6 +888,25 @@
                                         </ContextMenu>
                                     </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
+                                        <!-- The same checkboxes for Store apps; an app Windows needs has a disabled box that is never checked. -->
+                                        <DataGridTemplateColumn Width="36" CanUserSort="False" CanUserResize="False">
+                                            <DataGridTemplateColumn.Header>
+                                                <CheckBox IsThreeState="True" Width="18"
+                                                          IsChecked="{Binding DataContext.AllVisibleStoreAppsChecked, ElementName=Root, Mode=OneWay}"
+                                                          Command="{Binding DataContext.ToggleAllVisibleStoreAppsCommand, ElementName=Root}"
+                                                          ToolTip="Отметить все приложения в списке (с учётом поиска и фильтра) или снять с них отметки" />
+                                            </DataGridTemplateColumn.Header>
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type local:StoreApp}">
+                                                    <CheckBox Width="18" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                              IsChecked="{Binding IsChecked, Mode=OneWay}"
+                                                              Command="{Binding DataContext.ToggleStoreAppCheckCommand, ElementName=Root}"
+                                                              CommandParameter="{Binding}"
+                                                              IsEnabled="{Binding CanCheck}" ToolTip="{Binding CheckTooltip}"
+                                                              ToolTipService.ShowOnDisabled="True" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                         <DataGridTemplateColumn Header="Приложение" Width="2*" MinWidth="150" SortMemberPath="DisplayName" CanUserSort="True">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
@@ -867,7 +942,7 @@
                                     </DataGrid.Columns>
                                 </DataGrid>
 
-                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="380"
+                                <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="380"
                                             Visibility="{Binding IsStoreEmpty, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding StoreEmptyGlyph}" FontSize="30" HorizontalAlignment="Center">
                                         <TextBlock.Style>

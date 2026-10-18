@@ -71,7 +71,7 @@ public sealed class FilterOption<T> : ObservableObject
     }
 }
 
-public sealed class ProgramsViewModel : PageViewModel
+public sealed partial class ProgramsViewModel : PageViewModel
 {
     private static readonly TimeSpan EnrichBudget = TimeSpan.FromSeconds(90);
     private static readonly Regex FamilyNameRegex = new(@"^[A-Za-z0-9._\-~]+$", RegexOptions.Compiled);
@@ -144,6 +144,18 @@ public sealed class ProgramsViewModel : PageViewModel
         OpenStorePageCommand = new RelayCommand(OpenStorePage, () => SelectedStoreApp?.PackageFamilyName is not null);
         StoreSearchWebCommand = new RelayCommand(StoreSearchWeb, () => SelectedStoreApp is not null);
         OpenStoreFolderCommand = new RelayCommand(OpenStoreFolder, () => !string.IsNullOrWhiteSpace(SelectedStoreApp?.InstallLocation));
+
+        // Checkboxes and "Удалить отмеченные" on both tabs (ProgramsViewModel.Checked.cs).
+        CheckedPrograms.Changed += (_, _) => OnProgramChecksChanged();
+        UninstallCheckedCommand = new AsyncRelayCommand(UninstallCheckedAsync, () => !IsBusy && CheckedPrograms.Count > 0);
+        ClearProgramChecksCommand = new RelayCommand(CheckedPrograms.Clear);
+        ToggleProgramCheckCommand = new RelayCommand(p => ToggleCheck(p as InstalledProgram), p => p is InstalledProgram { CanCheck: true });
+        ToggleAllVisibleProgramsCommand = new RelayCommand(ToggleAllVisiblePrograms, () => VisibleCheckablePrograms().Any());
+        CheckedStoreApps.Changed += (_, _) => OnStoreChecksChanged();
+        RemoveCheckedStoreAppsCommand = new AsyncRelayCommand(RemoveCheckedStoreAppsAsync, () => !IsBusy && CheckedStoreApps.Count > 0);
+        ClearStoreChecksCommand = new RelayCommand(CheckedStoreApps.Clear);
+        ToggleStoreAppCheckCommand = new RelayCommand(p => ToggleCheck(p as StoreApp), p => p is StoreApp { CanCheck: true });
+        ToggleAllVisibleStoreAppsCommand = new RelayCommand(ToggleAllVisibleStoreApps, () => VisibleCheckableStoreApps().Any());
     }
 
     public override string Title => "Программы";
@@ -544,7 +556,11 @@ public sealed class ProgramsViewModel : PageViewModel
     private void ApplyPrograms(ProgramScanResult scan)
     {
         var selectedKey = SelectedProgram?.RegistryKeyPath;
-        _programs.ReplaceAll(scan.Programs.OrderBy(p => p.DisplayName, NameComparer));
+        var programs = scan.Programs.OrderBy(p => p.DisplayName, NameComparer).ToList();
+        foreach (var p in programs)
+            p.Checks = CheckedPrograms; // a rescan builds new objects for the same entries: their checks come back by key
+        _programs.ReplaceAll(programs);
+        SyncProgramChecks();
         _unreadableEntries = scan.UnreadableEntries;
         SelectedProgram = selectedKey is null
             ? null
@@ -555,7 +571,11 @@ public sealed class ProgramsViewModel : PageViewModel
     private void ApplyStoreApps(StoreAppsResult store)
     {
         var selected = SelectedStoreApp?.PackageFullName;
-        _storeApps.ReplaceAll(store.Apps.OrderBy(a => a.DisplayName, NameComparer));
+        var apps = store.Apps.OrderBy(a => a.DisplayName, NameComparer).ToList();
+        foreach (var a in apps)
+            a.Checks = CheckedStoreApps; // the same for Store apps, by package
+        _storeApps.ReplaceAll(apps);
+        SyncStoreChecks();
         StoreError = store.Error;
         SelectedStoreApp = selected is null
             ? null
@@ -658,6 +678,7 @@ public sealed class ProgramsViewModel : PageViewModel
     private void RefreshProgramsView()
     {
         _programsView.Refresh();
+        OnPropertyChanged(nameof(AllVisibleProgramsChecked)); // the header box follows the rows the list shows
         OnPropertyChanged(nameof(IsProgramsEmpty));
         OnPropertyChanged(nameof(ProgramsEmptyTitle));
         OnPropertyChanged(nameof(ProgramsEmptyText));
@@ -668,6 +689,7 @@ public sealed class ProgramsViewModel : PageViewModel
     private void RefreshStoreView()
     {
         _storeView.Refresh();
+        OnPropertyChanged(nameof(AllVisibleStoreAppsChecked));
         OnPropertyChanged(nameof(IsStoreEmpty));
         OnPropertyChanged(nameof(StoreEmptyTitle));
         OnPropertyChanged(nameof(StoreEmptyText));

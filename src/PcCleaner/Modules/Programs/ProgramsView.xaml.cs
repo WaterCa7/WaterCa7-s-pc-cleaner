@@ -99,10 +99,13 @@ public partial class ProgramsView : UserControl
         return element as DataGridRow;
     }
 
+    /// <summary>Width of the checkbox column in front of both grids (the thresholds below include it).</summary>
+    private const double CheckColumnWidth = 36;
+
     /// <summary>Hides secondary columns when the grid gets narrow (minimum window size).</summary>
     private void ProgramsGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var width = e.NewSize.Width;
+        var width = e.NewSize.Width - CheckColumnWidth;
         var changed = SetVisible(PublisherColumn, width >= 560);
         changed |= SetVisible(DateColumn, width >= 470);
         if (changed)
@@ -111,7 +114,7 @@ public partial class ProgramsView : UserControl
 
     private void StoreGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (SetVisible(StorePublisherColumn, e.NewSize.Width >= 470))
+        if (SetVisible(StorePublisherColumn, e.NewSize.Width - CheckColumnWidth >= 470))
             RedistributeStarColumns(StoreGrid);
     }
 
