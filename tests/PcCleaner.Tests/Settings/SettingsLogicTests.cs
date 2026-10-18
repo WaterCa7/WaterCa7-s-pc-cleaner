@@ -252,6 +252,18 @@ public class SettingsLogicTests
     }
 
     [Fact]
+    public void RunAsAdmin_IsOnByDefault_AlsoForASettingsFileFromAnOlderVersion()
+    {
+        Assert.True(new AppSettings().RunAsAdmin);
+
+        var older = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{ \"AutoUpdate\": false, \"CreateRestorePoint\": false }")!;
+        Assert.True(older.RunAsAdmin);
+
+        var off = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{ \"RunAsAdmin\": false }")!;
+        Assert.False(off.RunAsAdmin);
+    }
+
+    [Fact]
     public void Settings_RoundTripThroughFile()
     {
         // AppPaths.DataDir points to the temp test folder (TestEnvironment), never to the real profile.

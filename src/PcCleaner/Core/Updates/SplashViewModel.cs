@@ -150,8 +150,9 @@ public sealed class SplashViewModel : ObservableObject
                 ShowProgress = true;
                 if (await Task.Run(_installNow))
                 {
-                    leaveVisible = true; // the process is going away: keep the blurred splash up until it does
                     _shutdown();
+                    // Only once the shutdown is under way: if it throws, the program stays open and the splash must close.
+                    leaveVisible = true; // the process is going away: keep the blurred splash up until it does
                     return;
                 }
             }

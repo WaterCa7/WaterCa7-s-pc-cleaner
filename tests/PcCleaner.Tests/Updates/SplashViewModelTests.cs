@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using PcCleaner.Core;
@@ -183,19 +184,50 @@ public sealed class SplashViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Skip_BeforeTheDownloadStarts_DoesNothing()
+    public async Task Skip_WhileStillChecking_IsIgnored_AndTheDownloadThatFollowsStillOffersIt()
     {
+        Publish("1.2.0");
         _http.Hold(ManifestUrl);
-        var splash = Splash(Service());
+        _http.Hold(UpdateTestKit.Url("1.2.0"));
+        var updates = Service();
+        var splash = Splash(updates);
 
         var run = splash.RunAsync(CancellationToken.None);
         await Until(splash, () => splash.IsVisible);
-        splash.SkipCommand.Execute(null);
+        Assert.False(splash.CanSkip);
+        splash.SkipCommand.Execute(null); // nothing is downloading yet: a press now must not be remembered for later
+
+        _http.Release(ManifestUrl);
+        await Until(splash, () => splash.CanSkip);
+        await Task.Delay(50); // give a remembered press the chance to close the splash
 
         Assert.True(splash.IsVisible);
+        Assert.True(splash.ShowProgress);
+        Assert.True(splash.CanSkip);
+        Assert.Equal("Скачиваем версию 1.2.0…", splash.StatusText);
         Assert.False(run.IsCompleted);
-        _delay.TimeoutElapsed.SetResult();
+        Assert.Equal(0, _shutdownCalls);
+
+        _http.Release();
         await run.WaitAsync(Timeout);
+        Assert.Equal(1, _installCalls); // the early press did not cancel the update
+        Assert.Equal(1, _shutdownCalls);
+    }
+
+    [Fact]
+    public async Task ShutdownThatThrows_ClosesTheSplashInsteadOfLeavingItUpForever()
+    {
+        Publish("1.2.0");
+        var splash = new SplashViewModel(Service(), () => true, () => throw new InvalidOperationException("shutdown failed"))
+        {
+            Delay = _delay.Delay,
+        };
+
+        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+
+        Assert.False(splash.IsVisible);
+        Assert.False(splash.ShowProgress);
+        Assert.False(splash.CanSkip);
     }
 
     [Fact]
@@ -387,20 +419,29 @@ public sealed class SplashViewModelTests : IDisposable
         }
     }
 
-    /// <summary>The fake GitHub, except that one url can be held back until <see cref="Release"/>.</summary>
+    /// <summary>The fake GitHub, except that urls can be held back until <see cref="Release()"/> (or one of them until <see cref="Release(string)"/>).</summary>
     private sealed class GatedHandler : DelegatingHandler
     {
-        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private volatile string? _heldUrl;
+        private readonly ConcurrentDictionary<string, TaskCompletionSource> _gates = new();
 
-        public void Hold(string url) => _heldUrl = url;
+        public void Hold(string url) => _gates[url] = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public void Release() => _gate.TrySetResult();
+        public void Release()
+        {
+            foreach (var gate in _gates.Values)
+                gate.TrySetResult();
+        }
+
+        public void Release(string url)
+        {
+            if (_gates.TryGetValue(url, out var gate))
+                gate.TrySetResult();
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            if (request.RequestUri!.ToString() == _heldUrl)
-                await _gate.Task.WaitAsync(cancellationToken);
+            if (_gates.TryGetValue(request.RequestUri!.ToString(), out var gate))
+                await gate.Task.WaitAsync(cancellationToken);
             return await base.SendAsync(request, cancellationToken);
         }
     }

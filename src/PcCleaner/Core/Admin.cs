@@ -14,6 +14,9 @@ public static class Admin
 
     private const string AdministratorsSid = "S-1-5-32-544";
 
+    /// <summary>The Windows error code for «Нет» in the UAC prompt (ERROR_CANCELLED).</summary>
+    internal const int ErrorCancelledByUser = 1223;
+
     private static readonly Lazy<bool> Elevated = new(() =>
     {
         using var identity = WindowsIdentity.GetCurrent();
@@ -73,6 +76,26 @@ public static class Admin
     /// </summary>
     public static bool RestartElevated() => RestartElevated(standardUserNoteShown: false);
 
+    /// <summary>
+    /// Starts <paramref name="exe"/> (with <paramref name="args"/>) through the shell with the "runas" verb, which makes
+    /// Windows show the UAC prompt. Shared by the restart buttons and the restart at startup (<see cref="StartupElevation"/>).
+    /// </summary>
+    internal static ProcessStartInfo ElevatedStartInfo(string exe, IEnumerable<string>? args = null)
+    {
+        var info = new ProcessStartInfo(exe)
+        {
+            UseShellExecute = true,
+            Verb = "runas",
+            WorkingDirectory = AppContext.BaseDirectory,
+        };
+        if (args is not null)
+        {
+            foreach (var arg in args)
+                info.ArgumentList.Add(arg);
+        }
+        return info;
+    }
+
     /// <summary>Shows a standard message when an action needs elevation. Returns IsElevated.</summary>
     public static bool RequireElevation(string actionDescription)
     {
@@ -94,12 +117,7 @@ public static class Admin
             return false;
         try
         {
-            Process.Start(new ProcessStartInfo(exe)
-            {
-                UseShellExecute = true,
-                Verb = "runas",
-                WorkingDirectory = AppContext.BaseDirectory,
-            });
+            Process.Start(ElevatedStartInfo(exe));
             Application.Current?.Shutdown();
             return true;
         }

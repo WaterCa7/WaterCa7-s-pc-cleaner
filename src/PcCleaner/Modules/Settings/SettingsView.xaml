@@ -156,6 +156,12 @@
                                     <TextBlock Text="{Binding RestorePointAdminWarning}" Foreground="{StaticResource WarningBrush}"
                                                FontSize="12.5" TextWrapping="Wrap" />
                                 </DockPanel>
+
+                                <!-- Always as administrator: the program restarts itself elevated at every start -->
+                                <CheckBox Style="{StaticResource ToggleSwitch}" Margin="0,16,0,0" IsChecked="{Binding RunAsAdmin}">
+                                    <TextBlock Text="Запускать с правами администратора" TextWrapping="Wrap" />
+                                </CheckBox>
+                                <TextBlock Style="{StaticResource Muted}" Margin="50,8,0,0" TextWrapping="Wrap" Text="{Binding RunAsAdminHint}" />
                             </StackPanel>
                         </Border>
 

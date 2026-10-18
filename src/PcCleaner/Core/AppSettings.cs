@@ -36,6 +36,12 @@ public sealed class AppSettings
     /// <summary>Download and install new versions by itself (Settings → «Обновления»).</summary>
     public bool AutoUpdate { get; set; } = true;
 
+    /// <summary>
+    /// Restart the program with administrator rights at every start (Windows asks; «Нет» opens it with limited rights).
+    /// Settings → «Защита перед изменениями». See <see cref="StartupElevation"/>.
+    /// </summary>
+    public bool RunAsAdmin { get; set; } = true;
+
     /// <summary>When update.json was last read successfully (UTC).</summary>
     public DateTime? LastUpdateCheckUtc { get; set; }
 

@@ -61,6 +61,48 @@ public class SettingsViewModelTests
     }
 
     [Fact]
+    public void RunAsAdmin_IsOnByDefault_AndShownWithoutSaving()
+    {
+        var vm = Create();
+        vm.LoadGeneral();
+
+        Assert.True(vm.RunAsAdmin);
+        Assert.Equal(0, _saves);
+
+        _settings.RunAsAdmin = false;
+        vm.LoadGeneral();
+
+        Assert.False(vm.RunAsAdmin);
+        Assert.Equal(0, _saves);
+    }
+
+    [Fact]
+    public void RunAsAdmin_IsSavedWhenChanged()
+    {
+        var vm = Create();
+        vm.LoadGeneral();
+
+        vm.RunAsAdmin = false;
+        Assert.False(_settings.RunAsAdmin);
+        Assert.Equal(1, _saves);
+
+        vm.RunAsAdmin = true;
+        Assert.True(_settings.RunAsAdmin);
+        Assert.Equal(2, _saves);
+
+        vm.RunAsAdmin = true; // no change, nothing to save
+        Assert.Equal(2, _saves);
+    }
+
+    [Fact]
+    public void RunAsAdmin_HintSaysWhatTheSwitchCosts()
+    {
+        Assert.Equal(
+            "Windows будет спрашивать разрешение при каждом запуске; без прав часть проверок и исправлений недоступна.",
+            Create().RunAsAdminHint);
+    }
+
+    [Fact]
     public void AddAndRemoveExclusions()
     {
         var vm = Create();
