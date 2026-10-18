@@ -1167,7 +1167,7 @@ public sealed class DashboardViewModel : PageViewModel
                     else
                     {
                         failed++;
-                        if (item.FixFailed && HealthScoring.LooksLikeAdminRequired(item.Issue.FixResult))
+                        if (item.FixFailed && (item.AccessDenied || HealthScoring.LooksLikeAdminRequired(item.Issue.FixResult)))
                             needAdmin++;
                     }
                 }

@@ -212,6 +212,33 @@ public class FixAllTests
     }
 
     [Fact]
+    public async Task FixAll_FixThatThrowsUnauthorizedAccess_CountsInNeedAdmin()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Нет доступа", _ => throw new UnauthorizedAccessException("Access to the path is denied.")),
+            NewIssue("Обычное", Counting(new Counter())));
+        var reasons = new List<string>();
+        vm.RequestElevation = reason =>
+        {
+            reasons.Add(reason);
+            return true;
+        };
+
+        var batch = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
+
+        Assert.NotNull(batch);
+        Assert.Equal(1, batch!.NeedAdmin);
+        Assert.Equal(1, batch.Failed);
+        Assert.Equal(1, batch.Fixed);
+        Assert.True(RowOf(vm, "Нет доступа").AccessDenied);
+        Assert.Contains("Для 1 нужны права администратора.", vm.ActionSummary);
+        if (Admin.IsElevated)
+            Assert.Empty(reasons);
+        else
+            Assert.Equal("исправления, которым нужны права администратора", Assert.Single(reasons));
+    }
+
+    [Fact]
     public async Task FixAll_WithoutAdminResults_DoesNotOfferElevation()
     {
         var vm = await ScannedAsync(
@@ -229,7 +256,7 @@ public class FixAllTests
         Assert.Equal(0, batch!.NeedAdmin);
         Assert.Equal(1, batch.Failed);
         Assert.Equal(0, asked);
-        Assert.DoesNotContain("прав администратора", vm.ActionSummary);
+        Assert.DoesNotContain("администратора", vm.ActionSummary);
     }
 
     [Fact]

@@ -130,7 +130,7 @@ public sealed class OptimizerParityServiceTests : IDisposable
 
         var dvr = issues.Single(i => i.Title.Contains("Xbox Game Bar", StringComparison.Ordinal));
         Assert.NotNull(dvr.FixAsync); // still fixable one by one, after its own confirmation...
-        Assert.False(dvr.AutoFixSafe); // ...but "Исправить безопасное" must not take clip recording away silently
+        Assert.False(dvr.AutoFixSafe); // ...but it must not be marked safe: it takes clip recording away
         Assert.Contains("Важно: Скриншоты и запись клипов через Xbox Game Bar будут недоступны", dvr.Details);
 
         var gameMode = issues.Single(i => i.Title.Contains("игровой режим", StringComparison.OrdinalIgnoreCase));

@@ -122,6 +122,23 @@ public class CleanerServiceTests
     }
 
     [Fact]
+    public async Task Analyze_RecycleBinIssue_IsNotInFixAll()
+    {
+        // Emptying the Recycle Bin cannot be undone, while «Исправить всё» promises that every action can be reverted:
+        // the issue keeps its own button on the row and is never part of the batch.
+        using var t = new CleanerTestFolder("service-bin-fixall");
+        var service = CreateService(t, out _, out var bin);
+        bin.Bytes = 5 * Mb;
+        bin.Items = 3;
+
+        var issues = await service.AnalyzeAsync(CancellationToken.None);
+
+        var issue = Assert.Single(issues, i => i.Title.StartsWith("В корзине"));
+        Assert.True(issue.CanFix);
+        Assert.False(issue.InFixAll);
+    }
+
+    [Fact]
     public async Task Analyze_RespectsCategoriesTheUserUnchecked()
     {
         using var t = new CleanerTestFolder("service-disabled");

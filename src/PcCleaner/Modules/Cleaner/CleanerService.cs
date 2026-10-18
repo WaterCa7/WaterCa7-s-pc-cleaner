@@ -550,6 +550,9 @@ public sealed class CleanerService : IHealthContributor
                 Gain = $"Освободит {Format.Bytes(bytes)}",
                 ReclaimableBytes = bytes,
                 AutoFixSafe = false,
+                // Emptying the bin cannot be undone, and "Исправить всё" promises that every action can be reverted:
+                // this fix only runs from its own button on the row.
+                InFixAll = false,
                 TargetPageKey = "Cleaner",
                 FixAsync = async token =>
                 {

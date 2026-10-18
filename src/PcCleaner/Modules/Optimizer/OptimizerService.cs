@@ -227,8 +227,9 @@ public sealed class OptimizerService : IHealthContributor
     internal static readonly IReadOnlySet<string> PageOnlyIds = new HashSet<string>(StringComparer.Ordinal) { "RamLoad" };
 
     /// <summary>
-    /// One-click fixes the dashboard may run in its "Исправить безопасное" batch. Turning off Xbox Game Bar recording is
-    /// NOT among them: it takes away clip and screenshot capture, so it is the user's choice (per-item button only).
+    /// One-click fixes the dashboard marks as safe (AutoFixSafe, the "Безопасно исправить" badge); "Исправить всё" is no
+    /// longer limited to them. Turning off Xbox Game Bar recording is NOT among them: it takes away clip and screenshot
+    /// capture, so it is not marked safe.
     /// </summary>
     internal static bool IsBatchSafeFix(string? fixId) => fixId is TweakIds.GameMode or TweakIds.PowerPlan;
 
