@@ -40,12 +40,12 @@ public class DiskExplorerLaunchTests
     }
 
     /// <summary>
-    /// A string literal without a folder as the program of Process.Start, ProcessStartInfo, SystemTools.Launch /
-    /// RunStreamingAsync or a FileName initializer: a search-order hijack.
-    /// (ProcessRunner.RunAsync resolves bare names itself, and OpenToolAsync wraps its name in SystemTools.Exe.)
+    /// A string literal without a folder as the program of Process.Start, ProcessStartInfo, SystemTools.Launch,
+    /// DiskService.OpenTool, RunStreamingAsync or a FileName initializer: a search-order hijack.
+    /// (ProcessRunner.RunAsync resolves bare names itself.)
     /// </summary>
     private static readonly Regex BareProgram = new(
-        @"(?:Process\.Start|new\s+ProcessStartInfo|\bLaunch|RunStreamingAsync)\s*\(\s*""(?<name>[^""\\/]*)""" +
+        @"(?:Process\.Start|new\s+ProcessStartInfo|\bLaunch|\bOpenTool|RunStreamingAsync)\s*\(\s*""(?<name>[^""\\/]*)""" +
         @"|\bFileName\s*=\s*""(?<name>[^""\\/]*)""",
         RegexOptions.CultureInvariant);
 
@@ -78,6 +78,7 @@ public class DiskExplorerLaunchTests
         Assert.Matches(BareProgram, "Process.Start(new ProcessStartInfo(\"cleanmgr.exe\") { UseShellExecute = true });");
         Assert.Matches(BareProgram, "var psi = new ProcessStartInfo { FileName = \"defrag.exe\" };");
         Assert.Matches(BareProgram, "SystemTools.Launch(\"SystemPropertiesProtection.exe\");");
+        Assert.Matches(BareProgram, "_service.OpenTool(\"cleanmgr.exe\", \"\", \"cleanmgr\");");
         Assert.DoesNotMatch(BareProgram, "Process.Start(ExplorerPath, $\"/select,\\\"{path}\\\"\")?.Dispose();");
         Assert.DoesNotMatch(BareProgram, "SystemTools.Launch(SystemTools.Exe(\"cleanmgr.exe\"));");
         Assert.DoesNotMatch(BareProgram, "Process.Start(new ProcessStartInfo(\"C:\\\\Windows\\\\explorer.exe\"));");

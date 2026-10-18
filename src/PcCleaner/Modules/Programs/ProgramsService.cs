@@ -902,10 +902,11 @@ public sealed class ProgramsService : IHealthContributor
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 // Only the waiting stopped (RunUninstallerAsync): the uninstaller keeps running. Return a text instead of
-                // throwing, so the Dashboard shows it with its "stopped" note rather than a bare "Исправление отменено.".
+                // throwing, so the Dashboard shows it with its "stopped" note (which says «Проверить снова») rather than a
+                // bare "Исправление отменено.". A quiet uninstall has no window.
                 Log.Info($"Удаление «{name}»: ожидание деинсталлятора прервано пользователем");
-                return $"Ожидание остановлено: удаление «{name}» могло продолжиться — нажмите «Проверить снова», " +
-                       "когда окно удаления закроется.";
+                return $"Ожидание остановлено: удаление «{name}» могло продолжиться " +
+                       (ShouldUninstallQuietly(program) ? "в фоне, без окна." : "в окне удаления программы.");
             }
         }
         if (outcome.Status == UninstallStatus.NotStarted)

@@ -388,7 +388,7 @@
                         <controls:BulkActionBar.ActionsContent>
                             <Button Style="{StaticResource AccentButton}" Padding="12,6" Content="Завершить отмеченные"
                                     Command="{Binding KillCheckedCommand}"
-                                    ToolTip="Принудительно завершить отмеченные процессы и все процессы отмеченных программ. Перед этим программа спросит подтверждение." />
+                                    ToolTip="Принудительно завершить отмеченные процессы. Перед этим программа спросит подтверждение." />
                         </controls:BulkActionBar.ActionsContent>
                     </controls:BulkActionBar>
 

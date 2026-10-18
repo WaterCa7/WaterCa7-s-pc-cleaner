@@ -389,7 +389,11 @@ public sealed partial class StartupService : IHealthContributor
                 : $"Запись «{name}» отключена — включить её можно на странице «Автозагрузка».";
         if (result.NeedsAdmin)
             return $"Нужны права администратора: {result.Message}";
-        return $"Не удалось {(removed ? "удалить" : "отключить")} «{name}»: {result.Message}";
+        // The reason may already say "Не удалось …" (the Startup page shows it alone): one "Не удалось" is enough, and the
+        // dashboard row already names the entry.
+        return result.Message.TrimStart().StartsWith("Не удалось", StringComparison.OrdinalIgnoreCase)
+            ? result.Message.Trim()
+            : $"Не удалось {(removed ? "удалить" : "отключить")} «{name}»: {result.Message}";
     }
 
     /// <summary>Enabled non-Microsoft programs that start at logon (Run, Startup folder, tasks). Hidden Windows items never count.</summary>

@@ -592,7 +592,9 @@ public sealed class ProcessRow : ProcessItem
     /// </summary>
     public override bool CanCheck => CanKill && Group?.CanKill != false;
 
-    public override string? CheckTooltip => CanKill && Group is { CanKill: false } program ? program.CheckTooltip : base.CheckTooltip;
+    public override string? CheckTooltip => CanKill && Group is { CanKill: false }
+        ? "Входит в программу с защищённым процессом — отметить нельзя; завершить его можно кнопкой «Завершить»"
+        : base.CheckTooltip;
 
     internal long CreateTime { get; }
 

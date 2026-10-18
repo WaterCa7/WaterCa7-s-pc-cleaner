@@ -318,7 +318,7 @@ public sealed class ProgramsDashboardFixTests : IDisposable
     }
 
     private const string WaitStoppedText =
-        "Ожидание остановлено: удаление «Амиго» могло продолжиться — нажмите «Проверить снова», когда окно удаления закроется.";
+        "Ожидание остановлено: удаление «Амиго» могло продолжиться в окне удаления программы.";
 
     [Fact]
     public async Task UnwantedProgram_CancelledWhileWaitingForTheUninstaller_SaysItMayStillRun()
@@ -338,7 +338,26 @@ public sealed class ProgramsDashboardFixTests : IDisposable
 
         Assert.Equal(WaitStoppedText, text);
         Assert.Equal(new[] { "restore:Удаление Амиго", "uninstall:Амиго:normal" }, _calls);
-        Assert.True(cts.IsCancellationRequested); // the caller still sees the cancellation (the Dashboard keys on it)
+    }
+
+    [Fact]
+    public async Task UnwantedProgram_QuietUninstallCancelledWhileWaiting_MentionsNoWindow()
+    {
+        AddAmigoWithQuietCommand();
+        using var cts = new CancellationTokenSource();
+        var service = CreateService();
+        service.UninstallOverride = (_, _, _) =>
+        {
+            cts.Cancel();
+            return Task.FromCanceled<UninstallOutcome>(cts.Token);
+        };
+        var issue = await UnwantedIssueAsync(service, "Amigo Browser");
+
+        var text = await issue.FixAsync!(cts.Token);
+
+        Assert.Equal("Ожидание остановлено: удаление «Amigo Browser» могло продолжиться в фоне, без окна.", text);
+        // The Dashboard adds its own «Проверить снова» note to a stopped fix: the text does not repeat it.
+        Assert.DoesNotContain("Проверить снова", text);
     }
 
     [Fact]

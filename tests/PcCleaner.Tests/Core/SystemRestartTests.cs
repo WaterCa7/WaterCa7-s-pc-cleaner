@@ -29,7 +29,7 @@ public sealed class SystemRestartTests
     {
         using var fake = new SystemRestartFake(answer: false);
 
-        await SystemRestart.RestartAsync(CancellationToken.None, askFirst: true);
+        await SystemRestart.RestartAsync(CancellationToken.None);
 
         var (title, question) = Assert.Single(fake.Questions);
         Assert.Equal("Перезагрузить компьютер", title);
@@ -85,14 +85,14 @@ public sealed class SystemRestartTests
         Assert.Equal(0, fake.StartCalls);
     }
 
-    // ===== askFirst: false = the caller (the dashboard's «Исправить проблему» question) has already asked =====
+    // ===== RestartWithoutAskingAsync: the caller (the dashboard's «Исправить проблему» question) has already asked =====
 
     [Fact]
     public async Task AlreadyAsked_RestartsOnceWithoutAskingAgain()
     {
         using var fake = new SystemRestartFake(answer: false); // would refuse if it were asked
 
-        var text = await SystemRestart.RestartAsync(CancellationToken.None, askFirst: false);
+        var text = await SystemRestart.RestartWithoutAskingAsync(CancellationToken.None);
 
         Assert.Equal("Компьютер перезагружается…", text);
         Assert.Equal(1, fake.StartCalls);
@@ -105,7 +105,7 @@ public sealed class SystemRestartTests
     {
         using var fake = new SystemRestartFake(answer: true, startSucceeds: false);
 
-        var text = await SystemRestart.RestartAsync(CancellationToken.None, askFirst: false);
+        var text = await SystemRestart.RestartWithoutAskingAsync(CancellationToken.None);
 
         Assert.Equal("Не удалось перезагрузить компьютер.", text);
         Assert.Empty(fake.Questions);
@@ -119,7 +119,7 @@ public sealed class SystemRestartTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SystemRestart.RestartAsync(cts.Token, askFirst: false));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SystemRestart.RestartWithoutAskingAsync(cts.Token));
 
         Assert.Equal(0, fake.StartCalls);
     }

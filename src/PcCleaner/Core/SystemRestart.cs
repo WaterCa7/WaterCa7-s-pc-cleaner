@@ -17,12 +17,18 @@ public static class SystemRestart
     internal static Func<bool> Start { get; set; } = StartRestart;
 
     /// <summary>
-    /// Asks the user (unless <paramref name="askFirst"/> is false because the caller has just asked, like the dashboard's
-    /// «Исправить проблему» question that already shows the warning), then restarts. Returns the result for the dashboard
-    /// row: «Компьютер перезагружается…» after the restart was requested, otherwise a text that says nothing was changed or
-    /// that the restart did not start.
+    /// Asks the user, then restarts. Returns the result for the dashboard row: «Компьютер перезагружается…» after the restart
+    /// was requested, otherwise a text that says nothing was changed or that the restart did not start.
     /// </summary>
-    public static async Task<string> RestartAsync(CancellationToken ct, bool askFirst = true)
+    public static Task<string> RestartAsync(CancellationToken ct) => RestartCoreAsync(ct, askFirst: true);
+
+    /// <summary>
+    /// Restarts without a question of its own — only for a caller that has just asked, like the dashboard's «Исправить проблему»
+    /// question, which already shows the warning. Same results as <see cref="RestartAsync"/>.
+    /// </summary>
+    internal static Task<string> RestartWithoutAskingAsync(CancellationToken ct) => RestartCoreAsync(ct, askFirst: false);
+
+    private static async Task<string> RestartCoreAsync(CancellationToken ct, bool askFirst)
     {
         ct.ThrowIfCancellationRequested();
         if (askFirst && !Confirm("Перезагрузить компьютер",

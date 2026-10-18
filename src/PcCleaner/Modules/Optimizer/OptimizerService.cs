@@ -278,7 +278,7 @@ public sealed class OptimizerService : IHealthContributor
                 // Manual advice is never fixed by the program, except "restart Windows". A restart loses unsaved work in
                 // other programs, so «Исправить всё» does not press it. The dashboard's own «Исправить проблему» question
                 // (it shows the warning below) is the only one: SystemRestart does not ask a second time.
-                fix = ct => SystemRestart.RestartAsync(ct, askFirst: false);
+                fix = SystemRestart.RestartWithoutAskingAsync;
                 fixLabel = RestartFixLabel;
                 inFixAll = false;
                 consequence = RestartWarning;

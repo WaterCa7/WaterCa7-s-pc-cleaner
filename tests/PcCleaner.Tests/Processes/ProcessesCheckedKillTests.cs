@@ -324,6 +324,8 @@ public class ProcessesCheckedKillTests
         Assert.Equal(2, svchost.Count);
         Assert.False(svchost.CanCheck);
         Assert.False(RowOf(vm, 700).CanCheck); // no check can hide behind the program's disabled box
+        Assert.Equal("Входит в программу с защищённым процессом — отметить нельзя; завершить его можно кнопкой «Завершить»",
+            RowOf(vm, 700).CheckTooltip);
         Assert.False(svchost.IsChecked);
         Assert.False(RowOf(vm, 700).IsChecked);
         Assert.Equal(1, vm.CheckedCount);

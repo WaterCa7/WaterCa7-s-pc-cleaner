@@ -80,7 +80,10 @@ public sealed record ScanSummary
         ? PreviousScore is { } inherited ? (inherited, PreviousTime) : null
         : (BaselineScore, Time);
 
-    /// <summary>Reclaimable space split into "fixable from the dashboard" and "after manual review".</summary>
+    /// <summary>
+    /// Reclaimable space split into what the dashboard's fix buttons free and what the user frees themselves (findings without a
+    /// fix, fixes that only open a tool).
+    /// </summary>
     [JsonIgnore]
     public ReclaimableSplit Reclaimable
     {

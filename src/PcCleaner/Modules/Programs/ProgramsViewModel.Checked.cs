@@ -89,8 +89,8 @@ public sealed partial class ProgramsViewModel
     private IEnumerable<StoreApp> VisibleCheckableStoreApps() => _storeView.Cast<StoreApp>().Where(a => a.CanCheck);
 
     /// <summary>
-    /// Programs that are gone after a rescan, and ones that can't be checked any more (a runtime now), leave the checks: a disabled box
-    /// is never checked or counted. Runs with every new list.
+    /// Programs that are gone after a rescan, and ones that can't be checked any more (a runtime now, or no working uninstaller), leave
+    /// the checks: a disabled box is never checked or counted. Runs with every new list.
     /// </summary>
     private void SyncProgramChecks()
     {

@@ -134,4 +134,25 @@ public class StartupSuspiciousFixTests
         Assert.True(HealthScoring.LooksLikeFailure(failed));
         Assert.True(HealthScoring.LooksLikeFailure(removalFailed));
     }
+
+    [Theory]
+    [InlineData(false, "Не удалось изменить запись: доступ запрещён.")]
+    [InlineData(true, "Не удалось удалить запись: файл занят.")]
+    [InlineData(true, "Не удалось сохранить резервную копию раздела реестра — удаление отменено.")]
+    public void ResultText_AReasonThatAlreadySaysNotDone_IsNotPrefixedTwice(bool removed, string reason)
+    {
+        var item = new StartupItem
+        {
+            Id = "reg|test",
+            Kind = StartupKind.RegistryRun,
+            Scope = StartupScope.CurrentUser,
+            Name = "Evil",
+        };
+
+        var text = StartupService.SuspiciousFixText(item, StartupActionResult.Fail(reason), removed);
+
+        Assert.Equal(reason, text);
+        Assert.Single(text.Split("Не удалось"), part => part.Length > 0);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+    }
 }
