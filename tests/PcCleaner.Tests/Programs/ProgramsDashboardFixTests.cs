@@ -118,15 +118,29 @@ public sealed class ProgramsDashboardFixTests : IDisposable
         return service;
     }
 
-    private static StoreAppRecord Record(string fullName)
+    private static StoreAppRecord Record(string fullName, string signature = "Store")
     {
         var name = fullName[..fullName.IndexOf('_')];
-        return new StoreAppRecord(name, fullName, null, null, "1.0.0.0", null, "Store");
+        return new StoreAppRecord(name, fullName, null, null, "1.0.0.0", null, signature);
     }
+
+    /// <summary>The preinstalled apps of the catalog, as installed packages.</summary>
+    private static readonly string[] ManyBloat =
+    {
+        "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.BingFinance", "Microsoft.BingSports", "Microsoft.BingTravel",
+        "Microsoft.BingFoodAndDrink", "Microsoft.BingHealthAndFitness", "Microsoft.BingSearch", "Microsoft.News",
+        "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.MicrosoftSolitaireCollection", "Microsoft.People",
+        "Microsoft.WindowsFeedbackHub", "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.MixedReality.Portal",
+    };
+
+    private static string FullName(string name) => $"{name}_1.0.0.0_x64__8wekyb3d8bbwe";
+
+    /// <summary>Removes made, in order (the restore point is not one of them).</summary>
+    private List<string> Removes() => _calls.Where(c => c.StartsWith("remove:", StringComparison.Ordinal)).ToList();
 
     private static string NameOf(string fullName) => ProgramsService.CreateStoreApp(Record(fullName)).DisplayName;
 
-    private static IReadOnlyList<StoreAppRecord> Records(params string[] fullNames) => fullNames.Select(Record).ToList();
+    private static IReadOnlyList<StoreAppRecord> Records(params string[] fullNames) => fullNames.Select(n => Record(n)).ToList();
 
     private static async Task<HealthIssue> UnwantedIssueAsync(ProgramsService service, string name = "Амиго")
     {
@@ -518,14 +532,82 @@ public sealed class ProgramsDashboardFixTests : IDisposable
         Assert.Equal("Удалено приложений: 2 из 2.", text);
         AssertSuccess(text);
         Assert.Equal(new[] { $"remove:{BingNews}", $"remove:{CandyCrush}" }.OrderBy(c => c),
-            _calls.OrderBy(c => c)); // the protected Microsoft Store app is never passed on
+            Removes().OrderBy(c => c)); // the protected Microsoft Store app is never passed on
+    }
+
+    [Fact]
+    public async Task Bloat_Fix_CreatesOneRestorePointBeforeRemoving_LikeThePage()
+    {
+        var service = CreateService(() => Records(BingNews, CandyCrush));
+        var issue = await BloatIssueAsync(service);
+
+        await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Equal(3, _calls.Count);
+        Assert.Equal("restore:Удаление предустановленных приложений", _calls[0]);
+        Assert.Equal(2, Removes().Count);
+    }
+
+    [Fact]
+    public async Task Bloat_Fix_CancelledWhileTheRestorePointIsMade_RemovesNothing()
+    {
+        using var cts = new CancellationTokenSource();
+        var service = CreateService(() => Records(BingNews, CandyCrush));
+        service.CreateRestorePointAsync = (description, _) =>
+        {
+            _calls.Add($"restore:{description}");
+            cts.Cancel();
+            return Task.FromResult(true);
+        };
+        var issue = await BloatIssueAsync(service);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => issue.FixAsync!(cts.Token));
+
+        Assert.Empty(Removes());
+    }
+
+    [Fact]
+    public async Task Bloat_Question_NamesUpTo15Apps_AndSaysHowTheyComeBack()
+    {
+        var records = ManyBloat.Select(n => Record(FullName(n))).ToList();
+        records[^1] = Record(FullName(ManyBloat[^1]), signature: "Developer"); // installed by another program, not from the Store
+        var service = CreateService(() => records);
+        var issue = await BloatIssueAsync(service);
+        var question = DashboardViewModel.FixConfirmText(new IssueItem(issue));
+
+        // The text of the Programs page's «Удалить лишние»: 15 names (in the list's order), then the rest counted.
+        var apps = (await service.ScanStoreAppsAsync(CancellationToken.None)).Apps.Where(a => a.IsBloatware).ToList();
+        Assert.Equal(17, apps.Count);
+        Assert.Contains(ProgramsService.PreinstalledAppsText(apps), issue.Details);
+        foreach (var app in apps.Take(15))
+            Assert.Contains("• " + app.DisplayName + "\n", issue.Details);
+        Assert.DoesNotContain("• " + apps[15].DisplayName, issue.Details);
+        Assert.Contains("• … и ещё 2", issue.Details);
+        Assert.Contains("остальные — только переустановив программу, которая их поставила", issue.Details);
+        Assert.Contains("точка восстановления", issue.Details);
+        // The whole of it fits into the question: nothing is cut.
+        Assert.DoesNotContain("(полное описание", question);
+        Assert.Contains("• … и ещё 2", question);
+        Assert.Contains("переустановив программу", question);
+    }
+
+    [Fact]
+    public async Task Bloat_Question_OnlyStoreApps_SaysAnyCanBeInstalledAgain()
+    {
+        var service = CreateService(() => Records(BingNews, CandyCrush));
+        var issue = await BloatIssueAsync(service);
+
+        Assert.Contains("• " + NameOf(BingNews), issue.Details);
+        Assert.Contains("• " + NameOf(CandyCrush), issue.Details);
+        Assert.Contains("Любое из них можно вернуть, установив заново из Microsoft Store.", issue.Details);
+        Assert.DoesNotContain("и ещё", issue.Details);
     }
 
     [Fact]
     public async Task Bloat_Fix_SkipsAppsGoneSinceTheScan_AndAppsInstalledAfterIt()
     {
         var installed = new List<string> { BingNews, CandyCrush };
-        var service = CreateService(() => installed.Select(Record).ToList());
+        var service = CreateService(() => installed.Select(n => Record(n)).ToList());
         var issue = await BloatIssueAsync(service);
         installed.Remove(CandyCrush); // the user removed it meanwhile
         installed.Add(BingWeather);   // and a new preinstalled app appeared: it was not in the list the user confirmed
@@ -533,14 +615,14 @@ public sealed class ProgramsDashboardFixTests : IDisposable
         var text = await issue.FixAsync!(CancellationToken.None);
 
         Assert.Equal("Удалено приложений: 1 из 1.", text);
-        Assert.Equal(new[] { $"remove:{BingNews}" }, _calls);
+        Assert.Equal(new[] { $"remove:{BingNews}" }, Removes());
     }
 
     [Fact]
     public async Task Bloat_Fix_NothingLeft_ChangesNothing()
     {
         var installed = new List<string> { BingNews, CandyCrush };
-        var service = CreateService(() => installed.Select(Record).ToList());
+        var service = CreateService(() => installed.Select(n => Record(n)).ToList());
         var issue = await BloatIssueAsync(service);
         installed.Clear();
 
@@ -611,7 +693,7 @@ public sealed class ProgramsDashboardFixTests : IDisposable
 
         var text = await issue.FixAsync!(cts.Token);
 
-        Assert.Single(_calls); // the loop stopped after the first app
+        Assert.Single(Removes()); // the loop stopped after the first app
         Assert.StartsWith("Удалено приложений: 1 из 3.", text);
         Assert.Contains("прервано", text);
         AssertFailureNotAdmin(text); // not marked fixed: two apps are left

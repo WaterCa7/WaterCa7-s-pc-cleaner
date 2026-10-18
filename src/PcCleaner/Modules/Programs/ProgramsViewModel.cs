@@ -1083,16 +1083,9 @@ public sealed partial class ProgramsViewModel : PageViewModel
         if (targets.Count == 0)
             return;
 
-        var names = string.Join("\n", targets.Take(15).Select(t => "• " + t.DisplayName));
-        if (targets.Count > 15)
-            names += $"\n• … и ещё {targets.Count - 15}";
         if (!Dialogs.Confirm("Удаление предустановленных приложений",
                 $"Удалить {Format.Count(targets.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений")}?\n\n" +
-                $"{names}\n\nОни удаляются только для вашей учётной записи. " +
-                (targets.All(t => t.IsFromStore)
-                    ? "Любое из них можно вернуть, установив заново из Microsoft Store. "
-                    : "Приложения из Microsoft Store можно вернуть, установив заново оттуда же; остальные — только переустановив программу, которая их поставила. ") +
-                "Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора).\n\n" +
+                ProgramsService.PreinstalledAppsText(targets) + "\n\n" +
                 "Если какое-то из них вам нужно — нажмите «Нет» и удаляйте приложения по одному."))
             return;
 

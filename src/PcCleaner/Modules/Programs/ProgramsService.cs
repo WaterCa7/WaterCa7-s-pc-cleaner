@@ -792,14 +792,13 @@ public sealed class ProgramsService : IHealthContributor
             var bloat = store.Apps.Where(a => a.IsBloatware).ToList();
             if (bloat.Count > 0)
             {
-                var examples = string.Join(", ", bloat.Take(4).Select(a => a.DisplayName)) + (bloat.Count > 4 ? " и другие" : "");
                 issues.Add(new HealthIssue
                 {
                     Module = ModuleName,
                     Title = $"{Format.Count(bloat.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений")} можно удалить",
-                    Details = $"Например: {examples}. Они занимают место и иногда работают в фоне. Кнопка удалит все приложения из " +
-                              "этого списка, только для вашей учётной записи; вернуть их можно из Microsoft Store. Если какое-то вам " +
-                              "нужно, удаляйте приложения по одному на вкладке «Приложения Microsoft Store».",
+                    // The text of the Programs page's «Удалить лишние»: the dashboard's question shows it before the removal.
+                    Details = "Они занимают место и иногда работают в фоне. Кнопка удалит:\n" + PreinstalledAppsText(bloat) +
+                              " Если какое-то из них вам нужно, удаляйте приложения по одному на вкладке «Приложения Microsoft Store».",
                     Severity = IssueSeverity.Info,
                     TargetPageKey = "Programs",
                     FixAsync = c => FixPreinstalledAppsAsync(bloat, c),
@@ -814,6 +813,24 @@ public sealed class ProgramsService : IHealthContributor
         }
 
         return issues;
+    }
+
+    /// <summary>
+    /// «Удалить лишние» on the Programs page and on the dashboard: the apps (up to 15 names, then "… и ещё N"), how they come back
+    /// after the removal and the restore point made before it.
+    /// </summary>
+    internal static string PreinstalledAppsText(IReadOnlyList<StoreApp> apps)
+    {
+        const int maxNames = 15;
+        var names = string.Join("\n", apps.Take(maxNames).Select(a => "• " + a.DisplayName));
+        if (apps.Count > maxNames)
+            names += $"\n• … и ещё {apps.Count - maxNames}";
+        return names + "\n\nОни удаляются только для вашей учётной записи. " +
+               (apps.All(a => a.IsFromStore)
+                   ? "Любое из них можно вернуть, установив заново из Microsoft Store. "
+                   : "Приложения из Microsoft Store можно вернуть, установив заново оттуда же; остальные — только переустановив " +
+                     "программу, которая их поставила. ") +
+               "Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора).";
     }
 
     /// <summary>Fix for the dashboard (already confirmed there): deletes the broken entries with backups.</summary>
@@ -910,7 +927,8 @@ public sealed class ProgramsService : IHealthContributor
 
     /// <summary>
     /// Fix for the dashboard (already confirmed there): removes the preinstalled Store apps of the list the user saw that are
-    /// still installed (the Store apps are read again; apps that appeared after the scan are left alone).
+    /// still installed (the Store apps are read again; apps that appeared after the scan are left alone). One restore point
+    /// comes first, as on the Programs page.
     /// </summary>
     private async Task<string> FixPreinstalledAppsAsync(IReadOnlyList<StoreApp> scanned, CancellationToken ct)
         => await RemovePreinstalledAppsAsync(scanned, await ScanStoreAppsAsync(ct), ct);
@@ -928,6 +946,8 @@ public sealed class ProgramsService : IHealthContributor
         if (targets.Count == 0)
             return "Предустановленных приложений, которые можно удалить, не найдено — ничего не изменено.";
 
+        await CreateRestorePointAsync("Удаление предустановленных приложений", ct);
+        ct.ThrowIfCancellationRequested(); // "Отмена" before anything was removed: a plain cancellation
         var removed = 0;
         var failed = new List<string>();
         foreach (var app in targets)
