@@ -46,6 +46,7 @@ internal sealed class StartupSandbox : IDisposable
             },
             // A private trusted list: tests of other modules use the shared AppServices.Settings at the same time.
             Settings = () => Settings,
+            BackupKey = (key, reason, ct) => BackupHook is { } hook ? hook(key, reason, ct) : RegistryBackup.ExportAsync(key, reason, ct),
         };
         Service = new StartupService(Environment);
     }
@@ -66,6 +67,12 @@ internal sealed class StartupSandbox : IDisposable
     public string RecycledDir { get; }
 
     public bool Elevated { get; set; }
+
+    /// <summary>
+    /// Replaces the .reg export that precedes a registry change (a test may cancel the page's work or fail it from here, half way
+    /// through a bulk action). Null = the real export of the sandbox key.
+    /// </summary>
+    public Func<string, string, CancellationToken, Task<string?>>? BackupHook { get; set; }
 
     public StartupEnvironment Environment { get; }
 

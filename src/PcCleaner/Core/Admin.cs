@@ -38,6 +38,9 @@ public static class Admin
 
     public static bool IsElevated => Elevated.Value;
 
+    /// <summary>True once the elevated copy of the program has been started and this one is closing.</summary>
+    internal static bool RestartStarted { get; private set; }
+
     /// <summary>
     /// True for a standard (non-administrator) Windows account. Restarting "as administrator" from it makes Windows ask
     /// for the password of ANOTHER account, and the restarted program then works with that account's profile
@@ -100,6 +103,9 @@ public static class Admin
                 Verb = "runas",
                 WorkingDirectory = AppContext.BaseDirectory,
             });
+            // Shutdown() only queues the closing of the windows: code that asked for the restart goes on running for a moment, and
+            // must be able to tell "the program is closing" from "the user said no" (RequireElevation returns false for both).
+            RestartStarted = true;
             Application.Current?.Shutdown();
             return true;
         }

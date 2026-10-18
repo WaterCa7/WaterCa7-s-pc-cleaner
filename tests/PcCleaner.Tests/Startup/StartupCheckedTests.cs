@@ -70,6 +70,9 @@ public class StartupCheckedTests
 
         public bool Answer { get; set; } = true;
 
+        /// <summary>The answer to the restart question: true = the user agreed and the restart as administrator has started.</summary>
+        public bool RestartStarts { get; set; }
+
         public string Question => Assert.Single(Questions).Message;
 
         public (string Title, string Message) Info => Assert.Single(Infos);
@@ -85,7 +88,7 @@ public class StartupCheckedTests
             vm.RequireElevation = action =>
             {
                 ElevationRequests.Add(action);
-                return false; // "Нет" / the restart was not made
+                return RestartStarts; // false: "Нет" / the restart was not made
             };
             vm.CreateRestorePoint = (description, _) =>
             {
@@ -783,6 +786,182 @@ public class StartupCheckedTests
         Assert.Single(seams.ElevationRequests);
         Assert.Empty(seams.Infos);
         Assert.Equal(1, vm.CheckedCount);
+    });
+
+    [Fact]
+    public void WhenTheRestartAsAdministratorStarts_NothingElseIsAskedShownOrChanged() => OnUiThread(async () =>
+    {
+        using var sandbox = new StartupSandbox(elevated: false);
+        AddRun(sandbox, "Mine");
+        AddRun(sandbox, "Machine", hive: "HKLM");
+        var seams = new Seams { RestartStarts = true }; // "Да": the program is closing
+        var vm = NewVm(sandbox, seams);
+        Check(vm, "Mine", "Machine");
+
+        // The app is shutting down: no question (it could be the deletion), no "Нечего…" message, no change; the checks stay.
+        await vm.DisableCheckedCommand.ExecuteAsync(null);
+        await vm.DeleteCheckedCommand.ExecuteAsync(null);
+        Row(vm, "Mine").IsChecked = false;
+        await vm.DeleteCheckedCommand.ExecuteAsync(null); // only the machine-wide entry: used to end in a "nothing to delete" message
+
+        Assert.Equal(3, seams.ElevationRequests.Count);
+        Assert.Empty(seams.Questions);
+        Assert.Empty(seams.Infos);
+        Assert.Empty(seams.RestorePoints);
+        Assert.Null(vm.Message);
+        Assert.True(IsApprovedEnabled(sandbox, "Mine"));
+        Assert.True(IsApprovedEnabled(sandbox, "Machine", "HKLM"));
+        Assert.NotNull(sandbox.GetValue(@"HKCU\Run", "Mine"));
+        Assert.NotNull(sandbox.GetValue(@"HKLM\Run", "Machine"));
+        Assert.Equal(1, vm.CheckedCount);
+        Assert.True(Row(vm, "Machine").IsChecked);
+    });
+
+    // ---------------------------------------------------------------- stopped half way
+
+    [Fact]
+    public void Disable_StoppedWithCancel_KeepsWhatWasDone_AndSaysSo() => OnUiThread(async () =>
+    {
+        using var sandbox = new StartupSandbox();
+        AddRun(sandbox, "Alpha");
+        AddRun(sandbox, "Beta");
+        AddRun(sandbox, "Gamma");
+        var seams = new Seams();
+        var vm = NewVm(sandbox, seams);
+        Check(vm, "Alpha", "Beta", "Gamma");
+        // The first entry creates the StartupApproved key, the second one exports it first: «Отмена» is pressed right there.
+        sandbox.BackupHook = (_, _, _) =>
+        {
+            vm.CancelCommand.Execute(null);
+            return Task.FromResult<string?>("backup.reg");
+        };
+
+        await vm.DisableCheckedCommand.ExecuteAsync(null);
+
+        var disabled = new[] { "Alpha", "Beta", "Gamma" }.Where(n => !IsApprovedEnabled(sandbox, n)).ToList();
+        var done = Assert.Single(disabled); // the first one only
+        Assert.Equal("Отключено: 1. Остановлено — остальные записи не тронуты.", vm.Message);
+        Assert.False(vm.MessageIsError);
+        var info = seams.Info.Message;
+        Assert.Contains("Отключено: 1 запись.", info);
+        Assert.Contains("Остановлено: остальные записи не тронуты.", info);
+        Assert.False(Row(vm, done).IsEnabled);
+        Assert.Equal(2, vm.CheckedCount); // the stopped ones stay checked
+        Assert.False(Row(vm, done).IsChecked);
+        Assert.Equal(2, vm.ItemsView.Cast<StartupItem>().Count(i => i.IsEnabled && i.IsChecked));
+    });
+
+    [Fact]
+    public void Disable_WithAnErrorHalfWay_ShowsThePartialCountsInTheBanner() => OnUiThread(async () =>
+    {
+        using var sandbox = new StartupSandbox();
+        AddRun(sandbox, "Alpha");
+        AddRun(sandbox, "Beta");
+        AddRun(sandbox, "Gamma");
+        var seams = new Seams();
+        var vm = NewVm(sandbox, seams);
+        Check(vm, "Alpha", "Beta", "Gamma");
+        // Not an error the service handles (like an IOException): it reaches the page's busy wrapper, which shows its own dialog.
+        sandbox.BackupHook = (_, _, _) => throw new NotSupportedException("тестовая ошибка");
+
+        await vm.DisableCheckedCommand.ExecuteAsync(null);
+
+        var disabled = new[] { "Alpha", "Beta", "Gamma" }.Where(n => !IsApprovedEnabled(sandbox, n)).ToList();
+        var done = Assert.Single(disabled);
+        Assert.Equal("Отключено: 1. Остановлено из-за ошибки — остальные записи не тронуты.", vm.Message);
+        Assert.True(vm.MessageIsError);
+        Assert.Empty(seams.Infos); // the error dialog is the one message
+        Assert.Equal(2, vm.CheckedCount);
+        Assert.False(Row(vm, done).IsChecked);
+        Assert.False(Row(vm, done).IsEnabled);
+    });
+
+    [Fact]
+    public void Delete_StoppedWithCancel_ReloadsTheListFromTheRealState() => OnUiThread(async () =>
+    {
+        using var sandbox = new StartupSandbox();
+        AddRun(sandbox, "Alpha");
+        AddRun(sandbox, "Beta");
+        AddRun(sandbox, "Gamma");
+        var seams = new Seams();
+        var vm = NewVm(sandbox, seams);
+        Check(vm, "Alpha", "Beta");
+        var calls = 0;
+        sandbox.BackupHook = (_, _, _) =>
+        {
+            if (++calls == 2)
+                vm.CancelCommand.Execute(null); // the second entry is never deleted, the first one already is
+            return Task.FromResult<string?>("backup.reg");
+        };
+
+        await vm.DeleteCheckedCommand.ExecuteAsync(null);
+
+        var remaining = new[] { "Alpha", "Beta", "Gamma" }.Where(n => sandbox.GetValue(@"HKCU\Run", n) is not null).ToList();
+        Assert.Equal(2, remaining.Count);
+        Assert.Contains("Gamma", remaining);
+        // The list was read again: it shows exactly what is left, not the entries as they were before the deletion.
+        Assert.Equal(remaining.OrderBy(n => n), vm.ItemsView.Cast<StartupItem>().Select(i => i.Name).OrderBy(n => n));
+        Assert.Equal("Удаление остановлено. Часть записей могла быть удалена — список обновлён.", vm.Message);
+        Assert.False(vm.MessageIsError);
+        Assert.Empty(seams.Infos);
+        Assert.Equal(1, vm.CheckedCount); // the one that was not deleted stays checked
+        Assert.Equal(remaining.Single(n => n != "Gamma"), vm.ItemsView.Cast<StartupItem>().Single(i => i.IsChecked).Name);
+    });
+
+    [Fact]
+    public void Delete_FailingHalfWay_ReloadsTheListAndSaysSo() => OnUiThread(async () =>
+    {
+        using var sandbox = new StartupSandbox();
+        AddRun(sandbox, "Alpha");
+        AddRun(sandbox, "Beta");
+        AddRun(sandbox, "Gamma");
+        var seams = new Seams();
+        var vm = NewVm(sandbox, seams);
+        Check(vm, "Alpha", "Beta");
+        var calls = 0;
+        sandbox.BackupHook = (_, _, _) =>
+        {
+            if (++calls == 2)
+                throw new NotSupportedException("тестовая ошибка");
+            return Task.FromResult<string?>("backup.reg");
+        };
+
+        await vm.DeleteCheckedCommand.ExecuteAsync(null);
+
+        var remaining = new[] { "Alpha", "Beta", "Gamma" }.Where(n => sandbox.GetValue(@"HKCU\Run", n) is not null).ToList();
+        Assert.Equal(2, remaining.Count);
+        Assert.Equal(remaining.OrderBy(n => n), vm.ItemsView.Cast<StartupItem>().Select(i => i.Name).OrderBy(n => n));
+        Assert.Equal("Не удалось удалить отмеченные записи. Список обновлён.", vm.Message);
+        Assert.True(vm.MessageIsError);
+        Assert.Empty(seams.Infos);
+        Assert.Equal(1, vm.CheckedCount);
+    });
+
+    // ---------------------------------------------------------------- one source of truth for the rights
+
+    [Fact]
+    public void SingleEntryActions_AndTheRestartButton_UseTheSameRightsAsTheService() => OnUiThread(async () =>
+    {
+        using var admin = new StartupSandbox(elevated: true);
+        using var standard = new StartupSandbox(elevated: false);
+        var seams = new Seams();
+        var adminVm = NewVm(admin, seams, Array.Empty<StartupItem>());
+        var standardVm = NewVm(standard, seams, Array.Empty<StartupItem>());
+
+        Assert.True(adminVm.IsElevated);
+        Assert.False(standardVm.IsElevated);
+        Assert.False(adminVm.RestartAsAdminCommand.CanExecute(null));  // nothing to restart for
+        Assert.True(standardVm.RestartAsAdminCommand.CanExecute(null));
+
+        // A machine-wide entry is switched on by the single switch without any restart question, because the service may change it
+        // (the same rights the bulk buttons and the service itself see; the test runner's own rights do not matter).
+        AddDisabledRun(admin, "Machine", hive: "HKLM");
+        var vm = NewVm(admin, seams);
+        await vm.ToggleCommand.ExecuteAsync(Row(vm, "Machine"));
+
+        Assert.True(IsApprovedEnabled(admin, "Machine", "HKLM"));
+        Assert.True(Row(vm, "Machine").IsEnabled);
+        Assert.Empty(seams.ElevationRequests);
     });
 
     // ---------------------------------------------------------------- restore point
