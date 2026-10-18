@@ -522,6 +522,7 @@ public sealed class CleanerService : IHealthContributor
                 Gain = $"Освободит до {Format.Bytes(total)}",
                 ReclaimableBytes = total,
                 AutoFixSafe = true,
+                FixKind = FixKind.DeletesJunk,
                 TargetPageKey = "Cleaner",
                 FixAsync = token => FixJunkAsync(ids, token),
             });
@@ -541,6 +542,7 @@ public sealed class CleanerService : IHealthContributor
                       "с правами администратора. Перезапустите программу от имени администратора и нажмите кнопку ещё раз.",
                 Severity = IssueSeverity.Info,
                 Gain = $"Освободит до {Format.Bytes(systemBytes)}",
+                FixKind = FixKind.DeletesJunk,
                 TargetPageKey = "Cleaner",
                 FixAsync = token => FixSystemJunkAsync(systemIds, token),
             });

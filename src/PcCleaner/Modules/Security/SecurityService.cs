@@ -1160,7 +1160,7 @@ public sealed partial class SecurityService : IHealthContributor
 
         HealthIssue Issue(string title, string details, IssueSeverity severity,
             Func<CancellationToken, Task<string>>? fix = null, bool autoFix = false, string? gain = null,
-            string? fixLabel = null, string? settingsUri = null, bool inFixAll = true) => new()
+            string? fixLabel = null, string? settingsUri = null, bool inFixAll = true, string? consequence = null) => new()
             {
                 Module = ModuleName,
                 Title = title,
@@ -1169,6 +1169,7 @@ public sealed partial class SecurityService : IHealthContributor
                 FixAsync = fix,
                 FixLabel = fixLabel ?? HealthIssue.DefaultFixLabel,
                 InFixAll = inFixAll,
+                Consequence = consequence,
                 AutoFixSafe = autoFix,
                 Gain = gain,
                 SettingsUri = settingsUri,
@@ -1267,7 +1268,7 @@ public sealed partial class SecurityService : IHealthContributor
         {
             issues.Add(Issue("Контроль учётных записей (UAC) отключён",
                 "Любая программа получает права администратора без вашего ведома. После включения нужна перезагрузка.",
-                IssueSeverity.High, Wrap(EnableUacAsync)));
+                IssueSeverity.High, Wrap(EnableUacAsync), consequence: "После включения UAC нужно перезагрузить компьютер."));
         }
         else if (uac is { Status: SecurityStatus.Warning })
         {
@@ -1367,7 +1368,8 @@ public sealed partial class SecurityService : IHealthContributor
                 FirstParagraph(smb1.Details) + " Исправление создаст точку восстановления и отключит компонент Windows " +
                 "«SMB 1.0», после него нужна перезагрузка. Вернуть его можно в «Включение или отключение компонентов Windows».",
                 smb1.Status == SecurityStatus.Danger ? IssueSeverity.High : IssueSeverity.Medium,
-                Wrap(DisableSmb1Async), gain: "Защита от сетевых червей вроде WannaCry"));
+                Wrap(DisableSmb1Async), gain: "Защита от сетевых червей вроде WannaCry",
+                consequence: "После отключения SMBv1 нужно перезагрузить компьютер."));
         }
 
         var secureBoot = report.Check(SecurityCheckIds.SecureBoot);

@@ -51,6 +51,7 @@ public class DiskDashboardFixTests
         Assert.True(issue.CanFix);
         Assert.Equal("В Корзину", issue.FixLabel);
         Assert.True(issue.InFixAll);
+        Assert.Equal(FixKind.MovesToRecycleBin, issue.FixKind); // «Исправить всё» says the files can be restored
         Assert.False(issue.AutoFixSafe);
         Assert.Equal("Disk", issue.TargetPageKey);
     }

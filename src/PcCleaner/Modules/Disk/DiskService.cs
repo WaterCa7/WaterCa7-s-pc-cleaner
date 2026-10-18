@@ -701,6 +701,7 @@ public sealed class DiskService : IHealthContributor
             ReclaimableBytes = total,
             TargetPageKey = PageKey,
             FixLabel = "В Корзину",
+            FixKind = FixKind.MovesToRecycleBin,
             FixAsync = token => RecycleOldDownloadsAsync(scanned, token),
         };
     }

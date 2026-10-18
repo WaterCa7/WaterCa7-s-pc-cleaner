@@ -140,6 +140,21 @@ public class SecurityDashboardFixTests
         }
     }
 
+    [Fact]
+    public void BuildIssues_FixesThatNeedARestart_SaySoInFixAll()
+    {
+        using var sb = new SecuritySandbox();
+
+        var issues = sb.Service.BuildIssues(ReportWithEveryFix());
+        var promptOnly = sb.Service.BuildIssues(ReportWithEveryFix(SecurityStatus.Warning)).Single(i => i.Title.Contains("UAC"));
+
+        Assert.Equal("После включения UAC нужно перезагрузить компьютер.", issues.Single(i => i.Title.Contains("UAC")).Consequence);
+        Assert.Equal("После отключения SMBv1 нужно перезагрузить компьютер.",
+            issues.Single(i => i.Title == "Включён устаревший протокол SMBv1").Consequence);
+        Assert.Null(promptOnly.Consequence); // turning the prompt back on needs no restart
+        Assert.Equal(2, issues.Count(i => i.Consequence is not null));
+    }
+
     [Theory]
     [InlineData(0, SecurityStatus.Danger, "Перезагрузите")]   // UAC off: "UAC включён. Перезагрузите компьютер…"
     [InlineData(1, SecurityStatus.Warning, "Запросы UAC снова включены")] // only the prompt was off

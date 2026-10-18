@@ -402,7 +402,13 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     /// <summary>Issues "Исправить всё" runs: fixable ones except those that open their own windows, restart or uninstall.</summary>
-    public int FixAllCount => _issues.Count(i => i.CanFix && i.InFixAll);
+    public int FixAllCount => _issues.Count(RunsInFixAll);
+
+    /// <summary>
+    /// What "Исправить всё" runs: a fix that is still open and part of it — never one that only opens a tool, since a batch
+    /// must not open windows the user then has to work in.
+    /// </summary>
+    private static bool RunsInFixAll(HealthIssue issue) => issue.CanFix && issue.InFixAll && !issue.OnlyOpensTool;
 
     public bool HasFixAll => !IsScanning && FixAllCount > 0;
 
@@ -1017,14 +1023,20 @@ public sealed class DashboardViewModel : PageViewModel
         message.AppendLine($"Проблема: {issue.Title}");
         if (!string.IsNullOrWhiteSpace(issue.Details))
             message.AppendLine().AppendLine(ShortenForDialog(issue.Details));
-        if (item.GainText is { } gain)
-            message.AppendLine().AppendLine($"Что изменится: {gain}");
+        if ((issue.OnlyOpensTool ? OpensToolText(issue) : item.GainText) is { } change)
+            message.AppendLine().AppendLine($"Что изменится: {change}");
         message.AppendLine()
             .AppendLine($"Исправление выполнит раздел «{issue.Module}» — только то, что описано выше. " +
                         "Всё сделанное запишется в журнал («Настройки» → журнал действий).")
             .AppendLine().Append("Исправить сейчас?");
         return message.ToString();
     }
+
+    /// <summary>A fix that only opens «Очистка диска» frees nothing by itself: the question says where the space is freed.</summary>
+    private static string OpensToolText(HealthIssue issue)
+        => "Откроется «Очистка диска» — " + (issue.ReclaimableBytes > 0
+            ? $"освободить до {Format.Bytes(issue.ReclaimableBytes)} можно там"
+            : "освободить место можно там");
 
     /// <summary>
     /// Keeps a message box on the screen: very long module texts are cut (the full text stays visible on the issue row).
@@ -1126,7 +1138,7 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     /// <summary>
-    /// "Исправить всё (N)": ONE confirmation listing every CanFix &amp;&amp; InFixAll issue → restore point →
+    /// "Исправить всё (N)": ONE confirmation listing every issue it runs (<see cref="RunsInFixAll"/>) → restore point →
     /// fixes one by one → summary (→ offer to restart as administrator when some fixes needed the rights).
     /// Returns null if nothing was done.
     /// </summary>
@@ -1134,7 +1146,7 @@ public sealed class DashboardViewModel : PageViewModel
     {
         if (IsBusy)
             return null;
-        var items = AllItems.Where(i => i.Issue.CanFix && i.Issue.InFixAll).ToList();
+        var items = AllItems.Where(i => RunsInFixAll(i.Issue)).ToList();
         if (items.Count == 0)
             return null;
 
@@ -1208,36 +1220,68 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     /// <summary>
-    /// The ONE confirmation of "Исправить всё". Every item is named: up to 20 one per line (with gain and module),
-    /// longer lists compactly per module so the message box still fits on the screen.
+    /// The ONE confirmation of "Исправить всё". Every item is named with what its fix does and what to know before it
+    /// ("Важно: …", as in the single fix's question): one per line while the list takes at most 20 lines, longer lists
+    /// compactly per module so the message box still fits on the screen. The paragraph after the list speaks only of the
+    /// kinds of fixes the batch runs.
     /// </summary>
     internal static string FixAllConfirmText(IReadOnlyList<IssueItem> items)
     {
-        const int maxDetailedLines = 20;
+        const int maxListLines = 20;
         var message = new StringBuilder();
         message.AppendLine(items.Count == 1
             ? "Будет исправлено:"
             : $"Будут исправлены проблемы ({items.Count}):");
         message.AppendLine();
-        if (items.Count <= maxDetailedLines)
+        var detailed = items.SelectMany(FixAllLines).ToList();
+        if (detailed.Count <= maxListLines)
         {
-            foreach (var item in items)
-                message.AppendLine($"• {item.Issue.Title}" + (item.GainText is { } g ? $" — {g}" : "") + $" ({item.Issue.Module})");
+            foreach (var line in detailed)
+                message.AppendLine(line);
         }
         else
         {
             foreach (var module in items.GroupBy(i => i.Issue.Module ?? ""))
+            {
                 message.AppendLine($"• {module.Key} ({module.Count()}): " + string.Join("; ", module.Select(i => i.Issue.Title)));
+                foreach (var issue in module.Select(i => i.Issue).Where(i => !string.IsNullOrWhiteSpace(i.Consequence)))
+                    message.AppendLine($"  Важно: {issue.Title} — {issue.Consequence!.Trim()}");
+            }
         }
         message.AppendLine()
-            .AppendLine("Временные файлы и кэш удаляются насовсем — документы, пароли и история браузеров не затрагиваются. " +
-                        "Изменённые настройки Windows можно вернуть обратно. Удаление программ, очистка Корзины и " +
-                        "перезагрузка сюда не входят — для них есть отдельные кнопки.")
+            .AppendLine(FixAllEffectsText(items))
             .AppendLine("Перед изменениями программа попробует создать точку восстановления Windows (если это включено " +
                         "в настройках и есть права администратора). Если в Windows выключена защита системы, точка не " +
                         "создаётся — программа её не включает сама. Всё сделанное запишется в журнал.")
             .AppendLine().Append("Продолжить?");
         return message.ToString();
+    }
+
+    /// <summary>"• Прокси → Выключить прокси — gain (module)" and, when the fix has one, its "  Важно: …" line.</summary>
+    private static IEnumerable<string> FixAllLines(IssueItem item)
+    {
+        var issue = item.Issue;
+        var action = string.IsNullOrWhiteSpace(issue.FixLabel) || issue.FixLabel == HealthIssue.DefaultFixLabel
+            ? ""
+            : $" → {issue.FixLabel.Trim()}";
+        yield return $"• {issue.Title}{action}" + (item.GainText is { } g ? $" — {g}" : "") + $" ({issue.Module})";
+        if (!string.IsNullOrWhiteSpace(issue.Consequence))
+            yield return "  Важно: " + issue.Consequence.Trim();
+    }
+
+    /// <summary>What happens to files and settings — only for the kinds of fixes in the batch — and what is never in it.</summary>
+    private static string FixAllEffectsText(IReadOnlyList<IssueItem> items)
+    {
+        var kinds = items.Select(i => i.Issue.FixKind).ToHashSet();
+        var sentences = new List<string>();
+        if (kinds.Contains(FixKind.DeletesJunk))
+            sentences.Add("Временные файлы и кэш удаляются насовсем — документы, пароли и история браузеров не затрагиваются.");
+        if (kinds.Contains(FixKind.MovesToRecycleBin))
+            sentences.Add("Файлы из «Загрузок» уходят в Корзину — их можно восстановить.");
+        if (kinds.Contains(FixKind.Settings))
+            sentences.Add("Изменённые настройки Windows можно вернуть обратно.");
+        sentences.Add("Удаление программ, очистка Корзины и перезагрузка сюда не входят — для них есть отдельные кнопки.");
+        return string.Join(" ", sentences);
     }
 
     internal static string BatchSummaryText(FixBatchResult r)

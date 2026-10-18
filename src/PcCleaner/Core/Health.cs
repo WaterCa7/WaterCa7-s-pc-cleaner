@@ -9,6 +9,19 @@ public enum IssueSeverity
     Critical = 4,
 }
 
+/// <summary>What a fix does to the computer: the «Исправить всё» question explains only the kinds it runs.</summary>
+public enum FixKind
+{
+    /// <summary>Changes Windows settings or entries, which can be changed back (the default).</summary>
+    Settings = 0,
+
+    /// <summary>Deletes temporary files and caches for good (Cleaner).</summary>
+    DeletesJunk,
+
+    /// <summary>Moves the user's files to the Recycle Bin, where they can be restored (old downloads).</summary>
+    MovesToRecycleBin,
+}
+
 /// <summary>
 /// A finding produced by a module analysis. Shown on the dashboard after a smart scan.
 /// </summary>
@@ -46,6 +59,15 @@ public sealed class HealthIssue : ObservableObject
 
     /// <summary>False for fixes that open their own windows, restart the PC or remove programs: they are not run by "Исправить всё".</summary>
     public bool InFixAll { get; init; } = true;
+
+    /// <summary>What the fix does to files and settings («Исправить всё» explains it once, after the list).</summary>
+    public FixKind FixKind { get; init; } = FixKind.Settings;
+
+    /// <summary>
+    /// One short sentence the user must know before the fix runs ("Изменение вступит в силу после перезагрузки компьютера.").
+    /// The single fix's question shows it in <see cref="Details"/>; «Исправить всё» shows it under the issue's line.
+    /// </summary>
+    public string? Consequence { get; init; }
 
     /// <summary>The fix only opens a tool where the user finishes the job (Disk Cleanup): the row is not marked fixed and its size stays in the "free it yourself" part.</summary>
     public bool OnlyOpensTool { get; init; }

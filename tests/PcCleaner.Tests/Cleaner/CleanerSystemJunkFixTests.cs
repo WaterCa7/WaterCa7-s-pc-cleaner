@@ -111,6 +111,7 @@ public class CleanerSystemJunkFixTests
 
         Assert.True(issue.CanFix);
         Assert.True(issue.InFixAll);
+        Assert.Equal(FixKind.DeletesJunk, issue.FixKind);
         Assert.False(issue.AutoFixSafe);
         Assert.Equal("Cleaner", issue.TargetPageKey);
     }

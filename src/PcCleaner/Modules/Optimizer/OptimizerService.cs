@@ -229,7 +229,7 @@ public sealed class OptimizerService : IHealthContributor
     /// <summary>
     /// Low-risk one-click fixes: their dashboard row gets the «Безопасно исправить» badge (AutoFixSafe). The badge only
     /// informs; «Исправить всё» is gated by InFixAll, not by this. Turning off Xbox Game Bar recording is NOT among them:
-    /// it takes away clip and screenshot capture, so it is not marked low-risk.
+    /// it takes away clip and screenshot capture, so it is not marked low-risk, and «Исправить всё» leaves it out too.
     /// </summary>
     internal static bool IsLowRiskFix(string? fixId) => fixId is TweakIds.GameMode or TweakIds.PowerPlan;
 
@@ -256,6 +256,9 @@ public sealed class OptimizerService : IHealthContributor
             var consequence = appliesTweak ? rec.AfterApplyNote : null;
             if (appliesTweak)
             {
+                // Turning off Xbox Game Bar recording takes clip and screenshot capture away: the user decides on it per
+                // item, «Исправить всё» does not press its button.
+                inFixAll = rec.FixId != TweakIds.GameDvr;
                 var captured = rec;
                 fix = async ct =>
                 {
@@ -298,6 +301,7 @@ public sealed class OptimizerService : IHealthContributor
                 FixAsync = fix,
                 FixLabel = fixLabel,
                 InFixAll = inFixAll,
+                Consequence = string.IsNullOrWhiteSpace(consequence) ? null : consequence,
                 // Only reversible tweaks that take nothing away from the user get the «Безопасно исправить» badge.
                 AutoFixSafe = appliesTweak && rec.IsSafe && !rec.NeedsAdmin && IsLowRiskFix(rec.FixId),
                 SettingsUri = rec.SettingsUri,

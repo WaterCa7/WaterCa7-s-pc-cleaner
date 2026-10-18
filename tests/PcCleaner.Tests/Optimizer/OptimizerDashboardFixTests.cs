@@ -151,6 +151,58 @@ public sealed class OptimizerDashboardFixTests : IDisposable
         Assert.True(HealthScoring.LooksLikeFailure(text));
     }
 
+    // ===================== «Исправить всё» =====================
+
+    [Fact]
+    public async Task GameBarRecording_IsTurnedOffOnlyByItsOwnButton_AndFixAllNeverRunsIt()
+    {
+        const string note = "Скриншоты и запись клипов через Xbox Game Bar будут недоступны, пока вы не вернёте настройку.";
+        var service = Create(GoodDesktop(), GoodSettings() with { GameDvrValue = 1, AppCaptureValue = 1 });
+        var dvr = Assert.Single(await service.AnalyzeAsync(CancellationToken.None),
+            i => i.Title.Contains("Xbox Game Bar", StringComparison.Ordinal));
+        Assert.False(dvr.InFixAll); // it takes clip recording away: the user decides per item
+        Assert.NotNull(dvr.FixAsync); // its own button stays
+        Assert.Equal(note, dvr.Consequence);
+
+        var vm = new DashboardViewModel(new IHealthContributor[] { service }, new AppSettings())
+        {
+            CreateRestorePointAsync = (_, _) => throw new InvalidOperationException("nothing may be fixed"),
+        };
+        await vm.ScanCoreAsync(CancellationToken.None, persist: false);
+        string? question = null;
+        var previous = Dialogs.ConfirmHandler;
+        Dialogs.ConfirmHandler = (_, message) =>
+        {
+            question = message;
+            return true;
+        };
+        try
+        {
+            Assert.Equal(0, vm.FixAllCount);
+            Assert.Null(await vm.FixAllAsync());
+        }
+        finally
+        {
+            Dialogs.ConfirmHandler = previous;
+        }
+
+        Assert.Null(question);
+        var row = vm.Groups.SelectMany(g => g.AllItems).Single(i => i.Issue.Title == dvr.Title);
+        Assert.Null(row.Issue.FixResult); // never started
+        Assert.True(row.Issue.CanFix);
+    }
+
+    [Fact]
+    public async Task TweakWithAConsequence_HandsItToFixAll_OnlyWhenTheFixAppliesIt()
+    {
+        var withAdmin = await HagsIssueAsync(elevated: true);
+        var withoutAdmin = await HagsIssueAsync(elevated: false);
+
+        Assert.Equal("Изменение вступит в силу после перезагрузки компьютера.", withAdmin.Consequence);
+        Assert.True(withAdmin.InFixAll);
+        Assert.Null(withoutAdmin.Consequence); // that fix only says administrator rights are needed
+    }
+
     // ===================== «Перезагрузить» =====================
 
     private async Task<HealthIssue> RebootIssueAsync(bool pendingReboot)

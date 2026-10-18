@@ -76,6 +76,7 @@ public class CleanerServiceTests
         Assert.Equal("Очистка", junk.Module);
         Assert.True(junk.ReclaimableBytes >= 120 * Mb);
         Assert.StartsWith("Можно освободить", junk.Title);
+        Assert.Equal(FixKind.DeletesJunk, junk.FixKind); // «Исправить всё» says these files are deleted for good
         Assert.True(File.Exists(big), "analysis must not delete anything");
 
         var message = await junk.FixAsync!(CancellationToken.None);

@@ -28,10 +28,11 @@ public class FixAllTests
 
     private static HealthIssue NewIssue(string title, Func<CancellationToken, Task<string>>? fix = null,
         bool autoFixSafe = false, bool inFixAll = true, string? settingsUri = null, string fixLabel = "Исправить",
-        bool onlyOpensTool = false, long reclaimable = 0)
+        bool onlyOpensTool = false, long reclaimable = 0, string? consequence = null, FixKind fixKind = FixKind.Settings,
+        string module = "Ускорение")
         => new()
         {
-            Module = "Ускорение",
+            Module = module,
             Title = title,
             Details = "Описание проблемы",
             Severity = IssueSeverity.Medium,
@@ -42,6 +43,8 @@ public class FixAllTests
             OnlyOpensTool = onlyOpensTool,
             SettingsUri = settingsUri,
             FixLabel = fixLabel,
+            Consequence = consequence,
+            FixKind = fixKind,
             TargetPageKey = "Optimizer",
         };
 
@@ -73,6 +76,9 @@ public class FixAllTests
 
     private static IssueItem RowOf(DashboardViewModel vm, string title)
         => vm.Groups.SelectMany(g => g.AllItems).Single(i => i.Issue.Title == title);
+
+    private static List<IssueItem> RowsOf(DashboardViewModel vm, params string[] titles)
+        => titles.Select(t => RowOf(vm, t)).ToList();
 
     [Fact]
     public void HealthIssue_Defaults()
@@ -293,11 +299,109 @@ public class FixAllTests
         Assert.StartsWith("Будут исправлены проблемы (2):", many);
         Assert.Contains("Первое", many);
         Assert.Contains("Второе", many);
-        Assert.Contains("удаляются насовсем", many);
-        Assert.DoesNotContain("уходят в Корзину", many);
         Assert.Contains("очистка Корзины и перезагрузка сюда не входят", many);
         Assert.DoesNotContain("низкорисковые", many);
         Assert.StartsWith("Будет исправлено:", one);
+    }
+
+    [Fact]
+    public async Task FixAllConfirmText_NamesWhatEachFixDoes_AndWhatToKnowBeforeIt()
+    {
+        const string restart = "Изменение вступит в силу после перезагрузки компьютера.";
+        var vm = await ScannedAsync(
+            NewIssue("Прокси", Counting(new Counter()), fixLabel: "Выключить прокси"),
+            NewIssue("Обычное", Counting(new Counter())),
+            NewIssue("Планирование GPU", Counting(new Counter()), consequence: restart));
+
+        var text = DashboardViewModel.FixAllConfirmText(RowsOf(vm, "Прокси", "Обычное", "Планирование GPU"));
+        var lines = text.Split(Environment.NewLine);
+
+        Assert.Contains("• Прокси → Выключить прокси (Ускорение)", lines);
+        Assert.Contains("• Обычное (Ускорение)", lines); // the plain «Исправить» adds nothing
+        var gpu = Array.IndexOf(lines, "• Планирование GPU (Ускорение)");
+        Assert.True(gpu >= 0, text);
+        Assert.Equal("  Важно: " + restart, lines[gpu + 1]); // the single fix's «Важно:» line is in the batch too
+        Assert.Single(lines, l => l.Contains("Важно:"));
+    }
+
+    [Fact]
+    public async Task FixAllConfirmText_ClosingParagraph_SpeaksOnlyOfWhatIsIncluded()
+    {
+        const string junk = "Временные файлы и кэш удаляются насовсем — документы, пароли и история браузеров не затрагиваются.";
+        const string downloads = "Файлы из «Загрузок» уходят в Корзину — их можно восстановить.";
+        const string settings = "Изменённые настройки Windows можно вернуть обратно.";
+        const string notIncluded = "Удаление программ, очистка Корзины и перезагрузка сюда не входят — для них есть отдельные кнопки.";
+        var vm = await ScannedAsync(
+            NewIssue("Настройка", Counting(new Counter())),
+            NewIssue("Мусор", Counting(new Counter()), fixKind: FixKind.DeletesJunk, module: "Очистка"),
+            NewIssue("Загрузки", Counting(new Counter()), fixKind: FixKind.MovesToRecycleBin, module: "Диски"));
+
+        var onlySettings = DashboardViewModel.FixAllConfirmText(RowsOf(vm, "Настройка"));
+        var onlyJunk = DashboardViewModel.FixAllConfirmText(RowsOf(vm, "Мусор"));
+        var onlyDownloads = DashboardViewModel.FixAllConfirmText(RowsOf(vm, "Загрузки"));
+        var all = DashboardViewModel.FixAllConfirmText(RowsOf(vm, "Мусор", "Загрузки", "Настройка"));
+
+        Assert.Contains(settings, onlySettings);
+        Assert.DoesNotContain("насовсем", onlySettings);
+        Assert.DoesNotContain("«Загрузок»", onlySettings);
+
+        Assert.Contains(junk, onlyJunk);
+        Assert.DoesNotContain(settings, onlyJunk);
+        Assert.DoesNotContain("«Загрузок»", onlyJunk);
+
+        Assert.Contains(downloads, onlyDownloads);
+        Assert.DoesNotContain("насовсем", onlyDownloads);
+        Assert.DoesNotContain(settings, onlyDownloads);
+
+        Assert.Contains($"{junk} {downloads} {settings} {notIncluded}", all);
+        foreach (var text in new[] { onlySettings, onlyJunk, onlyDownloads })
+            Assert.Contains(notIncluded, text);
+    }
+
+    [Fact]
+    public async Task FixAllConfirmText_ImportantLinesCountTowardTheShortList()
+    {
+        // 18 problems and 3 «Важно:» lines do not fit one per line: the per-module form is used, the consequences stay.
+        var vm = await ScannedAsync(Enumerable.Range(1, 18)
+            .Select(i => NewIssue($"Проблема {i:00}", Counting(new Counter()), consequence: i <= 3 ? $"Последствие {i}." : null))
+            .ToArray());
+
+        var text = DashboardViewModel.FixAllConfirmText(vm.Groups.SelectMany(g => g.AllItems).ToList());
+        var lines = text.Split(Environment.NewLine);
+
+        Assert.Contains(lines, l => l.StartsWith("• Ускорение (18): Проблема 01; Проблема 02;", StringComparison.Ordinal));
+        Assert.Contains("  Важно: Проблема 01 — Последствие 1.", lines);
+        Assert.Contains("  Важно: Проблема 03 — Последствие 3.", lines);
+        Assert.True(lines.Count(l => l.StartsWith("•", StringComparison.Ordinal) || l.StartsWith("  Важно", StringComparison.Ordinal)) <= 20,
+            text);
+    }
+
+    [Fact]
+    public async Task FixAll_LeavesAFixThatOnlyOpensATool_EvenIfItSaysItIsInFixAll()
+    {
+        var calls = new Counter();
+        var vm = await ScannedAsync(
+            NewIssue("Только открывает", Counting(calls, "Открыта «Очистка диска»."), inFixAll: true, onlyOpensTool: true),
+            NewIssue("Обычное", Counting(new Counter())));
+
+        Assert.Equal(1, vm.FixAllCount);
+        var batch = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
+
+        Assert.Equal(1, batch!.Total);
+        Assert.Equal(0, calls.Value);
+    }
+
+    [Fact]
+    public async Task FixConfirmText_OfAFixThatOnlyOpensATool_SaysWhereTheSpaceIsFreed()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Осталась папка Windows.old", Counting(new Counter()), inFixAll: false, onlyOpensTool: true,
+                reclaimable: 40L << 30));
+
+        var text = DashboardViewModel.FixConfirmText(RowOf(vm, "Осталась папка Windows.old"));
+
+        Assert.Contains($"Что изменится: Откроется «Очистка диска» — освободить до {Format.Bytes(40L << 30)} можно там", text);
+        Assert.DoesNotContain("Освободит", text);
     }
 
     [Fact]
