@@ -162,7 +162,7 @@
     <TabControl SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
 
         <!-- ================= Основные ================= -->
-        <TabItem Header="Основные">
+        <TabItem Header="{loc:T 'Основные'}">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                 <Grid Margin="0,0,2,4">
                     <Grid.RowDefinitions>
@@ -225,11 +225,11 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,12">
                                     <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE777;" />
-                                    <TextBlock Style="{StaticResource H3}" Text="Защита перед изменениями" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Защита перед изменениями'}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding CreateRestorePoint}"
-                                          ToolTip="Точка восстановления — «снимок» системных файлов и реестра, к которому можно откатить Windows">
-                                    <TextBlock Text="Создавать точку восстановления перед изменениями системы" TextWrapping="Wrap" />
+                                          ToolTip="{loc:T 'Точка восстановления — «снимок» системных файлов и реестра, к которому можно откатить Windows'}">
+                                    <TextBlock Text="{loc:T 'Создавать точку восстановления перед изменениями системы'}" TextWrapping="Wrap" />
                                 </CheckBox>
                                 <TextBlock Style="{StaticResource Muted}" Margin="50,8,0,0" Text="{Binding RestorePointHint}" />
                                 <DockPanel Margin="50,6,0,0"
@@ -242,7 +242,7 @@
 
                                 <!-- Always as administrator: the program restarts itself elevated at every start -->
                                 <CheckBox Style="{StaticResource ToggleSwitch}" Margin="0,16,0,0" IsChecked="{Binding RunAsAdmin}">
-                                    <TextBlock Text="Запускать с правами администратора" TextWrapping="Wrap" />
+                                    <TextBlock Text="{loc:T 'Запускать с правами администратора'}" TextWrapping="Wrap" />
                                 </CheckBox>
                                 <TextBlock Style="{StaticResource Muted}" Margin="50,8,0,0" TextWrapping="Wrap" Text="{Binding RunAsAdminHint}" />
                             </StackPanel>
@@ -253,12 +253,12 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,12">
                                     <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE823;" />
-                                    <TextBlock Style="{StaticResource H3}" Text="Временные файлы" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Временные файлы'}" VerticalAlignment="Center" />
                                 </DockPanel>
-                                <TextBlock Text="Не удалять временные файлы моложе" TextWrapping="Wrap" />
+                                <TextBlock Text="{loc:T 'Не удалять временные файлы моложе'}" TextWrapping="Wrap" />
                                 <ComboBox Margin="0,8,0,0" Width="260" HorizontalAlignment="Left"
                                           ItemsSource="{Binding AgeOptions}" SelectedItem="{Binding SelectedAgeOption}" DisplayMemberPath="Label"
-                                          ToolTip="Допустимо от 0 до 720 часов. Рекомендуем 24 часа." />
+                                          ToolTip="{loc:T 'Допустимо от 0 до 720 часов. Рекомендуем 24 часа.'}" />
                                 <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="{Binding AgeHint}" />
                             </StackPanel>
                         </Border>
@@ -268,18 +268,18 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,12">
                                     <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE895;" />
-                                    <TextBlock Style="{StaticResource H3}" Text="Обновления" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Обновления'}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding AutoUpdate}">
-                                    <TextBlock Text="Обновляться автоматически" TextWrapping="Wrap" />
+                                    <TextBlock Text="{loc:T 'Обновляться автоматически'}" TextWrapping="Wrap" />
                                 </CheckBox>
                                 <TextBlock Style="{StaticResource Muted}" Margin="50,8,0,0" TextWrapping="Wrap"
-                                           Text="Новая версия скачивается в фоне, проверяется по цифровой подписи и ставится при следующем запуске программы." />
+                                           Text="{loc:T 'Новая версия скачивается в фоне, проверяется по цифровой подписи и ставится при следующем запуске программы.'}" />
                                 <TextBlock Margin="0,12,0,0" Text="{Binding VersionLine}" />
                                 <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0" Text="{Binding LastCheckText}" />
                                 <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Updates.StatusText}"
                                            Visibility="{Binding Updates.StatusText, Converter={StaticResource HasValueToVis}}" />
-                                <Button Margin="0,10,0,0" Padding="14,6" HorizontalAlignment="Left" Content="Проверить сейчас"
+                                <Button Margin="0,10,0,0" Padding="14,6" HorizontalAlignment="Left" Content="{loc:T 'Проверить сейчас'}"
                                         Command="{Binding CheckUpdatesCommand}" />
                             </StackPanel>
                         </Border>
@@ -289,13 +289,13 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,10">
                                     <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE8B7;" />
-                                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Открыть папку" FontSize="12.5"
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="{loc:T 'Открыть папку'}" FontSize="12.5"
                                             VerticalAlignment="Center" Command="{Binding OpenDataFolderCommand}" ToolTip="{Binding DataDir}" />
-                                    <TextBlock Style="{StaticResource H3}" Text="Данные программы" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Данные программы'}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <UniformGrid Columns="3">
                                     <Button Margin="0,0,6,0" Padding="8,8" Command="{Binding SelectTabCommand}" CommandParameter="1"
-                                            ToolTip="Открыть журнал действий">
+                                            ToolTip="{loc:T 'Открыть журнал действий'}">
                                         <StackPanel>
                                             <TextBlock Text="{Binding LogTotal}" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                             <TextBlock Text="{Binding LogTileLabel}" FontSize="11.5" Foreground="{StaticResource MutedBrush}"
@@ -303,7 +303,7 @@
                                         </StackPanel>
                                     </Button>
                                     <Button Margin="3,0,3,0" Padding="8,8" Command="{Binding SelectTabCommand}" CommandParameter="2"
-                                            ToolTip="Открыть список резервных копий">
+                                            ToolTip="{loc:T 'Открыть список резервных копий'}">
                                         <StackPanel>
                                             <TextBlock Text="{Binding Backups.Count}" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                             <TextBlock Text="{Binding BackupsTileLabel}" FontSize="11.5" Foreground="{StaticResource MutedBrush}"
@@ -311,7 +311,7 @@
                                         </StackPanel>
                                     </Button>
                                     <Button Margin="6,0,0,0" Padding="8,8" Command="{Binding SelectTabCommand}" CommandParameter="3"
-                                            ToolTip="Открыть карантин">
+                                            ToolTip="{loc:T 'Открыть карантин'}">
                                         <StackPanel>
                                             <TextBlock Text="{Binding QuarantineItems.Count}" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                             <TextBlock Text="{Binding QuarantineTileLabel}" FontSize="11.5" Foreground="{StaticResource MutedBrush}"
@@ -327,14 +327,14 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,6">
                                     <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE72C;" />
-                                    <TextBlock Style="{StaticResource H3}" Text="Сброс настроек" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Сброс настроек'}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Журнал, резервные копии и карантин не затрагиваются." />
+                                           Text="{loc:T 'Журнал, резервные копии и карантин не затрагиваются.'}" />
                                 <Button Margin="0,10,0,0" HorizontalAlignment="Left" Command="{Binding ResetSettingsCommand}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE7A7;" />
-                                        <TextBlock Text="Сбросить настройки по умолчанию" />
+                                        <TextBlock Text="{loc:T 'Сбросить настройки по умолчанию'}" />
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -350,10 +350,10 @@
                                     <Border DockPanel.Dock="Right" Style="{StaticResource Badge}" Margin="8,0,0,0">
                                         <TextBlock Text="{Binding Exclusions.Count}" FontSize="11.5" Foreground="{StaticResource MutedBrush}" />
                                     </Border>
-                                    <TextBlock Style="{StaticResource H3}" Text="Исключения очистки" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Исключения очистки'}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Эти папки и файлы «Очистка» никогда не тронет — вместе со всем содержимым. Путь можно ввести вручную, в том числе с переменными вроде %USERPROFILE%." />
+                                           Text="{loc:T 'Эти папки и файлы «Очистка» никогда не тронет — вместе со всем содержимым. Путь можно ввести вручную, в том числе с переменными вроде %USERPROFILE%.'}" />
 
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
@@ -367,20 +367,20 @@
                                                 <KeyBinding Key="Return" Command="{Binding AddExclusionCommand}" />
                                             </TextBox.InputBindings>
                                         </TextBox>
-                                        <TextBlock Style="{StaticResource Placeholder}" Margin="11,0,40,0" Text="Например, D:\Проекты"
+                                        <TextBlock Style="{StaticResource Placeholder}" Margin="11,0,40,0" Text="{loc:T 'Например, D:\\Проекты'}"
                                                    Visibility="{Binding Text, ElementName=ExclusionBox, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                                         <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                 Margin="0,0,4,0" Padding="8,6" Command="{Binding BrowseExclusionCommand}"
-                                                ToolTip="Обзор… — выбрать папку в стандартном окне Windows">
+                                                ToolTip="{loc:T 'Обзор… — выбрать папку в стандартном окне Windows'}">
                                             <TextBlock Style="{StaticResource Icon}" FontSize="14" Text="&#xE838;"
                                                        Foreground="{StaticResource AccentBrush}" />
                                         </Button>
                                     </Grid>
                                     <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding AddExclusionCommand}"
-                                            ToolTip="Добавить введённый путь в исключения (или нажмите Enter)">
+                                            ToolTip="{loc:T 'Добавить введённый путь в исключения (или нажмите Enter)'}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE710;" />
-                                            <TextBlock Text="Добавить" />
+                                            <TextBlock Text="{loc:T 'Добавить'}" />
                                         </StackPanel>
                                     </Button>
                                 </Grid>
@@ -413,17 +413,17 @@
                                             </ListBox.ItemTemplate>
                                         </ListBox>
                                         <TextBlock Style="{StaticResource EmptyText}" VerticalAlignment="Center" Margin="16,0"
-                                                   Text="Исключений нет. Очистка и так работает только с временными файлами и кэшем — добавьте сюда папки, которые хотите защитить наверняка."
+                                                   Text="{loc:T 'Исключений нет. Очистка и так работает только с временными файлами и кэшем — добавьте сюда папки, которые хотите защитить наверняка.'}"
                                                    Visibility="{Binding Exclusions.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                                     </Grid>
                                 </Border>
 
                                 <Button Margin="0,10,0,0" HorizontalAlignment="Left" Command="{Binding RemoveExclusionsCommand}"
                                         CommandParameter="{Binding SelectedItems, ElementName=ExclusionsList}"
-                                        ToolTip="Удалить выделенные пути из списка исключений (сами папки не удаляются)">
+                                        ToolTip="{loc:T 'Удалить выделенные пути из списка исключений (сами папки не удаляются)'}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE74D;" />
-                                        <TextBlock Text="Удалить выбранное" />
+                                        <TextBlock Text="{loc:T 'Удалить выбранное'}" />
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -437,11 +437,11 @@
                                     <Border DockPanel.Dock="Right" Style="{StaticResource Badge}" Margin="8,0,0,0">
                                         <TextBlock Text="{Binding TrustedItems.Count}" FontSize="11.5" Foreground="{StaticResource MutedBrush}" />
                                     </Border>
-                                    <TextBlock Style="{StaticResource H3}" Text="Доверенные программы и файлы" VerticalAlignment="Center"
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Доверенные программы и файлы'}" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
                                 </DockPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="То, что вы отметили как доверенное. Проверки в разделах «Процессы», «Автозагрузка» и «Программы» не будут считать это подозрительным." />
+                                           Text="{loc:T 'То, что вы отметили как доверенное. Проверки в разделах «Процессы», «Автозагрузка» и «Программы» не будут считать это подозрительным.'}" />
                                 <Border Background="{StaticResource Surface2Brush}" CornerRadius="8" Margin="0,10,0,0" Height="100">
                                     <Grid>
                                         <ListBox x:Name="TrustedList" ItemsSource="{Binding TrustedItems}" SelectionMode="Extended" Margin="4">
@@ -456,16 +456,16 @@
                                             </ListBox.ItemTemplate>
                                         </ListBox>
                                         <TextBlock Style="{StaticResource EmptyText}" VerticalAlignment="Center" Margin="16,0"
-                                                   Text="Список пуст. Отметить программу как доверенную можно в разделах «Процессы», «Автозагрузка» и «Программы»."
+                                                   Text="{loc:T 'Список пуст. Отметить программу как доверенную можно в разделах «Процессы», «Автозагрузка» и «Программы».'}"
                                                    Visibility="{Binding TrustedItems.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                                     </Grid>
                                 </Border>
                                 <Button Margin="0,10,0,0" HorizontalAlignment="Left" Command="{Binding RemoveTrustedCommand}"
                                         CommandParameter="{Binding SelectedItems, ElementName=TrustedList}"
-                                        ToolTip="Убрать выделенное из доверенных — проверки снова будут их учитывать">
+                                        ToolTip="{loc:T 'Убрать выделенное из доверенных — проверки снова будут их учитывать'}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE74D;" />
-                                        <TextBlock Text="Убрать из доверенных" />
+                                        <TextBlock Text="{loc:T 'Убрать из доверенных'}" />
                                     </StackPanel>
                                 </Button>
                                 <TextBlock Text="{Binding TrustedMessage}" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12.5"
@@ -479,7 +479,7 @@
         </TabItem>
 
         <!-- ================= Журнал ================= -->
-        <TabItem Header="Журнал">
+        <TabItem Header="{loc:T 'Журнал'}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -494,28 +494,28 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <ComboBox Width="170" ItemsSource="{Binding LogFilterOptions}" SelectedItem="{Binding SelectedLogFilter}"
-                              DisplayMemberPath="Label" ToolTip="Какие записи показывать" />
+                              DisplayMemberPath="Label" ToolTip="{loc:T 'Какие записи показывать'}" />
                     <Grid Grid.Column="1" Margin="8,0,0,0">
                         <TextBox x:Name="LogSearchBox" Padding="32,6,8,6" VerticalContentAlignment="Center"
                                  Text="{Binding LogSearch, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0"
                                    HorizontalAlignment="Left" Foreground="{StaticResource MutedBrush}" IsHitTestVisible="False" />
-                        <TextBlock Style="{StaticResource Placeholder}" Margin="33,0,8,0" Text="Поиск по журналу"
+                        <TextBlock Style="{StaticResource Placeholder}" Margin="33,0,8,0" Text="{loc:T 'Поиск по журналу'}"
                                    Visibility="{Binding Text, ElementName=LogSearchBox, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                     </Grid>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
                         <Button Command="{Binding CopyLogCommand}" CommandParameter="{Binding SelectedItems, ElementName=LogGrid}"
-                                ToolTip="Скопировать выделенные записи в буфер обмена (если ничего не выделено — все показанные)">
+                                ToolTip="{loc:T 'Скопировать выделенные записи в буфер обмена (если ничего не выделено — все показанные)'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE8C8;" />
-                                <TextBlock Text="Копировать" />
+                                <TextBlock Text="{loc:T 'Копировать'}" />
                             </StackPanel>
                         </Button>
                         <Button Margin="8,0,0,0" Command="{Binding OpenLogsFolderCommand}"
-                                ToolTip="Журналы всех запусков хранятся там по дням (файлы .log)">
+                                ToolTip="{loc:T 'Журналы всех запусков хранятся там по дням (файлы .log)'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE838;" />
-                                <TextBlock Text="Открыть папку журналов" />
+                                <TextBlock Text="{loc:T 'Открыть папку журналов'}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -526,7 +526,7 @@
                                Margin="12,0,0,0" />
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Muted}" Text="{Binding LogSummary}" TextWrapping="NoWrap" />
-                        <Button Style="{StaticResource LinkButton}" Content="Сбросить фильтр" Margin="10,0,0,0" FontSize="12.5"
+                        <Button Style="{StaticResource LinkButton}" Content="{loc:T 'Сбросить фильтр'}" Margin="10,0,0,0" FontSize="12.5"
                                 Command="{Binding ClearLogSearchCommand}"
                                 Visibility="{Binding IsLogFiltered, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
@@ -537,9 +537,9 @@
                         <DataGrid x:Name="LogGrid" ItemsSource="{Binding FilteredLog}" SelectionMode="Extended"
                                   PreviewMouseRightButtonDown="OnGridPreviewRightClick">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Время" Binding="{Binding TimeText}" Width="84" />
-                                <DataGridTemplateColumn Header="Уровень" Width="112" CellTemplate="{StaticResource LogLevelBadge}" />
-                                <DataGridTemplateColumn Header="Сообщение" Width="*">
+                                <DataGridTextColumn Header="{loc:T 'Время'}" Binding="{Binding TimeText}" Width="84" />
+                                <DataGridTemplateColumn Header="{loc:T 'Уровень'}" Width="112" CellTemplate="{StaticResource LogLevelBadge}" />
+                                <DataGridTemplateColumn Header="{loc:T 'Сообщение'}" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate DataType="{x:Type core:LogEntry}">
                                             <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}" />
@@ -549,10 +549,10 @@
                             </DataGrid.Columns>
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Копировать выделенное" Command="{Binding CopyLogCommand}"
+                                    <MenuItem Header="{loc:T 'Копировать выделенное'}" Command="{Binding CopyLogCommand}"
                                               CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                    <MenuItem Header="Копировать все показанные" Command="{Binding CopyLogCommand}" />
-                                    <MenuItem Header="Открыть папку журналов" Command="{Binding OpenLogsFolderCommand}" />
+                                    <MenuItem Header="{loc:T 'Копировать все показанные'}" Command="{Binding CopyLogCommand}" />
+                                    <MenuItem Header="{loc:T 'Открыть папку журналов'}" Command="{Binding OpenLogsFolderCommand}" />
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
                         </DataGrid>
@@ -567,7 +567,7 @@
         </TabItem>
 
         <!-- ================= Резервные копии ================= -->
-        <TabItem Header="Резервные копии">
+        <TabItem Header="{loc:T 'Резервные копии'}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -579,40 +579,40 @@
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" Text="{Binding BackupsSummary}" TextWrapping="NoWrap"
                                Margin="16,0,2,0" VerticalAlignment="Top" />
                     <TextBlock Style="{StaticResource Muted}"
-                               Text="Перед каждым изменением реестра программа сохраняет копию раздела. Если после изменения что-то работает не так, выберите копию и нажмите «Восстановить»." />
+                               Text="{loc:T 'Перед каждым изменением реестра программа сохраняет копию раздела. Если после изменения что-то работает не так, выберите копию и нажмите «Восстановить».'}" />
                 </DockPanel>
 
                 <DockPanel Grid.Row="1" Margin="0,12,0,10">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
-                        <Button Command="{Binding RefreshBackupsCommand}" ToolTip="Обновить список" Padding="10,7">
+                        <Button Command="{Binding RefreshBackupsCommand}" ToolTip="{loc:T 'Обновить список'}" Padding="10,7">
                             <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE72C;" />
                         </Button>
                         <Button Margin="8,0,0,0" Command="{Binding OpenBackupsFolderCommand}" ToolTip="{Binding BackupsDir}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE838;" />
-                                <TextBlock Text="Открыть папку резервных копий" />
+                                <TextBlock Text="{loc:T 'Открыть папку резервных копий'}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
                     <WrapPanel>
                         <Button Style="{StaticResource AccentButton}" Margin="0,0,8,6" Command="{Binding RestoreBackupCommand}"
-                                ToolTip="Заново записать в реестр значения, сохранённые в выбранной копии">
+                                ToolTip="{loc:T 'Заново записать в реестр значения, сохранённые в выбранной копии'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE777;" />
-                                <TextBlock Text="Восстановить" />
+                                <TextBlock Text="{loc:T 'Восстановить'}" />
                             </StackPanel>
                         </Button>
                         <Button Margin="0,0,8,6" Command="{Binding ShowBackupCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE8B7;" />
-                                <TextBlock Text="Показать в папке" />
+                                <TextBlock Text="{loc:T 'Показать в папке'}" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource DangerButton}" Margin="0,0,8,6" Command="{Binding DeleteBackupCommand}"
-                                ToolTip="Удалить файл копии (реестр не изменится). Доступно только для копий реестра.">
+                                ToolTip="{loc:T 'Удалить файл копии (реестр не изменится). Доступно только для копий реестра.'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE74D;" />
-                                <TextBlock Text="Удалить копию" />
+                                <TextBlock Text="{loc:T 'Удалить копию'}" />
                             </StackPanel>
                         </Button>
                     </WrapPanel>
@@ -623,8 +623,8 @@
                         <DataGrid x:Name="BackupsGrid" ItemsSource="{Binding Backups}" SelectedItem="{Binding SelectedBackup, Mode=TwoWay}"
                                   SelectionMode="Single" RowHeight="50" PreviewMouseRightButtonDown="OnGridPreviewRightClick">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Дата" Binding="{Binding TimeText}" Width="128" />
-                                <DataGridTemplateColumn Header="Что сохранено" Width="*">
+                                <DataGridTextColumn Header="{loc:T 'Дата'}" Binding="{Binding TimeText}" Width="128" />
+                                <DataGridTemplateColumn Header="{loc:T 'Что сохранено'}" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate DataType="{x:Type local:BackupEntry}">
                                             <StackPanel ToolTip="{Binding ToolTipText}" Background="Transparent">
@@ -635,25 +635,25 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Тип" Width="140" CellTemplate="{StaticResource BackupKindBadge}" />
-                                <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" Width="84" />
+                                <DataGridTemplateColumn Header="{loc:T 'Тип'}" Width="140" CellTemplate="{StaticResource BackupKindBadge}" />
+                                <DataGridTextColumn Header="{loc:T 'Размер'}" Binding="{Binding SizeText}" Width="84" />
                             </DataGrid.Columns>
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Восстановить" Command="{Binding RestoreBackupCommand}" />
-                                    <MenuItem Header="Показать в папке" Command="{Binding ShowBackupCommand}" />
-                                    <MenuItem Header="Удалить копию" Command="{Binding DeleteBackupCommand}" />
+                                    <MenuItem Header="{loc:T 'Восстановить'}" Command="{Binding RestoreBackupCommand}" />
+                                    <MenuItem Header="{loc:T 'Показать в папке'}" Command="{Binding ShowBackupCommand}" />
+                                    <MenuItem Header="{loc:T 'Удалить копию'}" Command="{Binding DeleteBackupCommand}" />
                                     <Separator />
-                                    <MenuItem Header="Открыть папку резервных копий" Command="{Binding OpenBackupsFolderCommand}" />
+                                    <MenuItem Header="{loc:T 'Открыть папку резервных копий'}" Command="{Binding OpenBackupsFolderCommand}" />
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
                         </DataGrid>
                         <StackPanel VerticalAlignment="Center" Margin="24"
                                     Visibility="{Binding Backups.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
                             <TextBlock Style="{StaticResource EmptyIcon}" Text="&#xEA35;" />
-                            <TextBlock Style="{StaticResource H3}" HorizontalAlignment="Center" Text="Резервных копий пока нет" Margin="0,0,0,6" />
+                            <TextBlock Style="{StaticResource H3}" HorizontalAlignment="Center" Text="{loc:T 'Резервных копий пока нет'}" Margin="0,0,0,6" />
                             <TextBlock Style="{StaticResource EmptyText}"
-                                       Text="Они появятся автоматически, когда программа впервые изменит реестр — например, отключит программу в автозагрузке. Благодаря копиям любое такое изменение можно отменить." />
+                                       Text="{loc:T 'Они появятся автоматически, когда программа впервые изменит реестр — например, отключит программу в автозагрузке. Благодаря копиям любое такое изменение можно отменить.'}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -661,7 +661,7 @@
         </TabItem>
 
         <!-- ================= Карантин ================= -->
-        <TabItem Header="Карантин">
+        <TabItem Header="{loc:T 'Карантин'}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -673,37 +673,37 @@
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" Text="{Binding QuarantineSummary}" TextWrapping="NoWrap"
                                Margin="16,0,2,0" VerticalAlignment="Top" ToolTip="{Binding QuarantineDir}" />
                     <TextBlock Style="{StaticResource Muted}"
-                               Text="Подозрительные файлы программа не удаляет, а переименовывает и переносит сюда — в карантине они не могут запуститься. Если файл оказался нужным, верните его на место." />
+                               Text="{loc:T 'Подозрительные файлы программа не удаляет, а переименовывает и переносит сюда — в карантине они не могут запуститься. Если файл оказался нужным, верните его на место.'}" />
                 </DockPanel>
 
                 <DockPanel Grid.Row="1" Margin="0,12,0,10">
                     <Button DockPanel.Dock="Right" VerticalAlignment="Top" Command="{Binding RefreshQuarantineCommand}"
-                            ToolTip="Обновить список" Padding="10,7">
+                            ToolTip="{loc:T 'Обновить список'}" Padding="10,7">
                         <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE72C;" />
                     </Button>
                     <WrapPanel>
                         <Button Style="{StaticResource AccentButton}" Margin="0,0,8,6" Command="{Binding RestoreQuarantineCommand}"
                                 CommandParameter="{Binding SelectedItems, ElementName=QuarantineGrid}"
-                                ToolTip="Вернуть выделенные файлы на прежнее место">
+                                ToolTip="{loc:T 'Вернуть выделенные файлы на прежнее место'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE777;" />
-                                <TextBlock Text="Восстановить" />
+                                <TextBlock Text="{loc:T 'Восстановить'}" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource DangerButton}" Margin="0,0,8,6" Command="{Binding DeleteQuarantineCommand}"
                                 CommandParameter="{Binding SelectedItems, ElementName=QuarantineGrid}"
-                                ToolTip="Стереть выделенные файлы без возможности восстановления">
+                                ToolTip="{loc:T 'Стереть выделенные файлы без возможности восстановления'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE74D;" />
-                                <TextBlock Text="Удалить навсегда" />
+                                <TextBlock Text="{loc:T 'Удалить навсегда'}" />
                             </StackPanel>
                         </Button>
                         <Button Margin="0,0,8,6" Command="{Binding ShowQuarantineOriginCommand}"
                                 CommandParameter="{Binding SelectedItems, ElementName=QuarantineGrid}"
-                                ToolTip="Открыть папку, откуда файл был перемещён в карантин">
+                                ToolTip="{loc:T 'Открыть папку, откуда файл был перемещён в карантин'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE8B7;" />
-                                <TextBlock Text="Исходная папка" />
+                                <TextBlock Text="{loc:T 'Исходная папка'}" />
                             </StackPanel>
                         </Button>
                     </WrapPanel>
@@ -714,7 +714,7 @@
                         <DataGrid x:Name="QuarantineGrid" ItemsSource="{Binding QuarantineItems}" SelectionMode="Extended" RowHeight="50"
                                   PreviewMouseRightButtonDown="OnGridPreviewRightClick">
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Файл" Width="1.3*">
+                                <DataGridTemplateColumn Header="{loc:T 'Файл'}" Width="1.3*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate DataType="{x:Type local:QuarantineRow}">
                                             <StackPanel ToolTip="{Binding ToolTipText}" Background="Transparent">
@@ -725,8 +725,8 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Помещён" Binding="{Binding TimeText}" Width="128" />
-                                <DataGridTemplateColumn Header="Причина" Width="*">
+                                <DataGridTextColumn Header="{loc:T 'Помещён'}" Binding="{Binding TimeText}" Width="128" />
+                                <DataGridTemplateColumn Header="{loc:T 'Причина'}" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate DataType="{x:Type local:QuarantineRow}">
                                             <TextBlock Text="{Binding Reason}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="36"
@@ -734,20 +734,20 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" Width="100" />
+                                <DataGridTextColumn Header="{loc:T 'Размер'}" Binding="{Binding SizeText}" Width="100" />
                             </DataGrid.Columns>
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Восстановить" Command="{Binding RestoreQuarantineCommand}"
+                                    <MenuItem Header="{loc:T 'Восстановить'}" Command="{Binding RestoreQuarantineCommand}"
                                               CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                    <MenuItem Header="Удалить навсегда" Command="{Binding DeleteQuarantineCommand}"
+                                    <MenuItem Header="{loc:T 'Удалить навсегда'}" Command="{Binding DeleteQuarantineCommand}"
                                               CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                     <Separator />
-                                    <MenuItem Header="Открыть исходную папку" Command="{Binding ShowQuarantineOriginCommand}"
+                                    <MenuItem Header="{loc:T 'Открыть исходную папку'}" Command="{Binding ShowQuarantineOriginCommand}"
                                               CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                    <MenuItem Header="Найти в интернете" Command="{Binding SearchQuarantineWebCommand}"
+                                    <MenuItem Header="{loc:T 'Найти в интернете'}" Command="{Binding SearchQuarantineWebCommand}"
                                               CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                    <MenuItem Header="Проверить на VirusTotal (по хешу)" Command="{Binding VirusTotalQuarantineCommand}"
+                                    <MenuItem Header="{loc:T 'Проверить на VirusTotal (по хешу)'}" Command="{Binding VirusTotalQuarantineCommand}"
                                               CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
@@ -755,9 +755,9 @@
                         <StackPanel VerticalAlignment="Center" Margin="24"
                                     Visibility="{Binding QuarantineItems.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
                             <TextBlock Style="{StaticResource EmptyIcon}" Text="&#xE72E;" />
-                            <TextBlock Style="{StaticResource H3}" HorizontalAlignment="Center" Text="Карантин пуст" Margin="0,0,0,6" />
+                            <TextBlock Style="{StaticResource H3}" HorizontalAlignment="Center" Text="{loc:T 'Карантин пуст'}" Margin="0,0,0,6" />
                             <TextBlock Style="{StaticResource EmptyText}"
-                                       Text="Карантин — это защищённая папка для подозрительных файлов. Когда вы отправляете файл в карантин (кнопка «В карантин» в разделе «Процессы»), он не удаляется, а переименовывается и переносится сюда, поэтому больше не может запуститься. Если файл окажется нужным, его можно будет вернуть отсюда одним нажатием." />
+                                       Text="{loc:T 'Карантин — это защищённая папка для подозрительных файлов. Когда вы отправляете файл в карантин (кнопка «В карантин» в разделе «Процессы»), он не удаляется, а переименовывается и переносится сюда, поэтому больше не может запуститься. Если файл окажется нужным, его можно будет вернуть отсюда одним нажатием.'}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -765,7 +765,7 @@
         </TabItem>
 
         <!-- ================= Восстановление системы ================= -->
-        <TabItem Header="Восстановление системы">
+        <TabItem Header="{loc:T 'Восстановление системы'}">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                 <Grid Margin="0,0,2,4">
                     <Grid.ColumnDefinitions>
@@ -779,10 +779,10 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE777;" />
-                                    <TextBlock Style="{StaticResource H3}" Text="Точка восстановления" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Точка восстановления'}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Точка восстановления — это «снимок» системных файлов, драйверов и реестра Windows. Если после изменений компьютер стал работать хуже, Windows вернёт систему к этому состоянию. Документы, фото и другие личные файлы при этом не затрагиваются." />
+                                           Text="{loc:T 'Точка восстановления — это «снимок» системных файлов, драйверов и реестра Windows. Если после изменений компьютер стал работать хуже, Windows вернёт систему к этому состоянию. Документы, фото и другие личные файлы при этом не затрагиваются.'}" />
 
                                 <Border Style="{StaticResource InnerCard}" Margin="0,12,0,0">
                                     <StackPanel>
@@ -810,14 +810,14 @@
                                         HorizontalAlignment="Stretch"
                                         Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
                                     <TextBlock Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" FontSize="12.5"
-                                               Text="Создавать точки восстановления может только администратор. При нажатии кнопки программа предложит перезапуститься с нужными правами." />
+                                               Text="{loc:T 'Создавать точки восстановления может только администратор. При нажатии кнопки программа предложит перезапуститься с нужными правами.'}" />
                                 </Border>
 
                                 <Button Style="{StaticResource AccentButton}" Margin="0,14,0,0" HorizontalAlignment="Left"
                                         Command="{Binding CreateRestorePointCommand}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE710;" />
-                                        <TextBlock Text="Создать точку восстановления сейчас" />
+                                        <TextBlock Text="{loc:T 'Создать точку восстановления сейчас'}" />
                                     </StackPanel>
                                 </Button>
                                 <!-- Exact outcome of the last attempt: created / skipped by Windows / not created -->
@@ -865,23 +865,23 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE7A7;" />
-                                    <TextBlock Style="{StaticResource H3}" Text="Откат системы" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Откат системы'}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Чтобы вернуть компьютер к одной из точек, откройте мастер восстановления Windows и выберите нужную точку. Перед откатом сохраните открытые документы — компьютер перезагрузится." />
+                                           Text="{loc:T 'Чтобы вернуть компьютер к одной из точек, откройте мастер восстановления Windows и выберите нужную точку. Перед откатом сохраните открытые документы — компьютер перезагрузится.'}" />
                                 <WrapPanel Margin="0,12,0,0">
                                     <Button Margin="0,0,8,6" Command="{Binding OpenSystemRestoreCommand}"
-                                            ToolTip="Запустить мастер «Восстановление системы» (rstrui.exe). Windows попросит права администратора.">
+                                            ToolTip="{loc:T 'Запустить мастер «Восстановление системы» (rstrui.exe). Windows попросит права администратора.'}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE8A7;" />
-                                            <TextBlock Text="Открыть восстановление системы" />
+                                            <TextBlock Text="{loc:T 'Открыть восстановление системы'}" />
                                         </StackPanel>
                                     </Button>
                                     <Button Margin="0,0,8,6" Command="{Binding OpenProtectionSettingsCommand}"
-                                            ToolTip="Окно «Защита системы»: включение защиты, место на диске, удаление старых точек">
+                                            ToolTip="{loc:T 'Окно «Защита системы»: включение защиты, место на диске, удаление старых точек'}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource ButtonIcon}" Text="&#xE713;" />
-                                            <TextBlock Text="Настроить защиту" />
+                                            <TextBlock Text="{loc:T 'Настроить защиту'}" />
                                         </StackPanel>
                                     </Button>
                                 </WrapPanel>
@@ -893,7 +893,7 @@
                         <StackPanel>
                             <DockPanel Margin="0,0,0,10">
                                 <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE81C;" />
-                                <TextBlock Style="{StaticResource H3}" Text="Последние точки восстановления" VerticalAlignment="Center"
+                                <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Последние точки восстановления'}" VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" />
                             </DockPanel>
                             <ItemsControl ItemsSource="{Binding RestorePoints}">
@@ -925,7 +925,7 @@
         </TabItem>
 
         <!-- ================= О программе ================= -->
-        <TabItem Header="О программе">
+        <TabItem Header="{loc:T 'О программе'}">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                 <Grid Margin="0,0,2,4">
                     <Grid.ColumnDefinitions>
@@ -947,9 +947,9 @@
                                 </StackPanel>
                             </DockPanel>
                             <TextBlock TextWrapping="Wrap" LineHeight="20"
-                                       Text="Программа помогает держать компьютер в порядке: удаляет временные файлы и кэш, показывает фоновые процессы и автозагрузку, находит подозрительные и нежелательные программы, анализирует диски и подсказывает, как ускорить систему и её компоненты." />
+                                       Text="{loc:T 'Программа помогает держать компьютер в порядке: удаляет временные файлы и кэш, показывает фоновые процессы и автозагрузку, находит подозрительные и нежелательные программы, анализирует диски и подсказывает, как ускорить систему и её компоненты.'}" />
 
-                            <TextBlock Style="{StaticResource H3}" Text="Безопасность прежде всего" Margin="0,16,0,8" />
+                            <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Безопасность прежде всего'}" Margin="0,16,0,8" />
                             <ItemsControl ItemsSource="{Binding SafetyLines}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -968,7 +968,7 @@
                         <StackPanel>
                             <DockPanel Margin="0,0,0,12">
                                 <TextBlock Style="{StaticResource SectionIcon}" Text="&#xE946;" />
-                                <TextBlock Style="{StaticResource H3}" Text="Сведения" VerticalAlignment="Center" />
+                                <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Сведения'}" VerticalAlignment="Center" />
                             </DockPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -982,20 +982,20 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <TextBlock Style="{StaticResource InfoLabel}" Text="Версия" />
+                                <TextBlock Style="{StaticResource InfoLabel}" Text="{loc:T 'Версия'}" />
                                 <TextBlock Style="{StaticResource InfoValue}" Grid.Column="1" Text="{Binding VersionNumber}" />
-                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="1" Text="Платформа" />
+                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="1" Text="{loc:T 'Платформа'}" />
                                 <TextBlock Style="{StaticResource InfoValue}" Grid.Row="1" Grid.Column="1" Text="{Binding RuntimeText}" />
-                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="2" Text="Система" />
+                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="2" Text="{loc:T 'Система'}" />
                                 <TextBlock Style="{StaticResource InfoValue}" Grid.Row="2" Grid.Column="1" Text="{Binding OsText}" />
-                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="3" Text="Администратор" />
+                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="3" Text="{loc:T 'Администратор'}" />
                                 <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,10">
                                     <TextBlock Style="{StaticResource InfoValue}" Margin="0" Text="{Binding AdminStatusText}" />
-                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить от имени администратора" Margin="0,4,0,0"
+                                    <Button Style="{StaticResource WrapLinkButton}" Content="{loc:T 'Перезапустить от имени администратора'}" Margin="0,4,0,0"
                                             HorizontalAlignment="Left" FontSize="12.5" Command="{Binding RestartAsAdminCommand}"
                                             Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}" />
                                 </StackPanel>
-                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="4" Text="Папка данных" />
+                                <TextBlock Style="{StaticResource InfoLabel}" Grid.Row="4" Text="{loc:T 'Папка данных'}" />
                                 <TextBlock Style="{StaticResource InfoValue}" Grid.Row="4" Grid.Column="1" Text="{Binding DataDir}"
                                            TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding DataDir}" />
                             </Grid>
@@ -1005,15 +1005,15 @@
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE71B;" Foreground="{StaticResource AccentBrush}"
                                                Margin="0,0,10,0" />
-                                    <Button Style="{StaticResource LinkButton}" Content="Страница проекта на GitHub" HorizontalAlignment="Left"
+                                    <Button Style="{StaticResource LinkButton}" Content="{loc:T 'Страница проекта на GitHub'}" HorizontalAlignment="Left"
                                             Command="{Binding OpenRepoCommand}" ToolTip="{Binding RepoUrl}" />
                                 </DockPanel>
                                 <DockPanel>
                                     <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE838;" Foreground="{StaticResource AccentBrush}"
                                                Margin="0,0,10,0" />
-                                    <Button Style="{StaticResource LinkButton}" Content="Открыть папку с данными программы" HorizontalAlignment="Left"
+                                    <Button Style="{StaticResource LinkButton}" Content="{loc:T 'Открыть папку с данными программы'}" HorizontalAlignment="Left"
                                             Command="{Binding OpenDataFolderCommand}"
-                                            ToolTip="Настройки, журналы, резервные копии реестра и карантин" />
+                                            ToolTip="{loc:T 'Настройки, журналы, резервные копии реестра и карантин'}" />
                                 </DockPanel>
                             </StackPanel>
                         </StackPanel>

@@ -35,6 +35,7 @@ public class LocalizationCatalogTests
         "MainViewModel.cs",
         "MainWindow.xaml",
         "MainWindow.xaml.cs",
+        "Modules/Settings/",
     };
 
     /// <summary>

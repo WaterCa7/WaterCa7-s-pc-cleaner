@@ -1,5 +1,6 @@
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -19,12 +20,13 @@ public sealed record LogFilterOption(LogLevelFilter Value, string Label)
 /// <summary>Filtering / searching / copying of journal entries (pure logic, unit-tested).</summary>
 internal static class LogFilter
 {
-    public static IReadOnlyList<LogFilterOption> Options { get; } = new[]
+    /// <summary>The filter choices, in the UI language (made on each call, so the texts always follow it).</summary>
+    public static IReadOnlyList<LogFilterOption> Options => new[]
     {
-        new LogFilterOption(LogLevelFilter.All, "Все"),
-        new LogFilterOption(LogLevelFilter.Actions, "Действия"),
-        new LogFilterOption(LogLevelFilter.Warnings, "Предупреждения"),
-        new LogFilterOption(LogLevelFilter.Errors, "Ошибки"),
+        new LogFilterOption(LogLevelFilter.All, T._("Все")),
+        new LogFilterOption(LogLevelFilter.Actions, T._("Действия")),
+        new LogFilterOption(LogLevelFilter.Warnings, T._("Предупреждения")),
+        new LogFilterOption(LogLevelFilter.Errors, T._("Ошибки")),
     };
 
     public static bool MatchesLevel(LogLevel level, LogLevelFilter filter) => filter switch
@@ -67,7 +69,8 @@ internal static class LogFilter
         return result;
     }
 
-    public static string FormatLine(LogEntry e) => $"{e.Time:dd.MM.yyyy HH:mm:ss} [{e.LevelText}] {e.Message}";
+    public static string FormatLine(LogEntry e)
+        => $"{e.Time.ToString(T.IsEnglish ? "MMM d, yyyy HH:mm:ss" : "dd.MM.yyyy HH:mm:ss", T.Culture)} [{e.LevelText}] {e.Message}";
 
     /// <summary>Text for the clipboard, in chronological order.</summary>
     public static string ToClipboardText(IEnumerable<LogEntry> entries)

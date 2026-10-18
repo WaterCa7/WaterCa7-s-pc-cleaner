@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -56,10 +57,10 @@ public sealed class BackupEntry
 
     public string KindText => Kind switch
     {
-        BackupKind.Registry => NeedsAdmin ? "Реестр (система)" : "Реестр",
-        BackupKind.Hosts => "Файл hosts",
-        BackupKind.ScheduledTask => "Задание",
-        _ => "Файл",
+        BackupKind.Registry => NeedsAdmin ? T._("Реестр (система)") : T._("Реестр"),
+        BackupKind.Hosts => T._("Файл hosts"),
+        BackupKind.ScheduledTask => T._("Задание"),
+        _ => T._("Файл"),
     };
 
     public string TimeText => Format.DateTime(Time);
@@ -78,9 +79,9 @@ public sealed class BackupEntry
                 sb.Append('\n').Append(KeyPath);
             if (HasDescription)
                 sb.Append("\n\n").Append(Description);
-            sb.Append("\n\nФайл: ").Append(FileName);
+            sb.Append("\n\n").Append(T.F("Файл: {0}", FileName));
             if (NeedsAdmin)
-                sb.Append("\nДля восстановления нужны права администратора.");
+                sb.Append("\n" + T._("Для восстановления нужны права администратора."));
             return sb.ToString();
         }
     }
@@ -111,7 +112,7 @@ internal static class BackupCatalog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            Log.Warn($"Не удалось прочитать папку резервных копий: {ex.Message}");
+            Log.Warn(T.F("Не удалось прочитать папку резервных копий: {0}", ex.Message));
             return new List<BackupEntry>();
         }
     }
@@ -184,17 +185,17 @@ internal static class BackupCatalog
         if (ext == ".hosts" || bare.Contains("hosts", StringComparison.OrdinalIgnoreCase))
         {
             kind = BackupKind.Hosts;
-            title = "Копия файла hosts";
+            title = T._("Копия файла hosts");
         }
         else if (ext == ".xml" && ReadTaskUri(file.FullName) is { } uri)
         {
             kind = BackupKind.ScheduledTask;
-            title = $"Задание планировщика «{uri.TrimStart('\\')}»";
+            title = T.F("Задание планировщика «{0}»", uri.TrimStart('\\'));
         }
         else if (ext == ".xml")
         {
             kind = BackupKind.ScheduledTask;
-            title = $"Задание планировщика «{rest.Replace('_', ' ').Trim()}»";
+            title = T.F("Задание планировщика «{0}»", rest.Replace('_', ' ').Trim());
         }
         else
         {
@@ -236,7 +237,7 @@ internal static class BackupCatalog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось прочитать резервную копию {Path.GetFileName(path)}: {ex.Message}");
+            Log.Warn(T.F("Не удалось прочитать резервную копию {0}: {1}", Path.GetFileName(path), ex.Message));
         }
         return null;
     }
@@ -258,7 +259,7 @@ internal static class BackupCatalog
         {
             return (null, new RegFileInfo(null, false, false)
             {
-                Problem = tooBig ? "Файл копии слишком большой для копии одного раздела реестра." : null,
+                Problem = tooBig ? T._("Файл копии слишком большой для копии одного раздела реестра.") : null,
             });
         }
         return (bytes, RegFileParser.Parse(bytes));
@@ -291,15 +292,15 @@ internal static class BackupCatalog
     /// <summary>Sidebar name of a module key ("Optimizer" → "Ускорение").</summary>
     public static string ModuleDisplayName(string key) => key switch
     {
-        "Dashboard" => "Главная",
-        "Cleaner" => "Очистка",
-        "Processes" => "Процессы",
-        "Startup" => "Автозагрузка",
-        "Programs" => "Программы",
-        "Disk" => "Диски",
-        "Optimizer" => "Ускорение",
-        "Security" => "Безопасность",
-        "Settings" => "Настройки",
+        "Dashboard" => T._("Главная"),
+        "Cleaner" => T._("Очистка"),
+        "Processes" => T._("Процессы"),
+        "Startup" => T._("Автозагрузка"),
+        "Programs" => T._("Программы"),
+        "Disk" => T._("Диски"),
+        "Optimizer" => T._("Ускорение"),
+        "Security" => T._("Безопасность"),
+        "Settings" => T._("Настройки"),
         _ => key,
     };
 
@@ -353,49 +354,49 @@ internal static class BackupCatalog
     public static string FriendlyKeyName(string key)
     {
         var k = ShortHive(key);
-        var scope = k.StartsWith("HKCU", StringComparison.OrdinalIgnoreCase) ? " — текущий пользователь"
-            : k.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase) ? " — все пользователи"
+        var scope = k.StartsWith("HKCU", StringComparison.OrdinalIgnoreCase) ? " — " + T._("текущий пользователь")
+            : k.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase) ? " — " + T._("все пользователи")
             : "";
 
         if (Has(k, @"\Explorer\StartupApproved\"))
-            return "Включение и отключение автозагрузки" + scope;
+            return T._("Включение и отключение автозагрузки") + scope;
         if (EndsOrHas(k, @"\CurrentVersion\RunOnce"))
-            return "Однократный автозапуск (RunOnce)" + scope;
+            return T._("Однократный автозапуск (RunOnce)") + scope;
         if (EndsOrHas(k, @"\CurrentVersion\Run"))
-            return "Автозагрузка программ (Run)" + scope;
+            return T._("Автозагрузка программ (Run)") + scope;
         if (After(k, @"\CurrentVersion\Uninstall\") is { } program)
-            return $"Запись об установленной программе «{program}»";
+            return T.F("Запись об установленной программе «{0}»", program);
         if (After(k, @"\CurrentControlSet\Services\") is { } service)
-            return $"Параметры службы «{service}»";
+            return T.F("Параметры службы «{0}»", service);
         if (Has(k, @"\Image File Execution Options"))
-            return "Параметры запуска программ (IFEO)";
+            return T._("Параметры запуска программ (IFEO)");
         if (Has(k, @"\Winlogon"))
-            return "Параметры входа в Windows (Winlogon)";
+            return T._("Параметры входа в Windows (Winlogon)");
         if (Has(k, @"\Multimedia\SystemProfile"))
-            return "Приоритеты мультимедиа и игр";
+            return T._("Приоритеты мультимедиа и игр");
         if (Has(k, @"\GameBar") || Has(k, @"\GameConfigStore") || Has(k, @"\GameDVR"))
-            return "Игровые настройки Windows";
+            return T._("Игровые настройки Windows");
         if (Has(k, @"\Control Panel\Desktop"))
-            return "Параметры рабочего стола" + scope;
+            return T._("Параметры рабочего стола") + scope;
         if (Has(k, @"\Control Panel\Mouse"))
-            return "Параметры мыши";
+            return T._("Параметры мыши");
         if (Has(k, @"\Explorer\Advanced"))
-            return "Параметры Проводника";
+            return T._("Параметры Проводника");
         if (Has(k, @"\Explorer\Serialize"))
-            return "Параметры запуска Проводника";
+            return T._("Параметры запуска Проводника");
         if (Has(k, @"\Schedule\TaskCache"))
-            return "Планировщик заданий";
+            return T._("Планировщик заданий");
         if (Has(k, @"\Control\Power") || Has(k, @"\PowerSettings"))
-            return "Параметры электропитания";
+            return T._("Параметры электропитания");
         if (Has(k, @"\Windows Defender"))
             return "Microsoft Defender";
         if (Has(k, @"\Policies\"))
-            return "Групповые политики" + scope;
+            return T._("Групповые политики") + scope;
 
         var last = k.TrimEnd('\\');
         var idx = last.LastIndexOf('\\');
         var segment = idx >= 0 ? last[(idx + 1)..] : last;
-        return segment.Length == 0 || segment == "…" ? "Раздел реестра" : $"Раздел «{segment}»";
+        return segment.Length == 0 || segment == "…" ? T._("Раздел реестра") : T.F("Раздел «{0}»", segment);
     }
 
     public static DateTime? TimeFromFileName(string fileName)
@@ -420,11 +421,11 @@ internal static class BackupCatalog
         // Backups live directly in the folder; anything in a subfolder (possibly behind a junction) is refused.
         if (!PathGuard.IsDirectChild(regFile, backupsDir))
         {
-            Log.Warn($"Удаление отменено: {regFile} находится вне папки резервных копий");
-            return (false, "Файл находится вне папки резервных копий — удаление отменено.");
+            Log.Warn(T.F("Удаление отменено: {0} находится вне папки резервных копий", regFile));
+            return (false, T._("Файл находится вне папки резервных копий — удаление отменено."));
         }
         if (!regFile.EndsWith(".reg", StringComparison.OrdinalIgnoreCase))
-            return (false, "Из программы можно удалять только резервные копии реестра (.reg).");
+            return (false, T._("Из программы можно удалять только резервные копии реестра (.reg)."));
 
         var files = new List<string> { Path.GetFullPath(regFile) };
         var side = Path.GetFullPath(regFile) + ".txt";
@@ -439,19 +440,19 @@ internal static class BackupCatalog
                 if (!info.Exists)
                     continue;
                 if (FileTools.IsReparsePoint(info))
-                    return (false, "Это ссылка на другой файл, а не резервная копия — удаление отменено.");
+                    return (false, T._("Это ссылка на другой файл, а не резервная копия — удаление отменено."));
             }
             foreach (var f in files.Where(File.Exists))
                 File.Delete(f);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось удалить резервную копию {name}: {ex.Message}");
-            return (false, $"Не удалось удалить файл: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Не удалось удалить резервную копию {0}: {1}", name, ex.Message));
+            return (false, T.F("Не удалось удалить файл: {0}.", ErrorText.For(ex)));
         }
 
-        Log.Action($"Удалена резервная копия реестра: {name}");
-        return (true, $"Резервная копия «{name}» удалена.");
+        Log.Action(T.F("Удалена резервная копия реестра: {0}", name));
+        return (true, T.F("Резервная копия «{0}» удалена.", name));
     }
 
     private static (string? Text, string? Path) ReadDescription(string file)

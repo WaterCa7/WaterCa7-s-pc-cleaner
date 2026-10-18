@@ -39,17 +39,17 @@ internal static class SettingsLogic
         var s = text?.Trim();
         if (string.IsNullOrEmpty(s))
         {
-            error = "Укажите число часов.";
+            error = T._("Укажите число часов.");
             return false;
         }
         if (!int.TryParse(s, System.Globalization.NumberStyles.Integer, Format.Ru, out var value))
         {
-            error = "Нужно целое число часов, например 24.";
+            error = T._("Нужно целое число часов, например 24.");
             return false;
         }
         if (value < MinAgeHoursMin || value > MinAgeHoursMax)
         {
-            error = $"Допустимо от {MinAgeHoursMin} до {MinAgeHoursMax} часов (30 дней).";
+            error = T.F("Допустимо от {0} до {1} часов (30 дней).", MinAgeHoursMin, MinAgeHoursMax);
             return false;
         }
         hours = value;
@@ -59,9 +59,9 @@ internal static class SettingsLogic
 
     public static string AgeLabel(int hours) => hours switch
     {
-        0 => "Без задержки (удалять сразу)",
-        DefaultMinAgeHours => "24 часа (рекомендуется)",
-        168 => "1 неделя",
+        0 => T._("Без задержки (удалять сразу)"),
+        DefaultMinAgeHours => T._("24 часа (рекомендуется)"),
+        168 => T._("1 неделя"),
         _ when hours % 24 == 0 => Format.Count(hours / 24, "день", "дня", "дней"),
         _ => Format.Count(hours, "час", "часа", "часов"),
     };
@@ -83,25 +83,25 @@ internal static class SettingsLogic
         var s = input?.Trim().Trim('"').Trim();
         if (string.IsNullOrEmpty(s))
         {
-            error = "Укажите путь к папке или файлу.";
+            error = T._("Укажите путь к папке или файлу.");
             return false;
         }
 
         s = Environment.ExpandEnvironmentVariables(s);
         if (s.IndexOfAny(Path.GetInvalidPathChars()) >= 0 || s.IndexOfAny(new[] { '*', '?', '<', '>', '|', '"' }) >= 0)
         {
-            error = "В пути есть недопустимые символы (* ? < > | \").";
+            error = T._("В пути есть недопустимые символы (* ? < > | \").");
             return false;
         }
         if (!Path.IsPathFullyQualified(s))
         {
-            error = "Нужен полный путь, например D:\\Проекты или %USERPROFILE%\\Documents.";
+            error = T._("Нужен полный путь, например D:\\Проекты или %USERPROFILE%\\Documents.");
             return false;
         }
         // A colon is allowed only right after the drive letter.
         if (s.Length > 2 && s.IndexOf(':', 2) >= 0)
         {
-            error = "Двоеточие допустимо только после буквы диска.";
+            error = T._("Двоеточие допустимо только после буквы диска.");
             return false;
         }
 
@@ -112,7 +112,7 @@ internal static class SettingsLogic
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException
                                        or System.Security.SecurityException)
         {
-            error = "Некорректный путь.";
+            error = T._("Некорректный путь.");
             return false;
         }
 
@@ -147,14 +147,14 @@ internal static class SettingsLogic
             StringComparison.OrdinalIgnoreCase));
         if (same is not null)
         {
-            message = "Этот путь уже есть в списке исключений.";
+            message = T._("Этот путь уже есть в списке исключений.");
             return ExclusionAddResult.Duplicate;
         }
 
         var parent = settings.CleanerExclusions.FirstOrDefault(e => !string.IsNullOrWhiteSpace(e) && IsSameOrUnder(path, e));
         if (parent is not null)
         {
-            message = $"Этот путь уже защищён: он находится внутри исключения «{parent}».";
+            message = T.F("Этот путь уже защищён: он находится внутри исключения «{0}».", parent);
             return ExclusionAddResult.AlreadyCovered;
         }
 
@@ -162,8 +162,8 @@ internal static class SettingsLogic
         settings.CleanerExclusions = new List<string>(settings.CleanerExclusions) { path };
         // Network paths are not probed: an unreachable server would freeze the UI for the SMB timeout.
         message = IsNetworkPath(path) || Directory.Exists(path) || File.Exists(path)
-            ? $"Добавлено исключение: {path}"
-            : $"Добавлено исключение: {path} (такой папки пока нет — правило сработает, когда она появится)";
+            ? T.F("Добавлено исключение: {0}", path)
+            : T.F("Добавлено исключение: {0} (такой папки пока нет — правило сработает, когда она появится)", path);
         return ExclusionAddResult.Added;
     }
 

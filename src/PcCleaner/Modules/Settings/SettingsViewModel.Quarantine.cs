@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -64,7 +65,7 @@ public sealed partial class SettingsViewModel
         var rows = await Task.Run(QuarantineActions.LoadRows, ct);
         QuarantineItems = new ObservableCollection<QuarantineRow>(rows);
         QuarantineSummary = rows.Count == 0
-            ? "Карантин пуст"
+            ? T._("Карантин пуст")
             : $"{Format.Count(rows.Count, "файл", "файла", "файлов")} · {Format.Bytes(rows.Sum(r => r.SizeBytes))}";
     }
 
@@ -74,12 +75,9 @@ public sealed partial class SettingsViewModel
             return;
 
         var message =
-            (rows.Count == 1 ? "Вернуть файл из карантина на прежнее место?" : $"Вернуть из карантина {Format.Count(rows.Count, "файл", "файла", "файлов")}?") +
-            "\n\n" + BulkText.BulletList(rows.Select(r => r.OriginalPath), 8) + "\n\n" +
-            "Файл попал в карантин, потому что выглядел подозрительно. Восстанавливайте его, только если уверены, " +
-            "что он нужен и безопасен: после восстановления он снова сможет запускаться. " +
-            "При необходимости его можно будет снова отправить в карантин.";
-        if (!Dialogs.Confirm("Восстановление из карантина", message))
+            (rows.Count == 1 ? T._("Вернуть файл из карантина на прежнее место?") : T.F("Вернуть из карантина {0}?", Format.Count(rows.Count, "файл", "файла", "файлов"))) +
+            "\n\n" + BulkText.BulletList(rows.Select(r => r.OriginalPath), 8) + "\n\n" + T._("Файл попал в карантин, потому что выглядел подозрительно. Восстанавливайте его, только если уверены, что он нужен и безопасен: после восстановления он снова сможет запускаться. При необходимости его можно будет снова отправить в карантин.");
+        if (!Dialogs.Confirm(T._("Восстановление из карантина"), message))
             return;
 
         var results = new List<string>();
@@ -87,40 +85,37 @@ public sealed partial class SettingsViewModel
         var processed = 0;
         // Moving a file back to another drive copies its data, so the moves run off the UI thread;
         // the follow-up questions are asked between them (continuations return to the UI thread).
-        await RunBusyAsync("Восстановление из карантина…", async ct =>
+        await RunBusyAsync(T._("Восстановление из карантина…"), async ct =>
         {
             foreach (var row in rows)
             {
                 ct.ThrowIfCancellationRequested();
-                ReportProgress(processed * 100.0 / rows.Count, $"Восстановление: {row.FileName}");
+                ReportProgress(processed * 100.0 / rows.Count, T.F("Восстановление: {0}", row.FileName));
                 var item = row.Item;
                 var result = await Task.Run(() => QuarantineActions.Restore(item, renameIfExists: false));
                 if (result.Status == QuarantineRestoreStatus.Conflict)
                 {
                     var alternative = QuarantineActions.AlternativePath(row.OriginalPath);
                     var ask =
-                        $"По пути\n{row.OriginalPath}\nуже есть другой файл.\n\n" +
-                        $"Восстановить файл из карантина рядом, под именем «{System.IO.Path.GetFileName(alternative)}»? " +
-                        "Существующий файл не будет изменён.";
-                    result = Dialogs.Confirm("Файл уже существует", ask)
+                        T.F("По пути\n{0}\nуже есть другой файл.\n\nВосстановить файл из карантина рядом, под именем «{1}»? Существующий файл не будет изменён.", row.OriginalPath, System.IO.Path.GetFileName(alternative));
+                    result = Dialogs.Confirm(T._("Файл уже существует"), ask)
                         ? await Task.Run(() => QuarantineActions.Restore(item, renameIfExists: true))
-                        : result with { Message = $"{row.FileName}: пропущен — по исходному пути уже есть файл." };
+                        : result with { Message = T.F("{0}: пропущен — по исходному пути уже есть файл.", row.FileName) };
                 }
                 else if (result.Status == QuarantineRestoreStatus.MissingStoredFile)
                 {
-                    if (Dialogs.Confirm("Файл не найден",
-                            $"Файл «{row.FileName}» отсутствует в папке карантина — возможно, его удалили вручную или антивирусом.\n\n" +
-                            "Убрать эту запись из списка карантина?"))
+                    if (Dialogs.Confirm(T._("Файл не найден"),
+                            T.F("Файл «{0}» отсутствует в папке карантина — возможно, его удалили вручную или антивирусом.\n\nУбрать эту запись из списка карантина?", row.FileName)))
                     {
                         var (removed, removeText) = QuarantineActions.Delete(item);
                         result = result with
                         {
-                            Message = removed ? $"{row.FileName}: файла уже не было, запись убрана из списка." : removeText,
+                            Message = removed ? T.F("{0}: файла уже не было, запись убрана из списка.", row.FileName) : removeText,
                         };
                     }
                     else
                     {
-                        result = result with { Message = $"{row.FileName}: файл в карантине не найден." };
+                        result = result with { Message = T.F("{0}: файл в карантине не найден.", row.FileName) };
                     }
                 }
 
@@ -137,11 +132,11 @@ public sealed partial class SettingsViewModel
         if (results.Count == 0)
             return; // cancelled before anything was done
         var header = restored == rows.Count
-            ? (restored == 1 ? "Файл восстановлен." : $"Восстановлено файлов: {restored}.")
-            : $"Восстановлено: {restored} из {rows.Count}.";
+            ? (restored == 1 ? T._("Файл восстановлен.") : T.F("Восстановлено файлов: {0}.", restored))
+            : T.F("Восстановлено: {0} из {1}.", restored, rows.Count);
         if (processed < rows.Count)
-            header += " Остальные файлы не обработаны — операция была отменена.";
-        Dialogs.Info("Восстановление из карантина", header + "\n\n" + BulkText.BulletList(results, 10));
+            header += " " + T._("Остальные файлы не обработаны — операция была отменена.");
+        Dialogs.Info(T._("Восстановление из карантина"), header + "\n\n" + BulkText.BulletList(results, 10));
     }
 
     private void DeleteQuarantine(List<QuarantineRow> rows)
@@ -150,10 +145,9 @@ public sealed partial class SettingsViewModel
             return;
 
         var message =
-            (rows.Count == 1 ? "Удалить файл из карантина навсегда?" : $"Удалить навсегда {Format.Count(rows.Count, "файл", "файла", "файлов")} из карантина?") +
-            "\n\n" + BulkText.BulletList(rows.Select(r => r.OriginalPath), 8) + "\n\n" +
-            "Файлы будут стёрты без помещения в корзину — восстановить их будет нельзя.";
-        if (!Dialogs.Confirm("Удаление из карантина", message))
+            (rows.Count == 1 ? T._("Удалить файл из карантина навсегда?") : T.F("Удалить навсегда {0} из карантина?", Format.Count(rows.Count, "файл", "файла", "файлов"))) +
+            "\n\n" + BulkText.BulletList(rows.Select(r => r.OriginalPath), 8) + "\n\n" + T._("Файлы будут стёрты без помещения в корзину — восстановить их будет нельзя.");
+        if (!Dialogs.Confirm(T._("Удаление из карантина"), message))
             return;
 
         var results = new List<string>();
@@ -168,8 +162,8 @@ public sealed partial class SettingsViewModel
 
         _ = SafeRun(() => LoadQuarantineAsync(CancellationToken.None));
         var header = deleted == rows.Count
-            ? (deleted == 1 ? "Файл удалён навсегда." : $"Удалено файлов: {deleted}.")
-            : $"Удалено: {deleted} из {rows.Count}.";
-        Dialogs.Info("Удаление из карантина", deleted == rows.Count ? header : header + "\n\n" + BulkText.BulletList(results, 10));
+            ? (deleted == 1 ? T._("Файл удалён навсегда.") : T.F("Удалено файлов: {0}.", deleted))
+            : T.F("Удалено: {0} из {1}.", deleted, rows.Count);
+        Dialogs.Info(T._("Удаление из карантина"), deleted == rows.Count ? header : header + "\n\n" + BulkText.BulletList(results, 10));
     }
 }

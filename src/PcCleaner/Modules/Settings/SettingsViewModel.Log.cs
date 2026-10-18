@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -65,8 +66,8 @@ public sealed partial class SettingsViewModel
     public bool IsLogFiltered => SelectedLogFilter.Value != LogLevelFilter.All || _logTerms.Length > 0;
 
     public string LogEmptyText => IsLogFiltered
-        ? "Нет записей, подходящих под фильтр или поиск."
-        : "Журнал пока пуст — здесь появятся все действия программы.";
+        ? T._("Нет записей, подходящих под фильтр или поиск.")
+        : T._("Журнал пока пуст — здесь появятся все действия программы.");
 
     public RelayCommand CopyLogCommand { get; private set; } = null!;
     public RelayCommand OpenLogsFolderCommand { get; private set; } = null!;
@@ -153,10 +154,10 @@ public sealed partial class SettingsViewModel
     private void UpdateLogSummary()
     {
         var all = LogFilter.Count(_logSource.ToList());
-        LogCounters = $"Действий: {all.Actions} · предупреждений: {all.Warnings} · ошибок: {all.Errors}";
+        LogCounters = T.F("Действий: {0} · предупреждений: {1} · ошибок: {2}", all.Actions, all.Warnings, all.Errors);
         LogSummary = IsLogFiltered
-            ? $"Показано {Format.Number(FilteredLog.Count)} из {Format.Count(all.Total, "записи", "записей", "записей")}"
-            : $"Всего {Format.Count(all.Total, "запись", "записи", "записей")} за этот запуск";
+            ? T.F("Показано {0} из {1}", Format.Number(FilteredLog.Count), Format.Count(all.Total, "записи", "записей", "записей"))
+            : T.F("Всего {0} за этот запуск", Format.Count(all.Total, "запись", "записи", "записей"));
         LogTotal = all.Total;
         OnPropertyChanged(nameof(IsLogFiltered));
         OnPropertyChanged(nameof(LogEmptyText));
@@ -177,7 +178,7 @@ public sealed partial class SettingsViewModel
         var entries = selected.Count > 0 ? selected : FilteredLog.ToList();
         if (entries.Count == 0)
         {
-            Dialogs.Info("Журнал", "Нечего копировать: список записей пуст.");
+            Dialogs.Info(T._("Журнал"), T._("Нечего копировать: список записей пуст."));
             return;
         }
 
@@ -187,15 +188,15 @@ public sealed partial class SettingsViewModel
             try
             {
                 Clipboard.SetText(text);
-                Log.Info($"Журнал: скопировано в буфер обмена — {Format.Count(entries.Count, "запись", "записи", "записей")}");
+                Log.Info(T.F("Журнал: скопировано в буфер обмена — {0}", Format.Count(entries.Count, "запись", "записи", "записей")));
                 return;
             }
             catch (Exception ex) when (ex is COMException or ExternalException)
             {
                 if (attempt == 4)
                 {
-                    Log.Warn($"Не удалось скопировать журнал в буфер обмена: {ex.Message}");
-                    Dialogs.Info("Журнал", "Буфер обмена сейчас занят другой программой. Попробуйте ещё раз через пару секунд.");
+                    Log.Warn(T.F("Не удалось скопировать журнал в буфер обмена: {0}", ex.Message));
+                    Dialogs.Info(T._("Журнал"), T._("Буфер обмена сейчас занят другой программой. Попробуйте ещё раз через пару секунд."));
                     return;
                 }
                 Thread.Sleep(60);
@@ -211,7 +212,7 @@ public sealed partial class SettingsViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось создать папку {dir}: {ex.Message}");
+            Log.Warn(T.F("Не удалось создать папку {0}: {1}", dir, ex.Message));
         }
         ProcessRunner.ShowInExplorer(dir);
     }
