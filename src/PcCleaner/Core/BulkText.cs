@@ -1,3 +1,5 @@
+using PcCleaner.Core.Localization;
+
 namespace PcCleaner.Core;
 
 /// <summary>Text for the one confirmation a bulk action shows before it touches the checked items.</summary>
@@ -9,7 +11,7 @@ public static class BulkText
         var all = lines.ToList();
         var shown = all.Take(max).Select(l => "• " + l).ToList();
         if (all.Count > max)
-            shown.Add($"…и ещё {all.Count - max}");
+            shown.Add(T.F("…и ещё {0}", all.Count - max));
         return string.Join("\n", shown);
     }
 
@@ -24,9 +26,9 @@ public static class BulkText
         var nl = Environment.NewLine;
         if (hiddenLines.Count == 0)
             return header + ":" + nl + BulletList(shownLines);
-        var text = header + "." + nl + nl + "Не видны в списке сейчас:" + nl + BulletList(hiddenLines, hiddenLines.Count);
+        var text = header + "." + nl + nl + T._("Не видны в списке сейчас:") + nl + BulletList(hiddenLines, hiddenLines.Count);
         if (shownLines.Count > 0)
-            text += nl + nl + "В списке:" + nl + BulletList(shownLines);
+            text += nl + nl + T._("В списке:") + nl + BulletList(shownLines);
         return text;
     }
 }

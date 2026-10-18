@@ -266,6 +266,7 @@ public class FormatLanguageTests
         Assert.Equal("42 с", Format.Duration(TimeSpan.FromSeconds(42)));
         Assert.Equal("18.10.2026", Format.Date(Moment));
         Assert.Equal("18.10.2026 14:05", Format.DateTime(Moment));
+        Assert.Equal("18.10.2026 14:05:07", Format.DateTimeSeconds(Moment.AddSeconds(7)));
         Assert.Equal("—", Format.Date(null));
         Assert.Equal("21 файл", Format.Count(21, "файл", "файла", "файлов"));
         Assert.Equal("5 файлов", Format.Count(5, "файл", "файла", "файлов"));
@@ -298,6 +299,7 @@ public class FormatLanguageTests
             Assert.Equal("42 s", Format.Duration(TimeSpan.FromSeconds(42)));
             Assert.Equal("Oct 18, 2026", Format.Date(Moment));
             Assert.Equal("Oct 18, 2026 14:05", Format.DateTime(Moment));
+            Assert.Equal("Oct 18, 2026 14:05:07", Format.DateTimeSeconds(Moment.AddSeconds(7)));
             Assert.Equal("—", Format.DateTime(null));
         }
     }

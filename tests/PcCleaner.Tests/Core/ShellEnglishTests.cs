@@ -111,6 +111,7 @@ public class ShellEnglishTests
             var admin = Admin.BusyWarning(new[] { ("Cleanup", "Scanning…") });
             Assert.StartsWith("Work is still in progress in the section:\n• “Cleanup”: Scanning\n\n", admin);
             Assert.EndsWith("press the button again.", admin);
+            Assert.Contains("Other programs' windows (for example, an uninstaller) keep working.", admin);
 
             Assert.Equal("Restart as administrator", Admin.RestartTitle);
             Assert.Equal(
@@ -141,6 +142,22 @@ public class ShellEnglishTests
 
         Assert.Equal("Внимание", new LogEntry(DateTime.Now, LogLevel.Warning, "x").LevelText);
         Assert.Equal(SplashViewModel.CheckingText, T._(SplashViewModel.CheckingText));
+    }
+
+    [Fact]
+    public void TheBulkTextLists_AreEnglish()
+    {
+        var nl = Environment.NewLine;
+
+        using (TestLanguage.English())
+        {
+            Assert.Equal("• a\n• b\n• c\n…and 2 more", BulkText.BulletList(new[] { "a", "b", "c", "d", "e" }, 3));
+            Assert.Equal(
+                "Delete 2." + nl + nl + "Not visible in the list right now:" + nl + "• h" + nl + nl + "In the list:" + nl + "• s",
+                BulkText.TargetList("Delete 2", new[] { "h" }, new[] { "s" }));
+        }
+
+        Assert.Equal("• a\n• b\n…и ещё 1", BulkText.BulletList(new[] { "a", "b", "c" }, 2));
     }
 
     [Fact]

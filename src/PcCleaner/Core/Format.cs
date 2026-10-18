@@ -61,6 +61,10 @@ public static class Format
     public static string DateTime(DateTime? date)
         => date is null ? "—" : date.Value.ToString(T.IsEnglish ? "MMM d, yyyy HH:mm" : "dd.MM.yyyy HH:mm", T.Culture);
 
+    /// <summary>"18.10.2026 14:05:07"; English "Oct 18, 2026 14:05:07".</summary>
+    public static string DateTimeSeconds(DateTime? date)
+        => date is null ? "—" : date.Value.ToString(T.IsEnglish ? "MMM d, yyyy HH:mm:ss" : "dd.MM.yyyy HH:mm:ss", T.Culture);
+
     /// <summary>Plural(5, "файл", "файла", "файлов") -> "файлов"; in English the en.json entry of "файл" or "файлов" (<see cref="T.Plural"/>).</summary>
     public static string Plural(long n, string one, string few, string many) => T.Plural(n, one, few, many);
 

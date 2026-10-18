@@ -23,6 +23,7 @@ public class LocalizationCatalogTests
         "App.xaml.cs",
         "Core/Admin.cs",
         "Core/AppRestart.cs",
+        "Core/BulkText.cs",
         "Core/Converters.cs",
         "Core/Dialogs.cs",
         "Core/Log.cs",
@@ -89,6 +90,29 @@ public class LocalizationCatalogTests
 
         Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
         Assert.NotEmpty(LocalizationCatalog.Check(SourceFiles(), File.ReadAllText(EnJsonPath()), enforced)); // the list is what lets them pass
+    }
+
+    [Fact]
+    public void TheEnforcedCsFiles_HaveNoCyrillicLiteralOutsideT()
+    {
+        var problems = LocalizationCatalog.UnwrappedCyrillic(SourceFiles(), Enforced);
+
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
+    }
+
+    [Fact]
+    public void TheEnglishTexts_UseAmericanSpelling()
+    {
+        var british = new System.Text.RegularExpressions.Regex(
+            @"\b(?:cancell\w*|colour\w*|behaviour\w*|favour\w*|neighbour\w*|centre\w*|organis\w*|recognis\w*|analys(?:e|ed|es|ing)|" +
+            @"programme\w*|grey|licence|catalogue\w*|defence|travell\w*|labell\w*|modell\w*|optimis\w*|initialis\w*|synchronis\w*)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var found = T.ParseCatalog(File.ReadAllText(EnJsonPath()))
+            .Where(e => british.IsMatch(e.Value))
+            .Select(e => $"«{e.Value}»")
+            .ToList();
+
+        Assert.True(found.Count == 0, "British spelling in en.json (use the American one):" + Environment.NewLine + string.Join(Environment.NewLine, found));
     }
 
     [Fact]
@@ -378,6 +402,135 @@ public class LocalizationCatalogTests
     [Fact]
     public void AGoodCatalog_WithTheSameTexts_IsFine()
         => Assert.Empty(Check("""{ "А": "A", "Б": "B" }""", ("Pages/A.cs", "T._(\"А\");\nT._(\"Б\");")));
+
+    // ----- the guard against a forgotten text -----
+
+    private static List<string> Unwrapped(string cs, string path = "Pages/A.cs", params (string Path, string Content)[] more)
+        => LocalizationCatalog.UnwrappedCyrillic(new[] { (path, cs) }.Concat(more), new[] { "Pages/" });
+
+    [Fact]
+    public void ACyrillicLiteral_OutsideT_IsReported_WithTheFileAndLine()
+    {
+        var cs = """
+            var a = 1;
+            var b = "Привет";
+            var c = $"Найдено {n}";
+            """;
+
+        var problems = Unwrapped(cs);
+
+        Assert.Equal(2, problems.Count);
+        Assert.Contains("Pages/A.cs:2", problems[0]);
+        Assert.Contains("Pages/A.cs:3", problems[1]);
+    }
+
+    [Fact]
+    public void WrappedLiterals_AndPluralWords_AreFine()
+    {
+        var cs = """
+            var a = T._("Привет");
+            var b = T.F("Найдено {0}", Format.Count(n, "файл", "файла", "файлов"));
+            var c = Dialogs.Confirm(T._("Заголовок"), T.F("Вопрос {0}?", name));
+            var d = T.Plural(n, "день", "дня", "дней");
+            """;
+
+        Assert.Empty(Unwrapped(cs));
+    }
+
+    [Fact]
+    public void OnlyTheLiteralOutsideT_IsReported_InACallThatAlsoHasWrappedOnes()
+    {
+        var problem = Assert.Single(Unwrapped("Dialogs.Info(T._(\"Заголовок\"), \"Текст\");"));
+
+        Assert.Contains("\"Текст\"", problem);
+        Assert.DoesNotContain("Заголовок", problem);
+    }
+
+    [Fact]
+    public void CommentsCharsTheLanguageNameAndNonCyrillicText_AreFine()
+    {
+        var cs = """
+            /// <summary>"Привет" in the docs</summary>
+            // var a = "Привет";
+            var b = 1; // "Привет"
+            /* "Привет" */
+            var c = 'я';
+            var d = "Русский";
+            var e = "Hello";
+            """;
+
+        Assert.Empty(Unwrapped(cs));
+    }
+
+    [Fact]
+    public void AConst_PassedThroughT_IsFine_ButAConstUsedOtherwiseIsReported()
+    {
+        var cs = """
+            public const string Status = "Проверяем…";
+            public const string Key = "Ключ";
+            var a = T._(Status);
+            var b = Key;
+            """;
+
+        var problem = Assert.Single(Unwrapped(cs));
+
+        Assert.Contains("Pages/A.cs:2", problem);
+    }
+
+    [Fact]
+    public void AConst_WithItsValueOnTheNextLine_IsFine_WhenPassedThroughT()
+    {
+        var cs = """
+            internal const string Note =
+                "Остановлено — возможно, сделано не всё.";
+            var a = T._(Note);
+            """;
+
+        Assert.Empty(Unwrapped(cs));
+    }
+
+    [Fact]
+    public void PluralWordsInAnInterpolatedString_AreFine_ButItsOwnText_IsReported()
+    {
+        var cs = """
+            var a = $"{Format.Count(n, "файл", "файла", "файлов")} · {size}";
+            var b = $"Найдено {Format.Count(n, "файл", "файла", "файлов")}";
+            """;
+
+        var problem = Assert.Single(Unwrapped(cs));
+
+        Assert.Contains("Pages/A.cs:2", problem);
+    }
+
+    [Fact]
+    public void ARegionMarkedAsData_IsNotChecked_ButTheLinesAroundItAre()
+    {
+        var cs = """
+            var before = "Привет";
+            // l10n:data-begin — Russian words that are matched, never shown
+            var months = new[] { "января", "февраля" };
+            var rx = new Regex(@"\bне\s+удалось\b");
+            // l10n:data-end
+            var after = "Пока";
+            """;
+
+        var problems = Unwrapped(cs);
+
+        Assert.Equal(2, problems.Count);
+        Assert.Contains("Pages/A.cs:1", problems[0]);
+        Assert.Contains("Pages/A.cs:6", problems[1]);
+    }
+
+    [Fact]
+    public void AConst_PassedThroughT_InAnotherFile_IsFine()
+        => Assert.Empty(Unwrapped("public const string Status = \"Проверяем…\";", "Pages/A.cs", ("Other/B.cs", "var a = T._(A.Status);")));
+
+    [Fact]
+    public void AFile_OutsideTheEnforcedList_AndXaml_AreNotChecked()
+    {
+        Assert.Empty(Unwrapped("var a = \"Привет\";", "Other/A.cs"));
+        Assert.Empty(Unwrapped("<TextBlock Text=\"Привет\" />", "Pages/A.xaml"));
+    }
 
     // ----- the repository -----
 

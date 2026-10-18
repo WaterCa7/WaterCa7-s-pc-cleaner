@@ -96,7 +96,7 @@ public class SettingsEnglishTests
     {
         using (TestLanguage.English())
         {
-            Assert.Equal("hosts file", new BackupEntry { FullPath = "a.hosts", Time = DateTime.Now, Kind = BackupKind.Hosts, Title = "x" }.KindText);
+            Assert.Equal("Hosts file", new BackupEntry { FullPath = "a.hosts", Time = DateTime.Now, Kind = BackupKind.Hosts, Title = "x" }.KindText);
             Assert.Equal("Registry (system)", new BackupEntry { FullPath = "a.reg", Time = DateTime.Now, Kind = BackupKind.Registry, Title = "x", NeedsAdmin = true }.KindText);
             Assert.Equal("Program startup (Run) — current user", BackupCatalog.FriendlyKeyName(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"));
             Assert.Equal("Home", BackupCatalog.ModuleDisplayName("Dashboard"));

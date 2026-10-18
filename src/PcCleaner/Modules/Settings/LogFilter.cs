@@ -70,7 +70,7 @@ internal static class LogFilter
     }
 
     public static string FormatLine(LogEntry e)
-        => $"{e.Time.ToString(T.IsEnglish ? "MMM d, yyyy HH:mm:ss" : "dd.MM.yyyy HH:mm:ss", T.Culture)} [{e.LevelText}] {e.Message}";
+        => $"{Format.DateTimeSeconds(e.Time)} [{e.LevelText}] {e.Message}";
 
     /// <summary>Text for the clipboard, in chronological order.</summary>
     public static string ToClipboardText(IEnumerable<LogEntry> entries)

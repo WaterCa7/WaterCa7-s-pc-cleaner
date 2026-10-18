@@ -111,6 +111,111 @@ internal static class LocalizationCatalog
         return problems;
     }
 
+    private static readonly string[] WrappingCalls = { "T._", "T.F", "T.Plural", "Format.Count", "Format.Plural" };
+
+    private static readonly Regex CalleeName = new(@"[A-Za-z_@][\w.]*$", RegexOptions.Compiled);
+
+    private static readonly Regex ConstDeclaration = new(@"\bconst\s+string\s+(?<name>\w+)\s*=\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Guard against a text that was forgotten: every string literal with Cyrillic letters in an enforced .cs file must be an
+    /// argument of T._ / T.F / T.Plural / Format.Count / Format.Plural. Allowed besides that: comments, the name of the language
+    /// "Русский" (it is never translated), a const string that the code passes through T._ / T.F by its name, the plural
+    /// words inside an interpolated string (<c>$"{Format.Count(n, "файл", "файла", "файлов")} …"</c>) and a region of Russian
+    /// words the program matches against and never shows, between the comment lines <c>// l10n:data-begin</c> and
+    /// <c>// l10n:data-end</c>.
+    /// </summary>
+    /// <returns>One line per literal: "file:line: …".</returns>
+    public static List<string> UnwrappedCyrillic(IEnumerable<(string Path, string Content)> files, IReadOnlyCollection<string> enforced)
+    {
+        var sources = files.ToList();
+        var problems = new List<string>();
+        foreach (var (path, content) in sources)
+        {
+            if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || !IsListed(path, enforced))
+                continue;
+            var code = WithoutCommentLines(content);
+            var dataLines = DataRegionLines(content);
+            var open = new List<string>(); // for each open bracket: the name of the call for "(", else ""
+            var i = 0;
+            while (i < code.Length)
+            {
+                var start = i;
+                if (TrySkip(code, ref i))
+                {
+                    var token = code[start..i];
+                    if (token[0] is '/' or '\'' || open.Any(c => Array.IndexOf(WrappingCalls, c) >= 0))
+                        continue;
+                    if (!Cyrillic.IsMatch(token.StartsWith('$') || token.StartsWith("@$") ? WithoutPluralCalls(token) : token))
+                        continue;
+                    if (token == "\"Русский\"" || dataLines.Contains(LineOf(code, start)) || IsPassedThroughT(code, start, sources))
+                        continue;
+                    var shown = token.Length > 60 ? token[..60] + "…" : token;
+                    problems.Add($"{path}:{LineOf(code, start)}: {shown} is not an argument of T._ / T.F / T.Plural");
+                    continue;
+                }
+                var c = code[i];
+                if (c is '(' or '[' or '{')
+                    open.Add(c == '(' ? CalleeName.Match(code[Math.Max(0, i - 80)..i].TrimEnd()).Value : "");
+                else if ((c is ')' or ']' or '}') && open.Count > 0)
+                    open.RemoveAt(open.Count - 1);
+                i++;
+            }
+        }
+        return problems;
+    }
+
+    /// <summary>The literal at <paramref name="start"/> is the value of "const string Name =" and some file calls T._(Name) or T.F(Name, …).</summary>
+    private static bool IsPassedThroughT(string code, int start, IReadOnlyList<(string Path, string Content)> sources)
+    {
+        var declaration = ConstDeclaration.Match(code[Math.Max(0, start - 200)..start]);
+        if (!declaration.Success)
+            return false;
+        var use = new Regex(@"\bT\s*\.\s*(?:_|F)\s*\(\s*(?:[\w.]*\.)?" + declaration.Groups["name"].Value + @"\s*[,)]");
+        return sources.Any(s => s.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) && use.IsMatch(WithoutCommentLines(s.Content)));
+    }
+
+    private static readonly Regex PluralCall = new(@"(?:Format\s*\.\s*(?:Count|Plural)|T\s*\.\s*Plural)\s*\(", RegexOptions.Compiled);
+
+    /// <summary>The numbers of the lines from "// l10n:data-begin" to "// l10n:data-end" (the marker lines included).</summary>
+    private static HashSet<int> DataRegionLines(string content)
+    {
+        var lines = new HashSet<int>();
+        var inside = false;
+        var number = 0;
+        foreach (var line in content.Split('\n'))
+        {
+            number++;
+            var text = line.Trim();
+            if (text.StartsWith("// l10n:data-begin", StringComparison.Ordinal))
+                inside = true;
+            if (inside)
+                lines.Add(number);
+            if (text.StartsWith("// l10n:data-end", StringComparison.Ordinal))
+                inside = false;
+        }
+        return lines;
+    }
+
+    /// <summary>An interpolated string without its Format.Count(…) / Format.Plural(…) / T.Plural(…) calls.</summary>
+    private static string WithoutPluralCalls(string token)
+    {
+        while (PluralCall.Match(token) is { Success: true } m)
+        {
+            var i = m.Index + m.Length;
+            var depth = 1;
+            while (i < token.Length && depth > 0)
+            {
+                if (TrySkip(token, ref i))
+                    continue;
+                depth += token[i] == '(' ? 1 : token[i] == ')' ? -1 : 0;
+                i++;
+            }
+            token = token[..m.Index] + token[i..];
+        }
+        return token;
+    }
+
     /// <summary>The path is one of the files or inside one of the folders (ending with "/") of the list.</summary>
     private static bool IsListed(string path, IReadOnlyCollection<string> list)
         => list.Any(e => e.EndsWith('/')

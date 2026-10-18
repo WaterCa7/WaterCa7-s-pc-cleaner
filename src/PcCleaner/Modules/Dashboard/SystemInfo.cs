@@ -125,6 +125,7 @@ public static class SystemInfo
         return TranslateEdition(name);
     }
 
+    // l10n:data-begin — the Russian names of the Windows editions (the English run shows the registry name as it is)
     private static readonly (string En, string Ru)[] Editions =
     {
         ("Home Single Language", "Домашняя для одного языка"),
@@ -133,6 +134,7 @@ public static class SystemInfo
         ("Enterprise", "Корпоративная"),
         ("Education", "для образовательных учреждений"),
     };
+    // l10n:data-end
 
     private static string TranslateEdition(string name)
     {

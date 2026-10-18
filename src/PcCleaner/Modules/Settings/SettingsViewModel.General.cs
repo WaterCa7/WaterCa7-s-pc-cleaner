@@ -135,7 +135,7 @@ public sealed partial class SettingsViewModel
         var busy = OpenPages().Where(p => p.IsBusy).ToList();
         if (busy.Count > 0)
         {
-            var list = string.Join("\n", busy.Select(p => $"• «{p.Title}»"));
+            var list = string.Join("\n", busy.Select(p => $"• {T.Quote(p.Title)}"));
             if (!Confirm(T._("Перезапуск программы"),
                     T.F("Сейчас ещё идёт работа:\n{0}\n\nПри перезапуске она прервётся. Перезапустить программу сейчас?", list)))
                 return;

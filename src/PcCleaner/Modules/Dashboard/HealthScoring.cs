@@ -208,11 +208,13 @@ public static class HealthScoring
             : T.F("{0} {1} {2} г. в {3}", time.Day, month, time.Year, clock);
     }
 
+    // l10n:data-begin — the Russian month names of a date (the English run uses "MMM"), not a text to translate
     private static readonly string[] MonthsGenitive =
     {
         "января", "февраля", "марта", "апреля", "мая", "июня",
         "июля", "августа", "сентября", "октября", "ноября", "декабря",
     };
+    // l10n:data-end
 
     /// <summary>"3 проблемы" / "нет проблем".</summary>
     public static string ProblemsText(int count)
@@ -241,6 +243,7 @@ public static class HealthScoring
         if (string.IsNullOrWhiteSpace(message))
             return false;
         var m = message.Trim().ToLowerInvariant();
+        // l10n:data-begin — Russian words matched in the messages of the modules, never shown
         return LooksLikeAdminRequired(m)
                || StillBroken.IsMatch(m)
                || m.StartsWith("не удалось")
@@ -256,6 +259,7 @@ public static class HealthScoring
                || m.Contains("исправление отменено")
                || m.Contains("действие отменено")
                || m.Contains("операция отменена");
+        // l10n:data-end
     }
 
     /// <summary>The fix result says administrator rights are required ("Нужны права администратора", "Недостаточно прав"...).</summary>
@@ -270,6 +274,7 @@ public static class HealthScoring
     //   "Удалено 2 записи … Не удалось: 3." / "… Не удалось удалить (1): …".
     // Deliberately NOT matched: "Не удалось удалить 3 занятых файла" (a normal cleaning result) and
     // "Точку восстановления создать не удалось" (a side note of a successful fix).
+    // l10n:data-begin — Russian words matched in the messages of the modules, never shown
     private static readonly Regex StillBroken = new(
         @"\b(?:всё|все)\s+(?:ещё|еще)\s+(?:вы|от)ключ|\bпо-прежнему\s+(?:вы|от)ключ" +
         @"|\bне\s+дал[аио]?\b" +
@@ -285,4 +290,5 @@ public static class HealthScoring
     private static readonly Regex AdminRequired = new(
         @"прав(а|ами)?\s+админ|от\s+имени\s+админ|недостаточно\s+прав\b|\bнет\s+прав\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    // l10n:data-end
 }

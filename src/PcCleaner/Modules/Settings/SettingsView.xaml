@@ -623,7 +623,7 @@
                         <DataGrid x:Name="BackupsGrid" ItemsSource="{Binding Backups}" SelectedItem="{Binding SelectedBackup, Mode=TwoWay}"
                                   SelectionMode="Single" RowHeight="50" PreviewMouseRightButtonDown="OnGridPreviewRightClick">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="{loc:T 'Дата'}" Binding="{Binding TimeText}" Width="128" />
+                                <DataGridTextColumn Header="{loc:T 'Дата'}" Binding="{Binding TimeText}" Width="140" />
                                 <DataGridTemplateColumn Header="{loc:T 'Что сохранено'}" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate DataType="{x:Type local:BackupEntry}">
@@ -725,7 +725,7 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="{loc:T 'Помещён'}" Binding="{Binding TimeText}" Width="128" />
+                                <DataGridTextColumn Header="{loc:T 'Помещён'}" Binding="{Binding TimeText}" Width="140" />
                                 <DataGridTemplateColumn Header="{loc:T 'Причина'}" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate DataType="{x:Type local:QuarantineRow}">

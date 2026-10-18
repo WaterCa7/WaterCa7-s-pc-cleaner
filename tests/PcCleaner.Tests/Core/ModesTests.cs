@@ -1149,6 +1149,6 @@ public class ModesEnglishTests
 
         var (title, message) = Assert.Single(asked);
         Assert.Equal("Restart the program", title);
-        Assert.Equal("Work is still in progress:\n• «Раздел Cleaner»\n\nA restart will interrupt it. Restart the program now?", message);
+        Assert.Equal("Work is still in progress:\n• “Раздел Cleaner”\n\nA restart will interrupt it. Restart the program now?", message);
     }
 }

@@ -166,7 +166,7 @@ public class DashboardEnglishTests
             Assert.Equal("Fixed 1 of 3. About 1 MB freed. Failed: 2 — the reason is given in the problem row. " +
                          "Administrator rights are needed for 1. Click “Check again” to update the score.",
                 DashboardViewModel.BatchSummaryText(new FixBatchResult(3, 1, 2, false, 1024 * 1024, NeedAdmin: 1)));
-            Assert.Equal("Fixing was cancelled — nothing was changed.",
+            Assert.Equal("Fixing was canceled — nothing was changed.",
                 DashboardViewModel.BatchSummaryText(new FixBatchResult(2, 0, 0, true, 0)));
         }
     }
