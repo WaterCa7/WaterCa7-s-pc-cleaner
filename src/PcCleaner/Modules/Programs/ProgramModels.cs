@@ -2,6 +2,7 @@
 using System.Windows.Media;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Programs;
 
@@ -179,9 +180,9 @@ public sealed class InstalledProgram : ObservableObject
 
     /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
     public string? CheckTooltip => CanCheck ? null
-        : IsRuntime ? "Компоненты .NET, Visual C++ и т. п. нужны другим программам — удаляйте их по одной"
-        : IsBroken ? "Деинсталлятор не найден — уберите запись кнопкой «Убрать запись из списка»"
-        : "У программы не указан деинсталлятор. Попробуйте удалить её через «Параметры» → «Приложения».";
+        : IsRuntime ? T._("Компоненты .NET, Visual C++ и т. п. нужны другим программам — удаляйте их по одной")
+        : IsBroken ? T._("Деинсталлятор не найден — уберите запись кнопкой «Убрать запись из списка»")
+        : T._("У программы не указан деинсталлятор. Попробуйте удалить её через «Параметры» → «Приложения».");
 
     public bool IsChecked
     {
@@ -203,7 +204,7 @@ public sealed class InstalledProgram : ObservableObject
 
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
 
-    public string PublisherText => HasPublisher ? Publisher!.Trim() : "Не указан";
+    public string PublisherText => HasPublisher ? Publisher!.Trim() : T._("Не указан");
 
     public string VersionText => string.IsNullOrWhiteSpace(Version) ? "—" : Version!.Trim();
 
@@ -233,37 +234,37 @@ public sealed class InstalledProgram : ObservableObject
     public string SizeText => SizeBytes > 0 ? Format.Bytes(SizeBytes) : "—";
 
     public string SizeDetailsText => IsBroken
-        ? "Место уже освобождено — программы нет на диске"
+        ? T._("Место уже освобождено — программы нет на диске")
         : EstimatedSizeBytes > 0
-        ? Format.Bytes(EstimatedSizeBytes) + " (по данным установщика)"
+        ? T.F("{0} (по данным установщика)", Format.Bytes(EstimatedSizeBytes))
         : ComputedSizeBytes > 0
-            ? Format.Bytes(ComputedSizeBytes) + " (размер папки установки)"
-            : "Неизвестен";
+            ? T.F("{0} (размер папки установки)", Format.Bytes(ComputedSizeBytes))
+            : T._("Неизвестен");
 
     public string DateText => Format.Date(InstallDate);
 
     public string DateDetailsText => InstallDate is null
-        ? "Неизвестна"
+        ? T._("Неизвестна")
         : InstallDateFromFolder
-            ? Format.Date(InstallDate) + " (по дате создания папки)"
+            ? T.F("{0} (по дате создания папки)", Format.Date(InstallDate))
             : Format.Date(InstallDate);
 
     public string ScopeText => Scope switch
     {
-        ProgramScope.Machine64 => "Для всех пользователей (64-разрядная)",
-        ProgramScope.Machine32 => "Для всех пользователей (32-разрядная)",
-        _ => "Только для текущего пользователя",
+        ProgramScope.Machine64 => T._("Для всех пользователей (64-разрядная)"),
+        ProgramScope.Machine32 => T._("Для всех пользователей (32-разрядная)"),
+        _ => T._("Только для текущего пользователя"),
     };
 
     public string InstallerTypeText => IsMsi
         ? "Windows Installer (MSI)"
-        : Launch is null ? "Деинсталлятор не указан" : "Собственный деинсталлятор программы";
+        : Launch is null ? T._("Деинсталлятор не указан") : T._("Собственный деинсталлятор программы");
 
     public string InstallLocationText => string.IsNullOrWhiteSpace(InstallLocation)
-        ? "Не указана"
+        ? T._("Не указана")
         : InstallLocationExists ? InstallLocation!
-        : InstallLocationUnchecked ? InstallLocation + " (сетевой, съёмный или отключённый диск — не проверялась)"
-        : InstallLocation + " (папки нет)";
+        : InstallLocationUnchecked ? T.F("{0} (сетевой, съёмный или отключённый диск — не проверялась)", InstallLocation)
+        : T.F("{0} (папки нет)", InstallLocation);
 
     public string UninstallCommandText => Launch is null
         ? (string.IsNullOrWhiteSpace(UninstallString) ? "—" : UninstallString!)
@@ -344,25 +345,23 @@ public sealed class InstalledProgram : ObservableObject
     {
         var list = new List<ProgramBadge>();
         if (IsPup)
-            list.Add(new ProgramBadge("Нежелательная", "Нежелательная", BadgeKind.Danger,
-                "Похожа на потенциально нежелательную программу: " + PupReason));
+            list.Add(new ProgramBadge(T._("Нежелательная"), T._("Нежелательная"), BadgeKind.Danger,
+                T.F("Похожа на потенциально нежелательную программу: {0}", PupReason)));
         if (IsBroken)
-            list.Add(new ProgramBadge("Битая запись", "Битая запись", BadgeKind.Warning,
-                "Программа, скорее всего, уже удалена: нет ни деинсталлятора, ни папки установки. Осталась только строка в списке."));
+            list.Add(new ProgramBadge(T._("Битая запись"), T._("Битая запись"), BadgeKind.Warning,
+                T._("Программа, скорее всего, уже удалена: нет ни деинсталлятора, ни папки установки. Осталась только строка в списке.")));
         if (IsRecent)
-            list.Add(new ProgramBadge("Недавно установлена", "Недавняя", BadgeKind.Info,
-                $"Установлена или обновлена за последние {ProgramRules.RecentDays} дней. Если вы её не ставили — проверьте: " +
-                "такие программы часто приходят «в нагрузку» к другим установщикам."));
+            list.Add(new ProgramBadge(T._("Недавно установлена"), T._("Недавняя"), BadgeKind.Info,
+                T.F("Установлена или обновлена за последние {0} дней. Если вы её не ставили — проверьте: такие программы часто приходят «в нагрузку» к другим установщикам.", ProgramRules.RecentDays)));
         if (IsRuntime)
-            list.Add(new ProgramBadge("Нужна другим программам — не удалять", "Нужна другим", BadgeKind.Success,
-                "Компонент Microsoft (Visual C++, .NET, DirectX и т. п.), который используют другие программы и игры. " +
-                "Без него они могут перестать запускаться."));
+            list.Add(new ProgramBadge(T._("Нужна другим программам — не удалять"), T._("Нужна другим"), BadgeKind.Success,
+                T._("Компонент Microsoft (Visual C++, .NET, DirectX и т. п.), который используют другие программы и игры. Без него они могут перестать запускаться.")));
         if (IsDriver)
-            list.Add(new ProgramBadge("Драйвер устройства", "Драйвер", BadgeKind.Neutral,
-                "Пакет драйвера. Удаляйте, только если устройство больше не используется."));
+            list.Add(new ProgramBadge(T._("Драйвер устройства"), T._("Драйвер"), BadgeKind.Neutral,
+                T._("Пакет драйвера. Удаляйте, только если устройство больше не используется.")));
         if (IsTrusted)
-            list.Add(new ProgramBadge("Доверенная", "Доверенная", BadgeKind.Success,
-                "Вы отметили программу как доверенную — проверки на нежелательность для неё отключены."));
+            list.Add(new ProgramBadge(T._("Доверенная"), T._("Доверенная"), BadgeKind.Success,
+                T._("Вы отметили программу как доверенную — проверки на нежелательность для неё отключены.")));
         Badges = list;
     }
 }
@@ -467,7 +466,7 @@ public sealed class StoreApp : ObservableObject
     public bool CanCheck => CanRemove;
 
     /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
-    public string? CheckTooltip => CanCheck ? null : ProtectReason ?? "Это приложение нужно Windows — удалять его не стоит.";
+    public string? CheckTooltip => CanCheck ? null : ProtectReason ?? T._("Это приложение нужно Windows — удалять его не стоит.");
 
     public bool IsChecked
     {
@@ -493,11 +492,10 @@ public sealed class StoreApp : ObservableObject
 
     public ProgramBadge? Badge => Kind switch
     {
-        StoreAppKind.Bloatware => new ProgramBadge("Предустановленная, можно удалить", "Можно удалить", BadgeKind.Info,
-            "Приложение поставляется вместе с Windows или ноутбуком. Если вы им не пользуетесь, его можно удалить — " +
-            "при необходимости оно снова устанавливается из Microsoft Store."),
-        StoreAppKind.Protected => new ProgramBadge("Системное — не удалять", "Не удалять", BadgeKind.Neutral,
-            ProtectReason ?? "Нужен Windows или другим приложениям."),
+        StoreAppKind.Bloatware => new ProgramBadge(T._("Предустановленная, можно удалить"), T._("Можно удалить"), BadgeKind.Info,
+            T._("Приложение поставляется вместе с Windows или ноутбуком. Если вы им не пользуетесь, его можно удалить — при необходимости оно снова устанавливается из Microsoft Store.")),
+        StoreAppKind.Protected => new ProgramBadge(T._("Системное — не удалять"), T._("Не удалять"), BadgeKind.Neutral,
+            ProtectReason ?? T._("Нужен Windows или другим приложениям.")),
         _ => null,
     };
 
@@ -506,15 +504,14 @@ public sealed class StoreApp : ObservableObject
 
     /// <summary>How the user gets the app back after removal (only Store-signed packages come back from the Store).</summary>
     public string UndoText => IsFromStore
-        ? "Вернуть приложение можно в любой момент — установите его заново из Microsoft Store."
-        : "Это приложение установлено не из Microsoft Store (его поставила другая программа или MSIX-файл), поэтому " +
-          "вернуть его через Store не получится — только переустановив программу, которая его установила.";
+        ? T._("Вернуть приложение можно в любой момент — установите его заново из Microsoft Store.")
+        : T._("Это приложение установлено не из Microsoft Store (его поставила другая программа или MSIX-файл), поэтому вернуть его через Store не получится — только переустановив программу, которая его установила.");
 
     public string SourceText => SignatureKind switch
     {
         "Store" => "Microsoft Store",
-        "Developer" => "Установлено вручную (MSIX-пакет)",
-        "Enterprise" => "Установлено организацией",
+        "Developer" => T._("Установлено вручную (MSIX-пакет)"),
+        "Enterprise" => T._("Установлено организацией"),
         _ => string.IsNullOrWhiteSpace(SignatureKind) ? "—" : SignatureKind!,
     };
 

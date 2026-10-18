@@ -4,6 +4,7 @@ using System.IO;
 using System.Security;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Programs;
 
@@ -60,7 +61,7 @@ public sealed class ProgramsService : IHealthContributor
         _clock = clock ?? (() => DateTime.Now);
     }
 
-    public string ModuleName => "Программы";
+    public string ModuleName => T._("Программы");
 
     /// <summary>Overridable for tests (sandbox keys live in HKCU and never need elevation).</summary>
     internal Func<bool> IsElevated { get; set; } = () => Admin.IsElevated;
@@ -135,7 +136,7 @@ public sealed class ProgramsService : IHealthContributor
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn($"Программы: нет доступа к {source.HiveShortName}\\{source.SubKeyPath}: {ex.Message}");
+                Log.Warn(T.F("Программы: нет доступа к {0}\\{1}: {2}", source.HiveShortName, source.SubKeyPath, ex.Message));
             }
             finally
             {
@@ -144,7 +145,7 @@ public sealed class ProgramsService : IHealthContributor
         }
 
         if (unreadable > 0)
-            Log.Warn($"Программы: {Format.Count(unreadable, "запись", "записи", "записей")} в реестре не удалось прочитать (нет доступа)");
+            Log.Warn(T.F("Программы: {0} в реестре не удалось прочитать (нет доступа)", Format.Count(unreadable, "запись", "записи", "записей")));
         return new ProgramScanResult(result, unreadable);
     }
 
@@ -362,16 +363,17 @@ public sealed class ProgramsService : IHealthContributor
                 {
                     records = Array.Empty<StoreAppRecord>();
                     error = result.TimedOut
-                        ? "Windows слишком долго отвечала на запрос списка приложений."
-                        : "Windows не выдала список приложений Microsoft Store.";
-                    Log.Warn($"Программы: Get-AppxPackage не сработал ({(result.TimedOut ? "тайм-аут" : "код " + result.ExitCode)}): {FirstLine(result.StdErr)}");
+                        ? T._("Windows слишком долго отвечала на запрос списка приложений.")
+                        : T._("Windows не выдала список приложений Microsoft Store.");
+                    var how = result.TimedOut ? T._("тайм-аут") : T.F("код {0}", result.ExitCode);
+                    Log.Warn(T.F("Программы: Get-AppxPackage не сработал ({0}): {1}", how, FirstLine(result.StdErr)));
                 }
             }
             catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
             {
                 records = Array.Empty<StoreAppRecord>();
-                error = "Не удалось запустить PowerShell для получения списка приложений.";
-                Log.Warn($"Программы: не удалось запустить PowerShell: {ex.Message}");
+                error = T._("Не удалось запустить PowerShell для получения списка приложений.");
+                Log.Warn(T.F("Программы: не удалось запустить PowerShell: {0}", ex.Message));
             }
         }
 
@@ -396,7 +398,7 @@ public sealed class ProgramsService : IHealthContributor
 
         var name = friendly ?? manifestName ?? StoreAppCatalog.DeriveName(r.Name);
         if (r.Name.StartsWith("Microsoft.LanguageExperiencePack", StringComparison.OrdinalIgnoreCase) && friendly is null && manifestName is null)
-            name = "Языковой пакет " + r.Name["Microsoft.LanguageExperiencePack".Length..];
+            name = T.F("Языковой пакет {0}", r.Name["Microsoft.LanguageExperiencePack".Length..]);
 
         return new StoreApp
         {
@@ -412,7 +414,7 @@ public sealed class ProgramsService : IHealthContributor
             ProtectReason = StoreAppCatalog.ProtectReason(r.Name),
             LogoPath = manifest?.LogoPath,
             DisplayName = name,
-            PublisherDisplay = manifestPublisher ?? StoreAppCatalog.PublisherFromDistinguishedName(r.Publisher) ?? "Не указан",
+            PublisherDisplay = manifestPublisher ?? StoreAppCatalog.PublisherFromDistinguishedName(r.Publisher) ?? T._("Не указан"),
         };
     }
 
@@ -504,11 +506,10 @@ public sealed class ProgramsService : IHealthContributor
     {
         var launch = quiet ? p.QuietLaunch : p.Launch;
         if (launch is null)
-            return new UninstallOutcome(UninstallStatus.NotStarted, "У программы не указан деинсталлятор.");
+            return new UninstallOutcome(UninstallStatus.NotStarted, T._("У программы не указан деинсталлятор."));
         if (!launch.IsMsi && Path.IsPathRooted(launch.FileName) && !File.Exists(launch.FileName))
             return new UninstallOutcome(UninstallStatus.NotStarted,
-                $"Файл деинсталлятора не найден:\n{launch.FileName}\n\nПопробуйте удалить программу через «Параметры» → «Приложения». " +
-                "Если не получится, установите программу заново поверх старой и затем удалите.");
+                T.F("Файл деинсталлятора не найден:\n{0}\n\nПопробуйте удалить программу через «Параметры» → «Приложения». Если не получится, установите программу заново поверх старой и затем удалите.", launch.FileName));
 
         var workingDir = launch.WorkingDirectory is not null && Directory.Exists(launch.WorkingDirectory) ? launch.WorkingDirectory : null;
         var psi = new ProcessStartInfo(launch.FileName, launch.Arguments)
@@ -526,16 +527,18 @@ public sealed class ProgramsService : IHealthContributor
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            Log.Info($"Удаление «{p.DisplayName}»: запуск отклонён в окне контроля учётных записей");
-            return new UninstallOutcome(UninstallStatus.UacDeclined, "Запуск деинсталлятора отменён в окне контроля учётных записей.");
+            Log.Info(T.F("Удаление «{0}»: запуск отклонён в окне контроля учётных записей", p.DisplayName));
+            return new UninstallOutcome(UninstallStatus.UacDeclined, T._("Запуск деинсталлятора отменён в окне контроля учётных записей."));
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            Log.Warn($"Не удалось запустить деинсталлятор «{p.DisplayName}»: {ex.Message}");
-            return new UninstallOutcome(UninstallStatus.NotStarted, $"Не удалось запустить деинсталлятор: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Не удалось запустить деинсталлятор «{0}»: {1}", p.DisplayName, ex.Message));
+            return new UninstallOutcome(UninstallStatus.NotStarted, T.F("Не удалось запустить деинсталлятор: {0}.", ErrorText.For(ex)));
         }
 
-        Log.Action($"Запущен деинсталлятор «{p.DisplayName}»{(quiet ? " (тихое удаление)" : "")}: {launch.DisplayText}");
+        Log.Action(quiet
+            ? T.F("Запущен деинсталлятор «{0}» (тихое удаление): {1}", p.DisplayName, launch.DisplayText)
+            : T.F("Запущен деинсталлятор «{0}»: {1}", p.DisplayName, launch.DisplayText));
 
         int? exitCode = null;
         if (process is not null)
@@ -560,13 +563,12 @@ public sealed class ProgramsService : IHealthContributor
 
         if (!EntryExists(p))
         {
-            Log.Action($"Программа «{p.DisplayName}» удалена");
-            return new UninstallOutcome(UninstallStatus.Removed, $"Программа «{p.DisplayName}» удалена.", exitCode);
+            Log.Action(T.F("Программа «{0}» удалена", p.DisplayName));
+            return new UninstallOutcome(UninstallStatus.Removed, T.F("Программа «{0}» удалена.", p.DisplayName), exitCode);
         }
-        Log.Info($"Удаление «{p.DisplayName}»: деинсталлятор завершился (код {exitCode?.ToString() ?? "—"}), но программа осталась в списке");
+        Log.Info(T.F("Удаление «{0}»: деинсталлятор завершился (код {1}), но программа осталась в списке", p.DisplayName, exitCode?.ToString() ?? "—"));
         return new UninstallOutcome(UninstallStatus.StillInstalled,
-            $"Деинсталлятор завершил работу, но «{p.DisplayName}» всё ещё в списке. Возможно, удаление отменили " +
-            "или оно продолжается в отдельном окне (например, в Steam). Когда закончите, нажмите «Обновить».", exitCode);
+            T.F("Деинсталлятор завершил работу, но «{0}» всё ещё в списке. Возможно, удаление отменили или оно продолжается в отдельном окне (например, в Steam). Когда закончите, нажмите «Обновить».", p.DisplayName), exitCode);
     }
 
     /// <summary>
@@ -592,8 +594,8 @@ public sealed class ProgramsService : IHealthContributor
 
     /// <summary>The "nothing to run" outcome for a program with <c>CanUninstall == false</c> (same reasons as the Programs page).</summary>
     private static UninstallOutcome CannotUninstall(InstalledProgram p) => new(UninstallStatus.NotStarted, p.IsBroken
-        ? "Деинсталлятор этой программы не найден — скорее всего, она уже удалена."
-        : "У программы не указан деинсталлятор.");
+        ? T._("Деинсталлятор этой программы не найден — скорее всего, она уже удалена.")
+        : T._("У программы не указан деинсталлятор."));
 
     // ===================================================================== broken entries
 
@@ -614,36 +616,35 @@ public sealed class ProgramsService : IHealthContributor
     public async Task<EntryDeletionResult> DeleteEntryAsync(InstalledProgram p, CancellationToken ct)
     {
         if (!IsAllowedKey(p))
-            return new EntryDeletionResult(false, "Запись находится вне списка установленных программ — удаление запрещено.");
+            return new EntryDeletionResult(false, T._("Запись находится вне списка установленных программ — удаление запрещено."));
         if (p.IsMachineWide && !IsElevated())
-            return new EntryDeletionResult(false, "Нужны права администратора: запись относится ко всем пользователям.");
+            return new EntryDeletionResult(false, T._("Нужны права администратора: запись относится ко всем пользователям."));
 
         // Re-check right before deleting: the program may have been reinstalled (or repaired) since the list was read.
         var check = await Task.Run(() => RecheckBrokenEntry(p), ct);
         if (check is not null)
             return new EntryDeletionResult(false, check);
 
-        var backup = await RegistryBackup.ExportAsync(p.RegistryKeyPath, $"Запись «{p.DisplayName}» из списка установленных программ", ct);
+        var backup = await RegistryBackup.ExportAsync(p.RegistryKeyPath, T.F("Запись «{0}» из списка установленных программ", p.DisplayName), ct);
         if (backup is null)
-            return new EntryDeletionResult(false, "Не удалось сохранить резервную копию — запись не удалена.");
+            return new EntryDeletionResult(false, T._("Не удалось сохранить резервную копию — запись не удалена."));
 
         try
         {
             using var baseKey = RegistryKey.OpenBaseKey(p.Source.Hive, p.Source.View);
             using var parent = baseKey.OpenSubKey(p.Source.SubKeyPath, writable: true);
             if (parent is null)
-                return new EntryDeletionResult(false, "Раздел реестра со списком программ не найден.");
+                return new EntryDeletionResult(false, T._("Раздел реестра со списком программ не найден."));
             parent.DeleteSubKeyTree(p.KeyName, throwOnMissingSubKey: false);
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Не удалось удалить запись «{p.DisplayName}» ({p.RegistryKeyPath}): {ex.Message}");
-            return new EntryDeletionResult(false, $"Не удалось удалить запись: {ErrorText.For(ex)}.", backup);
+            Log.Warn(T.F("Не удалось удалить запись «{0}» ({1}): {2}", p.DisplayName, p.RegistryKeyPath, ex.Message));
+            return new EntryDeletionResult(false, T.F("Не удалось удалить запись: {0}.", ErrorText.For(ex)), backup);
         }
 
-        Log.Action($"Удалена запись «{p.DisplayName}» из списка установленных программ ({p.RegistryKeyPath}). " +
-                   $"Резервная копия: {Path.GetFileName(backup)}");
-        return new EntryDeletionResult(true, "Запись удалена.", backup);
+        Log.Action(T.F("Удалена запись «{0}» из списка установленных программ ({1}). Резервная копия: {2}", p.DisplayName, p.RegistryKeyPath, Path.GetFileName(backup)));
+        return new EntryDeletionResult(true, T._("Запись удалена."), backup);
     }
 
     /// <summary>
@@ -661,12 +662,12 @@ public sealed class ProgramsService : IHealthContributor
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            return $"Не удалось прочитать запись: {ErrorText.For(ex)}.";
+            return T.F("Не удалось прочитать запись: {0}.", ErrorText.For(ex));
         }
         if (current is null)
-            return "Этой записи уже нет в реестре — ничего не изменено.";
+            return T._("Этой записи уже нет в реестре — ничего не изменено.");
         if (!string.Equals(current.DisplayName?.Trim(), p.DisplayName, StringComparison.OrdinalIgnoreCase) || !ProgramRules.IsBroken(current))
-            return "Запись изменилась: похоже, программу установили заново. Ничего не удалено — обновите список.";
+            return T._("Запись изменилась: похоже, программу установили заново. Ничего не удалено — обновите список.");
         return null;
     }
 
@@ -705,9 +706,9 @@ public sealed class ProgramsService : IHealthContributor
     public async Task<(bool Success, string Message)> RemoveStoreAppAsync(StoreApp app, CancellationToken ct)
     {
         if (app.IsProtected)
-            return (false, "Это приложение нужно Windows или другим программам — удалять его нельзя.");
+            return (false, T._("Это приложение нужно Windows или другим программам — удалять его нельзя."));
         if (!StoreAppCatalog.IsValidPackageFullName(app.PackageFullName))
-            return (false, "Некорректное имя пакета.");
+            return (false, T._("Некорректное имя пакета."));
         if (RemoveStoreAppOverride is { } remove)
             return await remove(app, ct);
 
@@ -719,17 +720,17 @@ public sealed class ProgramsService : IHealthContributor
         }
         catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn($"Не удалось запустить PowerShell для удаления «{app.DisplayName}»: {ex.Message}");
-            return (false, $"Не удалось запустить PowerShell: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Не удалось запустить PowerShell для удаления «{0}»: {1}", app.DisplayName, ex.Message));
+            return (false, T.F("Не удалось запустить PowerShell: {0}.", ErrorText.For(ex)));
         }
 
         if (result.Success && result.StdOut.Contains("OK", StringComparison.Ordinal))
         {
-            Log.Action($"Удалено приложение Microsoft Store «{app.DisplayName}» ({app.PackageFullName}) для текущего пользователя");
-            return (true, "Удалено.");
+            Log.Action(T.F("Удалено приложение Microsoft Store «{0}» ({1}) для текущего пользователя", app.DisplayName, app.PackageFullName));
+            return (true, T._("Удалено."));
         }
-        var reason = result.TimedOut ? "Windows не ответила за 3 минуты." : FirstLine(result.StdErr);
-        Log.Warn($"Не удалось удалить приложение «{app.DisplayName}»: {reason}");
+        var reason = result.TimedOut ? T._("Windows не ответила за 3 минуты.") : FirstLine(result.StdErr);
+        Log.Warn(T.F("Не удалось удалить приложение «{0}»: {1}", app.DisplayName, reason));
         return (false, reason);
     }
 
@@ -746,20 +747,16 @@ public sealed class ProgramsService : IHealthContributor
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Нежелательная программа: {pup.DisplayName}",
-                Details = $"{pup.PupReason}. " + (canUninstall
-                    ? "Если вы не устанавливали её сознательно, удалите её. Кнопка запустит деинсталлятор самой программы " +
-                      "(Windows может спросить разрешение); если установщик умеет удалять без окон, это пройдёт без вопросов, " +
-                      "и остановить удаление будет нельзя. Перед удалением создаётся точка восстановления (если это включено " +
-                      "в настройках и есть права администратора). Подробности о программе — в разделе «Программы»."
-                    : "Деинсталлятор программы не найден — скорее всего, она уже удалена, а в списке осталась только запись, " +
-                      "поэтому удалить её отсюда нельзя. Запись можно убрать в разделе «Программы»."),
+                Title = T.F("Нежелательная программа: {0}", pup.DisplayName),
+                Details = canUninstall
+                    ? T.F("{0}. Если вы не устанавливали её сознательно, удалите её. Кнопка запустит деинсталлятор самой программы (Windows может спросить разрешение); если установщик умеет удалять без окон, это пройдёт без вопросов, и остановить удаление будет нельзя. Перед удалением создаётся точка восстановления (если это включено в настройках и есть права администратора). Подробности о программе — в разделе «Программы».", pup.PupReason)
+                    : T.F("{0}. Деинсталлятор программы не найден — скорее всего, она уже удалена, а в списке осталась только запись, поэтому удалить её отсюда нельзя. Запись можно убрать в разделе «Программы».", pup.PupReason),
                 Severity = IssueSeverity.High,
-                Gain = pup.SizeBytes > 0 ? $"Освободит ≈ {Format.Bytes(pup.SizeBytes)}" : null,
+                Gain = pup.SizeBytes > 0 ? T.F("Освободит ≈ {0}", Format.Bytes(pup.SizeBytes)) : null,
                 ReclaimableBytes = 0, // removing a program is the user's decision (InFixAll = false): not counted as "can free now"
                 TargetPageKey = "Programs",
                 FixAsync = canUninstall ? c => FixUnwantedProgramAsync(pup, c) : null,
-                FixLabel = "Удалить программу",
+                FixLabel = T._("Удалить программу"),
                 InFixAll = false,
             });
         }
@@ -767,17 +764,17 @@ public sealed class ProgramsService : IHealthContributor
         var broken = scan.Programs.Where(p => p.IsBroken).ToList();
         if (broken.Count > 0)
         {
-            var names = string.Join(", ", broken.Take(5).Select(b => $"«{b.DisplayName}»")) + (broken.Count > 5 ? " и другие" : "");
+            var shownNames = string.Join(", ", broken.Take(5).Select(b => T.Quote(b.DisplayName)));
+            var names = broken.Count > 5 ? T.F("{0} и другие", shownNames) : shownNames;
             var needsAdmin = broken.Any(b => b.IsMachineWide);
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"{Format.Count(broken.Count, "битая запись", "битые записи", "битых записей")} в списке программ",
-                Details = $"Эти программы уже удалены, но всё ещё видны в списке установленных: {names}. " +
-                          "Записи можно убрать — перед удалением сохраняется резервная копия реестра." +
-                          (needsAdmin ? " Нужны права администратора." : ""),
+                Title = T.F("{0} в списке программ", Format.Count(broken.Count, "битая запись", "битые записи", "битых записей")),
+                Details = T.F("Эти программы уже удалены, но всё ещё видны в списке установленных: {0}. Записи можно убрать — перед удалением сохраняется резервная копия реестра.", names) +
+                          (needsAdmin ? " " + T._("Нужны права администратора.") : ""),
                 Severity = IssueSeverity.Low,
-                Gain = "Чистый список программ",
+                Gain = T._("Чистый список программ"),
                 TargetPageKey = "Programs",
                 AutoFixSafe = false,
                 FixAsync = c => FixBrokenEntriesAsync(broken, c),
@@ -795,21 +792,20 @@ public sealed class ProgramsService : IHealthContributor
                 issues.Add(new HealthIssue
                 {
                     Module = ModuleName,
-                    Title = $"{Format.Count(bloat.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений")} можно удалить",
+                    Title = T.F("{0} можно удалить", Format.Count(bloat.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений")),
                     // The text of the Programs page's «Удалить лишние»: the dashboard's question shows it before the removal.
-                    Details = "Они занимают место и иногда работают в фоне. Кнопка удалит:\n" + PreinstalledAppsText(bloat) +
-                              " Если какое-то из них вам нужно, удаляйте приложения по одному на вкладке «Приложения Microsoft Store».",
+                    Details = T.F("Они занимают место и иногда работают в фоне. Кнопка удалит:\n{0} Если какое-то из них вам нужно, удаляйте приложения по одному на вкладке «Приложения Microsoft Store».", PreinstalledAppsText(bloat)),
                     Severity = IssueSeverity.Info,
                     TargetPageKey = "Programs",
                     FixAsync = c => FixPreinstalledAppsAsync(bloat, c),
-                    FixLabel = "Удалить лишние",
+                    FixLabel = T._("Удалить лишние"),
                     InFixAll = false,
                 });
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            Log.Warn("Программы: список приложений Microsoft Store не получен вовремя — пропущено");
+            Log.Warn(T._("Программы: список приложений Microsoft Store не получен вовремя — пропущено"));
         }
 
         return issues;
@@ -824,13 +820,10 @@ public sealed class ProgramsService : IHealthContributor
         const int maxNames = 15;
         var names = string.Join("\n", apps.Take(maxNames).Select(a => "• " + a.DisplayName));
         if (apps.Count > maxNames)
-            names += $"\n• … и ещё {apps.Count - maxNames}";
-        return names + "\n\nОни удаляются только для вашей учётной записи. " +
-               (apps.All(a => a.IsFromStore)
-                   ? "Любое из них можно вернуть, установив заново из Microsoft Store. "
-                   : "Приложения из Microsoft Store можно вернуть, установив заново оттуда же; остальные — только переустановив " +
-                     "программу, которая их поставила. ") +
-               "Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора).";
+            names += "\n" + T.F("• … и ещё {0}", apps.Count - maxNames);
+        return names + "\n\n" + (apps.All(a => a.IsFromStore)
+            ? T._("Они удаляются только для вашей учётной записи. Любое из них можно вернуть, установив заново из Microsoft Store. Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора).")
+            : T._("Они удаляются только для вашей учётной записи. Приложения из Microsoft Store можно вернуть, установив заново оттуда же; остальные — только переустановив программу, которая их поставила. Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора)."));
     }
 
     /// <summary>Fix for the dashboard (already confirmed there): deletes the broken entries with backups.</summary>
@@ -841,10 +834,9 @@ public sealed class ProgramsService : IHealthContributor
         var targets = fresh.Where(f => broken.Any(b => string.Equals(b.RegistryKeyPath, f.RegistryKeyPath, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (targets.Count == 0)
-            return "Битых записей больше нет.";
+            return T._("Битых записей больше нет.");
         if (targets.Any(t => t.IsMachineWide) && !IsElevated())
-            return "Ничего не изменено: для удаления этих записей нужны права администратора. " +
-                   "Перезапустите программу от имени администратора и повторите.";
+            return T._("Ничего не изменено: для удаления этих записей нужны права администратора. Перезапустите программу от имени администратора и повторите.");
 
         var (deleted, failures) = await DeleteEntriesAsync(targets, null, ct);
         return BrokenEntriesFixText(targets.Count, deleted, failures);
@@ -859,13 +851,13 @@ public sealed class ProgramsService : IHealthContributor
     {
         var notProcessed = Math.Max(0, targets - deleted - failures.Count);
         var interrupted = notProcessed > 0
-            ? $" Удаление прервано — не обработано: {Format.Count(notProcessed, "запись", "записи", "записей")}."
+            ? " " + T.F("Удаление прервано — не обработано: {0}.", Format.Count(notProcessed, "запись", "записи", "записей"))
             : "";
         if (deleted == 0)
-            return ("Ничего не удалено." + (failures.Count > 0 ? " " + failures[0] : "")).TrimEnd() + interrupted;
-        var text = $"Удалено {Format.Count(deleted, "запись", "записи", "записей")}, резервные копии сохранены.";
+            return (T._("Ничего не удалено.") + (failures.Count > 0 ? " " + failures[0] : "")).TrimEnd() + interrupted;
+        var text = T.F("Удалено {0}, резервные копии сохранены.", Format.Count(deleted, "запись", "записи", "записей"));
         if (failures.Count > 0)
-            text += $" Не удалось: {failures.Count}.";
+            text += " " + T.F("Не удалось: {0}.", failures.Count);
         return text + interrupted;
     }
 
@@ -881,9 +873,9 @@ public sealed class ProgramsService : IHealthContributor
         var program = (await ScanProgramsAsync(ct)).Programs.FirstOrDefault(p =>
             string.Equals(p.RegistryKeyPath, scanned.RegistryKeyPath, StringComparison.OrdinalIgnoreCase));
         if (program is null)
-            return "Программа уже удалена — делать ничего не нужно.";
+            return T._("Программа уже удалена — делать ничего не нужно.");
         if (!program.IsPup)
-            return $"«{program.DisplayName}» больше не считается нежелательной (возможно, вы добавили её в доверенные) — делать ничего не нужно.";
+            return T.F("«{0}» больше не считается нежелательной (возможно, вы добавили её в доверенные) — делать ничего не нужно.", program.DisplayName);
 
         var name = program.DisplayName;
         UninstallOutcome outcome;
@@ -893,7 +885,7 @@ public sealed class ProgramsService : IHealthContributor
         }
         else
         {
-            await CreateRestorePointAsync($"Удаление {name}", ct);
+            await CreateRestorePointAsync(T.F("Удаление {0}", name), ct);
             ct.ThrowIfCancellationRequested(); // "Отмена" before anything was started: a plain cancellation
             try
             {
@@ -904,13 +896,14 @@ public sealed class ProgramsService : IHealthContributor
                 // Only the waiting stopped (RunUninstallerAsync): the uninstaller keeps running. Return a text instead of
                 // throwing, so the Dashboard shows it with its "stopped" note (which says «Проверить снова») rather than a
                 // bare "Исправление отменено.". A quiet uninstall has no window.
-                Log.Info($"Удаление «{name}»: ожидание деинсталлятора прервано пользователем");
-                return $"Ожидание остановлено: удаление «{name}» могло продолжиться " +
-                       (ShouldUninstallQuietly(program) ? "в фоне, без окна." : "в окне удаления программы.");
+                Log.Info(T.F("Удаление «{0}»: ожидание деинсталлятора прервано пользователем", name));
+                return ShouldUninstallQuietly(program)
+                    ? T.F("Ожидание остановлено: удаление «{0}» могло продолжиться в фоне, без окна.", name)
+                    : T.F("Ожидание остановлено: удаление «{0}» могло продолжиться в окне удаления программы.", name);
             }
         }
         if (outcome.Status == UninstallStatus.NotStarted)
-            Log.Warn($"Главная: не удалось запустить удаление «{name}»: {outcome.Message.ReplaceLineEndings(" ")}");
+            Log.Warn(T.F("Главная: не удалось запустить удаление «{0}»: {1}", name, outcome.Message.ReplaceLineEndings(" ")));
         return UnwantedProgramFixText(name, outcome.Status);
     }
 
@@ -921,10 +914,10 @@ public sealed class ProgramsService : IHealthContributor
     /// </summary>
     private static string UnwantedProgramFixText(string name, UninstallStatus status) => status switch
     {
-        UninstallStatus.Removed => $"Программа «{name}» удалена.",
-        UninstallStatus.StillInstalled => $"Не удалось удалить «{name}»: программа осталась в списке установленных.",
-        UninstallStatus.UacDeclined => $"Не удалось удалить «{name}»: вы отклонили запрос контроля учётных записей Windows.",
-        _ => $"Не удалось запустить удаление «{name}».",
+        UninstallStatus.Removed => T.F("Программа «{0}» удалена.", name),
+        UninstallStatus.StillInstalled => T.F("Не удалось удалить «{0}»: программа осталась в списке установленных.", name),
+        UninstallStatus.UacDeclined => T.F("Не удалось удалить «{0}»: вы отклонили запрос контроля учётных записей Windows.", name),
+        _ => T.F("Не удалось запустить удаление «{0}».", name),
     };
 
     /// <summary>
@@ -940,18 +933,18 @@ public sealed class ProgramsService : IHealthContributor
     internal async Task<string> RemovePreinstalledAppsAsync(IReadOnlyList<StoreApp> scanned, StoreAppsResult current, CancellationToken ct)
     {
         if (current.Error is not null)
-            return "Не удалось получить список приложений Microsoft Store — ничего не изменено.";
+            return T._("Не удалось получить список приложений Microsoft Store — ничего не изменено.");
 
         var stillInstalled = current.Apps
             .Where(a => scanned.Any(s => string.Equals(s.Name, a.Name, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (stillInstalled.Count == 0)
-            return "Этих предустановленных приложений уже нет — делать ничего не нужно."; // gone since the scan: nothing left to do
+            return T._("Этих предустановленных приложений уже нет — делать ничего не нужно."); // gone since the scan: nothing left to do
         var targets = stillInstalled.Where(a => a.IsBloatware && a.CanRemove).ToList();
         if (targets.Count == 0)
-            return "Предустановленные приложения изменились после проверки — ничего не изменено. Нажмите «Проверить снова».";
+            return T._("Предустановленные приложения изменились после проверки — ничего не изменено. Нажмите «Проверить снова».");
 
-        await CreateRestorePointAsync("Удаление предустановленных приложений", ct);
+        await CreateRestorePointAsync(T._("Удаление предустановленных приложений"), ct);
         ct.ThrowIfCancellationRequested(); // "Отмена" before anything was removed: a plain cancellation
         var removed = 0;
         var failed = new List<string>();
@@ -983,12 +976,15 @@ public sealed class ProgramsService : IHealthContributor
     /// </summary>
     private static string PreinstalledAppsFixText(int targets, int removed, IReadOnlyList<string> failed)
     {
-        var text = $"Удалено приложений: {removed} из {targets}.";
+        var text = T.F("Удалено приложений: {0} из {1}.", removed, targets);
         if (failed.Count > 0)
-            text += $" Не удалось удалить ({failed.Count}): {string.Join(", ", failed.Take(5))}{(failed.Count > 5 ? " и другие" : "")}.";
+        {
+            var failedNames = string.Join(", ", failed.Take(5));
+            text += " " + T.F("Не удалось удалить ({0}): {1}.", failed.Count, failed.Count > 5 ? T.F("{0} и другие", failedNames) : failedNames);
+        }
         var notProcessed = Math.Max(0, targets - removed - failed.Count);
         if (notProcessed > 0)
-            text += $" Удаление прервано — не обработано: {Format.Count(notProcessed, "приложение", "приложения", "приложений")}.";
+            text += " " + T.F("Удаление прервано — не обработано: {0}.", Format.Count(notProcessed, "приложение", "приложения", "приложений"));
         return text;
     }
 
@@ -996,6 +992,6 @@ public sealed class ProgramsService : IHealthContributor
     {
         var line = s.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(l => !l.StartsWith("+", StringComparison.Ordinal) && !l.StartsWith("At line", StringComparison.OrdinalIgnoreCase));
-        return string.IsNullOrEmpty(line) ? "неизвестная причина" : line;
+        return string.IsNullOrEmpty(line) ? T._("неизвестная причина") : line;
     }
 }

@@ -69,7 +69,7 @@ public class FixResultClassifierTests
             var russian = Sample(russianKey, T.Russian);
             var failure = FixResultClassifier.IsFailure(russian, T.Russian, null);
             var admin = FixResultClassifier.NeedsAdmin(russian, T.Russian, null);
-            if ((!failure && !admin) || ExpectedSkipped.Contains(russianKey))
+            if ((!failure && !admin) || ExpectedSkipped.Contains(russianKey) || FixResultClassifier.SideNoteKeys.Contains(russianKey))
                 continue;
             var english = Sample(englishValue, T.English);
             var englishFailure = FixResultClassifier.IsFailure(english, T.English, catalog);
@@ -82,6 +82,81 @@ public class FixResultClassifierTests
         Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
         Assert.True(checkedFailures >= 50, $"only {checkedFailures} failure texts were checked");
         Assert.True(checkedAdmin >= 20, $"only {checkedAdmin} admin texts were checked");
+    }
+
+    /// <summary>
+    /// Russian texts that begin with a failure phrase but are only appended to the end of a result that stays "fixed": the Russian
+    /// rules read «Не удалось» at the start of a result only, so they give no English matcher (an English matcher fires anywhere).
+    /// </summary>
+    private static readonly string[] ExpectedSideNotes =
+    {
+        "Не удалось очистить: {0}.", // Cleaner: "Удалено … системного мусора. Не удалось очистить: …"
+    };
+
+    [Fact]
+    public void TheSideNoteKeys_AreExactlyTheListedOnes_AreInTheCatalog_AndAreFailurePhrasesInRussian()
+    {
+        var catalog = RealCatalog();
+
+        Assert.Equal(ExpectedSideNotes.OrderBy(k => k, StringComparer.Ordinal), FixResultClassifier.SideNoteKeys.OrderBy(k => k, StringComparer.Ordinal));
+        foreach (var key in FixResultClassifier.SideNoteKeys)
+        {
+            Assert.True(catalog.ContainsKey(key), $"«{key}» is not in en.json (stale side note)");
+            Assert.True(FixResultClassifier.IsFailure(Sample(key, T.Russian), T.Russian, null), $"«{key}» is not a failure phrase: it needs no entry here");
+        }
+    }
+
+    [Fact]
+    public void ASideNote_AfterASuccess_IsNotAFailure_InEnglish()
+    {
+        var catalog = RealCatalog();
+        foreach (var key in FixResultClassifier.SideNoteKeys)
+        {
+            var english = "Deleted 3 MB of system junk. " + Sample(catalog[key], T.English);
+
+            Assert.False(FixResultClassifier.IsFailure(english, T.English, catalog), english);
+            Assert.False(FixResultClassifier.IsFailure("Удалено 3 МБ системного мусора. " + Sample(key, T.Russian), T.Russian, null));
+        }
+    }
+
+    /// <summary>
+    /// Entries the Russian rules do NOT call a failure whose English text the English matchers do (the English text contains the text of
+    /// a failure entry): log lines and the like, never a fix result. A new divergence shows up here, so it is looked at: a fix result
+    /// among them would be judged differently in the two languages (give it its own wording, or add its key to
+    /// <see cref="FixResultClassifier.SideNoteKeys"/> when it is a side note of a successful result).
+    /// </summary>
+    private static readonly string[] ExpectedEnglishOnlyFailures =
+    {
+        "Главная: не удалось запустить удаление «{0}»: {1}", // log: contains "Could not start the uninstall of “{0}”."
+        "Главная: не удалось открыть {0}: {1}", // log
+        "Главная: не удалось скопировать отчёт в буфер обмена: {0}", // log
+        "Главная: не удалось сохранить отчёт в «{0}»: {1}", // log
+        "Обновление: не удалось запустить {0}: {1}", // log
+        "Очистка: не удалось узнать размер кэша оптимизации доставки: {0}", // log: contains "Could not get the size"
+        "Перезапустить как администратор", // a button label: "Restart as administrator" is the matcher of «от имени администратора»
+        "Программы: не удалось запустить PowerShell: {0}", // log: contains "Could not start PowerShell: {0}."
+    };
+
+    [Fact]
+    public void TheEntries_ThatOnlyEnglishCallsAFailure_AreExactlyTheListedOnes()
+    {
+        var catalog = RealCatalog();
+        var found = new List<string>();
+        foreach (var (russianKey, englishValue) in catalog)
+        {
+            var russian = Sample(russianKey, T.Russian);
+            if (FixResultClassifier.IsFailure(russian, T.Russian, null) || FixResultClassifier.NeedsAdmin(russian, T.Russian, null))
+                continue;
+            var english = Sample(englishValue, T.English);
+            if (FixResultClassifier.IsFailure(english, T.English, catalog) || FixResultClassifier.NeedsAdmin(english, T.English, catalog))
+                found.Add(russianKey);
+        }
+
+        var expected = ExpectedEnglishOnlyFailures.OrderBy(k => k, StringComparer.Ordinal).ToList();
+        var actual = found.OrderBy(k => k, StringComparer.Ordinal).ToList();
+        Assert.True(expected.SequenceEqual(actual),
+            "Entries English calls a failure and Russian does not (the list ExpectedEnglishOnlyFailures should be exactly this):" +
+            Environment.NewLine + string.Join(Environment.NewLine, actual.Select(k => $"        \"{k}\",")));
     }
 
     [Fact]

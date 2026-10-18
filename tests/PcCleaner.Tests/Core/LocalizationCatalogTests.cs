@@ -36,6 +36,7 @@ public class LocalizationCatalogTests
         "MainViewModel.cs",
         "MainWindow.xaml",
         "MainWindow.xaml.cs",
+        "Modules/Cleaner/",
         "Modules/Dashboard/DashboardConverters.cs",
         "Modules/Dashboard/DashboardItems.cs",
         "Modules/Dashboard/DashboardView.xaml",
@@ -49,6 +50,7 @@ public class LocalizationCatalogTests
         "Modules/Dashboard/SmartScanner.cs",
         "Modules/Dashboard/SystemInfo.cs",
         "Modules/Dashboard/TextOverflow.cs",
+        "Modules/Programs/",
         "Modules/Settings/",
     };
 

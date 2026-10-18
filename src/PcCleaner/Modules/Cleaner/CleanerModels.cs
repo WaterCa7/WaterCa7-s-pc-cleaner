@@ -61,9 +61,10 @@ public sealed class CleanRoot
 /// <summary>One line of the cleaner list ("Временные файлы пользователя", "Google Chrome", ...).</summary>
 public sealed class CleanerCategory
 {
+    // The keys of the three groups (the titles shown on the page are in CleanerViewModel.GroupInfo).
     public const string GroupWindows = "Windows";
-    public const string GroupBrowsers = "Браузеры";
-    public const string GroupApps = "Приложения и игры";
+    public const string GroupBrowsers = "Browsers";
+    public const string GroupApps = "Apps";
 
     public required string Id { get; init; }
 

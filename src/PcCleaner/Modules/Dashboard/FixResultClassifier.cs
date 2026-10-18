@@ -27,6 +27,20 @@ public static class FixResultClassifier
 
     private const RegexOptions MatcherOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline;
 
+    // l10n:data-begin — Russian keys of side notes, matched against the catalog and never shown as they are
+    /// <summary>
+    /// Russian keys that start like a failure («Не удалось …») but are only appended to the end of a result that stays "fixed", e.g.
+    /// «Удалено 3 МБ системного мусора. Не удалось очистить: Журналы Windows.»: the Russian rules read «Не удалось» only at the
+    /// start of a result, so such a result counts as fixed. In English a matcher fires anywhere in the result, so these keys give
+    /// no matcher: their English text is a side note too. Every Russian text that is appended to a successful result and begins with
+    /// a failure phrase belongs here (FixResultClassifierTests pins the exact set).
+    /// </summary>
+    internal static readonly IReadOnlySet<string> SideNoteKeys = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "Не удалось очистить: {0}.", // Cleaner: the part of the system junk that could not be cleaned, after "Удалено … системного мусора."
+    };
+    // l10n:data-end
+
     /// <summary>Matchers per catalog instance: built on first use, again when T gets another table; thread-safe.</summary>
     private static readonly ConditionalWeakTable<IReadOnlyDictionary<string, string>, CatalogMatchers> Matchers = new();
 
@@ -87,8 +101,8 @@ public static class FixResultClassifier
         var built = new Dictionary<string, Regex>(StringComparer.Ordinal);
         foreach (var (russian, english) in catalog)
         {
-            if (string.IsNullOrWhiteSpace(english))
-                continue; // no translation: T shows the Russian text, and the Russian rules judge it
+            if (string.IsNullOrWhiteSpace(english) || SideNoteKeys.Contains(russian))
+                continue; // no translation: T shows the Russian text, and the Russian rules judge it; or a side note (see SideNoteKeys)
             var sample = WithSampleArguments(russian);
             var isAdmin = IsRussianAdminRequired(sample);
             var isFailure = isAdmin || IsRussianFailure(sample);

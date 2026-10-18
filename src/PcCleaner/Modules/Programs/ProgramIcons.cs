@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Xml.Linq;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Programs;
 
@@ -194,7 +195,7 @@ internal static class ProgramIcons
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or ExternalException)
         {
-            Log.Warn($"Программы: не удалось прочитать название приложения: {ex.Message}");
+            Log.Warn(T.F("Программы: не удалось прочитать название приложения: {0}", ex.Message));
             return null;
         }
     }

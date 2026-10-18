@@ -121,3 +121,54 @@ names of languages stay in their own language (Русский / English).
 - Do not translate: page keys, registry paths and value names, command lines, file names, URLs, values saved in settings,
   `update.json`, `.reg`, `rstrui.exe` and other names of files and tools.
 - A sentence with a value inside is one entry with a placeholder (`"Версия {0} установлена"`), never two fragments.
+
+## Cleanup (the Cleaner page)
+
+| Русский | English |
+|---|---|
+| Анализ (button) / анализ | Analyze / analysis |
+| Очистить выбранное | Clean selected |
+| Выбрать рекомендуемое / Снять все | Select recommended / Uncheck all |
+| Можно освободить … | You can free up … |
+| мусор | junk |
+| Временные файлы пользователя / Windows | User temporary files / Windows temporary files |
+| Кэш эскизов | Thumbnail cache |
+| Отчёты об ошибках | Error reports |
+| Дампы памяти | Memory dumps |
+| Кэш обновлений Windows | Windows Update cache |
+| Кэш оптимизации доставки | Delivery Optimization cache |
+| Кэш шейдеров | shader cache |
+| Журналы Windows | Windows logs |
+| Не рекомендуется (badge) | Not recommended |
+| Глубокая очистка | Deep cleanup |
+| Очистка компонентов Windows (DISM) | Windows component cleanup (DISM) |
+| Мастер очистки диска | Disk Cleanup wizard |
+| Проводник | File Explorer |
+| занятые файлы (open in a running program) | files in use |
+| файлы без доступа | files without access |
+| Свежие файлы / моложе 24 часов | Fresh files / newer than 24 hours |
+| «Освобождено 3,2 ГБ, удалено 12 345 файлов, пропущено 87 занятых» | Freed 3.2 GB, deleted 12,345 files, skipped 87 in use |
+
+## Programs
+
+| Русский | English |
+|---|---|
+| Удалить программу / Удалить приложение | Uninstall program / Uninstall app |
+| Тихое удаление | Silent uninstall |
+| деинсталлятор | uninstaller |
+| Убрать запись из списка | Remove entry from the list |
+| Удалить отмеченные | Uninstall checked |
+| Удалить лишние (preinstalled apps) | Remove extras |
+| Нежелательные / Недавние / Большие / Битые (filters) | Unwanted / Recent / Large / Broken |
+| Предустановленная, можно удалить | Preinstalled, can be removed |
+| Нужна другим программам — не удалять | Needed by other programs — do not uninstall |
+| Системное — не удалять | System — do not remove |
+| Доверять / Убрать из доверенных | Trust / Remove from trusted |
+| Приложения Microsoft Store | Microsoft Store apps |
+| учётная запись (user account) | account |
+| контроль учётных записей (UAC) | User Account Control |
+| Проверить на VirusTotal | Check on VirusTotal |
+| Не указан / Неизвестен | Not specified / Unknown |
+
+The names of Microsoft Store apps keep the English names Windows itself uses (Новости → News, Калькулятор → Calculator,
+Безопасность Windows → Windows Security); product names stay as they are.

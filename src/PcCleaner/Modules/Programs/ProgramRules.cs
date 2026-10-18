@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Programs;
 
@@ -41,8 +42,10 @@ public static class ProgramRules
         @"^Windows App Runtime|^Microsoft Windows App Runtime|^Windows Desktop Runtime",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // l10n:data-begin — the Russian name of a driver package in the Uninstall list, matched and never shown
     private static readonly Regex DriverName = new(
         @"^(Пакет драйверов Windows|Windows Driver Package)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // l10n:data-end
 
     private static readonly string[] InstallDateFormats =
     {
@@ -410,9 +413,11 @@ public static class ProgramRules
     {
         if (string.IsNullOrWhiteSpace(displayName) || !RuntimeName.IsMatch(displayName))
             return false;
+        // l10n:data-begin — the Russian spelling of the publisher's name, matched and never shown
         return string.IsNullOrWhiteSpace(publisher) ||
                publisher.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) ||
                publisher.Contains("Майкрософт", StringComparison.OrdinalIgnoreCase);
+        // l10n:data-end
     }
 
     /// <summary>
@@ -425,14 +430,20 @@ public static class ProgramRules
         var reason = InstallLocationReason(installLocation);
         if (reason is null)
             return null;
-        if (reason.Contains("Temp", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена во временную папку (Temp) — обычные программы так не делают.";
-        if (reason.Contains("Загрузки", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.";
-        if (reason.Contains("корзин", StringComparison.OrdinalIgnoreCase))
-            return "Папка программы находится в корзине.";
-        if (reason.Contains("Public", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена в общую папку пользователей (Public) — это необычно.";
+        // l10n:data-begin — Core's Russian reasons, told apart by a word and never shown as they are
+        var isTemp = reason.Contains("Temp", StringComparison.OrdinalIgnoreCase);
+        var isDownloads = reason.Contains("Загрузки", StringComparison.OrdinalIgnoreCase);
+        var isRecycleBin = reason.Contains("корзин", StringComparison.OrdinalIgnoreCase);
+        var isPublic = reason.Contains("Public", StringComparison.OrdinalIgnoreCase);
+        // l10n:data-end
+        if (isTemp)
+            return T._("Программа установлена во временную папку (Temp) — обычные программы так не делают.");
+        if (isDownloads)
+            return T._("Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.");
+        if (isRecycleBin)
+            return T._("Папка программы находится в корзине.");
+        if (isPublic)
+            return T._("Программа установлена в общую папку пользователей (Public) — это необычно.");
         return reason;
     }
 

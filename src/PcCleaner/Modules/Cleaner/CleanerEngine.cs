@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Enumeration;
 using System.Security;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -31,7 +32,7 @@ internal static class CleanerEngine
             if (!guard.IsSafeRoot(root, out var reason))
             {
                 result.RejectedRoots++;
-                Log.Warn($"Очистка: «{root.Path}» пропущено ради безопасности — {reason}");
+                Log.Warn(T.F("Очистка: «{0}» пропущено ради безопасности — {1}", root.Path, reason));
                 continue;
             }
             var rootPath = SafePathTools.Normalize(root.Path)!;
@@ -104,7 +105,7 @@ internal static class CleanerEngine
                 if (!guard.IsSafeRoot(root, out var reason))
                 {
                     result.RejectedRoots++;
-                    Log.Warn($"Очистка: «{root.Path}» пропущено ради безопасности — {reason}");
+                    Log.Warn(T.F("Очистка: «{0}» пропущено ради безопасности — {1}", root.Path, reason));
                     continue;
                 }
                 var rootPath = SafePathTools.Normalize(root.Path)!;
@@ -112,7 +113,7 @@ internal static class CleanerEngine
                     continue;
                 if (guard.IsRedirected(rootPath, root.IsSingleFile))
                 {
-                    Log.Info($"Очистка: «{root.Path}» пропущено — путь к папке проходит через ссылку (junction/symlink)");
+                    Log.Info(T.F("Очистка: «{0}» пропущено — путь к папке проходит через ссылку (junction/symlink)", root.Path));
                     continue;
                 }
 

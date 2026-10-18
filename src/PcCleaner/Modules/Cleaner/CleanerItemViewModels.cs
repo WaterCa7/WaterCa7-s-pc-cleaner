@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -72,11 +73,11 @@ public sealed class CategoryItemViewModel : ObservableObject
 
     public bool CanClean => !NeedsAdmin;
 
-    public string AdminBadgeText => NeedsAdmin ? "Нужны права администратора" : "Частично — нужны права администратора";
+    public string AdminBadgeText => NeedsAdmin ? T._("Нужны права администратора") : T._("Частично — нужны права администратора");
 
     public string AdminTip => NeedsAdmin
-        ? "Это системная папка: очистить её можно только с правами администратора. Размер показан для справки."
-        : "Часть папок системная: без прав администратора они будут пропущены, остальное очистится как обычно.";
+        ? T._("Это системная папка: очистить её можно только с правами администратора. Размер показан для справки.")
+        : T._("Часть папок системная: без прав администратора они будут пропущены, остальное очистится как обычно.");
 
     public bool NotRecommended => !Category.DefaultChecked;
 
@@ -87,12 +88,12 @@ public sealed class CategoryItemViewModel : ObservableObject
     }
 
     public string RunningText => Category.IsBrowser
-        ? "Закройте браузер для полной очистки"
-        : "Закройте программу для полной очистки";
+        ? T._("Закройте браузер для полной очистки")
+        : T._("Закройте программу для полной очистки");
 
     public string RunningTip => Category.IsBrowser
-        ? "Браузер сейчас запущен: пока он открыт, часть файлов кэша занята и будет пропущена."
-        : "Программа сейчас запущена: пока она открыта, часть её файлов занята и будет пропущена.";
+        ? T._("Браузер сейчас запущен: пока он открыт, часть файлов кэша занята и будет пропущена.")
+        : T._("Программа сейчас запущена: пока она открыта, часть её файлов занята и будет пропущена.");
 
     public bool IsChecked
     {
@@ -147,10 +148,10 @@ public sealed class CategoryItemViewModel : ObservableObject
 
     public string SizeText => State switch
     {
-        ScanState.Scanning => "Анализ…",
+        ScanState.Scanning => T._("Анализ…"),
         ScanState.Done when _result?.Error is not null && Bytes == 0 => "—",
-        ScanState.Done when Bytes == 0 && Files == 0 && _result!.DeniedDirectories > 0 => "Нет доступа",
-        ScanState.Done when Bytes == 0 && Files == 0 => "Пусто",
+        ScanState.Done when Bytes == 0 && Files == 0 && _result!.DeniedDirectories > 0 => T._("Нет доступа"),
+        ScanState.Done when Bytes == 0 && Files == 0 => T._("Пусто"),
         ScanState.Done => Format.Bytes(Bytes),
         _ => "—",
     };
@@ -204,12 +205,12 @@ public sealed class CategoryItemViewModel : ObservableObject
                 return null;
             var prefixLength = baseDir.TrimEnd('\\').Length + 1;
             var names = Folders.Select(f => f.Path[prefixLength..]);
-            return "Очищаются только папки кэша внутри неё: " + string.Join(", ", names) + ".";
+            return T.F("Очищаются только папки кэша внутри неё: {0}.", string.Join(", ", names));
         }
     }
 
     public string? MoreFoldersText => FolderBase is null && Folders.Count > MaxVisibleFolders
-        ? $"…и ещё {Format.Count(Folders.Count - MaxVisibleFolders, "папка", "папки", "папок")}"
+        ? T.F("…и ещё {0}", Format.Count(Folders.Count - MaxVisibleFolders, "папка", "папки", "папок"))
         : null;
 
     public IReadOnlyList<LargeFileViewModel> LargestFiles
@@ -221,8 +222,8 @@ public sealed class CategoryItemViewModel : ObservableObject
     public bool HasLargestFiles => LargestFiles.Count > 0;
 
     public string LargestCaption => Files > LargestFiles.Count
-        ? $"Самые большие файлы — {Format.Number(LargestFiles.Count)} из {Format.Number(Files)}"
-        : "Файлы";
+        ? T.F("Самые большие файлы — {0} из {1}", Format.Number(LargestFiles.Count), Format.Number(Files))
+        : T._("Файлы");
 
     /// <summary>Extra facts about the last scan (fresh files kept, junctions skipped, no access...).</summary>
     public string DetailsNote
@@ -234,34 +235,39 @@ public sealed class CategoryItemViewModel : ObservableObject
             var parts = new List<string>();
             if (_result.TooYoungFiles > 0)
             {
+                var tooYoung = Format.Number(_result.TooYoungFiles);
                 parts.Add(Category.Age == AgeRule.Fixed
-                    ? $"Журналы моложе 30 дней не удаляются (таких файлов: {Format.Number(_result.TooYoungFiles)})."
-                    : $"Свежие файлы{(Category.AgeNote is null ? "" : $" ({Category.AgeNote})")} не удаляются — ими ещё могут " +
-                      $"пользоваться программы (таких файлов: {Format.Number(_result.TooYoungFiles)}).");
+                    ? T.F("Журналы моложе 30 дней не удаляются (таких файлов: {0}).", tooYoung)
+                    : Category.AgeNote is null
+                        ? T.F("Свежие файлы не удаляются — ими ещё могут пользоваться программы (таких файлов: {0}).", tooYoung)
+                        : T.F("Свежие файлы ({0}) не удаляются — ими ещё могут пользоваться программы (таких файлов: {1}).", Category.AgeNote, tooYoung));
             }
             if (_result.AdminBytes > 0 && !IsElevated && PartlyNeedsAdmin)
-                parts.Add($"{Format.Bytes(_result.AdminBytes)} находится в системных папках — их можно очистить только с правами администратора.");
+                parts.Add(T.F("{0} находится в системных папках — их можно очистить только с правами администратора.", Format.Bytes(_result.AdminBytes)));
             if (_result.DeniedDirectories > 0)
+            {
+                var folders = Format.Count(_result.DeniedDirectories, "папке", "папкам", "папкам");
                 parts.Add(IsElevated
-                    ? $"Нет доступа к {Format.Count(_result.DeniedDirectories, "папке", "папкам", "папкам")} — они пропущены."
-                    : $"Нет доступа к {Format.Count(_result.DeniedDirectories, "папке", "папкам", "папкам")}: с правами администратора будет видно больше.");
+                    ? T.F("Нет доступа к {0} — они пропущены.", folders)
+                    : T.F("Нет доступа к {0}: с правами администратора будет видно больше.", folders));
+            }
             if (_result.ReparsePointsSkipped > 0)
-                parts.Add($"Ссылок на другие папки (junction/symlink) пропущено: {Format.Number(_result.ReparsePointsSkipped)} — по ним очистка никогда не переходит.");
+                parts.Add(T.F("Ссылок на другие папки (junction/symlink) пропущено: {0} — по ним очистка никогда не переходит.", Format.Number(_result.ReparsePointsSkipped)));
             if (_result.ExcludedEntries > 0)
-                parts.Add($"В исключениях: {Format.Number(_result.ExcludedEntries)} — они не удаляются.");
+                parts.Add(T.F("В исключениях: {0} — они не удаляются.", Format.Number(_result.ExcludedEntries)));
             return string.Join(" ", parts);
         }
     }
 
     public string DetailsEmptyText => Category.Kind switch
     {
-        CategoryKind.RecycleBin => "Чтобы посмотреть, что лежит в корзине, откройте её в Проводнике.",
+        CategoryKind.RecycleBin => T._("Чтобы посмотреть, что лежит в корзине, откройте её в Проводнике."),
         CategoryKind.DeliveryOptimization =>
-            "Этими файлами управляет служба оптимизации доставки Windows, поэтому они очищаются её собственной командой.",
-        _ when State == ScanState.Scanning => "Идёт анализ…",
+            T._("Этими файлами управляет служба оптимизации доставки Windows, поэтому они очищаются её собственной командой."),
+        _ when State == ScanState.Scanning => T._("Идёт анализ…"),
         _ when HasResult && _result!.Error is not null => _result.Error + ".",
-        _ when HasResult => "Удалять здесь нечего — папки уже чистые.",
-        _ => "Нажмите «Анализ», чтобы увидеть файлы.",
+        _ when HasResult => T._("Удалять здесь нечего — папки уже чистые."),
+        _ => T._("Нажмите «Анализ», чтобы увидеть файлы."),
     };
 
     /// <summary>Click on the row text, or Space/Enter on its chevron.</summary>
@@ -416,7 +422,7 @@ public sealed class LargeFileViewModel
 
     public string SizeText => Format.Bytes(Size);
 
-    public string ToolTipText => $"{FullPath}\nРазмер: {Format.Bytes(Size)}\nИзменён: {Format.DateTime(Modified)}";
+    public string ToolTipText => T.F("{0}\nРазмер: {1}\nИзменён: {2}", FullPath, Format.Bytes(Size), Format.DateTime(Modified));
 
     public ICommand ShowInExplorerCommand { get; }
 
@@ -434,7 +440,7 @@ public sealed class LargeFileViewModel
         }
         catch (Exception ex) when (ex is COMException or ExternalException)
         {
-            Log.Warn($"Не удалось скопировать путь в буфер обмена: {ex.Message}");
+            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ex.Message));
         }
     }
 }
@@ -486,24 +492,24 @@ public sealed class CleanResultViewModel
     public DateTime Time { get; }
 
     public string Headline => Cancelled
-        ? $"Очистка прервана — освобождено {Format.Bytes(Freed)}"
+        ? T.F("Очистка прервана — освобождено {0}", Format.Bytes(Freed))
         : Freed > 0
-            ? $"Готово! Освобождено {Format.Bytes(Freed)}"
+            ? T.F("Готово! Освобождено {0}", Format.Bytes(Freed))
             : RecycleBinChanged
-                ? "Корзина не очищена — в ней появились новые файлы"
-                : "Готово, но место почти не освободилось";
+                ? T._("Корзина не очищена — в ней появились новые файлы")
+                : T._("Готово, но место почти не освободилось");
 
     public string Summary
     {
         get
         {
             var text = CleanerText.Deleted(Deleted);
-            text = char.ToUpper(text[0], Format.Ru) + text[1..];
+            text = char.ToUpper(text[0], T.Culture) + text[1..];
             if (Skipped > 0)
                 text += ", " + CleanerText.Skipped(Busy, Denied);
             text += ".";
             if (ErrorCount > 0)
-                text += $" Ошибок: {Format.Number(ErrorCount)} (подробности в журнале).";
+                text += " " + T.F("Ошибок: {0} (подробности в журнале).", Format.Number(ErrorCount));
             return text;
         }
     }
@@ -515,14 +521,13 @@ public sealed class CleanResultViewModel
         {
             var parts = new List<string>();
             if (RecycleBinChanged)
-                parts.Add("Корзина не очищена: после подтверждения в неё попали новые файлы. Проверьте её и нажмите " +
-                          "«Очистить выбранное» ещё раз — в подтверждении будет её новый размер.");
+                parts.Add(T._("Корзина не очищена: после подтверждения в неё попали новые файлы. Проверьте её и нажмите «Очистить выбранное» ещё раз — в подтверждении будет её новый размер."));
             if (Busy > 0)
-                parts.Add("Занятые файлы сейчас открыты в запущенных программах — закройте их и повторите очистку, чтобы удалить остальное.");
+                parts.Add(T._("Занятые файлы сейчас открыты в запущенных программах — закройте их и повторите очистку, чтобы удалить остальное."));
             if (Denied > 0)
                 parts.Add(_elevated
-                    ? "Файлы без доступа защищены Windows или принадлежат другой учётной записи — так и должно быть, их можно не трогать."
-                    : "Файлы без доступа принадлежат системе или другой учётной записи — часть из них можно удалить, запустив программу от имени администратора.");
+                    ? T._("Файлы без доступа защищены Windows или принадлежат другой учётной записи — так и должно быть, их можно не трогать.")
+                    : T._("Файлы без доступа принадлежат системе или другой учётной записи — часть из них можно удалить, запустив программу от имени администратора."));
             return parts.Count == 0 ? null : string.Join(" ", parts);
         }
     }
@@ -539,11 +544,11 @@ public sealed class CleanResultViewModel
         if (r.SkippedFiles > 0)
             parts.Add(CleanerText.Skipped(r.LockedFiles, r.DeniedFiles));
         if (r.SkippedAdminRoots > 0)
-            parts.Add("системные папки пропущены — нужны права администратора");
+            parts.Add(T._("системные папки пропущены — нужны права администратора"));
         if (r.Errors.Count > 0)
-            parts.Add("были ошибки");
+            parts.Add(T._("были ошибки"));
         if (parts.Count == 0)
-            parts.Add(r.Message ?? "нечего удалять");
+            parts.Add(r.Message ?? T._("нечего удалять"));
         return string.Join(", ", parts);
     }
 }
