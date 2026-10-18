@@ -65,6 +65,19 @@ public sealed class ProgramsService : IHealthContributor
     /// <summary>Overridable for tests (sandbox keys live in HKCU and never need elevation).</summary>
     internal Func<bool> IsElevated { get; set; } = () => Admin.IsElevated;
 
+    /// <summary>
+    /// Replaces the uninstaller run of <see cref="UninstallQuietWhenPossibleAsync"/> (tests: no real uninstaller is started).
+    /// Gets the program and whether the quiet command was chosen.
+    /// </summary>
+    internal Func<InstalledProgram, bool, CancellationToken, Task<UninstallOutcome>>? UninstallOverride { get; set; }
+
+    /// <summary>Replaces the PowerShell call of <see cref="RemoveStoreAppAsync"/> (tests); it runs after the protected-app checks.</summary>
+    internal Func<StoreApp, CancellationToken, Task<(bool Success, string Message)>>? RemoveStoreAppOverride { get; set; }
+
+    /// <summary>Creates the restore point before a dashboard fix uninstalls a program (tests replace it so none is created).</summary>
+    internal Func<string, CancellationToken, Task<bool>> CreateRestorePointAsync { get; set; }
+        = (description, ct) => RestorePoint.TryCreateAsync(description, ct);
+
     // ===================================================================== enumeration
 
     public Task<ProgramScanResult> ScanProgramsAsync(CancellationToken ct) => Task.Run(() => ScanPrograms(ct), ct);
@@ -556,6 +569,22 @@ public sealed class ProgramsService : IHealthContributor
             "или оно продолжается в отдельном окне (например, в Steam). Когда закончите, нажмите «Обновить».", exitCode);
     }
 
+    /// <summary>
+    /// "Quiet when possible": the installer's own silent command when it left one and the program is not a Microsoft
+    /// runtime (those are only ever uninstalled with the installer's window, see <see cref="InstalledProgram.ShowQuietUninstall"/>).
+    /// </summary>
+    internal static bool ShouldUninstallQuietly(InstalledProgram p) => p.QuietLaunch is not null && !p.IsRuntime;
+
+    /// <summary>
+    /// Uninstalls without showing the installer's window when that is possible (<see cref="ShouldUninstallQuietly"/>),
+    /// otherwise with it. Used by the dashboard fix and the bulk uninstall, where the user has already confirmed.
+    /// </summary>
+    internal Task<UninstallOutcome> UninstallQuietWhenPossibleAsync(InstalledProgram p, CancellationToken ct)
+    {
+        var quiet = ShouldUninstallQuietly(p);
+        return UninstallOverride is { } run ? run(p, quiet, ct) : RunUninstallerAsync(p, quiet, null, ct);
+    }
+
     // ===================================================================== broken entries
 
     /// <summary>Path separators would leave the Uninstall root; a quote would break the reg.exe backup command line.</summary>
@@ -669,6 +698,8 @@ public sealed class ProgramsService : IHealthContributor
             return (false, "Это приложение нужно Windows или другим программам — удалять его нельзя.");
         if (!StoreAppCatalog.IsValidPackageFullName(app.PackageFullName))
             return (false, "Некорректное имя пакета.");
+        if (RemoveStoreAppOverride is { } remove)
+            return await remove(app, ct);
 
         ProcessResult result;
         try
@@ -705,12 +736,17 @@ public sealed class ProgramsService : IHealthContributor
             {
                 Module = ModuleName,
                 Title = $"Нежелательная программа: {pup.DisplayName}",
-                Details = $"{pup.PupReason}. Если вы не устанавливали её сознательно, удалите её в разделе «Программы» " +
-                          "(откроется её собственный деинсталлятор).",
+                Details = $"{pup.PupReason}. Если вы не устанавливали её сознательно, удалите её. Кнопка запустит деинсталлятор " +
+                          "самой программы (Windows может спросить разрешение); если установщик умеет удалять без окон, это пройдёт " +
+                          "без вопросов, и остановить удаление будет нельзя. Перед удалением создаётся точка восстановления " +
+                          "(если это включено в настройках и есть права администратора). Подробности о программе — в разделе «Программы».",
                 Severity = IssueSeverity.High,
                 Gain = pup.SizeBytes > 0 ? $"Освободит ≈ {Format.Bytes(pup.SizeBytes)}" : null,
-                ReclaimableBytes = 0, // removal needs the user's review in the program's own uninstaller
+                ReclaimableBytes = 0, // removing a program is the user's decision (InFixAll = false): not counted as "can free now"
                 TargetPageKey = "Programs",
+                FixAsync = c => FixUnwantedProgramAsync(pup, c),
+                FixLabel = "Удалить программу",
+                InFixAll = false,
             });
         }
 
@@ -747,10 +783,14 @@ public sealed class ProgramsService : IHealthContributor
                 {
                     Module = ModuleName,
                     Title = $"{Format.Count(bloat.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений")} можно удалить",
-                    Details = $"Например: {examples}. Они занимают место и иногда работают в фоне. Удалить ненужные можно на вкладке " +
-                              "«Приложения Microsoft Store» — при необходимости их легко вернуть из Microsoft Store.",
+                    Details = $"Например: {examples}. Они занимают место и иногда работают в фоне. Кнопка удалит все приложения из " +
+                              "этого списка, только для вашей учётной записи; вернуть их можно из Microsoft Store. Если какое-то вам " +
+                              "нужно, удаляйте приложения по одному на вкладке «Приложения Microsoft Store».",
                     Severity = IssueSeverity.Info,
                     TargetPageKey = "Programs",
+                    FixAsync = c => FixPreinstalledAppsAsync(bloat, c),
+                    FixLabel = "Удалить лишние",
+                    InFixAll = false,
                 });
             }
         }
@@ -796,6 +836,94 @@ public sealed class ProgramsService : IHealthContributor
         if (failures.Count > 0)
             text += $" Не удалось: {failures.Count}.";
         return text + interrupted;
+    }
+
+    /// <summary>
+    /// Fix for the dashboard (already confirmed there): uninstalls the unwanted program with its own uninstaller, quietly
+    /// when the installer allows it. The program is read again first: it may be gone (or trusted) since the scan.
+    /// A restore point comes first, as before any uninstall on the Programs page.
+    /// </summary>
+    private async Task<string> FixUnwantedProgramAsync(InstalledProgram scanned, CancellationToken ct)
+    {
+        var program = (await ScanProgramsAsync(ct)).Programs.FirstOrDefault(p =>
+            string.Equals(p.RegistryKeyPath, scanned.RegistryKeyPath, StringComparison.OrdinalIgnoreCase));
+        if (program is null)
+            return "Программа уже удалена — ничего не изменено.";
+        if (!program.IsPup)
+            return $"«{program.DisplayName}» больше не считается нежелательной (возможно, вы добавили её в доверенные) — ничего не изменено.";
+
+        var name = program.DisplayName;
+        if (!program.CanUninstall)
+            return UnwantedProgramFixText(name, UninstallStatus.NotStarted); // nothing to run: no restore point either
+
+        await CreateRestorePointAsync($"Удаление {name}", ct);
+        var outcome = await UninstallQuietWhenPossibleAsync(program, ct);
+        return UnwantedProgramFixText(name, outcome.Status);
+    }
+
+    /// <summary>
+    /// The dashboard's text for <see cref="FixUnwantedProgramAsync"/>. Failures start with "Не удалось" (HealthScoring reads
+    /// them as not fixed). The declined UAC prompt does not say "права администратора": it is a failure, but restarting the
+    /// program as administrator would not help.
+    /// </summary>
+    private static string UnwantedProgramFixText(string name, UninstallStatus status) => status switch
+    {
+        UninstallStatus.Removed => $"Программа «{name}» удалена.",
+        UninstallStatus.StillInstalled => $"Не удалось удалить «{name}»: программа осталась в списке установленных.",
+        UninstallStatus.UacDeclined => $"Не удалось удалить «{name}»: вы отклонили запрос контроля учётных записей Windows.",
+        _ => $"Не удалось запустить удаление «{name}».",
+    };
+
+    /// <summary>
+    /// Fix for the dashboard (already confirmed there): removes the preinstalled Store apps of the list the user saw that are
+    /// still installed (the Store apps are read again; apps that appeared after the scan are left alone).
+    /// </summary>
+    private async Task<string> FixPreinstalledAppsAsync(IReadOnlyList<StoreApp> scanned, CancellationToken ct)
+    {
+        var targets = (await ScanStoreAppsAsync(ct)).Apps
+            .Where(a => a.IsBloatware && a.CanRemove &&
+                        scanned.Any(s => string.Equals(s.PackageFullName, a.PackageFullName, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (targets.Count == 0)
+            return "Предустановленных приложений, которые можно удалить, не найдено — ничего не изменено.";
+
+        var removed = 0;
+        var failed = new List<string>();
+        foreach (var app in targets)
+        {
+            if (ct.IsCancellationRequested)
+                break;
+            (bool Success, string Message) result;
+            try
+            {
+                result = await RemoveStoreAppAsync(app, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                break; // "Отмена": report what was done
+            }
+            if (result.Success)
+                removed++;
+            else
+                failed.Add(app.DisplayName);
+        }
+        return PreinstalledAppsFixText(targets.Count, removed, failed);
+    }
+
+    /// <summary>
+    /// The dashboard's text for <see cref="FixPreinstalledAppsAsync"/>. HealthIssue.FixAsync has no success flag, so failures say
+    /// "Не удалось удалить (2): …" and apps left because "Отмена" stopped the batch say "Удаление прервано…" — the wording
+    /// HealthScoring reads as not (fully) fixed.
+    /// </summary>
+    private static string PreinstalledAppsFixText(int targets, int removed, IReadOnlyList<string> failed)
+    {
+        var text = $"Удалено приложений: {removed} из {targets}.";
+        if (failed.Count > 0)
+            text += $" Не удалось удалить ({failed.Count}): {string.Join(", ", failed.Take(5))}{(failed.Count > 5 ? " и другие" : "")}.";
+        var notProcessed = Math.Max(0, targets - removed - failed.Count);
+        if (notProcessed > 0)
+            text += $" Удаление прервано — не обработано: {Format.Count(notProcessed, "приложение", "приложения", "приложений")}.";
+        return text;
     }
 
     private static string FirstLine(string s)

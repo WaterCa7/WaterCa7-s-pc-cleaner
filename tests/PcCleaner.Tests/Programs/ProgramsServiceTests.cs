@@ -298,7 +298,8 @@ public sealed class ProgramsServiceTests : IDisposable
 
         var pup = Assert.Single(issues, i => i.Severity == IssueSeverity.High);
         Assert.Contains("Амиго", pup.Title);
-        Assert.Null(pup.FixAsync);
+        Assert.NotNull(pup.FixAsync); // «Удалить программу» (its behaviour: ProgramsDashboardFixTests)
+        Assert.False(pup.InFixAll);
         Assert.Equal("Programs", pup.TargetPageKey);
 
         var broken = Assert.Single(issues, i => i.Severity == IssueSeverity.Low);
