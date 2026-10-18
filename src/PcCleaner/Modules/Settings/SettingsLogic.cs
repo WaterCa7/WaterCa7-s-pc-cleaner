@@ -1,5 +1,6 @@
 using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -220,7 +221,7 @@ internal static class SettingsLogic
     }
 
     /// <summary>
-    /// Repairs values loaded from a hand-edited settings.json (out-of-range age, null/blank/duplicate entries).
+    /// Repairs values loaded from a hand-edited settings.json (out-of-range age, unknown language, null/blank/duplicate entries).
     /// Returns the number of corrections. Does not save, except that a repaired trusted list is saved by
     /// AppSettings.AddTrusted/RemoveTrusted (the only safe way to change it).
     /// </summary>
@@ -231,6 +232,13 @@ internal static class SettingsLogic
         if (age != settings.CleanerMinFileAgeHours)
         {
             settings.CleanerMinFileAgeHours = age;
+            fixes++;
+        }
+
+        // Only the exact codes: anything else means "as the system" (the start does the same with an unknown value).
+        if (settings.Language is not null && !T.IsSupported(settings.Language))
+        {
+            settings.Language = null;
             fixes++;
         }
 

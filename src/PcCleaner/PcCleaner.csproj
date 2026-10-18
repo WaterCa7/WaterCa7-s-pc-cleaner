@@ -37,4 +37,10 @@
     <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- English UI texts ("Russian text": "English text"), read by Core/Localization/T.cs. -->
+    <None Remove="Core\Localization\en.json" />
+    <EmbeddedResource Include="Core\Localization\en.json" LogicalName="PcCleaner.Localization.en.json" />
+  </ItemGroup>
+
 </Project>

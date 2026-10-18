@@ -42,6 +42,12 @@ public sealed class AppSettings
     /// </summary>
     public bool RunAsAdmin { get; set; } = true;
 
+    /// <summary>
+    /// UI language: "ru", "en", or null — as the system (ru-* → Russian, otherwise English). Read once at start
+    /// (<see cref="Localization.T"/>), so a change applies after a restart; anything else is reset by SettingsLogic.Sanitize.
+    /// </summary>
+    public string? Language { get; set; }
+
     /// <summary>When update.json was last read successfully (UTC).</summary>
     public DateTime? LastUpdateCheckUtc { get; set; }
 

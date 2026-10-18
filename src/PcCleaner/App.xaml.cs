@@ -1,14 +1,17 @@
+using System.Globalization;
 using System.Text;
 using System.Windows;
+using System.Windows.Markup;
 using System.Windows.Threading;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core.Updates;
 
 namespace PcCleaner;
 
 public partial class App : Application
 {
-    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key1,Key2] [--no-scan].</summary>
+    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key1,Key2] [--no-scan] [--lang ru|en].</summary>
     internal static string? ScreenshotDir { get; private set; }
     internal static string[]? ScreenshotPages { get; private set; }
     internal static bool ScreenshotScan { get; private set; } = true;
@@ -16,6 +19,9 @@ public partial class App : Application
 
     /// <summary>Set by the updater when it starts the freshly installed version: --updated-from &lt;old version&gt;.</summary>
     internal static string? UpdatedFrom { get; private set; }
+
+    /// <summary>--lang ru|en: the UI language of this run instead of Настройки (screenshots in both languages); null if absent or unknown.</summary>
+    internal static string? LanguageArg { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -25,6 +31,9 @@ public partial class App : Application
         // Verification runs must never touch the user's real settings, logs, backups or quarantine.
         if (ScreenshotDir is not null)
             AppPaths.DataDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "WaterCa7sPcCleaner-verify");
+
+        // Before any text is made: the system UI language is read before UseLanguage replaces it.
+        UseLanguage(StartupLanguage(LanguageArg, AppServices.Settings.Language, CultureInfo.CurrentUICulture));
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += (_, args) =>
@@ -103,6 +112,25 @@ public partial class App : Application
         }
     }
 
+    /// <summary>The UI language of this run: --lang, else Настройки, else the system (ru-* → Russian, otherwise English).</summary>
+    internal static string StartupLanguage(string? argument, string? setting, CultureInfo system)
+        => T.ResolveLanguage(T.IsSupported(argument) ? argument : setting, system);
+
+    /// <summary>
+    /// Texts (<see cref="T"/>), and numbers and dates formatted by code and by XAML bindings, follow the language for the
+    /// whole run; a change in Настройки applies after a restart.
+    /// </summary>
+    private static void UseLanguage(string language)
+    {
+        T.Use(language);
+        CultureInfo.DefaultThreadCurrentCulture = T.Culture;
+        CultureInfo.DefaultThreadCurrentUICulture = T.Culture;
+        CultureInfo.CurrentCulture = T.Culture;
+        CultureInfo.CurrentUICulture = T.Culture;
+        FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement),
+            new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(T.Culture.IetfLanguageTag)));
+    }
+
     internal static void ParseArgs(string[] args)
     {
         for (var i = 0; i < args.Length; i++)
@@ -123,6 +151,10 @@ public partial class App : Application
                     break;
                 case StartupElevation.ElevatedRestartArg:
                     break; // our own restart with rights: only StartupElevation.ShouldElevate looks at it
+                case "--lang" when i + 1 < args.Length:
+                    var language = args[++i].Trim().ToLowerInvariant();
+                    LanguageArg = T.IsSupported(language) ? language : null;
+                    break;
                 case "--size" when i + 1 < args.Length:
                     var parts = args[++i].ToLowerInvariant().Split('x');
                     if (parts.Length == 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h) && w > 200 && h > 200)
