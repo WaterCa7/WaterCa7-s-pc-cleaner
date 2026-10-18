@@ -1506,6 +1506,7 @@ public static class RecommendationEngine
                 Severity = IssueSeverity.Medium,
                 CurrentValue = s.Uptime > TimeSpan.Zero ? $"Без перезагрузки: {Format.Duration(s.Uptime)}" : null,
                 Gain = "Завершится установка обновлений",
+                OffersRestart = true,
                 SettingsUri = UpdateUri,
                 SettingsLabel = "Центр обновления",
                 Steps = new[]
@@ -1531,6 +1532,7 @@ public static class RecommendationEngine
                 Severity = IssueSeverity.Low,
                 CurrentValue = $"Без перезагрузки: {Format.Duration(s.Uptime)}",
                 Gain = "Освежит систему",
+                OffersRestart = true,
                 Steps = new[]
                 {
                     "Сохраните открытые документы.",

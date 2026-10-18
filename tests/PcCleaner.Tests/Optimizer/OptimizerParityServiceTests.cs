@@ -97,7 +97,7 @@ public sealed class OptimizerParityServiceTests : IDisposable
         Assert.Contains("2133 МГц из 3200 МГц", memory.Details);
     }
 
-    // ===================== one owner per symptom / safe batch =====================
+    // ===================== one owner per symptom / low-risk badge =====================
 
     [Fact]
     public async Task Dashboard_HighRamLoad_IsReportedOnce_ByProcesses()
@@ -139,7 +139,7 @@ public sealed class OptimizerParityServiceTests : IDisposable
     }
 
     [Fact]
-    public void Dashboard_ConsequenceNote_IsShownOnlyWhenTheDashboardCanFix()
+    public void Dashboard_ConsequenceNote_IsShownOnlyWhenTheFixAppliesTheTweak()
     {
         var service = Create(GoodDesktop(), GoodSettings()); // not elevated
         var rec = new Recommendation
@@ -148,8 +148,8 @@ public sealed class OptimizerParityServiceTests : IDisposable
             NeedsAdmin = true, AfterApplyNote = "Изменение вступит в силу после перезагрузки компьютера.",
         };
         var issue = Assert.Single(service.ToHealthIssues(new[] { rec }));
-        Assert.Null(issue.FixAsync);
-        Assert.DoesNotContain("Важно:", issue.Details);
+        Assert.NotNull(issue.FixAsync); // without administrator rights it only says so (OptimizerDashboardFixTests)...
+        Assert.DoesNotContain("Важно:", issue.Details); // ...so it announces no consequence
     }
 
     // ===================== battery report =====================

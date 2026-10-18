@@ -727,28 +727,46 @@ public static class NetworkRules
 
     // ===================================================================== issues
 
-    private static HealthIssue Issue(string title, string details, IssueSeverity severity) => new()
+    /// <summary>The Windows page that shows the connection ("Нет доступа в интернет" on the dashboard opens it).</summary>
+    internal const string NetworkStatusUri = "ms-settings:network-status";
+
+    /// <summary>Text of the dashboard button that clears the DNS cache.</summary>
+    internal const string FlushDnsFixLabel = "Сбросить кэш DNS";
+
+    /// <summary>
+    /// The issue of one finding. Dashboard extras depend on its kind: "Нет доступа в интернет" links to the network status
+    /// page, "DNS не отвечает" gets <paramref name="flushDns"/> as its fix (null = no button).
+    /// </summary>
+    private static HealthIssue Issue(FindingKind kind, string title, string details, IssueSeverity severity,
+        Func<CancellationToken, Task<string>>? flushDns)
     {
-        Module = ModuleName,
-        Title = title,
-        Details = details,
-        Severity = severity,
-        TargetPageKey = PageKey,
-    };
+        var fixesDns = kind == FindingKind.DnsFailed && flushDns is not null;
+        return new()
+        {
+            Module = ModuleName,
+            Title = title,
+            Details = details,
+            Severity = severity,
+            TargetPageKey = PageKey,
+            SettingsUri = kind == FindingKind.NoInternet ? NetworkStatusUri : null,
+            FixAsync = fixesDns ? flushDns : null,
+            FixLabel = fixesDns ? FlushDnsFixLabel : HealthIssue.DefaultFixLabel,
+        };
+    }
 
     /// <summary>
     /// All findings for the dashboard, most important first (without the page-only ones the Security module already
-    /// reports). Pure: only reads the snapshot.
+    /// reports). Pure: only reads the snapshot; <paramref name="flushDns"/> is just handed to the DNS issue as its fix.
     /// </summary>
-    public static List<HealthIssue> BuildIssues(NetworkSnapshot s)
-        => BuildFindings(s).Where(f => !f.PageOnly).Select(f => f.Issue).ToList();
+    public static List<HealthIssue> BuildIssues(NetworkSnapshot s, Func<CancellationToken, Task<string>>? flushDns = null)
+        => BuildFindings(s, flushDns).Where(f => !f.PageOnly).Select(f => f.Issue).ToList();
 
     /// <summary>All findings with their kind, most important first. Pure: only reads the snapshot.</summary>
-    public static List<NetworkFinding> BuildFindings(NetworkSnapshot s)
+    public static List<NetworkFinding> BuildFindings(NetworkSnapshot s, Func<CancellationToken, Task<string>>? flushDns = null)
     {
         var issues = new List<NetworkFinding>();
         void Add(FindingKind kind, string title, string details, IssueSeverity severity, string? argument = null, bool pageOnly = false)
-            => issues.Add(new NetworkFinding(Issue(title, details, severity), kind, argument, pageOnly));
+            => issues.Add(new NetworkFinding(Issue(kind, title, details, severity, flushDns), kind, argument, pageOnly));
         var vpn = ActiveVpn(s.Adapters);
 
         // --- Internet and latency

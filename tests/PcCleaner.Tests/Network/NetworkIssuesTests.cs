@@ -1,4 +1,6 @@
+using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Modules.Dashboard;
 using PcCleaner.Modules.Network;
 using Xunit;
 using static PcCleaner.Tests.Network.NetworkTestData;
@@ -47,6 +49,7 @@ public class NetworkIssuesTests
             Assert.Equal("Сеть", i.Module);
             Assert.Equal("Network", i.TargetPageKey);
             Assert.Null(i.FixAsync);
+            Assert.Null(i.SettingsUri);
         });
     }
 
@@ -397,5 +400,109 @@ public class NetworkIssuesTests
         {
             AppServices.Settings.RemoveTrusted(path);
         }
+    }
+
+    // ===================== dashboard buttons: «Сбросить кэш DNS» and the network status page =====================
+
+    private static NetworkSnapshot NoInternetSnapshot() => new() { Adapters = new[] { Ethernet }, Latency = Latency(null) };
+
+    private static NetworkSnapshot DnsFailedSnapshot()
+        => new() { Latency = Latency(20), Dns = new DnsReport(new[] { new DnsLookup("a", null), new DnsLookup("b", null) }) };
+
+    /// <summary>A service whose console tool (ipconfig) is a fake that records what it was asked to run.</summary>
+    private static (NetworkService Service, List<(string Exe, string Args)> Calls) ServiceWithFakeIpconfig(bool ok, string output, int exitCode)
+    {
+        var calls = new List<(string Exe, string Args)>();
+        var service = new NetworkService
+        {
+            RunTool = (exe, args, _, _) =>
+            {
+                calls.Add((exe, args));
+                return Task.FromResult((ok, output, exitCode));
+            },
+        };
+        return (service, calls);
+    }
+
+    [Fact]
+    public void NoInternet_LinksToTheNetworkStatusPage()
+    {
+        var issue = Assert.Single(NetworkRules.BuildIssues(NoInternetSnapshot()));
+        Assert.Equal("ms-settings:network-status", issue.SettingsUri);
+        Assert.Null(issue.FixAsync); // nothing to run: the page only shows the connection
+    }
+
+    [Fact]
+    public void OtherNetworkProblems_HaveNoSettingsLink()
+    {
+        var issues = new[]
+            {
+                NetworkRules.BuildIssues(new NetworkSnapshot { Adapters = new[] { Ethernet }, Latency = Latency(140) }),
+                NetworkRules.BuildIssues(DnsFailedSnapshot()),
+                NetworkRules.BuildIssues(new NetworkSnapshot { Wifi = Wifi(35) }),
+            }
+            .SelectMany(list => list)
+            .ToList();
+        Assert.Equal(3, issues.Count);
+        Assert.All(issues, i => Assert.Null(i.SettingsUri));
+    }
+
+    [Fact]
+    public void DnsFailed_WithoutAFlushToRun_HasNoFix()
+    {
+        // The rules are pure: the fix comes from the service (BuildIssues(snapshot, flushDns)).
+        var issue = Assert.Single(NetworkRules.BuildIssues(DnsFailedSnapshot()));
+        Assert.Null(issue.FixAsync);
+        Assert.Equal(HealthIssue.DefaultFixLabel, issue.FixLabel);
+    }
+
+    [Fact]
+    public async Task DnsFailed_OnTheDashboard_FlushesTheDnsCache()
+    {
+        var (service, calls) = ServiceWithFakeIpconfig(true, "Windows IP Configuration\r\nSuccessfully flushed the DNS Resolver Cache.", 0);
+
+        var issue = Assert.Single(service.BuildIssues(DnsFailedSnapshot()));
+
+        Assert.Equal("DNS не отвечает — сайты не открываются", issue.Title);
+        Assert.NotNull(issue.FixAsync);
+        Assert.Equal("Сбросить кэш DNS", issue.FixLabel);
+        Assert.True(issue.InFixAll);
+        Assert.False(issue.OnlyOpensTool);
+        Assert.Empty(calls); // building the issues (the analysis) runs nothing
+
+        var text = await issue.FixAsync!(CancellationToken.None);
+
+        var call = Assert.Single(calls);
+        Assert.Equal(Path.Combine(Environment.SystemDirectory, "ipconfig.exe"), call.Exe);
+        Assert.Equal("/flushdns", call.Args);
+        Assert.StartsWith("Кэш DNS очищен", text);
+        Assert.False(HealthScoring.LooksLikeFailure(text));
+    }
+
+    [Fact]
+    public async Task DnsFlushThatFails_IsReadAsAFailureByTheDashboard()
+    {
+        var (service, calls) = ServiceWithFakeIpconfig(false, "Не удается очистить кэш сопоставителя DNS: Ошибка при выполнении функции.", 1);
+        var issue = Assert.Single(service.BuildIssues(DnsFailedSnapshot()));
+
+        var text = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Single(calls);
+        Assert.StartsWith("Не удалось очистить кэш DNS:", text);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+        Assert.False(HealthScoring.LooksLikeAdminRequired(text));
+    }
+
+    [Fact]
+    public void SlowDns_StaysAdvice_WithoutAFlushButton()
+    {
+        var (service, _) = ServiceWithFakeIpconfig(true, "", 0);
+        var issue = Assert.Single(service.BuildIssues(new NetworkSnapshot
+        {
+            Latency = Latency(20),
+            Dns = new DnsReport(new[] { new DnsLookup("a", 180), new DnsLookup("b", 220), new DnsLookup("c", 90) }),
+        }));
+        Assert.Equal("Медленный DNS", issue.Title);
+        Assert.Null(issue.FixAsync);
     }
 }

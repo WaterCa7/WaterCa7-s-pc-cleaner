@@ -1,0 +1,65 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+
+namespace PcCleaner.Core;
+
+/// <summary>Restarts Windows after the user confirmed it (unsaved work in other programs would be lost).</summary>
+public static class SystemRestart
+{
+    /// <summary>The Yes/No question (<see cref="Dialogs.Confirm"/>); tests replace it.</summary>
+    internal static Func<string, string, bool> Confirm { get; set; } = Dialogs.Confirm;
+
+    /// <summary>
+    /// Tells Windows to restart in a few seconds; false when it did not accept the request. Tests replace it:
+    /// no test may restart Windows.
+    /// </summary>
+    internal static Func<bool> Start { get; set; } = StartRestart;
+
+    /// <summary>
+    /// Asks the user, then restarts. Returns the result for the dashboard row: «Компьютер перезагружается…» after the
+    /// restart was requested, otherwise a text that says nothing was changed or that the restart did not start.
+    /// </summary>
+    public static async Task<string> RestartAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!Confirm("Перезагрузить компьютер",
+                "Сохраните работу во всех программах. Компьютер перезагрузится через несколько секунд. Продолжить?"))
+        {
+            Log.Info("Перезагрузка: пользователь отказался");
+            return "Перезагрузка отменена — ничего не изменено.";
+        }
+        // "Отмена" pressed while the question was open: the computer must not restart behind the user's back.
+        ct.ThrowIfCancellationRequested();
+
+        var start = Start;
+        if (!await Task.Run(start, CancellationToken.None).ConfigureAwait(false))
+            return "Не удалось перезагрузить компьютер.";
+        Log.Action("Перезагрузка: Windows перезагрузится через несколько секунд (по просьбе пользователя)");
+        return "Компьютер перезагружается…";
+    }
+
+    /// <summary>shutdown.exe /r /t 5: restart in 5 seconds. Works for any signed-in user.</summary>
+    private static bool StartRestart()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "shutdown.exe"), "/r /t 5")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var process = Process.Start(psi);
+            // shutdown.exe only schedules the restart and exits at once.
+            if (process is not null && process.WaitForExit(10_000) && process.ExitCode == 0)
+                return true;
+            Log.Warn($"Перезагрузка: shutdown.exe не принял запрос{(process is { HasExited: true } ? $" (код {process.ExitCode})" : "")}");
+            return false;
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        {
+            Log.Warn($"Перезагрузка: не удалось запустить shutdown.exe: {ErrorText.For(ex)}");
+            return false;
+        }
+    }
+}

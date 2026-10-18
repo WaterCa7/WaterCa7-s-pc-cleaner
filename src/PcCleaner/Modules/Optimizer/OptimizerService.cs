@@ -227,11 +227,14 @@ public sealed class OptimizerService : IHealthContributor
     internal static readonly IReadOnlySet<string> PageOnlyIds = new HashSet<string>(StringComparer.Ordinal) { "RamLoad" };
 
     /// <summary>
-    /// One-click fixes the dashboard marks as safe (AutoFixSafe, the "Безопасно исправить" badge); "Исправить всё" is no
-    /// longer limited to them. Turning off Xbox Game Bar recording is NOT among them: it takes away clip and screenshot
-    /// capture, so it is not marked safe.
+    /// Low-risk one-click fixes: their dashboard row gets the «Безопасно исправить» badge (AutoFixSafe). The badge only
+    /// informs; «Исправить всё» is gated by InFixAll, not by this. Turning off Xbox Game Bar recording is NOT among them:
+    /// it takes away clip and screenshot capture, so it is not marked low-risk.
     /// </summary>
-    internal static bool IsBatchSafeFix(string? fixId) => fixId is TweakIds.GameMode or TweakIds.PowerPlan;
+    internal static bool IsLowRiskFix(string? fixId) => fixId is TweakIds.GameMode or TweakIds.PowerPlan;
+
+    /// <summary>Text of the dashboard button of the two "restart Windows" tips.</summary>
+    internal const string RestartFixLabel = "Перезагрузить";
 
     internal IReadOnlyList<HealthIssue> ToHealthIssues(IEnumerable<Recommendation> items)
     {
@@ -244,7 +247,10 @@ public sealed class OptimizerService : IHealthContributor
                 continue;
 
             Func<CancellationToken, Task<string>>? fix = null;
-            if (rec.Kind == RecommendationKind.AutoFix && (!rec.NeedsAdmin || _isElevated()))
+            var fixLabel = HealthIssue.DefaultFixLabel;
+            var inFixAll = true;
+            var appliesTweak = rec.Kind == RecommendationKind.AutoFix && (!rec.NeedsAdmin || _isElevated());
+            if (appliesTweak)
             {
                 var captured = rec;
                 fix = async ct =>
@@ -253,12 +259,27 @@ public sealed class OptimizerService : IHealthContributor
                     return DashboardResultText(result, captured.AfterApplyNote);
                 };
             }
+            else if (rec.Kind == RecommendationKind.AutoFix)
+            {
+                // The tweak needs administrator rights and the program has none. The row keeps its button: it changes
+                // nothing and says why, so the dashboard can offer «Перезапустить от имени администратора».
+                var text = AdminRequiredText(rec);
+                fix = _ => Task.FromResult(text);
+            }
+            else if (rec.OffersRestart)
+            {
+                // Manual advice is never fixed by the program, except "restart Windows": SystemRestart asks first. A restart
+                // loses unsaved work in other programs, so «Исправить всё» does not press it.
+                fix = SystemRestart.RestartAsync;
+                fixLabel = RestartFixLabel;
+                inFixAll = false;
+            }
 
             var details = rec.Explanation;
             if (!string.IsNullOrWhiteSpace(rec.CurrentValue))
                 details += $"\nСейчас: {rec.CurrentValue}.";
             // The consequence of the fix must be visible BEFORE it runs (the dashboard's confirmation shows these details).
-            if (fix is not null && !string.IsNullOrWhiteSpace(rec.AfterApplyNote))
+            if (appliesTweak && !string.IsNullOrWhiteSpace(rec.AfterApplyNote))
                 details += $"\nВажно: {rec.AfterApplyNote}";
 
             issues.Add(new HealthIssue
@@ -269,13 +290,22 @@ public sealed class OptimizerService : IHealthContributor
                 Severity = rec.Kind == RecommendationKind.Info ? IssueSeverity.Info : rec.Severity,
                 Gain = rec.Gain,
                 FixAsync = fix,
-                // Only reversible tweaks that take nothing away from the user are safe for "fix everything".
-                AutoFixSafe = fix is not null && rec.IsSafe && !rec.NeedsAdmin && IsBatchSafeFix(rec.FixId),
+                FixLabel = fixLabel,
+                InFixAll = inFixAll,
+                // Only reversible tweaks that take nothing away from the user get the «Безопасно исправить» badge.
+                AutoFixSafe = appliesTweak && rec.IsSafe && !rec.NeedsAdmin && IsLowRiskFix(rec.FixId),
+                SettingsUri = rec.SettingsUri,
                 TargetPageKey = "Optimizer",
             });
         }
         return issues;
     }
+
+    /// <summary>What the dashboard row says when a tweak needs administrator rights and the program has none.</summary>
+    private static string AdminRequiredText(Recommendation rec)
+        => rec.FixId == TweakIds.Hags
+            ? "Нужны права администратора: планирование GPU включается только с ними."
+            : "Нужны права администратора: без них эту настройку не изменить.";
 
     /// <summary>Prefix of a failed fix's text: the dashboard reads a result that starts with it as "не исправлено".</summary>
     internal const string FailurePrefix = "Не удалось исправить: ";

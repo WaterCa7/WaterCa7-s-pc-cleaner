@@ -7,7 +7,8 @@ namespace PcCleaner.Modules.Network;
 
 /// <summary>
 /// Network module: read-only measurements (adapters, latency, DNS, Wi-Fi, connections, ports) for the page and the
-/// dashboard, plus the few explicit tools (flush DNS cache, reset network settings) that the page runs after confirmation.
+/// dashboard, plus the few explicit tools (flush DNS cache, reset network settings) that the page runs after confirmation
+/// (the dashboard's «Сбросить кэш DNS» button runs the first one after its own confirmation).
 /// </summary>
 public sealed class NetworkService : IHealthContributor
 {
@@ -67,8 +68,20 @@ public sealed class NetworkService : IHealthContributor
             UploadBytesPerSecond = upload.Result,
             Firewall = firewall.Result,
         };
-        return NetworkRules.BuildIssues(snapshot);
+        return BuildIssues(snapshot);
     }
+
+    /// <summary>The dashboard issues of a snapshot; "DNS не отвечает" gets the «Сбросить кэш DNS» fix.</summary>
+    internal IReadOnlyList<HealthIssue> BuildIssues(NetworkSnapshot snapshot) => NetworkRules.BuildIssues(snapshot, FlushDnsFixAsync);
+
+    /// <summary>
+    /// The dashboard fix of the DNS issue: <see cref="FlushDnsAsync"/>, with its message as the result. Clearing the cache
+    /// is harmless and repeatable, so there is no scan data to compare with the system first.
+    /// </summary>
+    private async Task<string> FlushDnsFixAsync(CancellationToken ct) => (await FlushDnsAsync(ct).ConfigureAwait(false)).Message;
+
+    /// <summary>Runs a console tool (ipconfig, netsh). Tests replace it, so that no real tool runs.</summary>
+    internal Func<string, string, TimeSpan, CancellationToken, Task<(bool Ok, string Output, int ExitCode)>> RunTool { get; set; } = RunToolAsync;
 
     /// <summary>Runs one measurement; a failure or timeout of one part never breaks the others.</summary>
     internal static async Task<T?> Safe<T>(string what, Func<Task<T>> work, CancellationToken ct) where T : class
@@ -113,7 +126,7 @@ public sealed class NetworkService : IHealthContributor
     public async Task<(bool Ok, string Message)> FlushDnsAsync(CancellationToken ct)
     {
         var ipconfig = Path.Combine(Environment.SystemDirectory, "ipconfig.exe");
-        var (ok, output, exitCode) = await RunToolAsync(ipconfig, "/flushdns", TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+        var (ok, output, exitCode) = await RunTool(ipconfig, "/flushdns", TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
         if (ok)
         {
             Log.Action("Сеть: очищен кэш DNS (ipconfig /flushdns)");
@@ -161,7 +174,7 @@ public sealed class NetworkService : IHealthContributor
             return (false, "Для сброса сетевых настроек нужны права администратора — ничего не изменено.");
 
         var netsh = Path.Combine(Environment.SystemDirectory, "netsh.exe");
-        return await ResetStepsAsync((args, token) => RunToolAsync(netsh, args, ResetStepTimeout, token), ct).ConfigureAwait(false);
+        return await ResetStepsAsync((args, token) => RunTool(netsh, args, ResetStepTimeout, token), ct).ConfigureAwait(false);
     }
 
     /// <summary>Only a netsh that hangs this long is stopped (it normally finishes within seconds).</summary>

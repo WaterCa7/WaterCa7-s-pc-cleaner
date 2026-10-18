@@ -429,7 +429,13 @@ public sealed class Recommendation : ObservableObject
     public bool NeedsAdmin { get; init; }
     public bool NeedsRestart { get; init; }
 
-    /// <summary>Low-risk and reversible: included in "Применить все рекомендуемые" and dashboard auto-fix.</summary>
+    /// <summary>The advice is to restart Windows: the dashboard row gets a «Перезагрузить» button (the page only shows the steps).</summary>
+    public bool OffersRestart { get; init; }
+
+    /// <summary>
+    /// Low-risk and reversible: included in "Применить все рекомендуемые". The dashboard's «Безопасно исправить» badge also
+    /// needs <see cref="OptimizerService.IsLowRiskFix"/>.
+    /// </summary>
     public bool IsSafe { get; init; }
 
     // ----- UI state -----

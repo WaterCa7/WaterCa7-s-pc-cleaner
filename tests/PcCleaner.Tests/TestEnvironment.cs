@@ -30,11 +30,18 @@ public static class TestEnvironment
                 return;
             AppPaths.DataDir = DataDir;
             Dialogs.UseSilentMode();
+            SystemRestart.Start = NoRestart;
             AppServices.Settings = new AppSettings();
             AppDomain.CurrentDomain.ProcessExit += (_, _) => RemoveEmptyRegistryParents();
             _initialized = true;
         }
     }
+
+    /// <summary>
+    /// What a test gets for "restart Windows" unless it replaces it with its own fake: nothing is restarted. A test that
+    /// answers "Да" to every question (<see cref="Dialogs.ConfirmHandler"/>) would otherwise run the real shutdown.exe.
+    /// </summary>
+    public static bool NoRestart() => false;
 
     /// <summary>Removes the empty module keys and then the empty root; keys still holding data (another test run) stay.</summary>
     private static void RemoveEmptyRegistryParents()

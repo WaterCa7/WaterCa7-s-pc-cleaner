@@ -1,6 +1,7 @@
 using System.IO;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Modules.Dashboard;
 using PcCleaner.Modules.Optimizer;
 using Xunit;
 using static PcCleaner.Tests.Optimizer.OptimizerTestData;
@@ -368,7 +369,8 @@ public sealed class OptimizerServiceTests : IDisposable
         Assert.True(plan.AutoFixSafe);
 
         var hags = issues.Single(i => i.Title.Contains("GPU", StringComparison.Ordinal));
-        Assert.Null(hags.FixAsync); // needs admin, app not elevated
+        Assert.NotNull(hags.FixAsync); // needs admin, app not elevated: the button only explains that
+        Assert.True(HealthScoring.LooksLikeAdminRequired(await hags.FixAsync!(CancellationToken.None)));
 
         var refresh = issues.Single(i => i.Title.Contains("Гц", StringComparison.Ordinal));
         Assert.Null(refresh.FixAsync);
@@ -418,7 +420,10 @@ public sealed class OptimizerServiceTests : IDisposable
         Assert.False(service.CanRevert(TweakIds.Hags));
 
         var issues = service.ToHealthIssues(new[] { rec });
-        Assert.Null(Assert.Single(issues).FixAsync); // the dashboard gets no fix button without elevation
+        var fix = Assert.Single(issues).FixAsync;
+        Assert.NotNull(fix); // the dashboard row keeps its button without elevation: it only says administrator rights are needed
+        Assert.True(HealthScoring.LooksLikeAdminRequired(await fix!(CancellationToken.None)));
+        Assert.False(service.CanRevert(TweakIds.Hags)); // ...and still changes nothing
     }
 
     [Fact]
