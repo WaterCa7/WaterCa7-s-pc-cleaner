@@ -6,6 +6,7 @@ using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -82,6 +83,7 @@ public sealed class DashboardViewModel : PageViewModel
         _settingsOverride = settings;
 
         ScanCommand = new AsyncRelayCommand(ScanAsync, () => !IsBusy);
+        CheckAndFixCommand = new AsyncRelayCommand(CheckAndFixAsync, () => !IsBusy);
         FixAllCommand = new AsyncRelayCommand(FixAllAsync, () => !IsBusy && FixAllCount > 0);
         NavigateCommand = new RelayCommand(p => Navigate(p as string));
         // Restarting closes the app: never offer it while a scan or a batch of fixes is running.
@@ -115,7 +117,10 @@ public sealed class DashboardViewModel : PageViewModel
         return (links, links.Skip(1).ToList());
     }
 
-    /// <summary>The mode was switched: the tiles of the pages that are no longer there go, the others come back.</summary>
+    /// <summary>
+    /// The mode was switched: the tiles of the pages that are no longer there go, the others come back, the big button
+    /// becomes «Проверить и исправить» (or the scan again) and the rows already on the screen change with it.
+    /// </summary>
     public override void OnModeChanged()
     {
         var mode = UiModes.Of(Settings);
@@ -126,7 +131,21 @@ public sealed class DashboardViewModel : PageViewModel
         OnPropertyChanged(nameof(QuickLinks));
         OnPropertyChanged(nameof(FeaturedLink));
         OnPropertyChanged(nameof(MoreLinks));
+        foreach (var item in AllItems)
+            item.SetMode(mode);
+        OnPropertyChanged(nameof(IsSimpleMode));
+        OnPropertyChanged(nameof(IsExpertMode));
+        OnPropertyChanged(nameof(MainScanCommand));
+        OnPropertyChanged(nameof(ScanButtonText));
+        OnPropertyChanged(nameof(ScanButtonToolTip));
+        OnPropertyChanged(nameof(ScanHintText));
+        OnPropertyChanged(nameof(IntroText));
     }
+
+    /// <summary>The simple mode: one button checks and fixes, the rows are short, the per-module rows and the report buttons are gone.</summary>
+    public bool IsSimpleMode => _shownMode == UiMode.Simple;
+
+    public bool IsExpertMode => !IsSimpleMode;
 
     public override string Title => "Главная";
 
@@ -174,6 +193,12 @@ public sealed class DashboardViewModel : PageViewModel
     // ===================== Commands =====================
 
     public AsyncRelayCommand ScanCommand { get; }
+
+    /// <summary>«Проверить и исправить» of the simple mode: <see cref="ScanCommand"/>, then the question of <see cref="FixAllCommand"/>.</summary>
+    public AsyncRelayCommand CheckAndFixCommand { get; }
+
+    /// <summary>What the big button of the hero card runs: the check with the fix in the simple mode, the plain scan in the expert one.</summary>
+    public AsyncRelayCommand MainScanCommand => IsSimpleMode ? CheckAndFixCommand : ScanCommand;
 
     public AsyncRelayCommand FixAllCommand { get; }
 
@@ -349,7 +374,23 @@ public sealed class DashboardViewModel : PageViewModel
         }
     }
 
-    public string ScanButtonText => _summary is null ? "Проверить компьютер" : "Проверить снова";
+    public string ScanButtonText => IsSimpleMode
+        ? T._("Проверить и исправить")
+        : _summary is null ? "Проверить компьютер" : "Проверить снова";
+
+    public string ScanButtonToolTip => IsSimpleMode
+        ? T._("Проверит компьютер и предложит исправить найденное. Перед исправлением покажет список и спросит подтверждение.")
+        : "Проверит все разделы: мусор, автозагрузку, процессы, программы, диски, настройки, сеть и защиту";
+
+    /// <summary>Under the big button.</summary>
+    public string ScanHintText => IsSimpleMode
+        ? T._("Около минуты · ничего не изменим без вашего согласия")
+        : "Около минуты · только чтение, ничего не меняет";
+
+    /// <summary>What the check does, before the first one (names the big button, so it follows the mode).</summary>
+    public string IntroText => IsSimpleMode
+        ? T._("Кнопка «Проверить и исправить» найдёт проблемы и предложит их исправить — после вашего подтверждения.")
+        : "Кнопка «Проверить компьютер» заглянет во все разделы программы и соберёт найденное в один понятный список с объяснениями.";
 
     public bool IsAdmin => Admin.IsElevated;
 
@@ -780,6 +821,37 @@ public sealed class DashboardViewModel : PageViewModel
     private Task ScanAsync() => RunBusyAsync("Проверяем компьютер…", ct => ScanCoreAsync(ct, persist: true));
 
     /// <summary>
+    /// «Проверить и исправить» (simple mode): the scan, then — when something can be fixed from here — the usual
+    /// «Исправить всё (N)» with its one question (never skipped), or «Всё в порядке» when nothing is left. A scan that was
+    /// stopped or broke offers nothing.
+    /// </summary>
+    internal async Task CheckAndFixAsync()
+    {
+        if (IsBusy)
+            return;
+        await ScanAsync();
+        if (State != DashboardScanState.Completed)
+            return;
+        if (FixAllCount > 0)
+        {
+            await FixAllAsync();
+            return;
+        }
+        if (_issues.Count == 0)
+        {
+            // "Не удалось проверить" sits in the warning above: a scan with failed modules cannot promise that all is well.
+            if (!IsIncomplete)
+                ActionSummary = T._("Всё в порядке");
+        }
+        else
+        {
+            // Problems are left, but none of them is in «Исправить всё» (they open a window, restart or remove a program):
+            // "всё в порядке" would be wrong, and there is nothing to ask.
+            ActionSummary = T._("Исправлять отсюда нечего — остальное в списке ниже");
+        }
+    }
+
+    /// <summary>
     /// Runs AnalyzeAsync of every module in parallel (each isolated, with its own timeout), then computes the score,
     /// fills the issue groups and (if <paramref name="persist"/>) saves the summary. Never throws on cancellation.
     /// </summary>
@@ -974,8 +1046,9 @@ public sealed class DashboardViewModel : PageViewModel
     private IssueItem CreateItem(HealthIssue issue)
     {
         var item = new IssueItem(issue);
+        item.SetMode(_shownMode);
         item.FixCommand = new AsyncRelayCommand(() => FixIssueAsync(item), () => !IsBusy && !item.IsFixing && item.Issue.CanFix);
-        item.OpenPageCommand = new RelayCommand(() => Navigate(issue.TargetPageKey), () => item.HasTargetPage);
+        item.OpenPageCommand = new RelayCommand(() => Navigate(issue.TargetPageKey), () => item.OpensPageForDetails);
         item.OpenSettingsCommand = new RelayCommand(() => OpenSettings(item), () => item.HasSettings);
         item.CopyCommand = new RelayCommand(() => CopyIssue(issue));
         item.SearchCommand = new RelayCommand(() => FileTools.SearchWeb(issue.Title ?? ""));

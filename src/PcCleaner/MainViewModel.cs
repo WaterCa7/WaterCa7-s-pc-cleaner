@@ -120,6 +120,9 @@ public sealed class MainViewModel : ObservableObject, INavigator
         }
     }
 
+    /// <summary>The simple mode is shown: the header keeps the subtitle of a page to one line (the whole text is in the tooltip).</summary>
+    public bool IsSimpleMode => _shownMode == UiMode.Simple;
+
     public bool IsAdmin => Admin.IsElevated;
 
     public string AdminText => IsAdmin ? "Права администратора" : "Ограниченный режим";
@@ -195,6 +198,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         if (mode == _shownMode)
             return;
         _shownMode = mode;
+        OnPropertyChanged(nameof(IsSimpleMode));
         SyncVisiblePages();
 
         foreach (var page in Pages)

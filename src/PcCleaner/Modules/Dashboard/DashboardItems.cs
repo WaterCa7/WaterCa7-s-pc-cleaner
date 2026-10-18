@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -86,11 +87,13 @@ public sealed class IssueItem : ObservableObject
     private bool _isExpanded;
     private bool _isFixing;
     private bool _fixFailed;
+    private bool _isSimple;
 
     public IssueItem(HealthIssue issue)
     {
         Issue = issue;
         ToggleExpandCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+        DetailsCommand = new RelayCommand(ShowMore);
     }
 
     public HealthIssue Issue { get; }
@@ -110,9 +113,65 @@ public sealed class IssueItem : ObservableObject
         get => _isExpanded;
         set
         {
-            if (Set(ref _isExpanded, value))
-                OnPropertyChanged(nameof(ExpandText));
+            if (!Set(ref _isExpanded, value))
+                return;
+            OnPropertyChanged(nameof(ExpandText));
+            OnPropertyChanged(nameof(ShowDetails));
+            OnPropertyChanged(nameof(ShowGain));
+            OnPropertyChanged(nameof(DetailsText));
         }
+    }
+
+    // ----- the simple mode: a short row (title, fix button, «Подробнее»); the rest opens in place -----
+
+    /// <summary>The Dashboard is in the simple mode (set by it, also when the mode is switched under existing rows).</summary>
+    public bool IsSimple => _isSimple;
+
+    internal void SetMode(UiMode mode)
+    {
+        var simple = mode == UiMode.Simple;
+        if (simple == _isSimple)
+            return;
+        _isSimple = simple;
+        OnPropertyChanged(nameof(IsSimple));
+        OnPropertyChanged(nameof(ShowBadges));
+        OnPropertyChanged(nameof(ShowDetails));
+        OnPropertyChanged(nameof(ShowGain));
+        OnPropertyChanged(nameof(OpensPageForDetails));
+        OnPropertyChanged(nameof(ShowDetailsButton));
+        OnPropertyChanged(nameof(DetailsText));
+        OnPropertyChanged(nameof(DetailsToolTip));
+    }
+
+    /// <summary>The badges above the title: severity, module, «Безопасно исправить». The simple mode keeps the severity bar and the group header.</summary>
+    public bool ShowBadges => !_isSimple;
+
+    /// <summary>The description: always in the expert mode, in the simple one only after «Подробнее».</summary>
+    public bool ShowDetails => HasDetails && (!_isSimple || IsExpanded);
+
+    /// <summary>What the fix gives: shown together with the description.</summary>
+    public bool ShowGain => HasGain && (!_isSimple || IsExpanded);
+
+    /// <summary>
+    /// «Подробнее» opens the page that found the problem: in the expert mode any page, in the simple mode only a page it has
+    /// (Очистка, Программы, Настройки). For a page it hides, «Подробнее» shows the description here instead of asking to
+    /// switch the mode.
+    /// </summary>
+    public bool OpensPageForDetails => HasTargetPage && (!_isSimple || UiModes.IsVisible(UiMode.Simple, Issue.TargetPageKey!));
+
+    public bool ShowDetailsButton => OpensPageForDetails || (_isSimple && (HasDetails || HasGain));
+
+    public string DetailsText => !OpensPageForDetails && IsExpanded ? T._("Свернуть") : T._("Подробнее");
+
+    /// <summary>The tip of the page button; no tip when the button only shows the description.</summary>
+    public string? DetailsToolTip => OpensPageForDetails ? "Открыть раздел, который нашёл проблему" : null;
+
+    private void ShowMore()
+    {
+        if (OpensPageForDetails)
+            OpenPageCommand?.Execute(null);
+        else
+            IsExpanded = !IsExpanded;
     }
 
     public string ExpandText => IsExpanded ? "Свернуть" : "Показать полностью";
@@ -169,6 +228,9 @@ public sealed class IssueItem : ObservableObject
         : "Открыть настройки";
 
     public ICommand ToggleExpandCommand { get; }
+
+    /// <summary>«Подробнее»: opens the page, or (simple mode, a page the mode hides) shows the description in the row.</summary>
+    public ICommand DetailsCommand { get; }
 
     public ICommand? FixCommand { get; internal set; }
 

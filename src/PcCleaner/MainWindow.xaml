@@ -156,7 +156,20 @@
 
                 <StackPanel Margin="32,24,32,10">
                     <TextBlock Style="{StaticResource H1}" Text="{Binding SelectedPage.Title}" />
-                    <TextBlock Style="{StaticResource Muted}" FontSize="13" Margin="0,4,0,0" Text="{Binding SelectedPage.Subtitle}" />
+                    <!-- Simple mode: one line, the whole text in the tooltip. -->
+                    <TextBlock FontSize="13" Margin="0,4,0,0" Text="{Binding SelectedPage.Subtitle}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSimpleMode}" Value="True">
+                                        <Setter Property="TextWrapping" Value="NoWrap" />
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        <Setter Property="ToolTip" Value="{Binding SelectedPage.Subtitle}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <!-- The program runs under another account than the signed-in user (e.g. an administrator's password was
                          typed on a standard account): per-user checks then look at that account's profile. -->
                     <Border Margin="0,10,0,0" Padding="10,7" CornerRadius="6" Background="{StaticResource WarningSoftBrush}"

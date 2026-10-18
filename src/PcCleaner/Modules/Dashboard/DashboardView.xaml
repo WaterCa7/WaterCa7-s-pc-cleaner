@@ -153,7 +153,7 @@
                         <MenuItem Header="Скопировать описание" Command="{Binding CopyCommand}" />
                         <MenuItem Header="Найти в интернете" Command="{Binding SearchCommand}" />
                         <MenuItem Header="Открыть раздел с подробностями" Command="{Binding OpenPageCommand}"
-                                  Visibility="{Binding HasTargetPage, Converter={StaticResource BoolToVis}}" />
+                                  Visibility="{Binding OpensPageForDetails, Converter={StaticResource BoolToVis}}" />
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
@@ -165,8 +165,9 @@
 
                     <Border CornerRadius="8,0,0,8" Background="{Binding Severity, Converter={StaticResource SevBrush}}" />
 
-                    <StackPanel Grid.Column="1" Margin="14,11,12,12">
-                        <WrapPanel>
+                    <StackPanel x:Name="Center" Grid.Column="1" Margin="14,11,12,12">
+                        <!-- severity, module, «Безопасно исправить»: the simple mode keeps the colour bar and the group header -->
+                        <WrapPanel Visibility="{Binding ShowBadges, Converter={StaticResource BoolToVis}}">
                             <Border Style="{StaticResource Badge}" Margin="0,0,6,5"
                                     Background="{Binding Severity, Converter={StaticResource SevBrush}, ConverterParameter=Soft}">
                                 <StackPanel Orientation="Horizontal">
@@ -198,12 +199,12 @@
 
                         <TextBlock x:Name="Details" Text="{Binding Issue.Details}" Style="{StaticResource Muted}" FontSize="12.5"
                                    Margin="0,4,0,0" MaxHeight="51" TextTrimming="WordEllipsis" local:TextOverflow.CollapsedHeight="51"
-                                   Visibility="{Binding HasDetails, Converter={StaticResource BoolToVis}}" />
+                                   Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}" />
                         <Button x:Name="ExpandLink" Style="{StaticResource LinkButton}" Content="{Binding ExpandText}" Command="{Binding ToggleExpandCommand}"
                                 HorizontalAlignment="Left" FontSize="12" Margin="0,4,0,0" Visibility="Collapsed" />
 
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
-                                    Visibility="{Binding HasGain, Converter={StaticResource BoolToVis}}">
+                                    Visibility="{Binding ShowGain, Converter={StaticResource BoolToVis}}">
                             <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE945;" Foreground="{StaticResource AccentBrush}" />
                             <TextBlock Text="{Binding GainText}" Foreground="{StaticResource AccentBrush}" FontSize="12.5" FontWeight="SemiBold"
                                        Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
@@ -243,9 +244,10 @@
                                 <TextBlock Text="Исправлено" Margin="6,0,0,0" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
                             </StackPanel>
                         </Border>
-                        <Button Style="{StaticResource GhostButton}" Content="Подробнее" Command="{Binding OpenPageCommand}" Margin="0,6,0,0"
-                                Foreground="{StaticResource MutedBrush}" ToolTip="Открыть раздел, который нашёл проблему"
-                                Visibility="{Binding HasTargetPage, Converter={StaticResource BoolToVis}}" />
+                        <!-- opens the page that found the problem; in the simple mode, for a page it hides, shows the description here -->
+                        <Button Style="{StaticResource GhostButton}" Content="{Binding DetailsText}" Command="{Binding DetailsCommand}" Margin="0,6,0,0"
+                                Foreground="{StaticResource MutedBrush}" ToolTip="{Binding DetailsToolTip}"
+                                Visibility="{Binding ShowDetailsButton, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -267,6 +269,12 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Issue.IsFixed}" Value="True">
                     <Setter TargetName="Row" Property="Opacity" Value="0.75" />
+                </DataTrigger>
+                <!-- simple mode: a short row, centred; «Подробнее» (not "Показать полностью") opens the description -->
+                <DataTrigger Binding="{Binding IsSimple}" Value="True">
+                    <Setter TargetName="Center" Property="VerticalAlignment" Value="Center" />
+                    <Setter TargetName="Center" Property="Margin" Value="14,10,12,10" />
+                    <Setter TargetName="ExpandLink" Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -343,56 +351,70 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="214">
-                        <Button Style="{StaticResource AccentButton}" Command="{Binding ScanCommand}" Padding="18,13" FontSize="14.5"
-                                ToolTip="Проверит все разделы: мусор, автозагрузку, процессы, программы, диски, настройки, сеть и защиту">
-                            <StackPanel Orientation="Horizontal">
+                        <!-- Expert: the scan. Simple: «Проверить и исправить», a bigger button (the scan, then the question of «Исправить всё»). -->
+                        <Button Command="{Binding MainScanCommand}" ToolTip="{Binding ScanButtonToolTip}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource AccentButton}">
+                                    <Setter Property="Padding" Value="18,13" />
+                                    <Setter Property="FontSize" Value="14.5" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSimpleMode}" Value="True">
+                                            <Setter Property="Padding" Value="24,18" />
+                                            <Setter Property="FontSize" Value="17" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Style="{StaticResource Icon}" FontSize="16" Text="&#xE721;" />
                                 <TextBlock Text="{Binding ScanButtonText}" Margin="10,0,0,0" />
                             </StackPanel>
                         </Button>
                         <!-- describes the scan button, so it stays right under it (not under the report buttons) -->
                         <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,8,0,0" TextAlignment="Center" MaxWidth="214"
-                                   HorizontalAlignment="Center" TextWrapping="Wrap" Text="Около минуты · только чтение, ничего не меняет" />
-                        <!-- report: enabled after a full scan in this session -->
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Button Command="{Binding SaveReportCommand}" Padding="10,7" ToolTipService.ShowOnDisabled="True"
-                                    AutomationProperties.Name="Сохранить отчёт"
-                                    ToolTip="Сохранить результаты проверки в HTML-файл: его можно открыть в любом браузере, распечатать или отправить. Доступно после проверки.">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE74E;" />
-                                    <TextBlock Text="Сохранить отчёт" Margin="8,0,0,0" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="2" Command="{Binding CopyReportCommand}" Padding="11,7" ToolTipService.ShowOnDisabled="True"
-                                    AutomationProperties.Name="Скопировать отчёт"
-                                    ToolTip="Скопировать отчёт текстом — чтобы вставить его в сообщение, письмо или на форум. Доступно после проверки.">
-                                <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8C8;" />
-                            </Button>
-                        </Grid>
-                        <DockPanel Margin="0,8,0,0" HorizontalAlignment="Center" MaxWidth="214"
-                                   Visibility="{Binding HasReportStatus, Converter={StaticResource BoolToVis}}">
-                            <TextBlock FontSize="12" VerticalAlignment="Top" Margin="0,1,6,0">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
-                                        <Setter Property="Text" Value="&#xE73E;" />
-                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ReportStatusOk}" Value="False">
-                                                <Setter Property="Text" Value="&#xE7BA;" />
-                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                            <TextBlock Text="{Binding ReportStatus}" FontSize="11.5" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
-                                       ToolTip="{Binding ReportStatusToolTip}" />
-                        </DockPanel>
+                                   HorizontalAlignment="Center" TextWrapping="Wrap" Text="{Binding ScanHintText}" />
+                        <!-- report: enabled after a full scan in this session; not in the simple mode -->
+                        <StackPanel Visibility="{Binding IsExpertMode, Converter={StaticResource BoolToVis}}">
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button Command="{Binding SaveReportCommand}" Padding="10,7" ToolTipService.ShowOnDisabled="True"
+                                        AutomationProperties.Name="Сохранить отчёт"
+                                        ToolTip="Сохранить результаты проверки в HTML-файл: его можно открыть в любом браузере, распечатать или отправить. Доступно после проверки.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE74E;" />
+                                        <TextBlock Text="Сохранить отчёт" Margin="8,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="2" Command="{Binding CopyReportCommand}" Padding="11,7" ToolTipService.ShowOnDisabled="True"
+                                        AutomationProperties.Name="Скопировать отчёт"
+                                        ToolTip="Скопировать отчёт текстом — чтобы вставить его в сообщение, письмо или на форум. Доступно после проверки.">
+                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8C8;" />
+                                </Button>
+                            </Grid>
+                            <DockPanel Margin="0,8,0,0" HorizontalAlignment="Center" MaxWidth="214"
+                                       Visibility="{Binding HasReportStatus, Converter={StaticResource BoolToVis}}">
+                                <TextBlock FontSize="12" VerticalAlignment="Top" Margin="0,1,6,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                            <Setter Property="Text" Value="&#xE73E;" />
+                                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ReportStatusOk}" Value="False">
+                                                    <Setter Property="Text" Value="&#xE7BA;" />
+                                                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="{Binding ReportStatus}" FontSize="11.5" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                                           ToolTip="{Binding ReportStatusToolTip}" />
+                            </DockPanel>
+                        </StackPanel>
                     </StackPanel>
 
                     <ContentControl Grid.Row="1" Grid.ColumnSpan="3" Content="{Binding}" ContentTemplate="{StaticResource HeroChips}"
@@ -489,8 +511,7 @@
                         </Border>
                         <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                             <TextBlock Style="{StaticResource H2}" Margin="0" Text="Проверим компьютер за минуту?" />
-                            <TextBlock Style="{StaticResource Muted}" FontSize="13" Margin="0,3,0,0"
-                                       Text="Кнопка «Проверить компьютер» заглянет во все разделы программы и соберёт найденное в один понятный список с объяснениями." />
+                            <TextBlock Style="{StaticResource Muted}" FontSize="13" Margin="0,3,0,0" Text="{Binding IntroText}" />
                         </StackPanel>
                     </DockPanel>
 
@@ -558,7 +579,8 @@
                     </Border>
                     <TextBlock Grid.Column="1" Margin="14,0,16,0" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="13"
                                Text="{Binding PreviousResultText}" />
-                    <Button Grid.Column="2" Command="{Binding ScanCommand}" VerticalAlignment="Center" Padding="14,8">
+                    <Button Grid.Column="2" Command="{Binding ScanCommand}" VerticalAlignment="Center" Padding="14,8"
+                            Visibility="{Binding IsExpertMode, Converter={StaticResource BoolToVis}}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE72C;" />
                             <TextBlock Text="Проверить снова" Margin="8,0,0,0" />
@@ -600,8 +622,9 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- per-module progress -->
-                    <ItemsControl ItemsSource="{Binding ModuleRows}" Margin="-4,14,-4,0" Focusable="False">
+                    <!-- per-module progress (expert; the simple mode has the progress bar of the window and the line above) -->
+                    <ItemsControl ItemsSource="{Binding ModuleRows}" Margin="-4,14,-4,0" Focusable="False"
+                                  Visibility="{Binding IsExpertMode, Converter={StaticResource BoolToVis}}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <!-- every row full: 8 modules -> 4 x 2 on a wide window, 2 x 4 on a narrow one -->
