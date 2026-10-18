@@ -385,6 +385,8 @@ public class FixAllTests
             NewIssue("Обычное", Counting(new Counter())));
 
         Assert.Equal(1, vm.FixAllCount);
+        Assert.Equal("Не входит в «Исправить всё»: это действие запускается только отдельно",
+            RowOf(vm, "Только открывает").AutoFixHint); // the row's hint says the same
         var batch = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
 
         Assert.Equal(1, batch!.Total);
