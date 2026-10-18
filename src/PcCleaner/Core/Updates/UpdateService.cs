@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -90,8 +91,8 @@ public sealed class UpdateService : ObservableObject
         _store.Clean();
         await UpdateInstaller.CleanupAsync(_env.ExePath, TimeSpan.FromSeconds(30));
         State = UpdateState.Updated;
-        StatusText = $"Программа обновлена с версии {fromVersion} до {CurrentVersion.ToString(3)}.";
-        Log.Action($"Обновление: работает версия {CurrentVersion.ToString(3)} (была {fromVersion})");
+        StatusText = T.F("Программа обновлена с версии {0} до {1}.", fromVersion, CurrentVersion.ToString(3));
+        Log.Action(T.F("Обновление: работает версия {0} (была {1})", CurrentVersion.ToString(3), fromVersion));
     }
 
     /// <summary>
@@ -105,7 +106,7 @@ public sealed class UpdateService : ObservableObject
             if (manual)
             {
                 State = UpdateState.Failed;
-                StatusText = "Эта копия программы — сборка для разработки, она не обновляется автоматически.";
+                StatusText = T._("Эта копия программы — сборка для разработки, она не обновляется автоматически.");
             }
             return;
         }
@@ -116,7 +117,7 @@ public sealed class UpdateService : ObservableObject
         try
         {
             State = UpdateState.Checking;
-            StatusText = "Проверка обновлений…";
+            StatusText = T._("Проверка обновлений…");
             using var client = new UpdateClient(_env.HttpHandler);
             byte[] json, signature;
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
@@ -129,43 +130,43 @@ public sealed class UpdateService : ObservableObject
             _env.SaveSettings(settings);
 
             if (!UpdateSignature.Verify(json, signature, _env.PublicKeyPem))
-                throw new UpdateException("цифровая подпись update.json не сходится — файл не от автора программы");
-            var manifest = UpdateManifest.Parse(json, out var problem) ?? throw new UpdateException(problem ?? "update.json не прочитан");
+                throw new UpdateException(T._("цифровая подпись update.json не сходится — файл не от автора программы"));
+            var manifest = UpdateManifest.Parse(json, out var problem) ?? throw new UpdateException(problem ?? T._("update.json не прочитан"));
             if (!manifest.IsNewerThan(_env.CurrentVersion))
             {
                 _store.Clean();
                 State = UpdateState.UpToDate;
-                StatusText = $"Установлена последняя версия ({CurrentVersion.ToString(3)}).";
-                Log.Info($"Обновления: последняя версия {manifest.Version} — обновлять нечего");
+                StatusText = T.F("Установлена последняя версия ({0}).", CurrentVersion.ToString(3));
+                Log.Info(T.F("Обновления: последняя версия {0} — обновлять нечего", manifest.Version));
                 return;
             }
 
             Manifest = manifest;
             if (_store.FailuresFor(manifest.Version) >= UpdateStore.MaxInstallFailures)
             {
-                RequireManual(manifest, "автоматическая установка уже дважды не удалась");
+                RequireManual(manifest, T._("автоматическая установка уже дважды не удалась"));
                 return;
             }
             if (_store.FindStaged(_env.CurrentVersion, _env.PublicKeyPem)?.Manifest.Version != manifest.Version)
             {
                 State = UpdateState.Downloading;
-                StatusText = $"Скачивается версия {manifest.Version}…";
+                StatusText = T.F("Скачивается версия {0}…", manifest.Version);
                 _store.Clean(keep: manifest.Version);
                 AppPaths.EnsureDir(_store.DirFor(manifest.Version));
                 await client.DownloadAsync(manifest.Download, _store.ExePathFor(manifest), new Progress<double>(p => Progress = p), ct);
                 _store.SaveManifest(manifest, json, signature);
-                Log.Info($"Обновления: скачана версия {manifest.Version}, установится при следующем запуске");
+                Log.Info(T.F("Обновления: скачана версия {0}, установится при следующем запуске", manifest.Version));
             }
             State = UpdateState.Ready;
-            StatusText = $"Версия {manifest.Version} скачана — установится при следующем запуске.";
+            StatusText = T.F("Версия {0} скачана — установится при следующем запуске.", manifest.Version);
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or
                                        UnauthorizedAccessException or UpdateException)
         {
             var offline = ex is HttpRequestException or OperationCanceledException;
-            Log.Info($"Обновления: {(offline ? "нет связи с GitHub" : "ошибка")} — {ex.Message}");
+            Log.Info(offline ? T.F("Обновления: нет связи с GitHub — {0}", ex.Message) : T.F("Обновления: ошибка — {0}", ex.Message));
             State = UpdateState.Failed;
-            StatusText = offline ? "Не удалось проверить обновления: нет связи с GitHub." : $"Не удалось обновиться: {ex.Message}.";
+            StatusText = offline ? T._("Не удалось проверить обновления: нет связи с GitHub.") : T.F("Не удалось обновиться: {0}.", ex.Message);
         }
         finally
         {
@@ -211,7 +212,7 @@ public sealed class UpdateService : ObservableObject
         Manifest = staged.Manifest;
         if (_store.FailuresFor(version) >= UpdateStore.MaxInstallFailures)
         {
-            RequireManual(staged.Manifest, "автоматическая установка уже дважды не удалась");
+            RequireManual(staged.Manifest, T._("автоматическая установка уже дважды не удалась"));
             return false;
         }
         try
@@ -220,25 +221,25 @@ public sealed class UpdateService : ObservableObject
         }
         catch (UnauthorizedAccessException ex)
         {
-            Log.Warn($"Обновление до {version}: нет прав на запись в папку {Path.GetDirectoryName(_env.ExePath)} — {ex.Message}");
-            RequireManual(staged.Manifest, "нет прав на запись в папку программы");
+            Log.Warn(T.F("Обновление до {0}: нет прав на запись в папку {1} — {2}", version, Path.GetDirectoryName(_env.ExePath), ex.Message));
+            RequireManual(staged.Manifest, T._("нет прав на запись в папку программы"));
             return false;
         }
         catch (Exception ex) when (ex is IOException or UpdateException)
         {
             _store.RecordFailure(version);
-            Log.Warn($"Обновление до {version} не установлено: {ex.Message}");
+            Log.Warn(T.F("Обновление до {0} не установлено: {1}", version, ex.Message));
             State = UpdateState.Failed;
-            StatusText = $"Не удалось установить версию {version}: {ex.Message}. Попробуем при следующем запуске.";
+            StatusText = T.F("Не удалось установить версию {0}: {1}. Попробуем при следующем запуске.", version, ex.Message);
             return false;
         }
         if (!_env.StartProcess(_env.ExePath, RestartArgs(args, CurrentVersion)))
         {
             State = UpdateState.Failed;
-            StatusText = $"Версия {version} установлена — запустите программу заново.";
+            StatusText = T.F("Версия {0} установлена — запустите программу заново.", version);
             return false;
         }
-        Log.Action($"Обновление: установлена версия {version}, перезапуск");
+        Log.Action(T.F("Обновление: установлена версия {0}, перезапуск", version));
         return true;
     }
 
@@ -246,7 +247,7 @@ public sealed class UpdateService : ObservableObject
     {
         Manifest = manifest;
         State = UpdateState.ManualRequired;
-        StatusText = $"Версию {manifest.Version} не получилось установить автоматически ({reason}). Скачайте её со страницы релизов.";
-        Log.Warn($"Обновление до {manifest.Version}: {reason} — нужно скачать вручную");
+        StatusText = T.F("Версию {0} не получилось установить автоматически ({1}). Скачайте её со страницы релизов.", manifest.Version, reason);
+        Log.Warn(T.F("Обновление до {0}: {1} — нужно скачать вручную", manifest.Version, reason));
     }
 }

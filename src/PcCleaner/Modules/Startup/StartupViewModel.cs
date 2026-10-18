@@ -6,6 +6,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Data;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Startup;
@@ -88,9 +89,9 @@ public sealed partial class StartupViewModel : PageViewModel
         _service.ChangedExternally += () => _stale = true;
     }
 
-    public override string Title => "Автозагрузка";
+    public override string Title => T._("Автозагрузка");
 
-    public override string Subtitle => "Что запускается вместе с Windows: программы, задания планировщика и службы";
+    public override string Subtitle => T._("Что запускается вместе с Windows: программы, задания планировщика и службы");
 
     public override string IconGlyph => "";
 

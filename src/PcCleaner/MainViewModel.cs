@@ -21,7 +21,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
     private readonly Action<AppSettings> _save;
     private PageViewModel? _selectedPage;
     private UiMode _shownMode;
-    private string _statusText = "Готово";
+    private string _statusText = T._("Готово");
     private bool _updateBannerDismissed;
 
     public MainViewModel()
@@ -125,7 +125,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
     public bool IsAdmin => Admin.IsElevated;
 
-    public string AdminText => IsAdmin ? "Права администратора" : "Ограниченный режим";
+    public string AdminText => IsAdmin ? T._("Права администратора") : T._("Ограниченный режим");
 
     public string VersionText => "v" + (typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0");
 
@@ -209,7 +209,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
             }
             catch (Exception ex)
             {
-                Log.Error($"Ошибка при смене режима на странице «{page.Title}»", ex);
+                Log.Error(T.F("Ошибка при смене режима на странице «{0}»", page.Title), ex);
             }
         }
 
@@ -243,14 +243,14 @@ public sealed class MainViewModel : ObservableObject, INavigator
         {
             case UpdateState.Ready:
                 var busy = Pages.Where(p => p.IsBusy).Select(p => p.Title).ToList();
-                if (busy.Count > 0 && !Dialogs.Confirm("Установка обновления", UpdateBanner.BusyWarning(busy)))
+                if (busy.Count > 0 && !Dialogs.Confirm(T._("Установка обновления"), UpdateBanner.BusyWarning(busy)))
                     return;
                 if (Updates.InstallNow(Environment.GetCommandLineArgs().Skip(1).ToList()))
                     System.Windows.Application.Current.Shutdown();
                 break;
             case UpdateState.Updated:
-                Dialogs.Info($"Что нового в версии {Updates.CurrentVersion.ToString(3)}",
-                    string.IsNullOrWhiteSpace(Updates.Manifest?.Notes) ? "Описание изменений есть на странице релиза." : Updates.Manifest!.Notes);
+                Dialogs.Info(T.F("Что нового в версии {0}", Updates.CurrentVersion.ToString(3)),
+                    string.IsNullOrWhiteSpace(Updates.Manifest?.Notes) ? T._("Описание изменений есть на странице релиза.") : Updates.Manifest!.Notes);
                 break;
             case UpdateState.ManualRequired:
                 ProcessRunner.ShellOpen(UpdateService.ReleasesUrl);
@@ -275,7 +275,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         }
         catch (Exception ex)
         {
-            Log.Error($"Ошибка при уходе со страницы «{previous?.Title}»", ex);
+            Log.Error(T.F("Ошибка при уходе со страницы «{0}»", previous?.Title), ex);
         }
         try
         {
@@ -283,7 +283,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         }
         catch (Exception ex)
         {
-            Log.Error($"Ошибка открытия страницы «{page.Title}»", ex);
+            Log.Error(T.F("Ошибка открытия страницы «{0}»", page.Title), ex);
         }
     }
 }

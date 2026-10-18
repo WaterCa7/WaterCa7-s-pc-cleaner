@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core.Updates;
 
 namespace PcCleaner.Core;
@@ -34,7 +35,7 @@ public static class StartupElevation
             return false;
         if (args.Any(a => string.Equals(a, ElevatedRestartArg, StringComparison.OrdinalIgnoreCase)))
         {
-            Log.Warn("Перезапуск с правами администратора не дал прав — работаем без них");
+            Log.Warn(T._("Перезапуск с правами администратора не дал прав — работаем без них"));
             return false;
         }
         return !args.Any(a => string.Equals(a, DeclinedArg, StringComparison.OrdinalIgnoreCase) ||
@@ -54,22 +55,22 @@ public static class StartupElevation
     {
         if (string.IsNullOrEmpty(exePath))
         {
-            Log.Warn("Запуск с правами администратора невозможен: не найден путь к программе");
+            Log.Warn(T._("Запуск с правами администратора невозможен: не найден путь к программе"));
             return false;
         }
         try
         {
             if (start(Admin.ElevatedStartInfo(exePath, args.Append(ElevatedRestartArg))))
                 return true;
-            Log.Warn($"Не удалось перезапустить «{exePath}» с правами администратора: программа не запустилась");
+            Log.Warn(T.F("Не удалось перезапустить «{0}» с правами администратора: программа не запустилась", exePath));
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == Admin.ErrorCancelledByUser)
         {
-            Log.Info("Права администратора не выданы: в окне Windows выбрано «Нет»");
+            Log.Info(T._("Права администратора не выданы: в окне Windows выбрано «Нет»"));
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось перезапустить «{exePath}» с правами администратора: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Не удалось перезапустить «{0}» с правами администратора: {1}", exePath, ErrorText.For(ex)));
         }
         return false;
     }

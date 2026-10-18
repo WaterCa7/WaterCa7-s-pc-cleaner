@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -131,9 +132,9 @@ public sealed class SecurityViewModel : PageViewModel
         OpenEncryptionSettingsCommand = new RelayCommand(OpenEncryptionSettings);
     }
 
-    public override string Title => "Безопасность";
+    public override string Title => T._("Безопасность");
 
-    public override string Subtitle => "Антивирус, брандмауэр, файл hosts, SMBv1, Secure Boot, TPM, шифрование и другие проверки защиты";
+    public override string Subtitle => T._("Антивирус, брандмауэр, файл hosts, SMBv1, Secure Boot, TPM, шифрование и другие проверки защиты");
 
     public override string IconGlyph => "";
 

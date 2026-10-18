@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -54,15 +55,15 @@ public sealed class UpdateClient : IDisposable
                 {
                     total += read;
                     if (total > file.Size)
-                        throw new UpdateException("скачанный файл больше, чем указано в update.json");
+                        throw new UpdateException(T._("скачанный файл больше, чем указано в update.json"));
                     hash.AppendData(buffer, 0, read);
                     await output.WriteAsync(buffer.AsMemory(0, read), ct);
                     progress?.Report((double)total / file.Size);
                 }
                 if (total != file.Size)
-                    throw new UpdateException($"скачано {total} байт из {file.Size}");
+                    throw new UpdateException(T.F("скачано {0} байт из {1}", total, file.Size));
                 if (Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant() != file.Sha256)
-                    throw new UpdateException("контрольная сумма скачанного файла не совпадает с update.json");
+                    throw new UpdateException(T._("контрольная сумма скачанного файла не совпадает с update.json"));
             }
             File.Move(partial, targetPath, overwrite: true);
         }
@@ -83,7 +84,7 @@ public sealed class UpdateClient : IDisposable
         while ((read = await stream.ReadAsync(chunk, ct)) > 0)
         {
             if (buffer.Length + read > MaxManifestBytes)
-                throw new UpdateException($"{url}: файл больше {MaxManifestBytes} байт");
+                throw new UpdateException(T.F("{0}: файл больше {1} байт", url, MaxManifestBytes));
             buffer.Write(chunk, 0, read);
         }
         return buffer.ToArray();
@@ -92,18 +93,18 @@ public sealed class UpdateClient : IDisposable
     private async Task<HttpResponseMessage> SendAsync(string url, CancellationToken ct)
     {
         if (!url.StartsWith("https://", StringComparison.Ordinal))
-            throw new UpdateException($"разрешены только https-адреса: {url}");
+            throw new UpdateException(T.F("разрешены только https-адреса: {0}", url));
         var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         if (response.RequestMessage?.RequestUri?.Scheme != Uri.UriSchemeHttps)
         {
             response.Dispose();
-            throw new UpdateException($"{url}: перенаправление не на https");
+            throw new UpdateException(T.F("{0}: перенаправление не на https", url));
         }
         if (!response.IsSuccessStatusCode)
         {
             var code = (int)response.StatusCode;
             response.Dispose();
-            throw new UpdateException($"{url}: ответ сервера {code}");
+            throw new UpdateException(T.F("{0}: ответ сервера {1}", url, code));
         }
         return response;
     }

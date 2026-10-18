@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Disk;
@@ -146,9 +147,9 @@ public sealed class DiskViewModel : PageViewModel
         RestartAsAdminCommand = new RelayCommand(() => ElevatedRestart.Request(), () => !Admin.IsElevated);
     }
 
-    public override string Title => "Диски";
+    public override string Title => T._("Диски");
 
-    public override string Subtitle => "Свободное место, что его занимает, советы по очистке и здоровье накопителей";
+    public override string Subtitle => T._("Свободное место, что его занимает, советы по очистке и здоровье накопителей");
 
     public override string IconGlyph => "\uEDA2";
 

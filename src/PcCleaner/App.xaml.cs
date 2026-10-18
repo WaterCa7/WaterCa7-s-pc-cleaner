@@ -47,13 +47,13 @@ public partial class App : Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
-            Log.Error("Необработанная ошибка фоновой задачи", args.Exception.GetBaseException());
+            Log.Error(T._("Необработанная ошибка фоновой задачи"), args.Exception.GetBaseException());
             args.SetObserved();
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
             if (args.ExceptionObject is Exception ex)
-                Log.Error("Критическая ошибка", ex);
+                Log.Error(T._("Критическая ошибка"), ex);
         };
 
         base.OnStartup(e);
@@ -61,8 +61,8 @@ public partial class App : Application
         if (ScreenshotDir is not null)
             Dialogs.UseSilentMode();
 
-        Log.Info($"Запуск WaterCa7s PC Cleaner {typeof(App).Assembly.GetName().Version?.ToString(3)}" +
-                 (Admin.IsElevated ? " (администратор)" : ""));
+        var version = typeof(App).Assembly.GetName().Version?.ToString(3);
+        Log.Info(Admin.IsElevated ? T.F("Запуск WaterCa7s PC Cleaner {0} (администратор)", version) : T.F("Запуск WaterCa7s PC Cleaner {0}", version));
 
         // Always as administrator (Настройки can switch it off): restart elevated before anything else happens, so the
         // update below is installed and started by the elevated copy and no second question is asked. «Нет» in the Windows
@@ -74,7 +74,7 @@ public partial class App : Application
                 Shutdown();
                 return;
             }
-            Log.Info("Программа открыта без прав администратора: часть проверок и исправлений недоступна");
+            Log.Info(T._("Программа открыта без прав администратора: часть проверок и исправлений недоступна"));
         }
 
         // Install an already downloaded update before any window appears; the new version starts and this one exits.
@@ -220,8 +220,8 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        Log.Error("Необработанная ошибка", e.Exception);
-        Dialogs.Error("Ошибка", ErrorText.Sentence(e.Exception));
+        Log.Error(T._("Необработанная ошибка"), e.Exception);
+        Dialogs.Error(T._("Ошибка"), ErrorText.Sentence(e.Exception));
         e.Handled = true;
     }
 }

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Optimizer;
 
@@ -60,9 +61,9 @@ public sealed class OptimizerViewModel : PageViewModel
         RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated && !IsBusy);
     }
 
-    public override string Title => "Ускорение";
+    public override string Title => T._("Ускорение");
 
-    public override string Subtitle => "Ваше железо и честные советы, как сделать компьютер быстрее";
+    public override string Subtitle => T._("Ваше железо и честные советы, как сделать компьютер быстрее");
 
     public override string IconGlyph => "\uE945";
 

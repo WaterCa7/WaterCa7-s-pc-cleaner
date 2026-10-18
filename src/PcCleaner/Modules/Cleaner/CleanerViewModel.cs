@@ -2,6 +2,7 @@
 using System.Text;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Cleaner;
@@ -55,9 +56,9 @@ public sealed class CleanerViewModel : PageViewModel
         PropertyChanged += OnSelfPropertyChanged;
     }
 
-    public override string Title => "Очистка";
+    public override string Title => T._("Очистка");
 
-    public override string Subtitle => "Временные файлы, кэш браузеров и программ, корзина — освободите место без риска";
+    public override string Subtitle => T._("Временные файлы, кэш браузеров и программ, корзина — освободите место без риска");
 
     public override string IconGlyph => "";
 

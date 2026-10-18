@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -37,12 +38,12 @@ public static class ScreenshotRunner
 
         var allPages = vm.Pages.ToList();
         foreach (var key in HiddenRequested(allPages, vm.VisiblePages, pageKeys))
-            Log.Info($"[screenshot] {key}: пропущено — в этом режиме раздела нет");
+            Log.Info(T.F("[screenshot] {0}: пропущено — в этом режиме раздела нет", key));
 
         foreach (var (index, page) in PagesToShoot(allPages, vm.VisiblePages, pageKeys))
         {
             var sw = Stopwatch.StartNew();
-            Log.Info($"[screenshot] {page.Key}: открытие");
+            Log.Info(T.F("[screenshot] {0}: открытие", page.Key));
             await vm.NavigateAsync(page);
             await WaitIdleAsync();
 
@@ -67,7 +68,7 @@ public static class ScreenshotRunner
             await WaitIdleAsync();
             var file = Path.Combine(outDir, $"{index:00}-{page.Key}.png");
             Save(window, file);
-            Log.Info($"[screenshot] {page.Key}: готово за {sw.Elapsed.TotalSeconds:0.0} с -> {file}");
+            Log.Info(T.F("[screenshot] {0}: готово за {1:0.0} с -> {2}", page.Key, sw.Elapsed.TotalSeconds, file));
         }
 
         await WaitIdleAsync();
@@ -83,7 +84,7 @@ public static class ScreenshotRunner
     private static async Task ShootWelcomeAsync(Window window, MainViewModel vm, string outDir)
     {
         var sw = Stopwatch.StartNew();
-        Log.Info("[screenshot] Welcome: открытие");
+        Log.Info(T._("[screenshot] Welcome: открытие"));
         vm.Welcome.ShowAtStart(screenshotRun: true, forced: true);
         await Task.Delay(700); // the fade-in is 250 ms
         await WaitIdleAsync();
@@ -92,7 +93,7 @@ public static class ScreenshotRunner
         vm.Welcome.Hide();
         await Task.Delay(700); // the fade-out is 250 ms; then the blur is dropped
         await WaitIdleAsync();
-        Log.Info($"[screenshot] Welcome: готово за {sw.Elapsed.TotalSeconds:0.0} с -> {file}");
+        Log.Info(T.F("[screenshot] Welcome: готово за {0:0.0} с -> {1}", sw.Elapsed.TotalSeconds, file));
     }
 
     /// <summary>

@@ -20,7 +20,21 @@ public class LocalizationCatalogTests
     /// </summary>
     internal static readonly string[] Enforced =
     {
+        "App.xaml.cs",
+        "Core/Admin.cs",
+        "Core/AppRestart.cs",
+        "Core/Converters.cs",
+        "Core/Dialogs.cs",
+        "Core/Log.cs",
+        "Core/PageViewModel.cs",
+        "Core/ScreenshotRunner.cs",
+        "Core/StartupElevation.cs",
+        "Core/UiModes.cs",
+        "Core/Updates/",
         "Core/WelcomeViewModel.cs",
+        "MainViewModel.cs",
+        "MainWindow.xaml",
+        "MainWindow.xaml.cs",
     };
 
     /// <summary>

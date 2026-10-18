@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Processes;
 
@@ -92,9 +93,9 @@ public sealed partial class ProcessesViewModel : PageViewModel
         ToggleAllVisibleCommand = new RelayCommand(ToggleAllVisible, () => Items.Any(i => i.CanCheck));
     }
 
-    public override string Title => "Процессы";
+    public override string Title => T._("Процессы");
 
-    public override string Subtitle => "Что сейчас работает на компьютере, сколько ресурсов занимает и нет ли среди этого подозрительного";
+    public override string Subtitle => T._("Что сейчас работает на компьютере, сколько ресурсов занимает и нет ли среди этого подозрительного");
 
     public override string IconGlyph => "";
 

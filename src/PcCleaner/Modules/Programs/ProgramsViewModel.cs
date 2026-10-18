@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Programs;
@@ -158,9 +159,9 @@ public sealed partial class ProgramsViewModel : PageViewModel
         ToggleAllVisibleStoreAppsCommand = new RelayCommand(ToggleAllVisibleStoreApps, () => VisibleCheckableStoreApps().Any());
     }
 
-    public override string Title => "Программы";
+    public override string Title => T._("Программы");
 
-    public override string Subtitle => "Установленные программы и приложения Store: что можно удалить, нежелательное ПО и «битые» записи";
+    public override string Subtitle => T._("Установленные программы и приложения Store: что можно удалить, нежелательное ПО и «битые» записи");
 
     public override string IconGlyph => "\uE71D";
 

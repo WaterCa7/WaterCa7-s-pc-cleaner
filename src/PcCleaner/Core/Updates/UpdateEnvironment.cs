@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -58,7 +59,7 @@ public sealed class UpdateEnvironment
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            Log.Warn($"Обновление: не удалось запустить {exe}: {ex.Message}");
+            Log.Warn(T.F("Обновление: не удалось запустить {0}: {1}", exe, ex.Message));
             return false;
         }
     }

@@ -147,9 +147,9 @@ public sealed class DashboardViewModel : PageViewModel
 
     public bool IsExpertMode => !IsSimpleMode;
 
-    public override string Title => "Главная";
+    public override string Title => T._("Главная");
 
-    public override string Subtitle => "Общее состояние компьютера и проверка в один клик";
+    public override string Subtitle => T._("Общее состояние компьютера и проверка в один клик");
 
     public override string IconGlyph => "";
 

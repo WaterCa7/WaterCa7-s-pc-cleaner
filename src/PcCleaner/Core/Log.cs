@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -18,10 +19,10 @@ public sealed record LogEntry(DateTime Time, LogLevel Level, string Message)
 
     public string LevelText => Level switch
     {
-        LogLevel.Warning => "Внимание",
-        LogLevel.Error => "Ошибка",
-        LogLevel.Action => "Действие",
-        _ => "Инфо",
+        LogLevel.Warning => T._("Внимание"),
+        LogLevel.Error => T._("Ошибка"),
+        LogLevel.Action => T._("Действие"),
+        _ => T._("Инфо"),
     };
 }
 

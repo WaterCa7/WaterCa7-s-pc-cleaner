@@ -1,3 +1,5 @@
+using PcCleaner.Core.Localization;
+
 namespace PcCleaner.Core;
 
 /// <summary>
@@ -91,7 +93,7 @@ public abstract class PageViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            Log.Info($"{Title}: операция отменена");
+            Log.Info(T.F("{0}: операция отменена", Title));
         }
         catch (Exception ex)
         {

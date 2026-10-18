@@ -56,6 +56,9 @@ public static class T
     public static string ResolveLanguage(string? setting, CultureInfo system)
         => IsSupported(setting) ? setting : system.TwoLetterISOLanguageName == Russian ? Russian : English;
 
+    /// <summary>A name in the quotes of the UI language: «text» in Russian, “text” in English.</summary>
+    public static string Quote(string text) => IsEnglish ? $"“{text}”" : $"«{text}»";
+
     /// <summary>The text in the UI language: the English entry of en.json, or the Russian text itself.</summary>
     public static string _(string ru)
     {

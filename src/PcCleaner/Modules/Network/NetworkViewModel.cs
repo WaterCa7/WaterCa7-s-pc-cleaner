@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Network;
 
@@ -138,9 +139,9 @@ public sealed class NetworkViewModel : PageViewModel
         DismissMessageCommand = new RelayCommand(() => Message = null);
     }
 
-    public override string Title => "Сеть";
+    public override string Title => T._("Сеть");
 
-    public override string Subtitle => "Скорость подключения, задержки, Wi-Fi, открытые порты и соединения программ";
+    public override string Subtitle => T._("Скорость подключения, задержки, Wi-Fi, открытые порты и соединения программ");
 
     public override string IconGlyph => "";
 

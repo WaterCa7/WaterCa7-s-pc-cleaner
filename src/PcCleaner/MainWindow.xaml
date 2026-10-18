@@ -100,7 +100,7 @@
                             <DockPanel ToolTipService.InitialShowDelay="300">
                                 <DockPanel.ToolTip>
                                     <TextBlock MaxWidth="320" TextWrapping="Wrap"
-                                               Text="Без прав администратора программа всё проверяет, но часть действий недоступна: системные папки, службы, раздел реестра HKLM, брандмауэр и другие настройки Windows." />
+                                               Text="{loc:T 'Без прав администратора программа всё проверяет, но часть действий недоступна: системные папки, службы, раздел реестра HKLM, брандмауэр и другие настройки Windows.'}" />
                                 </DockPanel.ToolTip>
                                 <!-- Without admin rights is the normal mode, not an error: blue dot, green with admin rights. -->
                                 <Ellipse Width="8" Height="8" VerticalAlignment="Center">
@@ -120,10 +120,10 @@
                             </DockPanel>
                             <Button Command="{Binding RestartAsAdminCommand}" Margin="0,8,0,0"
                                     Padding="10,5" FontSize="12" HorizontalAlignment="Stretch"
-                                    AutomationProperties.Name="Перезапустить от имени администратора"
-                                    ToolTip="Перезапустить программу с правами администратора — откроется окно контроля учётных записей"
+                                    AutomationProperties.Name="{loc:T 'Перезапустить от имени администратора'}"
+                                    ToolTip="{loc:T 'Перезапустить программу с правами администратора — откроется окно контроля учётных записей'}"
                                     Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
-                                <TextBlock Text="Перезапустить от имени администратора" TextWrapping="Wrap" TextAlignment="Center" />
+                                <TextBlock Text="{loc:T 'Перезапустить от имени администратора'}" TextWrapping="Wrap" TextAlignment="Center" />
                             </Button>
                         </StackPanel>
                     </Border>
@@ -185,7 +185,7 @@
                             Visibility="{Binding ShowUpdateBanner, Converter={StaticResource BoolToVis}}">
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Content="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="10" Padding="8,5"
-                                    Margin="6,0,0,0" ToolTip="Скрыть" Command="{Binding DismissUpdateBannerCommand}" />
+                                    Margin="6,0,0,0" ToolTip="{loc:T 'Скрыть'}" Command="{Binding DismissUpdateBannerCommand}" />
                             <Button DockPanel.Dock="Right" Content="{Binding UpdateBannerAction}" Padding="12,4" Margin="12,0,0,0"
                                     Command="{Binding UpdateBannerCommand}" />
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE895;" FontSize="14" Foreground="{StaticResource AccentBrush}"
@@ -208,7 +208,7 @@
                             <ProgressBar Value="{Binding SelectedPage.Progress, Mode=OneWay}" Maximum="100"
                                          IsIndeterminate="{Binding SelectedPage.IsProgressIndeterminate, Mode=OneWay}" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Отмена" Margin="12,0,0,0" Padding="12,5"
+                        <Button Grid.Column="1" Content="{loc:T 'Отмена'}" Margin="12,0,0,0" Padding="12,5"
                                 Command="{Binding SelectedPage.CancelCommand}" />
                     </Grid>
                 </Border>
@@ -217,7 +217,7 @@
 
                 <Border Grid.Row="3" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="32,7">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"><Run Text="{Binding VersionText, Mode=OneWay}" /><Run Text=" · Сделано для WaterCa7" /></TextBlock>
+                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"><Run Text="{Binding VersionText, Mode=OneWay}" /><Run Text="{loc:T ' · Сделано для WaterCa7'}" /></TextBlock>
                         <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" FontSize="11.5" TextTrimming="CharacterEllipsis"
                                    TextWrapping="NoWrap" />
                     </DockPanel>
@@ -242,8 +242,8 @@
                 <StackPanel Height="90" Margin="0,16,0,0">
                     <ProgressBar Maximum="1" Value="{Binding Splash.Progress, Mode=OneWay}" Margin="48,0"
                                  Visibility="{Binding Splash.ShowProgress, Converter={StaticResource BoolToVis}}" />
-                    <Button Content="Пропустить" Command="{Binding Splash.SkipCommand}" HorizontalAlignment="Center" Margin="0,22,0,0"
-                            Padding="20,7" ToolTip="Открыть программу сразу; обновление установится при следующем запуске"
+                    <Button Content="{loc:T 'Пропустить'}" Command="{Binding Splash.SkipCommand}" HorizontalAlignment="Center" Margin="0,22,0,0"
+                            Padding="20,7" ToolTip="{loc:T 'Открыть программу сразу; обновление установится при следующем запуске'}"
                             Visibility="{Binding Splash.CanSkip, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
             </StackPanel>

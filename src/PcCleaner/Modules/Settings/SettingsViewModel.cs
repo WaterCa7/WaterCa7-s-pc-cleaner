@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.ObjectModel;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -46,9 +47,9 @@ public sealed partial class SettingsViewModel : PageViewModel
         InitAboutCommands();
     }
 
-    public override string Title => "Настройки";
+    public override string Title => T._("Настройки");
 
-    public override string Subtitle => "Параметры программы, журнал действий, резервные копии, карантин и восстановление системы";
+    public override string Subtitle => T._("Параметры программы, журнал действий, резервные копии, карантин и восстановление системы");
 
     public override string IconGlyph => "";
 
@@ -113,7 +114,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Error("Настройки: не удалось загрузить данные", ex);
+            Log.Error(T._("Настройки: не удалось загрузить данные"), ex);
         }
     }
 
@@ -125,7 +126,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Error("Настройки: не удалось обновить списки", ex);
+            Log.Error(T._("Настройки: не удалось обновить списки"), ex);
         }
     }
 
@@ -153,7 +154,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Error("Настройки: ошибка обновления", ex);
+            Log.Error(T._("Настройки: ошибка обновления"), ex);
         }
     }
 
