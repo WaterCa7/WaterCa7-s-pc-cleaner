@@ -511,8 +511,10 @@
                                     </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
                                         <!-- Checkboxes for the bulk bar; the header one checks or clears all visible rows. Clicks go to the
-                                             view-model, which decides the new state. A runtime's box is disabled and never checked. -->
-                                        <DataGridTemplateColumn Width="36" CanUserSort="False" CanUserResize="False">
+                                             view-model, which decides the new state. A runtime's box is disabled and never checked.
+                                             Width 38 = the box (18) and the theme's 10 px cell padding on both sides; MinWidth keeps
+                                             the DataGrid from squeezing the column, which would cut the box. -->
+                                        <DataGridTemplateColumn Width="38" MinWidth="38" CanUserSort="False" CanUserResize="False">
                                             <DataGridTemplateColumn.Header>
                                                 <CheckBox IsThreeState="True" Width="18"
                                                           IsChecked="{Binding DataContext.AllVisibleProgramsChecked, ElementName=Root, Mode=OneWay}"
@@ -889,7 +891,7 @@
                                     </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
                                         <!-- The same checkboxes for Store apps; an app Windows needs has a disabled box that is never checked. -->
-                                        <DataGridTemplateColumn Width="36" CanUserSort="False" CanUserResize="False">
+                                        <DataGridTemplateColumn Width="38" MinWidth="38" CanUserSort="False" CanUserResize="False">
                                             <DataGridTemplateColumn.Header>
                                                 <CheckBox IsThreeState="True" Width="18"
                                                           IsChecked="{Binding DataContext.AllVisibleStoreAppsChecked, ElementName=Root, Mode=OneWay}"

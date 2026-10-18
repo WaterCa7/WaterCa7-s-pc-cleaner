@@ -100,7 +100,7 @@ public partial class ProgramsView : UserControl
     }
 
     /// <summary>Width of the checkbox column in front of both grids (the thresholds below include it).</summary>
-    private const double CheckColumnWidth = 36;
+    private const double CheckColumnWidth = 38;
 
     /// <summary>Hides secondary columns when the grid gets narrow (minimum window size).</summary>
     private void ProgramsGrid_SizeChanged(object sender, SizeChangedEventArgs e)
