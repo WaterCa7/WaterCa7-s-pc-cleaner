@@ -626,35 +626,62 @@ public static partial class SecurityRules
 
     /// <summary>
     /// An enabled proxy that runs on this computer and no setup script: usually a VPN or a program that bypasses blocks has
-    /// set it. EVERY host of the server list ("http=127.0.0.1:8080;https=[::1]:8080") must be "localhost" or a loopback address,
-    /// compared as a whole: "localhost.evil.example" or a list with one remote host is a remote proxy in disguise.
+    /// set it. The server list is split like Windows splits it, at ";" and at whitespace ("http=127.0.0.1:8080 https=[::1]:8080"),
+    /// and EVERY host must be "localhost" or a loopback address, compared as a whole: "localhost.evil.example", a list with one
+    /// remote host or an entry that does not parse cleanly ("[::1]@evil.example:8080") is a remote proxy in disguise.
     /// A setup script is checked first by <see cref="EvaluateProxy"/> and is never "local".
     /// </summary>
     public static bool IsLocalProxy(ProxyState p)
     {
         if (!p.Enabled || !string.IsNullOrWhiteSpace(p.AutoConfigUrl) || string.IsNullOrWhiteSpace(p.Server))
             return false;
-        var hosts = p.Server.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(ProxyHost).ToList();
-        return hosts.Count > 0 && hosts.All(IsLoopbackHost);
+        var hosts = p.Server.Split(ProxyListSeparators, StringSplitOptions.RemoveEmptyEntries).Select(ProxyHost).ToList();
+        return hosts.Count > 0 && hosts.All(h => h is not null && IsLoopbackHost(h));
     }
 
-    /// <summary>The host of one entry of ProxyServer: "host:port", "proto=host:port", "[::1]:port" or a bare IPv6 address.</summary>
-    private static string ProxyHost(string entry)
+    private static readonly char[] ProxyListSeparators = { ';', ' ', '\t', '\r', '\n' };
+
+    /// <summary>
+    /// The host of one entry of ProxyServer: "host:port", "proto=host:port", "scheme://host:port", "[::1]:port" or a bare IPv6
+    /// address. Null when the entry is anything else (a port that is not a number, text after "]" or after the port).
+    /// </summary>
+    private static string? ProxyHost(string entry)
     {
-        var e = entry.Trim();
+        var e = entry;
         var equals = e.IndexOf('=');
         if (equals >= 0)
-            e = e[(equals + 1)..].Trim();
+        {
+            if (!IsWord(e[..equals]))
+                return null;
+            e = e[(equals + 1)..];
+        }
+        var scheme = e.IndexOf("://", StringComparison.Ordinal);
+        if (scheme >= 0)
+        {
+            if (!IsWord(e[..scheme]))
+                return null;
+            e = e[(scheme + 3)..];
+        }
         if (e.StartsWith('['))
         {
             var close = e.IndexOf(']');
-            return close > 0 ? e[1..close] : e;
+            if (close < 0)
+                return null;
+            var rest = e[(close + 1)..];
+            return rest.Length == 0 || IsPort(rest) ? e[1..close] : null;
         }
         // One colon is host:port; more than one is an IPv6 address without a port.
         var colon = e.IndexOf(':');
-        return colon >= 0 && colon == e.LastIndexOf(':') ? e[..colon].Trim() : e;
+        if (colon < 0 || colon != e.LastIndexOf(':'))
+            return e;
+        return IsPort(e[colon..]) ? e[..colon] : null;
     }
+
+    /// <summary>A protocol or scheme name: "http", "https", "socks5".</summary>
+    private static bool IsWord(string s) => s.Length > 0 && char.IsAsciiLetter(s[0]) && s.All(char.IsAsciiLetterOrDigit);
+
+    /// <summary>":8080".</summary>
+    private static bool IsPort(string s) => s.Length > 1 && s[0] == ':' && s[1..].All(char.IsAsciiDigit);
 
     private static bool IsLoopbackHost(string host)
         => host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||

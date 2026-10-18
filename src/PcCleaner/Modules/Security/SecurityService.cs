@@ -1321,18 +1321,22 @@ public sealed partial class SecurityService : IHealthContributor
         var proxy = report.Check(SecurityCheckIds.Proxy);
         if (proxy is { Status: SecurityStatus.Warning })
         {
-            // A proxy on this computer is usually a VPN or a blocking-bypass program: its own button turns it off, but
-            // "Исправить всё" leaves it alone (the user may rely on it).
+            // A setup script (local or not) or a proxy on this computer is usually a VPN or a blocking-bypass service: its own
+            // button turns it off, but "Исправить всё" leaves it alone (the user may rely on it).
+            var script = !string.IsNullOrWhiteSpace(report.Proxy.AutoConfigUrl);
             var local = SecurityRules.IsLocalProxy(report.Proxy);
             const string effect = " Кнопка выключит прокси и уберёт скрипт настройки, адрес сервера останется в настройках, а их " +
                                   "копия сохранится. Включить прокси снова можно в «Параметры» → «Сеть и Интернет» → «Прокси-сервер».";
-            issues.Add(Issue(proxy.State,
-                local
+            var why = script
+                ? "Прокси настраивается скриптом: его обычно ставит VPN или сервис обхода блокировок (например, «Антизапрет»). " +
+                  "Если вы ими пользуетесь, оставьте как есть — «Исправить всё» этот скрипт не трогает, он выключается только своей кнопкой."
+                : local
                     ? "Прокси работает на этом компьютере: его обычно ставит VPN или программа обхода блокировок. Если вы ими " +
-                      "пользуетесь, оставьте как есть — «Исправить всё» этот прокси не трогает, он выключается только своей кнопкой." + effect
-                    : "Рекламные программы подменяют прокси. Если вы не включали его сами (VPN, работа) — отключите." + effect,
+                      "пользуетесь, оставьте как есть — «Исправить всё» этот прокси не трогает, он выключается только своей кнопкой."
+                    : "Рекламные программы подменяют прокси. Если вы не включали его сами (VPN, работа) — отключите.";
+            issues.Add(Issue(proxy.State, why + effect,
                 IssueSeverity.Medium, Wrap(c => DisableProxyAsync(report.Proxy, c)), fixLabel: "Выключить прокси",
-                inFixAll: !local));
+                inFixAll: !script && !local));
         }
 
         // Updates

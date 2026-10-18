@@ -428,7 +428,7 @@ public class SecurityDashboardSystemFixTests
         SetProxy(sb);
         var (issue, _) = await ScanIssueAsync(sb, "Используется скрипт настройки прокси");
         Assert.Equal("Выключить прокси", issue.FixLabel);
-        Assert.True(issue.InFixAll);
+        Assert.False(issue.InFixAll); // a setup script: only its own button turns it off
         Assert.Equal(IssueSeverity.Medium, issue.Severity);
 
         var text = await issue.FixAsync!(CancellationToken.None);
@@ -463,6 +463,7 @@ public class SecurityDashboardSystemFixTests
     [InlineData("127.0.0.1")]
     [InlineData("127.0.0.2:8080")]
     [InlineData("http=127.0.0.1:8080;https=[::1]:8080;socks=localhost:1080")]
+    [InlineData("http://127.0.0.1:8080")]
     public async Task Proxy_OnThisComputer_StaysOutOfFixAll_ButKeepsItsOwnButton(string server)
     {
         using var sb = new SecuritySandbox();
@@ -493,6 +494,8 @@ public class SecurityDashboardSystemFixTests
     [InlineData("127.0.0.1@evil.example:8080")]
     [InlineData("http=127.0.0.1:8080;https=ads.example:443")] // one remote host in the list is enough
     [InlineData("https=ads.example:443;http=127.0.0.1:8080")]
+    [InlineData("evil.example:80 http=127.0.0.1:8080")] // a list separated by a space, not by ";"
+    [InlineData("[::1]@evil.example:8080")]
     public async Task Proxy_OnAnotherComputer_StaysInFixAll(string server)
     {
         using var sb = new SecuritySandbox();
@@ -505,17 +508,26 @@ public class SecurityDashboardSystemFixTests
         Assert.DoesNotContain("«Исправить всё»", issue.Details);
     }
 
-    [Fact]
-    public async Task Proxy_SetupScript_StaysInFixAllEvenWithALocalServer()
+    [Theory]
+    [InlineData("127.0.0.1:10809", "http://127.0.0.1:1080/proxy.pac")]
+    [InlineData("1.2.3.4:8080", "http://evil.example/proxy.pac")]
+    [InlineData("", "https://pac.example/antizapret.pac")]
+    public async Task Proxy_SetupScript_StaysOutOfFixAll_ButKeepsItsOwnButton(string server, string script)
     {
-        // A script is not a program on this computer: the proxy check treats it first, and so does the fix.
+        // A VPN or a blocking-bypass service (Антизапрет and the like) usually sets a script, local or remote: switching it
+        // off in bulk would cut the user off from what they rely on.
         using var sb = new SecuritySandbox();
-        SetProxyServer(sb, "127.0.0.1:10809", script: "http://evil.example/proxy.pac");
+        SetProxyServer(sb, server, script);
 
         var (issue, _) = await ScanIssueAsync(sb, "Используется скрипт настройки прокси");
 
-        Assert.True(issue.InFixAll);
+        Assert.False(issue.InFixAll);
         Assert.NotNull(issue.FixAsync);
+        Assert.True(issue.CanFix);
+        Assert.Equal("Выключить прокси", issue.FixLabel);
+        Assert.Contains("скрипт", issue.Details);
+        Assert.Contains("VPN", issue.Details);
+        Assert.Contains("«Исправить всё»", issue.Details);
     }
 
     [Theory]
@@ -526,13 +538,24 @@ public class SecurityDashboardSystemFixTests
     [InlineData("[2001:db8::1]:8080", false)]
     [InlineData("127.0.0.1", true)]
     [InlineData("::1", true)]
-    [InlineData(" http = 127.0.0.1:8080 ; https = LOCALHOST:8080 ", true)]
+    [InlineData(" http=127.0.0.1:8080 ; https=LOCALHOST:8080 ", true)]
+    [InlineData("http = 127.0.0.1:8080", false)] // Windows splits at the spaces: "http" is a host of its own
+    [InlineData("evil.example:80=127.0.0.1:8080", false)]
     [InlineData("localhost.evil.example:8080", false)]
     [InlineData("127.0.0.1.evil.example:8080", false)]
     [InlineData("http=127.0.0.1:8080;https=ads.example:443", false)]
     [InlineData("http=127.0.0.1:8080;", true)]
     [InlineData(";", false)]
     [InlineData("0.0.0.0:8080", false)]
+    [InlineData("evil.example:80 http=127.0.0.1:8080", false)]
+    [InlineData("127.0.0.1:8080 localhost:3128", true)]
+    [InlineData("http://127.0.0.1:8080", true)]
+    [InlineData("http=http://[::1]:8080;https=https://localhost:8443", true)]
+    [InlineData("http://evil.example:8080", false)]
+    [InlineData("[::1]@evil.example:8080", false)]
+    [InlineData("[::1]:8080@evil.example", false)]
+    [InlineData("[::1]", true)]
+    [InlineData("127.0.0.1:80/evil.example", false)]
     public void ProxyCheck_RecognisesAProxyOnThisComputer(string server, bool local)
     {
         var check = SecurityRules.EvaluateProxy(new ProxyState(true, true, server, null));
