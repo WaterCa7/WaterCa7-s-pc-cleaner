@@ -88,7 +88,16 @@ public class FixAllTests
         Assert.Equal("Исправить", issue.FixLabel);
         Assert.True(issue.InFixAll);
         Assert.False(issue.OnlyOpensTool);
+        Assert.True(issue.RunsInFixAll);
         Assert.Null(issue.SettingsUri);
+    }
+
+    [Fact]
+    public void HealthIssue_RunsInFixAll_OnlyWhenItIsInFixAll_AndDoesNotOnlyOpenATool()
+    {
+        Assert.False(new HealthIssue { Module = "M", Title = "T", InFixAll = false }.RunsInFixAll);
+        Assert.False(new HealthIssue { Module = "M", Title = "T", OnlyOpensTool = true }.RunsInFixAll);
+        Assert.False(new HealthIssue { Module = "M", Title = "T", InFixAll = true, OnlyOpensTool = true }.RunsInFixAll);
     }
 
     [Fact]
@@ -356,6 +365,23 @@ public class FixAllTests
         Assert.Contains($"{junk} {downloads} {settings} {notIncluded}", all);
         foreach (var text in new[] { onlySettings, onlyJunk, onlyDownloads })
             Assert.Contains(notIncluded, text);
+    }
+
+    [Fact]
+    public async Task FixAllConfirmText_OnlyNeutralFixes_ClaimNothingCanBeChangedBack()
+    {
+        const string notIncluded = "Удаление программ, очистка Корзины и перезагрузка сюда не входят — для них есть отдельные кнопки.";
+        var vm = await ScannedAsync(
+            NewIssue("Кэш DNS", Counting(new Counter()), fixKind: FixKind.Neutral, module: "Сеть"),
+            NewIssue("Базы антивируса", Counting(new Counter()), fixKind: FixKind.Neutral, module: "Безопасность"));
+
+        var text = DashboardViewModel.FixAllConfirmText(RowsOf(vm, "Кэш DNS", "Базы антивируса"));
+        var lines = text.Split(Environment.NewLine);
+
+        Assert.DoesNotContain("вернуть обратно", text);
+        Assert.DoesNotContain("насовсем", text);
+        Assert.DoesNotContain("«Загрузок»", text);
+        Assert.Contains(notIncluded, lines); // the paragraph is that one sentence alone
     }
 
     [Fact]

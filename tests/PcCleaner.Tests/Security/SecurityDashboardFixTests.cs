@@ -86,7 +86,7 @@ public class SecurityDashboardFixTests
         Assert.False(HealthScoring.LooksLikeFailure(text), text);
     }
 
-    /// <summary>A report with every dashboard issue that has a fix (Defender, threats, firewall, UAC, SMBv1).</summary>
+    /// <summary>A report with every dashboard issue that has a fix (Defender, threats, firewall, UAC, Winlogon, SMBv1).</summary>
     private static SecurityReport ReportWithEveryFix(SecurityStatus uac = SecurityStatus.Danger)
     {
         var checks = SecurityCheckIds.All.Select(id => new SecurityCheckResult(id, SecurityStatus.Ok, "ok", "")).ToList();
@@ -95,6 +95,7 @@ public class SecurityDashboardFixTests
         Set(SecurityCheckIds.Firewall, SecurityStatus.Danger, "Выключен для частной сети");
         Set(SecurityCheckIds.Uac, uac, uac == SecurityStatus.Danger ? "UAC отключён" : "Запросы UAC отключены");
         Set(SecurityCheckIds.Smb1, SecurityStatus.Danger, "SMBv1 включён");
+        Set(SecurityCheckIds.Winlogon, SecurityStatus.Danger, "Подменён Shell");
         return new SecurityReport
         {
             Defender = new DefenderStatus
@@ -115,8 +116,8 @@ public class SecurityDashboardFixTests
     public async Task BuildIssues_EveryFixThatFails_IsNotReportedAsFixed()
     {
         using var sb = new SecuritySandbox();
-        // In the sandbox every system action fails without starting anything. The UAC fix works on the sandbox registry,
-        // so it is checked separately (BuildIssues_UacFix_SuccessCountsAsFixed).
+        // In the sandbox every system action fails without starting anything. The UAC and Winlogon fixes work on the sandbox
+        // registry, so they are checked separately (BuildIssues_UacFix_SuccessCountsAsFixed, SecurityDashboardSystemFixTests).
         var direct = new Dictionary<string, Func<CancellationToken, Task<SecurityActionResult>>>
         {
             ["Защита в реальном времени выключена"] = sb.Service.EnableRealtimeProtectionAsync,
@@ -128,7 +129,7 @@ public class SecurityDashboardFixTests
 
         var issues = sb.Service.BuildIssues(ReportWithEveryFix()).Where(i => i.FixAsync is not null).ToList();
 
-        Assert.Equal(direct.Keys.Append("Контроль учётных записей (UAC) отключён").OrderBy(t => t),
+        Assert.Equal(direct.Keys.Append("Контроль учётных записей (UAC) отключён").Append("Подменён запуск при входе в Windows").OrderBy(t => t),
             issues.Select(i => i.Title).OrderBy(t => t));
         foreach (var (title, action) in direct)
         {
@@ -151,8 +152,25 @@ public class SecurityDashboardFixTests
         Assert.Equal("После включения UAC нужно перезагрузить компьютер.", issues.Single(i => i.Title.Contains("UAC")).Consequence);
         Assert.Equal("После отключения SMBv1 нужно перезагрузить компьютер.",
             issues.Single(i => i.Title == "Включён устаревший протокол SMBv1").Consequence);
+        // Its single question tells the user to restart and scan afterwards: «Исправить всё» must say it too.
+        Assert.Equal("После восстановления перезагрузите компьютер и проверьте его антивирусом.",
+            issues.Single(i => i.Title == "Подменён запуск при входе в Windows").Consequence);
         Assert.Null(promptOnly.Consequence); // turning the prompt back on needs no restart
-        Assert.Equal(2, issues.Count(i => i.Consequence is not null));
+        Assert.Equal(3, issues.Count(i => i.Consequence is not null));
+    }
+
+    [Fact]
+    public void BuildIssues_OnlySettingsFixes_ClaimTheyCanBeChangedBack()
+    {
+        using var sb = new SecuritySandbox();
+
+        var issues = sb.Service.BuildIssues(ReportWithEveryFix()).Where(i => i.FixAsync is not null).ToList();
+
+        // Fresh signatures and treated threats are nothing the user would want back.
+        Assert.Equal(FixKind.Neutral, issues.Single(i => i.Title == "Антивирусные базы устарели").FixKind);
+        Assert.Equal(FixKind.Neutral, issues.Single(i => i.Title == "Есть необезвреженные угрозы: 1").FixKind);
+        Assert.All(issues.Where(i => i.Title is not ("Антивирусные базы устарели" or "Есть необезвреженные угрозы: 1")),
+            i => Assert.Equal(FixKind.Settings, i.FixKind));
     }
 
     [Theory]

@@ -486,6 +486,7 @@ public class NetworkIssuesTests
         Assert.Equal("Сбросить кэш DNS", issue.FixLabel);
         Assert.True(issue.InFixAll);
         Assert.False(issue.OnlyOpensTool);
+        Assert.Equal(FixKind.Neutral, issue.FixKind); // a flushed cache is nothing to change back
         Assert.Empty(calls); // building the issues (the analysis) runs nothing
 
         var text = await issue.FixAsync!(CancellationToken.None);

@@ -402,13 +402,7 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     /// <summary>Issues "Исправить всё" runs: fixable ones except those that open their own windows, restart or uninstall.</summary>
-    public int FixAllCount => _issues.Count(RunsInFixAll);
-
-    /// <summary>
-    /// What "Исправить всё" runs: a fix that is still open and part of it — never one that only opens a tool, since a batch
-    /// must not open windows the user then has to work in.
-    /// </summary>
-    private static bool RunsInFixAll(HealthIssue issue) => issue.CanFix && issue.InFixAll && !issue.OnlyOpensTool;
+    public int FixAllCount => _issues.Count(i => i.CanFix && i.RunsInFixAll);
 
     public bool HasFixAll => !IsScanning && FixAllCount > 0;
 
@@ -1138,7 +1132,7 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     /// <summary>
-    /// "Исправить всё (N)": ONE confirmation listing every issue it runs (<see cref="RunsInFixAll"/>) → restore point →
+    /// "Исправить всё (N)": ONE confirmation listing every open issue it runs (<see cref="HealthIssue.RunsInFixAll"/>) → restore point →
     /// fixes one by one → summary (→ offer to restart as administrator when some fixes needed the rights).
     /// Returns null if nothing was done.
     /// </summary>
@@ -1146,7 +1140,7 @@ public sealed class DashboardViewModel : PageViewModel
     {
         if (IsBusy)
             return null;
-        var items = AllItems.Where(i => RunsInFixAll(i.Issue)).ToList();
+        var items = AllItems.Where(i => i.Issue.CanFix && i.Issue.RunsInFixAll).ToList();
         if (items.Count == 0)
             return null;
 

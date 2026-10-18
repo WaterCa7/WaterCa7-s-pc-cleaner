@@ -20,6 +20,12 @@ public enum FixKind
 
     /// <summary>Moves the user's files to the Recycle Bin, where they can be restored (old downloads).</summary>
     MovesToRecycleBin,
+
+    /// <summary>
+    /// Leaves nothing the user would want back (DNS cache flush, antivirus signature update, threat removal): «Исправить всё»
+    /// adds no sentence about it.
+    /// </summary>
+    Neutral,
 }
 
 /// <summary>
@@ -57,8 +63,17 @@ public sealed class HealthIssue : ObservableObject
     /// <summary>Text of the fix button: "Исправить", or what exactly happens ("Перезагрузить", "Удалить программу").</summary>
     public string FixLabel { get; init; } = DefaultFixLabel;
 
-    /// <summary>False for fixes that open their own windows, restart the PC or remove programs: they are not run by "Исправить всё".</summary>
+    /// <summary>
+    /// False for fixes the user decides on one by one (they restart the PC, remove programs or take something away): their own
+    /// button stays, "Исправить всё" does not press it. See <see cref="RunsInFixAll"/>.
+    /// </summary>
     public bool InFixAll { get; init; } = true;
+
+    /// <summary>
+    /// "Исправить всё" runs this fix (when it is still open): it is <see cref="InFixAll"/> and does not only open a tool — a batch
+    /// must not open windows the user then has to work in. The one rule for the batch, its counter and the row's hint.
+    /// </summary>
+    public bool RunsInFixAll => InFixAll && !OnlyOpensTool;
 
     /// <summary>What the fix does to files and settings («Исправить всё» explains it once, after the list).</summary>
     public FixKind FixKind { get; init; } = FixKind.Settings;

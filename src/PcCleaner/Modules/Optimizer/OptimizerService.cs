@@ -251,14 +251,13 @@ public sealed class OptimizerService : IHealthContributor
 
             Func<CancellationToken, Task<string>>? fix = null;
             var fixLabel = HealthIssue.DefaultFixLabel;
-            var inFixAll = true;
+            // Turning off Xbox Game Bar recording takes clip and screenshot capture away: the user decides on it per item,
+            // «Исправить всё» does not press its button (nor the one that only says administrator rights are needed).
+            var inFixAll = rec.FixId != TweakIds.GameDvr;
             var appliesTweak = rec.Kind == RecommendationKind.AutoFix && (!rec.NeedsAdmin || _isElevated());
             var consequence = appliesTweak ? rec.AfterApplyNote : null;
             if (appliesTweak)
             {
-                // Turning off Xbox Game Bar recording takes clip and screenshot capture away: the user decides on it per
-                // item, «Исправить всё» does not press its button.
-                inFixAll = rec.FixId != TweakIds.GameDvr;
                 var captured = rec;
                 fix = async ct =>
                 {

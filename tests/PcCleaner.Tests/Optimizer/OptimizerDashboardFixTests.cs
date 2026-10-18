@@ -193,6 +193,21 @@ public sealed class OptimizerDashboardFixTests : IDisposable
     }
 
     [Fact]
+    public void GameBarRecording_ThatNeedsAdminRights_StaysOutOfFixAllToo()
+    {
+        var rec = new Recommendation
+        {
+            Id = "GameDvr", Title = "Отключите запись игр Xbox Game Bar", Explanation = "x", Kind = RecommendationKind.AutoFix,
+            FixId = TweakIds.GameDvr, NeedsAdmin = true,
+        };
+
+        var issue = Assert.Single(Create(GoodDesktop(), GoodSettings()).ToHealthIssues(new[] { rec })); // not elevated
+
+        Assert.NotNull(issue.FixAsync); // the row says administrator rights are needed...
+        Assert.False(issue.InFixAll); // ...but the batch never presses it
+    }
+
+    [Fact]
     public async Task TweakWithAConsequence_HandsItToFixAll_OnlyWhenTheFixAppliesIt()
     {
         var withAdmin = await HagsIssueAsync(elevated: true);

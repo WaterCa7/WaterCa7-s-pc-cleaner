@@ -155,7 +155,7 @@ public sealed class IssueItem : ObservableObject
 
     internal void RaiseNeedsAdmin() => OnPropertyChanged(nameof(NeedsAdmin));
 
-    public string AutoFixHint => Issue.InFixAll && !Issue.OnlyOpensTool
+    public string AutoFixHint => Issue.RunsInFixAll
         ? "Входит в «Исправить всё»"
         : "Не входит в «Исправить всё»: это действие запускается только отдельно";
 

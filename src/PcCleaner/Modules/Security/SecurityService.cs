@@ -1160,7 +1160,8 @@ public sealed partial class SecurityService : IHealthContributor
 
         HealthIssue Issue(string title, string details, IssueSeverity severity,
             Func<CancellationToken, Task<string>>? fix = null, bool autoFix = false, string? gain = null,
-            string? fixLabel = null, string? settingsUri = null, bool inFixAll = true, string? consequence = null) => new()
+            string? fixLabel = null, string? settingsUri = null, bool inFixAll = true, string? consequence = null,
+            FixKind kind = FixKind.Settings) => new()
             {
                 Module = ModuleName,
                 Title = title,
@@ -1170,6 +1171,7 @@ public sealed partial class SecurityService : IHealthContributor
                 FixLabel = fixLabel ?? HealthIssue.DefaultFixLabel,
                 InFixAll = inFixAll,
                 Consequence = consequence,
+                FixKind = kind,
                 AutoFixSafe = autoFix,
                 Gain = gain,
                 SettingsUri = settingsUri,
@@ -1204,7 +1206,8 @@ public sealed partial class SecurityService : IHealthContributor
             {
                 issues.Add(Issue("Антивирусные базы устарели",
                     $"Базы Защитника Windows не обновлялись {SecurityRules.Days(d.SignatureAgeDays.Value)}. Старые базы не знают новых вирусов.",
-                    IssueSeverity.Medium, Wrap(UpdateSignaturesAsync), autoFix: true, gain: "Свежие базы вирусов"));
+                    IssueSeverity.Medium, Wrap(UpdateSignaturesAsync), autoFix: true, gain: "Свежие базы вирусов",
+                    kind: FixKind.Neutral));
             }
             var badExclusions = d.Exclusions.Where(SecurityRules.IsDangerousExclusion).ToList();
             if (badExclusions.Count > 0)
@@ -1234,7 +1237,8 @@ public sealed partial class SecurityService : IHealthContributor
                 (canRemove
                     ? " Исправление попросит Защитник Windows обезвредить угрозы (обычно — поместить в карантин, откуда файл можно вернуть)."
                     : " Откройте «Безопасность Windows» → «Журнал защиты»."),
-                IssueSeverity.High, canRemove ? Wrap(RemoveActiveThreatsAsync) : null, gain: "Угрозы обезврежены"));
+                IssueSeverity.High, canRemove ? Wrap(RemoveActiveThreatsAsync) : null, gain: "Угрозы обезврежены",
+                kind: FixKind.Neutral));
         }
         var antiviruses = report.ActiveAntivirusNames;
         if (antiviruses.Count >= 2)
@@ -1301,7 +1305,8 @@ public sealed partial class SecurityService : IHealthContributor
             issues.Add(Issue("Подменён запуск при входе в Windows",
                 winlogon.Details + " Кнопка вернёт стандартные значения: перед этим создаётся точка восстановления (если она " +
                 "включена в настройках) и сохраняется копия раздела реестра. Потом перезагрузите компьютер и проверьте его антивирусом.",
-                IssueSeverity.Critical, Wrap(c => FixWinlogonAsync(report.Winlogon, c)), fixLabel: "Восстановить"));
+                IssueSeverity.Critical, Wrap(c => FixWinlogonAsync(report.Winlogon, c)), fixLabel: "Восстановить",
+                consequence: "После восстановления перезагрузите компьютер и проверьте его антивирусом."));
         }
         var ifeo = report.Check(SecurityCheckIds.Ifeo);
         if (ifeo is { Status: SecurityStatus.Danger })

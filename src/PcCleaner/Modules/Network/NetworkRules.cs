@@ -751,6 +751,7 @@ public static class NetworkRules
             SettingsUri = kind == FindingKind.NoInternet ? NetworkStatusUri : null,
             FixAsync = fixesDns ? flushDns : null,
             FixLabel = fixesDns ? FlushDnsFixLabel : HealthIssue.DefaultFixLabel,
+            FixKind = FixKind.Neutral, // a flushed DNS cache is nothing the user would want back
         };
     }
 

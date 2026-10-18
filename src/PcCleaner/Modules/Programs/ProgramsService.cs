@@ -929,8 +929,9 @@ public sealed class ProgramsService : IHealthContributor
 
     /// <summary>
     /// Fix for the dashboard (already confirmed there): removes the preinstalled Store apps of the list the user saw that are
-    /// still installed (the Store apps are read again; apps that appeared after the scan are left alone). One restore point
-    /// comes first, as on the Programs page.
+    /// still installed (the Store apps are read again; apps that appeared after the scan are left alone). The apps are matched by
+    /// package name, not by full name: the user confirmed «Новости», and a Store update since the scan changes only the version.
+    /// One restore point comes first, as on the Programs page.
     /// </summary>
     private async Task<string> FixPreinstalledAppsAsync(IReadOnlyList<StoreApp> scanned, CancellationToken ct)
         => await RemovePreinstalledAppsAsync(scanned, await ScanStoreAppsAsync(ct), ct);
@@ -941,12 +942,14 @@ public sealed class ProgramsService : IHealthContributor
         if (current.Error is not null)
             return "Не удалось получить список приложений Microsoft Store — ничего не изменено.";
 
-        var targets = current.Apps
-            .Where(a => a.IsBloatware && a.CanRemove &&
-                        scanned.Any(s => string.Equals(s.PackageFullName, a.PackageFullName, StringComparison.OrdinalIgnoreCase)))
+        var stillInstalled = current.Apps
+            .Where(a => scanned.Any(s => string.Equals(s.Name, a.Name, StringComparison.OrdinalIgnoreCase)))
             .ToList();
-        if (targets.Count == 0)
+        if (stillInstalled.Count == 0)
             return "Этих предустановленных приложений уже нет — делать ничего не нужно."; // gone since the scan: nothing left to do
+        var targets = stillInstalled.Where(a => a.IsBloatware && a.CanRemove).ToList();
+        if (targets.Count == 0)
+            return "Предустановленные приложения изменились после проверки — ничего не изменено. Нажмите «Проверить снова».";
 
         await CreateRestorePointAsync("Удаление предустановленных приложений", ct);
         ct.ThrowIfCancellationRequested(); // "Отмена" before anything was removed: a plain cancellation

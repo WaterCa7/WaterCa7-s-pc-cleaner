@@ -654,6 +654,42 @@ public sealed class ProgramsDashboardFixTests : IDisposable
     }
 
     [Fact]
+    public async Task Bloat_Fix_AppUpdatedByTheStoreSinceTheScan_IsStillRemoved()
+    {
+        const string newsUpdated = "Microsoft.BingNews_2.5.0.0_x64__8wekyb3d8bbwe";
+        var installed = new List<string> { BingNews, CandyCrush };
+        var service = CreateService(() => installed.Select(n => Record(n)).ToList());
+        var issue = await BloatIssueAsync(service);
+        installed[0] = newsUpdated; // the same app, a newer version: the user confirmed «Новости», not a version
+
+        var text = await issue.FixAsync!(CancellationToken.None);
+
+        Assert.Equal("Удалено приложений: 2 из 2.", text);
+        AssertSuccess(text);
+        Assert.Equal(new[] { $"remove:{newsUpdated}", $"remove:{CandyCrush}" }.OrderBy(c => c), Removes().OrderBy(c => c));
+    }
+
+    [Fact]
+    public async Task Bloat_Fix_AppsStillInstalledButChangedSinceTheScan_IsAFailure()
+    {
+        var service = CreateService(() => Records(BingNews));
+        var scanned = (await service.ScanStoreAppsAsync(CancellationToken.None)).Apps;
+        // The same package is still installed, but it can't be removed any more (Windows or another program needs it now).
+        var now = scanned.Select(a => new StoreApp
+            {
+                Name = a.Name, PackageFullName = a.PackageFullName, SignatureKind = a.SignatureKind, DisplayName = a.DisplayName,
+                Kind = StoreAppKind.Protected,
+            })
+            .ToList();
+
+        var text = await service.RemovePreinstalledAppsAsync(scanned, new StoreAppsResult(now, null), CancellationToken.None);
+
+        Assert.Equal("Предустановленные приложения изменились после проверки — ничего не изменено. Нажмите «Проверить снова».", text);
+        AssertFailureNotAdmin(text);
+        Assert.Empty(_calls);
+    }
+
+    [Fact]
     public async Task Bloat_Fix_StoreAppListNotReceived_ChangesNothing()
     {
         var service = CreateService(() => Records(BingNews, CandyCrush));
