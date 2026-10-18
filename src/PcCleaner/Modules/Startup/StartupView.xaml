@@ -417,8 +417,9 @@
                         <DataGrid.Columns>
                             <!-- Checkboxes for the bulk bar; the header one checks or clears all visible rows. Clicks go to the
                                  view-model, which decides the new state. A protected entry's box is disabled and never checked.
-                                 Width 36 = the box (18) and the 8 px cell padding on both sides. -->
-                            <DataGridTemplateColumn Width="36" CanUserSort="False" CanUserResize="False">
+                                 Width 36 = the box (18) and the 8 px cell padding on both sides. MinWidth keeps the DataGrid from
+                                 squeezing the column when the list is tight (it shrinks all fixed columns evenly, which cut the box). -->
+                            <DataGridTemplateColumn Width="36" MinWidth="36" CanUserSort="False" CanUserResize="False">
                                 <DataGridTemplateColumn.Header>
                                     <CheckBox IsThreeState="True" Width="18"
                                               IsChecked="{Binding DataContext.AllVisibleChecked, ElementName=Root, Mode=OneWay}"
@@ -492,7 +493,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Состояние" Width="122" SortMemberPath="StateSortKey">
+                            <DataGridTemplateColumn x:Name="StateColumn" Header="Состояние" Width="122" SortMemberPath="StateSortKey">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource StateBadge}" ToolTip="{Binding StateTooltip}">
