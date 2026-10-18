@@ -80,11 +80,13 @@ public partial class App : Application
 
         window.Show();
 
+        // Screenshot mode never starts the splash: it must not be visible or blur anything there. Right after an update the
+        // new version only cleans up; otherwise the splash looks for a newer version while the window is still blurred.
         if (ScreenshotDir is null)
         {
             _ = UpdatedFrom is not null
                 ? AppServices.Updates.CompleteUpdateAsync(UpdatedFrom)
-                : AppServices.Updates.CheckAsync(manual: false, CancellationToken.None);
+                : vm.Splash.RunAsync(CancellationToken.None);
         }
     }
 
