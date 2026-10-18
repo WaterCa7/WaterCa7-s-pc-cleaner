@@ -103,7 +103,7 @@ public partial class App : Application
         }
     }
 
-    private static void ParseArgs(string[] args)
+    internal static void ParseArgs(string[] args)
     {
         for (var i = 0; i < args.Length; i++)
         {
@@ -121,6 +121,8 @@ public partial class App : Application
                 case UpdateService.UpdatedFromArg when i + 1 < args.Length:
                     UpdatedFrom = args[++i];
                     break;
+                case StartupElevation.ElevatedRestartArg:
+                    break; // our own restart with rights: only StartupElevation.ShouldElevate looks at it
                 case "--size" when i + 1 < args.Length:
                     var parts = args[++i].ToLowerInvariant().Split('x');
                     if (parts.Length == 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h) && w > 200 && h > 200)

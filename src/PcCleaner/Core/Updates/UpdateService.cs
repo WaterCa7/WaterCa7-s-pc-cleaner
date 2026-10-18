@@ -183,6 +183,9 @@ public sealed class UpdateService : ObservableObject
                 i++;
                 continue;
             }
+            // Only the restart at startup uses it, and only for the copy it starts: the new version must not inherit it.
+            if (string.Equals(args[i], StartupElevation.ElevatedRestartArg, StringComparison.OrdinalIgnoreCase))
+                continue;
             result.Add(args[i]);
         }
         result.Add(UpdatedFromArg);

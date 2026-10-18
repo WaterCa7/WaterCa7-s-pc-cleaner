@@ -217,6 +217,11 @@ public sealed class UpdateServiceTests : IDisposable
             UpdateService.RestartArgs(new[] { UpdateService.UpdatedFromArg, "1.1.0", "--no-scan" }, new Version(1, 2, 0)));
 
     [Fact]
+    public void RestartArgs_DropTheElevatedRestartMarker()
+        => Assert.Equal(new[] { "--page", "Cleaner", "--no-scan", UpdateService.UpdatedFromArg, "1.2.0" },
+            UpdateService.RestartArgs(new[] { "--page", "Cleaner", "--Elevated-Restart", "--no-scan" }, new Version(1, 2, 0)));
+
+    [Fact]
     public void Settings_AutoUpdateIsOnByDefault_AndSurvivesSaving()
     {
         var json = System.Text.Json.JsonSerializer.Serialize(new AppSettings { AutoUpdate = false, LastUpdateCheckUtc = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc) });

@@ -28,6 +28,9 @@ public class StartupElevationTests
     [InlineData(false, true, false, "--updated-from 1.1.0", false)]            // the updater restarted us: no second question
     [InlineData(false, true, false, "--page Cleaner --Updated-From 1.1.0", false)]
     [InlineData(true, false, true, "--updated-from 1.1.0", false)]
+    [InlineData(false, true, false, "--elevated-restart", false)]              // our own restart did not give the rights: no loop
+    [InlineData(false, true, false, "--page Cleaner --ELEVATED-RESTART", false)]
+    [InlineData(true, true, false, "--elevated-restart", false)]               // the restart worked
     public void ShouldElevate(bool isElevated, bool runAsAdmin, bool screenshotMode, string args, bool expected)
     {
         var list = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -41,6 +44,44 @@ public class StartupElevationTests
         // "--page --elevation-declined" is odd, but the flag is looked for as a whole argument, nothing fancier.
         Assert.False(StartupElevation.ShouldElevate(false, true, false, new[] { "--page", "--elevation-declined" }));
         Assert.True(StartupElevation.ShouldElevate(false, true, false, new[] { "--page", "elevation-declined" }));
+    }
+
+    private const string LoopGuardWarning = "Перезапуск с правами администратора не дал прав — работаем без них";
+
+    private static int LoopGuardWarnings()
+        => Log.Entries.ToList().Count(e => e.Level == LogLevel.Warning && e.Message == LoopGuardWarning);
+
+    [Fact]
+    public void ShouldElevate_TheRestartStillWithoutRights_StopsAndSaysSoInTheJournal()
+    {
+        var before = LoopGuardWarnings();
+
+        Assert.False(StartupElevation.ShouldElevate(false, true, false, new[] { "--page", "Cleaner", "--elevated-restart" }));
+
+        Assert.Equal(before + 1, LoopGuardWarnings());
+    }
+
+    [Theory]
+    [InlineData(true, true, false)]   // the restart worked: nothing to complain about
+    [InlineData(false, false, false)] // the user switched it off meanwhile
+    [InlineData(false, true, true)]   // a screenshot run
+    public void ShouldElevate_TheMarkerIsOnlyAProblemWhenElevationWasWanted(bool isElevated, bool runAsAdmin, bool screenshotMode)
+    {
+        var before = LoopGuardWarnings();
+
+        Assert.False(StartupElevation.ShouldElevate(isElevated, runAsAdmin, screenshotMode, new[] { "--elevated-restart" }));
+
+        Assert.Equal(before, LoopGuardWarnings());
+    }
+
+    [Fact]
+    public void ShouldElevate_NoMarker_NoWarning()
+    {
+        var before = LoopGuardWarnings();
+
+        Assert.True(StartupElevation.ShouldElevate(false, true, false, new[] { "--page", "Cleaner" }));
+
+        Assert.Equal(before, LoopGuardWarnings());
     }
 
     // ----- TryRelaunchElevated -----
@@ -77,18 +118,48 @@ public class StartupElevationTests
         Assert.Equal(exe, info.FileName);
         Assert.Equal("runas", info.Verb);
         Assert.True(info.UseShellExecute); // a verb needs the shell
-        Assert.Equal(args, info.ArgumentList);
+        Assert.Equal(args.Append("--elevated-restart"), info.ArgumentList); // the same arguments, then the loop guard's marker
         Assert.Equal(AppContext.BaseDirectory, info.WorkingDirectory);
     }
 
     [Fact]
-    public void Relaunch_WithoutArguments_StartsWithNone()
+    public void Relaunch_WithoutArguments_StartsWithOnlyTheMarker()
     {
         var starts = new Starts();
 
         Assert.True(StartupElevation.TryRelaunchElevated(UniqueExe(), Array.Empty<string>(), starts.Start));
 
-        Assert.Empty(Assert.Single(starts.Infos).ArgumentList);
+        Assert.Equal(new[] { "--elevated-restart" }, Assert.Single(starts.Infos).ArgumentList);
+    }
+
+    [Fact]
+    public void Relaunch_TheRestartedCopyDoesNotRelaunchAgain()
+    {
+        var starts = new Starts();
+        var args = new[] { "--page", "Cleaner" };
+
+        StartupElevation.TryRelaunchElevated(UniqueExe(), args, starts.Start);
+
+        // What the restarted copy sees if Windows gave it no rights after all: it must stay as it is.
+        Assert.False(StartupElevation.ShouldElevate(false, true, false, Assert.Single(starts.Infos).ArgumentList.ToList()));
+    }
+
+    [Fact]
+    public void ParseArgs_IgnoresTheMarker_AndStillReadsTheOtherArguments()
+    {
+        // The restarted copy gets "<original arguments> --elevated-restart"; the command line parser must not trip over it.
+        App.ParseArgs(new[] { "--page", "Cleaner", "--elevated-restart" });
+
+        Assert.Equal(new[] { "Cleaner" }, App.ScreenshotPages);
+        Assert.Null(App.ScreenshotDir);
+        Assert.Null(App.UpdatedFrom);
+    }
+
+    [Fact]
+    public void AdminRestartButtons_NeverCarryTheMarker()
+    {
+        // Admin.RestartElevated (the buttons, RequireElevation) starts the exe with no arguments at all.
+        Assert.Empty(Admin.ElevatedStartInfo(UniqueExe()).ArgumentList);
     }
 
     [Fact]
@@ -101,7 +172,7 @@ public class StartupElevationTests
         var info = Assert.Single(starts.Infos);
         Assert.Equal(Environment.ProcessPath, info.FileName);
         Assert.Equal("runas", info.Verb);
-        Assert.Equal(new[] { "--page", "Cleaner" }, info.ArgumentList);
+        Assert.Equal(new[] { "--page", "Cleaner", "--elevated-restart" }, info.ArgumentList);
     }
 
     [Fact]

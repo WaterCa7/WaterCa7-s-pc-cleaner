@@ -15,20 +15,35 @@ public static class StartupElevation
     public const string DeclinedArg = "--elevation-declined";
 
     /// <summary>
-    /// False when the restart must not happen: already elevated, switched off, a --screenshots verification run, the user
-    /// has already said no (<see cref="DeclinedArg"/>), or the updater has just started this version
+    /// Added by <see cref="TryRelaunchElevated(IReadOnlyList{string}, Func{ProcessStartInfo, bool})"/> to the arguments of
+    /// the restarted copy. If that copy still has no rights (UAC switched off, an odd token, a policy) it sees the marker
+    /// and works without them instead of restarting itself forever. Never passed on: not to the update restart
+    /// (<see cref="UpdateService.RestartArgs"/>), not to the restart buttons (<see cref="Admin.ElevatedStartInfo"/>).
+    /// </summary>
+    public const string ElevatedRestartArg = "--elevated-restart";
+
+    /// <summary>
+    /// False when the restart must not happen: already elevated, switched off, a --screenshots verification run, the
+    /// restart has already been made once (<see cref="ElevatedRestartArg"/> and still no rights: logged), the user has
+    /// already said no (<see cref="DeclinedArg"/>), or the updater has just started this version
     /// (<see cref="UpdateService.UpdatedFromArg"/>: an elevated updater starts it elevated, a limited one was declined).
     /// </summary>
     public static bool ShouldElevate(bool isElevated, bool runAsAdmin, bool screenshotMode, IReadOnlyList<string> args)
     {
         if (isElevated || !runAsAdmin || screenshotMode)
             return false;
+        if (args.Any(a => string.Equals(a, ElevatedRestartArg, StringComparison.OrdinalIgnoreCase)))
+        {
+            Log.Warn("Перезапуск с правами администратора не дал прав — работаем без них");
+            return false;
+        }
         return !args.Any(a => string.Equals(a, DeclinedArg, StringComparison.OrdinalIgnoreCase) ||
                               string.Equals(a, UpdateService.UpdatedFromArg, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// Starts this exe again with the "runas" verb and the same arguments. True = the elevated copy is starting and this
+    /// Starts this exe again with the "runas" verb, the same arguments and <see cref="ElevatedRestartArg"/> after them.
+    /// True = the elevated copy is starting and this
     /// process must exit; false = the user said no in the Windows prompt or it could not be started (logged): carry on
     /// with limited rights.
     /// </summary>
@@ -44,7 +59,7 @@ public static class StartupElevation
         }
         try
         {
-            if (start(Admin.ElevatedStartInfo(exePath, args)))
+            if (start(Admin.ElevatedStartInfo(exePath, args.Append(ElevatedRestartArg))))
                 return true;
             Log.Warn($"Не удалось перезапустить «{exePath}» с правами администратора: программа не запустилась");
         }
