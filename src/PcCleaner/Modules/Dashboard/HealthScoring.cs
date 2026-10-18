@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using PcCleaner.Core;
 using PcCleaner.Core.Localization;
 
@@ -235,60 +234,23 @@ public static class HealthScoring
     /// <summary>
     /// FixAsync has no success flag: modules return a message. Some messages mean "nothing was changed"
     /// (e.g. admin rights are required) or "the problem is still there" — such a result must not mark the issue as fixed.
-    /// When in doubt the result counts as NOT fixed: claiming that a firewall or antivirus is on while it is still off
-    /// is far worse than asking the user to check again.
+    /// When in doubt the result counts as NOT fixed. Judged in the language of the UI (<see cref="FixResultClassifier"/>):
+    /// Russian by the Russian rules, English also by the failure texts of en.json.
     /// </summary>
     public static bool LooksLikeFailure(string? message)
     {
-        if (string.IsNullOrWhiteSpace(message))
-            return false;
-        var m = message.Trim().ToLowerInvariant();
-        // l10n:data-begin — Russian words matched in the messages of the modules, never shown
-        return LooksLikeAdminRequired(m)
-               || StillBroken.IsMatch(m)
-               || m.StartsWith("не удалось")
-               || m.StartsWith("ошибка")
-               || m.StartsWith("отменено")
-               || m.Contains("ничего не изменено")
-               || m.Contains("ничего не было изменено")
-               || m.Contains("ничего не изменилось")
-               || m.Contains("ничего не сделано")
-               || m.Contains("ничего не удалено")
-               // Only the cancellation phrases: a bare "отменено" also appears in successful tweak messages
-               // ("Автообновление драйверов отменено") which must still count as fixed.
-               || m.Contains("исправление отменено")
-               || m.Contains("действие отменено")
-               || m.Contains("операция отменена");
-        // l10n:data-end
+        var language = T.Language;
+        return FixResultClassifier.IsFailure(message, language, CatalogOf(language));
     }
 
     /// <summary>The fix result says administrator rights are required ("Нужны права администратора", "Недостаточно прав"...).</summary>
     public static bool LooksLikeAdminRequired(string? message)
-        => !string.IsNullOrWhiteSpace(message) && AdminRequired.IsMatch(message);
+    {
+        var language = T.Language;
+        return FixResultClassifier.NeedsAdmin(message, language, CatalogOf(language));
+    }
 
-    // Results that are returned normally (not "Не удалось …" at the start) but mean the problem is still there, e.g.
-    //   "Команда выполнена, но брандмауэр всё ещё выключен для: …", "Windows не дала включить защиту …",
-    //   "Защиту не удалось включить: …", "Раздел реестра с настройками UAC не найден.",
-    //   "Недоступно в тестовом окружении.", "Эту рекомендацию нельзя применить автоматически.",
-    //   "… (очистка прервана)." (stopped half-way), and partial bulk results that list failures:
-    //   "Удалено 2 записи … Не удалось: 3." / "… Не удалось удалить (1): …".
-    // Deliberately NOT matched: "Не удалось удалить 3 занятых файла" (a normal cleaning result) and
-    // "Точку восстановления создать не удалось" (a side note of a successful fix).
-    // l10n:data-begin — Russian words matched in the messages of the modules, never shown
-    private static readonly Regex StillBroken = new(
-        @"\b(?:всё|все)\s+(?:ещё|еще)\s+(?:вы|от)ключ|\bпо-прежнему\s+(?:вы|от)ключ" +
-        @"|\bне\s+дал[аио]?\b" +
-        @"|\bне\s+удалось\s+(?:включить|выключить|отключить)\b" +
-        @"|\bне\s+найден[аы]?\b" +
-        @"|\bв\s+тестовом\s+окружении\b" +
-        @"|\bнельзя\s+применить\b" +
-        @"|\bпрерван[аоы]?\b" +
-        @"|\bне\s+удалось\s*:\s*\d|\bне\s+удалось\s+удалить\s*\(\s*\d",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    // \b keeps "нет правил" / "недостаточно правильно" from matching.
-    private static readonly Regex AdminRequired = new(
-        @"прав(а|ами)?\s+админ|от\s+имени\s+админ|недостаточно\s+прав\b|\bнет\s+прав\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    // l10n:data-end
+    /// <summary>en.json in an English run (a Russian run never reads it).</summary>
+    private static IReadOnlyDictionary<string, string>? CatalogOf(string language)
+        => language == T.English ? T.EnglishTexts : null;
 }

@@ -41,6 +41,7 @@ public class LocalizationCatalogTests
         "Modules/Dashboard/DashboardView.xaml",
         "Modules/Dashboard/DashboardView.xaml.cs",
         "Modules/Dashboard/DashboardViewModel.cs",
+        "Modules/Dashboard/FixResultClassifier.cs",
         "Modules/Dashboard/HealthGauge.cs",
         "Modules/Dashboard/HealthScoring.cs",
         "Modules/Dashboard/ReportModels.cs",
