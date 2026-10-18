@@ -8,15 +8,30 @@ namespace PcCleaner.Tests.Core;
 
 /// <summary>
 /// Reads the texts of the UI from the source and checks en.json against them (see LocalizationCatalogTests).
-/// Texts: in C# T._("…"), T.F("…", …), T.Plural(n, "one", "few", "many") and Format.Plural/Format.Count (they go through
-/// T.Plural; "few" is Russian only), in XAML {loc:T '…'}. A text of an enforced file must be a string literal or a const
-/// string and have an en.json entry. en.json: one JSON object of strings, keys sorted (ordinal) without repeats, English
-/// values (no Cyrillic) with the same {0} placeholders as the key, and no entry that no text of the source uses.
+/// Wrapped texts — in C# T._("…"), T.F("…", …), T.Plural(n, "one", "few", "many"), in XAML {loc:T '…'} — need an en.json
+/// entry in every file. In the enforced files also the words of Format.Plural/Format.Count (they go through T.Plural), and
+/// every text argument of T and Format must be a string literal or a const string, except in the pass-through files.
+/// "few" is Russian only. en.json: one JSON object of strings, keys sorted (ordinal) without repeats, English values
+/// (no Cyrillic) with the same {0} placeholders as the key, and no entry that no text of the source uses.
 /// Lines starting with // and XAML comments are skipped.
 /// </summary>
 internal static class LocalizationCatalog
 {
-    private sealed record SourceText(string File, int Line, string Text, bool IsFormat);
+    /// <param name="IsImplicit">A word of Format.Plural/Format.Count: needs its entry only in an enforced file.</param>
+    private sealed record SourceText(string File, int Line, string Text, bool IsFormat, bool IsImplicit);
+
+    /// <summary>Where a problem of the source counts.</summary>
+    private enum Rule
+    {
+        /// <summary>In every file: a wrapped text that cannot be read.</summary>
+        Always,
+
+        /// <summary>In enforced files: a Format.Plural/Format.Count call that cannot be read.</summary>
+        Enforced,
+
+        /// <summary>In enforced files except the pass-through ones: a text argument that is not a literal or a const.</summary>
+        Literal,
+    }
 
     private static readonly Regex Call = new(
         @"\b(?:T\s*\.\s*(?<method>_|F|Plural)|Format\s*\.\s*(?<method>Plural|Count))\s*\(", RegexOptions.Compiled);
@@ -39,9 +54,14 @@ internal static class LocalizationCatalog
 
     /// <param name="files">Source files: path relative to src/PcCleaner ("/" separators) and content.</param>
     /// <param name="catalogJson">The text of en.json.</param>
-    /// <param name="enforced">Files and folders (ending with "/") whose texts must be translated.</param>
+    /// <param name="enforced">
+    /// Files and folders (ending with "/") that are fully translated: Format.Plural/Format.Count words included, and only
+    /// literal or const text arguments.
+    /// </param>
+    /// <param name="passThrough">Files (or folders) that may pass a variable text on, even inside an enforced folder.</param>
     /// <returns>One line per problem; empty when en.json is complete.</returns>
-    public static List<string> Check(IEnumerable<(string Path, string Content)> files, string catalogJson, IReadOnlyCollection<string> enforced)
+    public static List<string> Check(IEnumerable<(string Path, string Content)> files, string catalogJson, IReadOnlyCollection<string> enforced,
+        IReadOnlyCollection<string>? passThrough = null)
     {
         var problems = new List<string>();
         var catalog = ReadCatalog(catalogJson, problems);
@@ -52,7 +72,7 @@ internal static class LocalizationCatalog
 
         foreach (var (path, content) in sources)
         {
-            var fileProblems = new List<string>();
+            var fileProblems = new List<(Rule Rule, string Problem)>();
             var texts = path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase)
                 ? FromXaml(path, content, fileProblems)
                 : FromCSharp(path, content, consts, fileProblems);
@@ -62,11 +82,15 @@ internal static class LocalizationCatalog
                 if (text.IsFormat)
                     formats.Add(text.Text);
             }
-            if (!IsEnforced(path, enforced))
-                continue;
 
-            problems.AddRange(fileProblems);
-            foreach (var text in texts)
+            var isEnforced = IsListed(path, enforced);
+            var isPassThrough = IsListed(path, passThrough ?? Array.Empty<string>());
+            foreach (var (rule, problem) in fileProblems)
+            {
+                if (rule == Rule.Always || (isEnforced && (rule == Rule.Enforced || !isPassThrough)))
+                    problems.Add(problem);
+            }
+            foreach (var text in texts.Where(t => !t.IsImplicit || isEnforced))
             {
                 if (text.IsFormat && !IsValidFormat(text.Text, ArgumentCount(text.Text)))
                     problems.Add($"{text.File}:{text.Line}: «{text.Text}» is not a valid format string");
@@ -87,8 +111,9 @@ internal static class LocalizationCatalog
         return problems;
     }
 
-    private static bool IsEnforced(string path, IReadOnlyCollection<string> enforced)
-        => enforced.Any(e => e.EndsWith('/')
+    /// <summary>The path is one of the files or inside one of the folders (ending with "/") of the list.</summary>
+    private static bool IsListed(string path, IReadOnlyCollection<string> list)
+        => list.Any(e => e.EndsWith('/')
             ? path.StartsWith(e, StringComparison.OrdinalIgnoreCase)
             : string.Equals(path, e, StringComparison.OrdinalIgnoreCase));
 
@@ -166,7 +191,7 @@ internal static class LocalizationCatalog
 
     // ----- C# -----
 
-    private static List<SourceText> FromCSharp(string file, string content, IReadOnlyDictionary<string, string?> consts, List<string> problems)
+    private static List<SourceText> FromCSharp(string file, string content, IReadOnlyDictionary<string, string?> consts, List<(Rule, string)> problems)
     {
         var code = WithoutCommentLines(content);
         var texts = new List<SourceText>();
@@ -174,10 +199,11 @@ internal static class LocalizationCatalog
         {
             var line = LineOf(code, call.Index);
             var name = Regex.Replace(call.Value, @"[\s(]", "");
+            var isImplicit = name.StartsWith("Format.", StringComparison.Ordinal);
             var args = Arguments(code, call.Index + call.Length);
             if (args is null)
             {
-                problems.Add($"{file}:{line}: the arguments of {name} could not be read");
+                problems.Add((isImplicit ? Rule.Enforced : Rule.Always, $"{file}:{line}: the arguments of {name} could not be read"));
                 continue;
             }
             var method = call.Groups["method"].Value;
@@ -186,9 +212,9 @@ internal static class LocalizationCatalog
                 var arg = position < args.Count ? args[position] : "";
                 var text = Literal(arg) ?? Const(arg, consts);
                 if (text is null)
-                    problems.Add($"{file}:{line}: {name} needs a string literal or a const string, not «{arg}»");
+                    problems.Add((Rule.Literal, $"{file}:{line}: {name} needs a string literal or a const string, not «{arg}»"));
                 else
-                    texts.Add(new SourceText(file, line, text, IsFormat: method == "F"));
+                    texts.Add(new SourceText(file, line, text, IsFormat: method == "F", IsImplicit: isImplicit));
             }
         }
         return texts;
@@ -448,7 +474,7 @@ internal static class LocalizationCatalog
 
     // ----- XAML -----
 
-    private static List<SourceText> FromXaml(string file, string content, List<string> problems)
+    private static List<SourceText> FromXaml(string file, string content, List<(Rule, string)> problems)
     {
         // Comments become as many empty lines; entities (&amp; &quot; …) are decoded as the XAML reader does.
         var xaml = WebUtility.HtmlDecode(XamlComment.Replace(content, m => new string('\n', m.Value.Count(c => c == '\n'))));
@@ -459,10 +485,10 @@ internal static class LocalizationCatalog
             var quoted = LocQuoted.Match(xaml, start.Index);
             if (!quoted.Success)
             {
-                problems.Add($"{file}:{line}: write {{loc:T '…'}} with the text in quotes");
+                problems.Add((Rule.Always, $"{file}:{line}: write {{loc:T '…'}} with the text in quotes"));
                 continue;
             }
-            texts.Add(new SourceText(file, line, Regex.Replace(quoted.Groups["text"].Value, @"\\(.)", "$1"), IsFormat: false));
+            texts.Add(new SourceText(file, line, Regex.Replace(quoted.Groups["text"].Value, @"\\(.)", "$1"), IsFormat: false, IsImplicit: false));
         }
         return texts;
     }

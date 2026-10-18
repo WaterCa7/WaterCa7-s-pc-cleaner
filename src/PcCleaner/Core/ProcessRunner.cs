@@ -39,6 +39,29 @@ public static class ProcessRunner
         }
     }
 
+    [DllImport("kernel32.dll")]
+    private static extern uint GetACP();
+
+    /// <summary>
+    /// ANSI code page of the system ("language for non-Unicode programs", 1251 on Russian Windows), for files written by
+    /// non-Unicode programs. Not CultureInfo.CurrentCulture's: the start sets the culture to the UI language.
+    /// Latin-1 if the code page is not available.
+    /// </summary>
+    public static Encoding AnsiEncoding
+    {
+        get
+        {
+            try
+            {
+                return Encoding.GetEncoding((int)GetACP());
+            }
+            catch
+            {
+                return Encoding.Latin1;
+            }
+        }
+    }
+
     /// <summary>
     /// "reg.exe" -> "C:\Windows\System32\reg.exe". CreateProcess looks in the application's own folder first,
     /// so a bare name would let a planted reg.exe next to our exe (e.g. in Downloads) run with our — possibly

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -223,15 +222,8 @@ public static class HostsFile
         }
         catch (DecoderFallbackException)
         {
-            Encoding ansi;
-            try
-            {
-                ansi = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
-            }
-            catch
-            {
-                ansi = Encoding.Latin1;
-            }
+            // The system code page, not the UI language's: the English UI on Russian Windows still reads 1251.
+            var ansi = ProcessRunner.AnsiEncoding;
             return (ansi.GetString(bytes), ansi, 0);
         }
     }

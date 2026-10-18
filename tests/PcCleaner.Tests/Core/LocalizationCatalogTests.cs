@@ -5,39 +5,62 @@ using Xunit;
 namespace PcCleaner.Tests.Core;
 
 /// <summary>
-/// en.json is complete for the translated parts of the program: every T._("…"), T.F("…", …), T.Plural(n, "…", "…", "…")
-/// (and Format.Plural/Format.Count, which go through T.Plural) and {loc:T '…'} of the <see cref="Enforced"/> files has an
-/// entry with the same {0} placeholders, and en.json has no entry that nothing uses. See <see cref="LocalizationCatalog"/>.
+/// en.json is complete: every wrapped text — T._("…"), T.F("…", …), T.Plural(n, "…", "…", "…"), {loc:T '…'} — of any file
+/// has an entry with the same {0} placeholders; in the <see cref="Enforced"/> files also the words of Format.Plural and
+/// Format.Count (they go through T.Plural) and every text argument is a literal or a const; and en.json has no entry that
+/// nothing uses. See <see cref="LocalizationCatalog"/>.
 /// </summary>
 public class LocalizationCatalogTests
 {
     /// <summary>
-    /// Files and folders under src/PcCleaner whose texts must all be in en.json: "/" separators, a folder ends with "/",
-    /// e.g. "Modules/Settings/" or "MainWindow.xaml". Each translation task adds the files it wraps. Texts of other files may
-    /// stay untranslated (they show in Russian). Core/Localization/ and Core/Format.cs pass the caller's text on
-    /// (T._(Text), T.Plural(n, one, few, many)) and are not listed: they have no texts of their own.
+    /// Files and folders under src/PcCleaner that are fully translated: "/" separators, a folder ends with "/", e.g.
+    /// "Modules/Settings/" or "MainWindow.xaml". There, the words of Format.Plural/Format.Count need en.json entries too and
+    /// T._/T.F/T.Plural take only literals or consts (except the <see cref="PassThrough"/> files). Each translation task adds
+    /// the files it wraps. Wrapped texts (T._("…"), {loc:T '…'}) need their entry in every file, listed or not.
     /// </summary>
     internal static readonly string[] Enforced =
     {
     };
 
+    /// <summary>
+    /// Files that pass the caller's text on (T._(Text), T.Plural(n, one, few, many), Format.Count(n, forms[0], …)): they
+    /// may give T and Format a variable even inside an enforced folder.
+    /// </summary>
+    internal static readonly string[] PassThrough =
+    {
+        "Core/Format.cs",
+        "Core/Localization/LocExtension.cs",
+        "Modules/Network/NetworkUi.cs",
+    };
+
     [Fact]
     public void EveryTextOfTheEnforcedFiles_IsInEnJson_AndEnJsonHasNoStaleEntries()
     {
-        var problems = LocalizationCatalog.Check(SourceFiles(), File.ReadAllText(EnJsonPath()), Enforced);
+        var problems = LocalizationCatalog.Check(SourceFiles(), File.ReadAllText(EnJsonPath()), Enforced, PassThrough);
 
         Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
     }
 
     [Fact]
-    public void EnforcedPaths_Exist()
+    public void EnforcedAndPassThroughPaths_Exist()
     {
         var root = SourceRoot();
-        foreach (var path in Enforced)
+        foreach (var path in Enforced.Concat(PassThrough))
         {
             var full = Path.Combine(root, path.TrimEnd('/').Replace('/', Path.DirectorySeparatorChar));
             Assert.True(path.EndsWith('/') ? Directory.Exists(full) : File.Exists(full), $"{path} is not in src/PcCleaner");
         }
+    }
+
+    [Fact]
+    public void ThePassThroughFiles_PassWhenTheirFoldersAreEnforced()
+    {
+        var enforced = new[] { "Core/Localization/", "Core/Format.cs", "Modules/Network/NetworkUi.cs" };
+
+        var problems = LocalizationCatalog.Check(SourceFiles(), File.ReadAllText(EnJsonPath()), enforced, PassThrough);
+
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
+        Assert.NotEmpty(LocalizationCatalog.Check(SourceFiles(), File.ReadAllText(EnJsonPath()), enforced)); // the list is what lets them pass
     }
 
     [Fact]
@@ -107,16 +130,77 @@ public class LocalizationCatalogTests
     }
 
     [Fact]
-    public void TextsOutsideTheEnforcedFiles_MayStayUntranslated()
-        => Assert.Empty(Check("{}", ("Other/A.cs", "T._(\"Проверить снова\");"), ("Other/A.xaml", "<Button Content=\"{loc:T 'Сохранить'}\" />")));
+    public void WrappedTexts_NeedAnEntry_InEveryFile()
+    {
+        var cs = """
+            T._("Один");
+            T.F("Два {0}", x);
+            T.Plural(n, "три", "трёх", "трёх-много");
+            """;
+
+        var problems = Check("{}", ("Other/A.cs", cs), ("Other/B.xaml", "<TextBlock Text=\"{loc:T 'Шесть'}\" />"));
+
+        foreach (var text in new[] { "Один", "Два {0}", "три", "трёх-много", "Шесть" })
+            Assert.Contains(problems, p => p.Contains($"«{text}»"));
+        Assert.Equal(5, problems.Count);
+    }
+
+    [Fact]
+    public void AWrappedFormatString_IsChecked_InEveryFile()
+    {
+        Assert.Contains("format", Assert.Single(Check("{}", ("Other/A.cs", "T.F(\"Найдено {0\", n);"))));
+        Assert.Contains("placeholder", Assert.Single(Check("""{ "Найдено {0}": "Found" }""", ("Other/A.cs", "T.F(\"Найдено {0}\", n);"))));
+    }
+
+    [Fact]
+    public void AnUnquotedLocT_IsReported_InEveryFile()
+        => Assert.Contains("{loc:T '", Assert.Single(Check("{}", ("Other/A.xaml", "<TextBlock Text=\"{loc:T Сохранить}\" />"))));
+
+    [Fact]
+    public void FormatCountWords_OutsideTheEnforcedFiles_MayStayUntranslated()
+        => Assert.Empty(Check("{}", ("Other/A.cs", "Format.Count(n, \"файл\", \"файла\", \"файлов\");\nFormat.Plural(n, \"день\", \"дня\", \"дней\");")));
+
+    [Fact]
+    public void ANonLiteralText_OutsideTheEnforcedFiles_IsAllowed()
+        => Assert.Empty(Check("{}", ("Other/A.cs", "T._(name);\nT.Plural(n, one, few, many);\nFormat.Count(n, forms[0], forms[1], forms[2]);")));
 
     [Fact]
     public void AnEnforcedFile_CanBeNamedExactly()
     {
-        var files = new[] { ("Shell/Main.cs", "T._(\"Да\");"), ("Shell/Other.cs", "T._(\"Нет\");") };
+        var files = new[] { ("Shell/Main.cs", "Format.Count(n, \"день\", \"дня\", \"дней\");"), ("Shell/Other.cs", "Format.Count(n, \"год\", \"года\", \"лет\");") };
 
-        var problem = Assert.Single(LocalizationCatalog.Check(files, "{}", new[] { "Shell/Main.cs" }));
-        Assert.Contains("«Да»", problem);
+        var problems = LocalizationCatalog.Check(files, "{}", new[] { "Shell/Main.cs" });
+
+        Assert.Equal(2, problems.Count);
+        Assert.All(problems, p => Assert.Contains("Shell/Main.cs", p));
+    }
+
+    [Fact]
+    public void APassThroughFile_MayUseVariables_InsideAnEnforcedFolder()
+    {
+        var files = new[]
+        {
+            ("Core/Format.cs", "public static string Plural(long n, string one, string few, string many) => T.Plural(n, one, few, many);"),
+            ("Core/Ui.cs", "Status = T._(text);"),
+            ("Core/Words.cs", "Format.Count(n, \"день\", \"дня\", \"дней\");"),
+        };
+
+        var problems = LocalizationCatalog.Check(files, """{ "день": "day", "дней": "days" }""", new[] { "Core/" }, new[] { "Core/Format.cs" });
+
+        var problem = Assert.Single(problems); // Format.cs passes, Words.cs is translated, Ui.cs is not a pass-through
+        Assert.Contains("Core/Ui.cs:1", problem);
+        Assert.Contains("literal", problem);
+    }
+
+    [Fact]
+    public void APassThroughFile_StillNeedsItsWrappedTexts_AndItsFormatCountWords()
+    {
+        var files = new[] { ("Core/Format.cs", "T.Plural(n, one, few, many);\nT._(\"Да\");\nFormat.Count(n, \"день\", \"дня\", \"дней\");") };
+
+        var problems = LocalizationCatalog.Check(files, "{}", new[] { "Core/" }, new[] { "Core/Format.cs" });
+
+        Assert.Equal(3, problems.Count); // «Да», «день», «дней»
+        Assert.DoesNotContain(problems, p => p.Contains("literal"));
     }
 
     [Fact]

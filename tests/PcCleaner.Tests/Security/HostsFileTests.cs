@@ -1,9 +1,51 @@
+using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using PcCleaner.Modules.Security;
+using PcCleaner.Tests.Core;
 using Xunit;
 
 namespace PcCleaner.Tests.Security;
+
+/// <summary>
+/// A hosts file that is not UTF-8 is read and written in the system ANSI code page ("language for non-Unicode programs"),
+/// whatever the UI language: the start sets the culture to the UI language, so the English UI on Russian Windows must still
+/// read 1251.
+/// </summary>
+[Collection(LanguageSequentialCollection.Name)]
+public class HostsFileAnsiCodePageTests
+{
+    [DllImport("kernel32.dll")]
+    private static extern uint GetACP();
+
+    [Fact]
+    public void Decode_AnsiFallback_IsTheSystemCodePage_WhateverTheUiLanguage()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var bytes = Encoding.GetEncoding(1251).GetBytes("# Мой файл\r\n10.0.0.5 nas # мой NAS\r\n"); // not valid UTF-8
+        var saved = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ru-RU");
+            var russian = HostsFile.Decode(bytes).Encoding.CodePage;
+
+            int english;
+            using (TestLanguage.English())
+            {
+                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+                english = HostsFile.Decode(bytes).Encoding.CodePage;
+            }
+
+            Assert.Equal((int)GetACP(), russian);
+            Assert.Equal((int)GetACP(), english);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = saved;
+        }
+    }
+}
 
 public class HostsFileTests
 {
