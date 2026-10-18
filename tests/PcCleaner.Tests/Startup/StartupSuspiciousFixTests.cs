@@ -73,7 +73,7 @@ public class StartupSuspiciousFixTests
     }
 
     [Fact]
-    public async Task Fix_ForAnEntryThatIsGone_ChangesNothing()
+    public async Task Fix_ForAnEntryThatIsGone_HasNothingToDo_AndCountsAsFixed()
     {
         using var sandbox = new StartupSandbox();
         var (issue, _) = SuspiciousEntry(sandbox, @"HKCU\Run", "Evil");
@@ -82,8 +82,8 @@ public class StartupSuspiciousFixTests
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        Assert.Equal("Запись уже удалена — ничего не изменено.", text);
-        Assert.True(HealthScoring.LooksLikeFailure(text));
+        Assert.Equal("Запись уже удалена из автозагрузки — делать ничего не нужно.", text);
+        Assert.False(HealthScoring.LooksLikeFailure(text)); // gone is what the fix wanted: the row is marked fixed
         Assert.Null(sandbox.GetValue(ApprovedRun, "Evil"));
     }
 
@@ -96,9 +96,9 @@ public class StartupSuspiciousFixTests
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        Assert.Contains("ничего не изменено", text);
-        Assert.True(HealthScoring.LooksLikeFailure(text));
-        Assert.Null(sandbox.GetValue(ApprovedRun, "Evil"));
+        Assert.Equal("Запись «Evil» больше не считается подозрительной — делать ничего не нужно.", text);
+        Assert.False(HealthScoring.LooksLikeFailure(text)); // no longer a problem: nothing to do
+        Assert.Null(sandbox.GetValue(ApprovedRun, "Evil")); // and nothing was done
     }
 
     [Fact]

@@ -110,14 +110,14 @@ public class DiskDashboardFixTests
     }
 
     [Fact]
-    public async Task Fix_WhenEveryFileIsGone_ChangesNothing()
+    public async Task Fix_WhenEveryFileIsGone_HasNothingToDo()
     {
         var issue = DownloadsIssue(Service(), Ghost("a.iso"), Ghost("b.iso"));
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        Assert.Equal("Файлы уже удалены — ничего не изменено.", text);
-        Assert.True(HealthScoring.LooksLikeFailure(text));
+        Assert.Equal("Файлы уже удалены — делать ничего не нужно.", text);
+        Assert.False(HealthScoring.LooksLikeFailure(text)); // gone is what the fix wanted: the row is marked fixed
     }
 
     [Fact]

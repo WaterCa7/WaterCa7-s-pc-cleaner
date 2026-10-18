@@ -362,15 +362,15 @@ public sealed partial class StartupService : IHealthContributor
     /// <summary>
     /// Dashboard fix of a suspicious entry: disables it, or removes it (with a backup) when it is a RunOnce entry, which cannot
     /// be disabled. The entries are read again first: the scan may be hours old, and an entry that is gone, that the user trusted
-    /// since or that no longer looks suspicious is left alone.
+    /// since or that no longer looks suspicious is left alone — the problem is gone, so the text reads as done, not as a failure.
     /// </summary>
     internal async Task<string> FixSuspiciousAsync(StartupItem scanned, CancellationToken ct)
     {
         var current = (await ScanAsync(null, ct)).FirstOrDefault(i => i.Id == scanned.Id);
         if (current is null)
-            return "Запись уже удалена — ничего не изменено.";
+            return "Запись уже удалена из автозагрузки — делать ничего не нужно.";
         if (!current.IsSuspicious)
-            return $"Запись «{current.DisplayName}» больше не считается подозрительной — ничего не изменено.";
+            return $"Запись «{current.DisplayName}» больше не считается подозрительной — делать ничего не нужно.";
 
         var removed = current.IsRunOnce;
         var result = removed ? await DeleteAsync(current, ct) : await SetEnabledAsync(current, false, ct);

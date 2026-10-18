@@ -757,10 +757,12 @@ public sealed class DiskService : IHealthContributor
                     break;
             }
         }
+        // Files that are all gone leave nothing to do (done, not a failure); files changed since the scan are left alone, and
+        // that is a failure: the problem the user confirmed may still be there.
         if (unchanged.Count == 0)
             return changed > 0
                 ? "Файлы изменились после проверки — ничего не изменено. Откройте «Диски» → «Советы по месту» и посмотрите список заново."
-                : "Файлы уже удалены — ничего не изменено.";
+                : "Файлы уже удалены — делать ничего не нужно.";
 
         // Like the Disk page: the shell moves files to the Recycle Bin on an STA thread.
         var result = await SystemTools.RunSta(() => RecycleFiles(unchanged)).ConfigureAwait(false);

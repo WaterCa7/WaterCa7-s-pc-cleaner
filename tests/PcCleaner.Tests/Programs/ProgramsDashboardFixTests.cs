@@ -240,8 +240,8 @@ public sealed class ProgramsDashboardFixTests : IDisposable
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        Assert.Equal("Программа уже удалена — ничего не изменено.", text);
-        AssertFailureNotAdmin(text);
+        Assert.Equal("Программа уже удалена — делать ничего не нужно.", text);
+        AssertSuccess(text); // gone is what the fix wanted: the row is marked fixed
         Assert.Empty(_calls); // no restore point and no uninstaller either
     }
 
@@ -311,8 +311,9 @@ public sealed class ProgramsDashboardFixTests : IDisposable
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        Assert.Contains("ничего не изменено", text);
-        AssertFailureNotAdmin(text);
+        Assert.Equal($"«{name}» больше не считается нежелательной (возможно, вы добавили её в доверенные) — делать ничего не нужно.",
+            text);
+        AssertSuccess(text);
         Assert.Empty(_calls);
     }
 
@@ -619,7 +620,7 @@ public sealed class ProgramsDashboardFixTests : IDisposable
     }
 
     [Fact]
-    public async Task Bloat_Fix_NothingLeft_ChangesNothing()
+    public async Task Bloat_Fix_NothingLeft_HasNothingToDo()
     {
         var installed = new List<string> { BingNews, CandyCrush };
         var service = CreateService(() => installed.Select(n => Record(n)).ToList());
@@ -628,9 +629,9 @@ public sealed class ProgramsDashboardFixTests : IDisposable
 
         var text = await issue.FixAsync!(CancellationToken.None);
 
-        Assert.Contains("ничего не изменено", text);
-        AssertFailureNotAdmin(text);
-        Assert.Empty(_calls);
+        Assert.Equal("Этих предустановленных приложений уже нет — делать ничего не нужно.", text);
+        AssertSuccess(text);
+        Assert.Empty(_calls); // not even a restore point
     }
 
     [Fact]

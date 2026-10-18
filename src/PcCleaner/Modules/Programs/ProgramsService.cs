@@ -871,7 +871,8 @@ public sealed class ProgramsService : IHealthContributor
 
     /// <summary>
     /// Fix for the dashboard (already confirmed there): uninstalls the unwanted program with its own uninstaller, quietly
-    /// when the installer allows it. The program is read again first: it may be gone (or trusted) since the scan.
+    /// when the installer allows it. The program is read again first: it may be gone (or trusted) since the scan — then there is
+    /// nothing to do, and the text reads as done, not as a failure.
     /// A restore point comes first, as before any uninstall on the Programs page. "Отмена" while waiting for the uninstaller
     /// returns a text (the uninstaller itself keeps running); "Отмена" before it started throws.
     /// </summary>
@@ -880,9 +881,9 @@ public sealed class ProgramsService : IHealthContributor
         var program = (await ScanProgramsAsync(ct)).Programs.FirstOrDefault(p =>
             string.Equals(p.RegistryKeyPath, scanned.RegistryKeyPath, StringComparison.OrdinalIgnoreCase));
         if (program is null)
-            return "Программа уже удалена — ничего не изменено.";
+            return "Программа уже удалена — делать ничего не нужно.";
         if (!program.IsPup)
-            return $"«{program.DisplayName}» больше не считается нежелательной (возможно, вы добавили её в доверенные) — ничего не изменено.";
+            return $"«{program.DisplayName}» больше не считается нежелательной (возможно, вы добавили её в доверенные) — делать ничего не нужно.";
 
         var name = program.DisplayName;
         UninstallOutcome outcome;
@@ -944,7 +945,7 @@ public sealed class ProgramsService : IHealthContributor
                         scanned.Any(s => string.Equals(s.PackageFullName, a.PackageFullName, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (targets.Count == 0)
-            return "Предустановленных приложений, которые можно удалить, не найдено — ничего не изменено.";
+            return "Этих предустановленных приложений уже нет — делать ничего не нужно."; // gone since the scan: nothing left to do
 
         await CreateRestorePointAsync("Удаление предустановленных приложений", ct);
         ct.ThrowIfCancellationRequested(); // "Отмена" before anything was removed: a plain cancellation
