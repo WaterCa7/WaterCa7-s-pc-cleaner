@@ -216,7 +216,7 @@ public sealed partial class StartupService : IHealthContributor
         // ProgramData\Microsoft\Windows Defender\Platform) as genuine, and still flags a signed copy started from Temp.
         var result = Suspicion.Analyze(item.TargetFile, item.Signature, item.Command);
         // Known unwanted programs are often recognisable only by the entry name or publisher.
-        if (!result.Reasons.Any(r => r.StartsWith("Потенциально нежелательная", StringComparison.Ordinal)))
+        if (!result.Flags.HasFlag(SuspicionFlags.KnownPup))
         {
             var pup = KnownPups.Match(item.Name, item.Publisher) ?? KnownPups.Match(item.FileDescription, null);
             if (pup is not null && !item.IsMicrosoft)
@@ -240,7 +240,7 @@ public sealed partial class StartupService : IHealthContributor
         var score = Math.Min(100, result.Score + 35);
         if (signature is { IsValid: true } && result.Reasons.Count == 0)
             score = Math.Min(score, BelowMediumScore);
-        return new SuspicionResult(score, result.Reasons.Append(pup).ToList());
+        return result with { Score = score, Reasons = result.Reasons.Append(pup).ToList(), Flags = result.Flags | SuspicionFlags.KnownPup };
     }
 
     /// <summary>

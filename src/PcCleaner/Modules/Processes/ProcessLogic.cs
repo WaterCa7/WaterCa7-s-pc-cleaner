@@ -315,7 +315,7 @@ internal static class ProcessGrouping
         if (maxScore == 0)
             return SuspicionResult.Clean;
         var reasons = list.SelectMany(r => r.Reasons).Distinct().ToList();
-        return new SuspicionResult(maxScore, reasons);
+        return new SuspicionResult(maxScore, reasons, list.Aggregate(SuspicionFlags.None, (all, r) => all | r.Flags));
     }
 }
 
@@ -720,7 +720,7 @@ internal static class MinerHeuristic
     {
         if (!sustainedHighCpu || !IsCandidate(path, signature) || result.Reasons.Contains(Reason))
             return result;
-        return new SuspicionResult(Math.Clamp(result.Score + Score, 0, 100), result.Reasons.Append(Reason).ToList());
+        return result with { Score = Math.Clamp(result.Score + Score, 0, 100), Reasons = result.Reasons.Append(Reason).ToList() };
     }
 }
 

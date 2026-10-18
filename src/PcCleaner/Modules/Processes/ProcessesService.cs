@@ -332,7 +332,7 @@ public sealed class ProcessesService : IHealthContributor
         var score = Math.Clamp(result.Score + (signed ? 10 : 35), 0, 100);
         if (signed && result.Reasons.Count == 0)
             score = Math.Min(score, BelowMediumScore);
-        return new SuspicionResult(score, result.Reasons.Append(pup).ToList());
+        return result with { Score = score, Reasons = result.Reasons.Append(pup).ToList(), Flags = result.Flags | SuspicionFlags.KnownPup };
     }
 
     // ---------------------------------------------------------------- actions
