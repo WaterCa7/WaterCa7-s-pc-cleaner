@@ -171,20 +171,24 @@ public sealed class InstalledProgram : ObservableObject
     /// <summary>The registry key, upper-cased: registry keys are case-insensitive, the checked set is not.</summary>
     internal string CheckKey => RegistryKeyPath.ToUpperInvariant();
 
-    /// <summary>Runtimes are never removed in a batch: other programs need them, so they are removed one by one, with the warning.</summary>
-    public bool CanCheck => !IsRuntime;
+    /// <summary>
+    /// Only what "Удалить отмеченные" can really uninstall is checked. Runtimes never are: other programs need them, so they are removed
+    /// one by one, with the warning. Nor are entries without a working uninstaller (a broken entry is removed from the list instead).
+    /// </summary>
+    public bool CanCheck => !IsRuntime && CanUninstall;
 
     /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
-    public string? CheckTooltip => CanCheck
-        ? null
-        : "Компоненты .NET, Visual C++ и т. п. нужны другим программам — удаляйте их по одной";
+    public string? CheckTooltip => CanCheck ? null
+        : IsRuntime ? "Компоненты .NET, Visual C++ и т. п. нужны другим программам — удаляйте их по одной"
+        : IsBroken ? "Деинсталлятор не найден — уберите запись кнопкой «Убрать запись из списка»"
+        : "У программы не указан деинсталлятор. Попробуйте удалить её через «Параметры» → «Приложения».";
 
     public bool IsChecked
     {
         get => Checks?.IsChecked(CheckKey) == true;
         set
         {
-            // A runtime is never checked: its checkbox is disabled, and code that sets it is refused too.
+            // What can't be checked never is: its checkbox is disabled, and code that sets it is refused too.
             if (Checks is null || (value && !CanCheck))
             {
                 OnPropertyChanged();

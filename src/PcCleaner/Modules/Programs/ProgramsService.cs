@@ -580,13 +580,14 @@ public sealed class ProgramsService : IHealthContributor
     /// otherwise with it. Used by the dashboard fix and the bulk uninstall, where the user has already confirmed.
     /// A program that cannot be uninstalled at all (<see cref="InstalledProgram.CanUninstall"/> is false: a broken entry or
     /// no uninstaller) is never started: the result is <see cref="UninstallStatus.NotStarted"/> and the runner is not called.
+    /// <paramref name="waitingFor"/> is told which process the wait is for, as with <see cref="RunUninstallerAsync"/>.
     /// </summary>
-    internal Task<UninstallOutcome> UninstallQuietWhenPossibleAsync(InstalledProgram p, CancellationToken ct)
+    internal Task<UninstallOutcome> UninstallQuietWhenPossibleAsync(InstalledProgram p, CancellationToken ct, Action<string>? waitingFor = null)
     {
         if (!p.CanUninstall)
             return Task.FromResult(CannotUninstall(p));
         var quiet = ShouldUninstallQuietly(p);
-        return UninstallOverride is { } run ? run(p, quiet, ct) : RunUninstallerAsync(p, quiet, null, ct);
+        return UninstallOverride is { } run ? run(p, quiet, ct) : RunUninstallerAsync(p, quiet, waitingFor, ct);
     }
 
     /// <summary>The "nothing to run" outcome for a program with <c>CanUninstall == false</c> (same reasons as the Programs page).</summary>

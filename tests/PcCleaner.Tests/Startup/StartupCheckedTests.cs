@@ -1,6 +1,4 @@
 using System.IO;
-using System.Runtime.ExceptionServices;
-using System.Windows.Threading;
 using Microsoft.Win32;
 using PcCleaner.Core;
 using PcCleaner.Modules.Startup;
@@ -20,42 +18,6 @@ public class StartupCheckedTests
     private static readonly SignatureInfo Vendor = new(SignatureStatus.Valid, "Valve Corp.");
 
     public StartupCheckedTests() => TestEnvironment.Init();
-
-    /// <summary>
-    /// Runs an async test body on one thread with a dispatcher, like the app's UI thread: every step after an await comes back to it.
-    /// The list is a WPF CollectionView, which refuses to be changed from another thread (the test runner's continuations hop between
-    /// threads).
-    /// </summary>
-    private static void OnUiThread(Func<Task> body)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            var dispatcher = Dispatcher.CurrentDispatcher;
-            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
-            dispatcher.BeginInvoke(async () =>
-            {
-                try
-                {
-                    await body();
-                }
-                catch (Exception ex)
-                {
-                    failure = ex;
-                }
-                finally
-                {
-                    dispatcher.InvokeShutdown();
-                }
-            });
-            Dispatcher.Run();
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromMinutes(2)), "the test body did not finish");
-        if (failure is not null)
-            ExceptionDispatchInfo.Capture(failure).Throw();
-    }
 
     /// <summary>Records every question and message, and answers as told. Nothing is shown, restarted or created for real.</summary>
     private sealed class Seams
@@ -381,7 +343,7 @@ public class StartupCheckedTests
     // ---------------------------------------------------------------- disable / enable
 
     [Fact]
-    public void Disable_ConfirmNo_ChangesNothing() => OnUiThread(async () =>
+    public void Disable_ConfirmNo_ChangesNothing() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -402,7 +364,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Disable_Confirmed_DisablesEveryCheckedEntry_AndReportsOnce() => OnUiThread(async () =>
+    public void Disable_Confirmed_DisablesEveryCheckedEntry_AndReportsOnce() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -451,7 +413,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Enable_Confirmed_EnablesCheckedDisabledEntries_AndNamesTheOnesAlreadyOn() => OnUiThread(async () =>
+    public void Enable_Confirmed_EnablesCheckedDisabledEntries_AndNamesTheOnesAlreadyOn() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddDisabledRun(sandbox, "Alpha");
@@ -474,7 +436,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Disable_ThatFailsForSomeEntries_KeepsThemChecked_AndListsWhy() => OnUiThread(async () =>
+    public void Disable_ThatFailsForSomeEntries_KeepsThemChecked_AndListsWhy() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -500,7 +462,7 @@ public class StartupCheckedTests
     // ---------------------------------------------------------------- delete
 
     [Fact]
-    public void Delete_ConfirmNo_ChangesNothing() => OnUiThread(async () =>
+    public void Delete_ConfirmNo_ChangesNothing() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -521,7 +483,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Delete_Confirmed_RemovesTheEntries_MovesFilesToTheRecycleBin_AndReportsOnce() => OnUiThread(async () =>
+    public void Delete_Confirmed_RemovesTheEntries_MovesFilesToTheRecycleBin_AndReportsOnce() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -553,7 +515,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Delete_NamesTheEntriesItCannotDelete_AndTheyStayChecked() => OnUiThread(async () =>
+    public void Delete_NamesTheEntriesItCannotDelete_AndTheyStayChecked() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -573,7 +535,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void WhenNothingCanBeDone_ThereIsNothingToConfirm_ButTheReasonsAreShown() => OnUiThread(async () =>
+    public void WhenNothingCanBeDone_ThereIsNothingToConfirm_ButTheReasonsAreShown() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         var service = Manual("Vendor Service", StartupKind.Service);
@@ -593,7 +555,7 @@ public class StartupCheckedTests
     // ---------------------------------------------------------------- what is checked is what is touched
 
     [Fact]
-    public void CheckedEntriesTheListDoesNotShow_AreNamedFirst_NeverFolded_AndAreChangedToo() => OnUiThread(async () =>
+    public void CheckedEntriesTheListDoesNotShow_AreNamedFirst_NeverFolded_AndAreChangedToo() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         var hidden = Enumerable.Range(1, 20).Select(i => $"Hidden{i:00}").ToList();
@@ -626,7 +588,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void EntriesHiddenByTheSourceTabAndTheStatusCard_AreNamedAsHiddenToo() => OnUiThread(async () =>
+    public void EntriesHiddenByTheSourceTabAndTheStatusCard_AreNamedAsHiddenToo() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddDisabledRun(sandbox, "RunOff");
@@ -664,7 +626,7 @@ public class StartupCheckedTests
     }
 
     [Fact]
-    public void NothingHidden_MeansNoHiddenHeading() => OnUiThread(async () =>
+    public void NothingHidden_MeansNoHiddenHeading() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -681,7 +643,7 @@ public class StartupCheckedTests
     // ---------------------------------------------------------------- administrator rights
 
     [Fact]
-    public void EntriesNeedingAdmin_AreAskedAboutOnce_AndLeftAloneWhenTheProgramIsNotRestarted() => OnUiThread(async () =>
+    public void EntriesNeedingAdmin_AreAskedAboutOnce_AndLeftAloneWhenTheProgramIsNotRestarted() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox(elevated: false);
         AddRun(sandbox, "Mine");
@@ -705,7 +667,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void WhenEverythingNeedsAdmin_AndNoRestart_NothingIsAskedOrChanged() => OnUiThread(async () =>
+    public void WhenEverythingNeedsAdmin_AndNoRestart_NothingIsAskedOrChanged() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox(elevated: false);
         AddRun(sandbox, "Machine", hive: "HKLM");
@@ -723,7 +685,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void NoQuestionAboutAdmin_ForCurrentUserEntries_ForScheduledTasks_OrWhenAlreadyElevated() => OnUiThread(async () =>
+    public void NoQuestionAboutAdmin_ForCurrentUserEntries_ForScheduledTasks_OrWhenAlreadyElevated() => UiThread.Run(async () =>
     {
         // Current-user entries only.
         using (var sandbox = new StartupSandbox(elevated: false))
@@ -766,7 +728,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void WhenRightsAreLostAfterTheQuestion_TheRestartIsOffered_InsteadOfAnotherDialog() => OnUiThread(async () =>
+    public void WhenRightsAreLostAfterTheQuestion_TheRestartIsOffered_InsteadOfAnotherDialog() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox(elevated: true);
         AddRun(sandbox, "Machine", hive: "HKLM");
@@ -789,7 +751,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void WhenTheRestartAsAdministratorStarts_NothingElseIsAskedShownOrChanged() => OnUiThread(async () =>
+    public void WhenTheRestartAsAdministratorStarts_NothingElseIsAskedShownOrChanged() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox(elevated: false);
         AddRun(sandbox, "Mine");
@@ -820,7 +782,7 @@ public class StartupCheckedTests
     // ---------------------------------------------------------------- stopped half way
 
     [Fact]
-    public void Disable_StoppedWithCancel_KeepsWhatWasDone_AndSaysSo() => OnUiThread(async () =>
+    public void Disable_StoppedWithCancel_KeepsWhatWasDone_AndSaysSo() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -852,7 +814,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Disable_WithAnErrorHalfWay_ShowsThePartialCountsInTheBanner() => OnUiThread(async () =>
+    public void Disable_WithAnErrorHalfWay_ShowsThePartialCountsInTheBanner() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -877,7 +839,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Delete_StoppedWithCancel_ReloadsTheListFromTheRealState() => OnUiThread(async () =>
+    public void Delete_StoppedWithCancel_ReloadsTheListFromTheRealState() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -909,7 +871,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void Delete_FailingHalfWay_ReloadsTheListAndSaysSo() => OnUiThread(async () =>
+    public void Delete_FailingHalfWay_ReloadsTheListAndSaysSo() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -940,7 +902,7 @@ public class StartupCheckedTests
     // ---------------------------------------------------------------- one source of truth for the rights
 
     [Fact]
-    public void SingleEntryActions_AndTheRestartButton_UseTheSameRightsAsTheService() => OnUiThread(async () =>
+    public void SingleEntryActions_AndTheRestartButton_UseTheSameRightsAsTheService() => UiThread.Run(async () =>
     {
         using var admin = new StartupSandbox(elevated: true);
         using var standard = new StartupSandbox(elevated: false);
@@ -967,7 +929,7 @@ public class StartupCheckedTests
     // ---------------------------------------------------------------- restore point
 
     [Fact]
-    public void OneRestorePoint_ForAllServices_AndNoneWithoutThem() => OnUiThread(async () =>
+    public void OneRestorePoint_ForAllServices_AndNoneWithoutThem() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox();
         AddRun(sandbox, "Alpha");
@@ -994,7 +956,7 @@ public class StartupCheckedTests
     });
 
     [Fact]
-    public void NoRestorePoint_WhenTheServicesWereDroppedForLackOfRights_OrTheQuestionWasDeclined() => OnUiThread(async () =>
+    public void NoRestorePoint_WhenTheServicesWereDroppedForLackOfRights_OrTheQuestionWasDeclined() => UiThread.Run(async () =>
     {
         using var sandbox = new StartupSandbox(elevated: false);
         var seams = new Seams();

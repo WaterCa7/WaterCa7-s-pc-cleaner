@@ -79,6 +79,9 @@ public sealed partial class ProgramsViewModel
     /// <summary>The one message after a bulk removal (tests replace it).</summary>
     internal Action<string, string> ShowInfo { get; set; } = Dialogs.Info;
 
+    /// <summary>The one message after a bulk removal that an unexpected error stopped half way (tests replace it).</summary>
+    internal Action<string, string> ShowError { get; set; } = Dialogs.Error;
+
     // ===================== check several rows =====================
 
     private IEnumerable<InstalledProgram> VisibleCheckablePrograms() => _programsView.Cast<InstalledProgram>().Where(p => p.CanCheck);
@@ -204,15 +207,28 @@ public sealed partial class ProgramsViewModel
         /// <summary>Programs whose turn came and what happened; a null outcome: the program was gone before its turn.</summary>
         public List<(InstalledProgram Program, UninstallOutcome? Outcome)> Done { get; } = new();
 
-        /// <summary>The program whose uninstaller was being waited for when «Отмена» was pressed: its removal may go on.</summary>
+        /// <summary>Programs left alone at their turn because they can't be checked any more (a runtime, a broken entry now).</summary>
+        public List<(InstalledProgram Program, string Reason)> Skipped { get; } = new();
+
+        /// <summary>The program whose turn it is (set while the batch works on it).</summary>
+        public InstalledProgram? Current { get; set; }
+
+        /// <summary>
+        /// The program whose uninstaller was started and had not reported back when «Отмена» or an error stopped the batch: its removal
+        /// may go on.
+        /// </summary>
         public InstalledProgram? Interrupted { get; set; }
 
-        /// <summary>False after an unexpected error (the page's busy wrapper has shown it).</summary>
-        public bool Finished { get; set; }
+        /// <summary>The unexpected error that stopped the batch (already logged); null when it ran to the end or «Отмена» stopped it.</summary>
+        public Exception? Error { get; set; }
 
-        /// <summary>Programs «Отмена» stopped before their turn.</summary>
+        /// <summary>The program whose turn it was when <see cref="Error"/> happened.</summary>
+        public InstalledProgram? ErrorOn { get; set; }
+
+        /// <summary>Programs that were never started: «Отмена» or the error stopped the batch before their turn.</summary>
         public List<InstalledProgram> NotStarted => Targets
-            .Where(t => !Done.Any(d => ReferenceEquals(d.Program, t)) && !ReferenceEquals(t, Interrupted))
+            .Where(t => !Done.Any(d => ReferenceEquals(d.Program, t)) && !Skipped.Any(s => ReferenceEquals(s.Program, t)) &&
+                        !ReferenceEquals(t, Interrupted) && !ReferenceEquals(t, ErrorOn))
             .ToList();
     }
 
@@ -230,52 +246,65 @@ public sealed partial class ProgramsViewModel
         var run = new UninstallCheckedRun(plan.All);
         await RunBusyAsync("Удаляем отмеченные программы…", async ct =>
         {
-            try
-            {
-                await UninstallEachAsync(run, ct);
-            }
-            finally
-            {
-                // Whatever happened, the list shows what is installed now: removed programs leave it, and with it the checks.
-                ReportProgress(-1, "Обновляем список программ…");
-                await RescanProgramsAsync();
-            }
+            await UninstallEachAsync(run, ct);
+            // Whatever happened, the list shows what is installed now: removed programs leave it, and with it the checks.
+            ReportProgress(-1, "Обновляем список программ…");
+            await RescanProgramsAsync();
         });
-        if (run.Finished)
-            ShowInfo("Удаление отмеченных программ", UninstallCheckedSummary(run));
+        // An uninstaller that may still be running leaves the checks, so the button can't start a second one beside it.
+        if (run.Interrupted is { } interrupted)
+            CheckedPrograms.Set(interrupted.CheckKey, false);
+        (run.Error is null ? ShowInfo : ShowError)("Удаление отмеченных программ", UninstallCheckedSummary(run));
     }
 
     /// <summary>
-    /// Strictly one after another: each program is read again right before its turn (gone: counted as removed, nothing is started),
-    /// then uninstalled quietly when its installer allows it, otherwise with its own window. «Отмена» stops before the next program;
-    /// while an uninstaller runs it only stops the waiting.
+    /// Strictly one after another: each program is read again right before its turn (gone: counted as removed; no longer checkable:
+    /// skipped; nothing is started for either), then uninstalled quietly when its installer allows it, otherwise with its own window.
+    /// One restore point for the batch, right before the first program that is really started. «Отмена» stops before the next program;
+    /// while an uninstaller runs it only stops the waiting. An unexpected error stops the batch too: it is logged and reported with
+    /// what was done, in the one message.
     /// </summary>
     private async Task UninstallEachAsync(UninstallCheckedRun run, CancellationToken ct)
     {
         var targets = run.Targets;
+        var restorePointMade = false;
         try
         {
-            if (targets.Any(p => p.CanUninstall)) // nothing will be started: nothing to protect
-            {
-                ReportProgress(-1, "Создаём точку восстановления…");
-                await _service.CreateRestorePointAsync($"Удаление отмеченных программ ({targets.Count})", ct);
-            }
             for (var i = 0; i < targets.Count; i++)
             {
-                ct.ThrowIfCancellationRequested();
+                ct.ThrowIfCancellationRequested(); // «Отмена» between two programs: the next turn does not begin
                 var scanned = targets[i];
-                ReportProgress(100.0 * i / targets.Count, $"Удаляем ({i + 1} из {targets.Count}): {scanned.DisplayName}");
-                // An earlier uninstaller may have taken it along, or an update may have changed its uninstall command.
+                var (number, percent) = (i + 1, 100.0 * i / targets.Count);
+                run.Current = scanned;
+                ReportProgress(percent, $"Удаляем ({number} из {targets.Count}): {scanned.DisplayName}");
+                // An earlier uninstaller may have taken it along, it may have become a broken entry, or an update may have changed
+                // its uninstall command.
                 var current = (await _service.ScanProgramsAsync(ct)).Programs.FirstOrDefault(p => p.CheckKey == scanned.CheckKey);
                 if (current is null)
                 {
                     run.Done.Add((scanned, null));
-                    continue;
                 }
-                run.Interrupted = scanned;
-                var outcome = await _service.UninstallQuietWhenPossibleAsync(current, ct);
-                run.Interrupted = null;
-                run.Done.Add((scanned, outcome));
+                else if (!current.CanCheck)
+                {
+                    run.Skipped.Add((scanned, SkipReason(current)));
+                }
+                else
+                {
+                    if (!restorePointMade)
+                    {
+                        ReportProgress(-1, "Создаём точку восстановления…");
+                        await _service.CreateRestorePointAsync($"Удаление отмеченных программ ({targets.Count})", ct);
+                        restorePointMade = true;
+                    }
+                    var quiet = ProgramsService.ShouldUninstallQuietly(current);
+                    ReportProgress(percent, UninstallProgressText(number, targets.Count, scanned.DisplayName, quiet));
+                    run.Interrupted = scanned;
+                    var outcome = await _service.UninstallQuietWhenPossibleAsync(current, ct,
+                        exe => ReportProgress(percent, UninstallProgressText(number, targets.Count, scanned.DisplayName, quiet, exe)));
+                    run.Interrupted = null;
+                    run.Done.Add((scanned, outcome));
+                }
+                run.Current = null;
             }
         }
         catch (OperationCanceledException)
@@ -284,10 +313,36 @@ public sealed partial class ProgramsViewModel
                 ? $"Удаление отмеченных программ остановлено пользователем: ожидание деинсталлятора «{p.DisplayName}» прервано"
                 : "Удаление отмеченных программ остановлено пользователем");
         }
-        run.Finished = true;
+        catch (Exception ex)
+        {
+            run.Error = ex;
+            run.ErrorOn = run.Current;
+            Log.Error("Удаление отмеченных программ", ex);
+        }
     }
 
-    /// <summary>One line per program: its name and how it will be removed.</summary>
+    /// <summary>
+    /// The busy text while a checked program is being removed: "Удаляем (2 из 5): name" and, like the single uninstall, what the page
+    /// is waiting for (<paramref name="exe"/> once the runner knows it). A quiet run has no window to speak of.
+    /// </summary>
+    internal static string UninstallProgressText(int number, int total, string name, bool quiet, string? exe = null)
+    {
+        var process = exe is null ? "" : $" ({exe})";
+        return $"Удаляем ({number} из {total}): {name}\n" + (quiet
+            ? $"Ждём завершения тихого удаления{process}. «Отмена» остановит только ожидание, а не само удаление."
+            : $"Ждём завершения деинсталлятора{process}. Если его окно уже закрыто, нажмите «Отмена».");
+    }
+
+    /// <summary>Why a checked program is left alone at its turn (it can't be checked any more), as a short phrase.</summary>
+    private static string SkipReason(InstalledProgram p)
+        => p.IsRuntime ? "компонент, который нужен другим программам: такие удаляют по одному"
+            : p.IsBroken ? "деинсталлятор не найден"
+            : "у программы не указан деинсталлятор";
+
+    /// <summary>
+    /// One line per program: its name and how it will be removed. A program in the list can only be checked when it can be uninstalled,
+    /// so the "деинсталлятор не найден" mark is a fallback.
+    /// </summary>
     private static string UninstallLine(InstalledProgram p)
         => !p.CanUninstall ? $"{p.DisplayName} — деинсталлятор не найден"
             : ProgramsService.ShouldUninstallQuietly(p) ? $"{p.DisplayName} — тихо"
@@ -311,7 +366,8 @@ public sealed partial class ProgramsViewModel
 
     /// <summary>
     /// The one message after "Удалить отмеченные", grouped by what happened. Read after the rescan: a program the uninstaller reported
-    /// as still installed, or whose uninstaller was still awaited, counts as removed when it is no longer in the list.
+    /// as still installed, or whose uninstaller was still awaited, counts as removed when it is no longer in the list. An error that
+    /// stopped the batch is named right after the count.
     /// </summary>
     private string UninstallCheckedSummary(UninstallCheckedRun run)
     {
@@ -344,12 +400,18 @@ public sealed partial class ProgramsViewModel
                     break;
             }
         }
+        // After an error the program it happened on is named with the error instead.
         var mayContinue = new List<string>();
-        if (run.Interrupted is { } interrupted)
+        if (run.Error is null && run.Interrupted is { } interrupted)
             (StillListed(interrupted) ? mayContinue : removed).Add(interrupted.DisplayName);
 
         var sections = new List<string> { $"Удалено: {removed.Count} из {run.Targets.Count}." };
+        if (run.Error is { } error)
+            sections.Add(run.ErrorOn is { } on
+                ? $"Остановлено из-за ошибки на «{on.DisplayName}»: {ErrorText.For(error)}."
+                : $"Остановлено из-за ошибки: {ErrorText.For(error)}.");
         AddSection(sections, $"Удалены ({removed.Count}):", removed, fold: true);
+        AddSection(sections, $"Пропущены ({run.Skipped.Count}):", run.Skipped.Select(s => $"{s.Program.DisplayName} — {s.Reason}").ToList());
         AddSection(sections, $"Остались установленными ({stillInstalled.Count}) — деинсталлятор завершил работу, но программа всё ещё в " +
                              "списке (возможно, удаление отменили в его окне):", stillInstalled);
         AddSection(sections, $"Вы отклонили запрос контроля учётных записей ({uacDeclined.Count}):", uacDeclined);
@@ -358,7 +420,7 @@ public sealed partial class ProgramsViewModel
         if (mayContinue.Count > 0)
             sections.Add("Если окно удаления ещё открыто, дождитесь его завершения и нажмите «Обновить».");
         var notBegun = run.NotStarted.Select(p => p.DisplayName).ToList();
-        AddSection(sections, $"Не начаты из-за отмены ({notBegun.Count}):", notBegun);
+        AddSection(sections, $"Не начаты из-за {(run.Error is null ? "отмены" : "ошибки")} ({notBegun.Count}):", notBegun);
         return string.Join("\n\n", sections);
     }
 
@@ -384,12 +446,18 @@ public sealed partial class ProgramsViewModel
 
         public List<(StoreApp App, string Error)> Failed { get; } = new();
 
-        /// <summary>False after an unexpected error (the page's busy wrapper has shown it).</summary>
-        public bool Finished { get; set; }
+        /// <summary>The app whose turn it is (set while the batch works on it).</summary>
+        public StoreApp? Current { get; set; }
 
-        /// <summary>Apps «Отмена» stopped: the one being removed and those after it.</summary>
+        /// <summary>The unexpected error that stopped the batch (already logged); null when it ran to the end or «Отмена» stopped it.</summary>
+        public Exception? Error { get; set; }
+
+        /// <summary>The app whose turn it was when <see cref="Error"/> happened.</summary>
+        public StoreApp? ErrorOn { get; set; }
+
+        /// <summary>Apps «Отмена» or the error stopped: the one being removed («Отмена») and those after it.</summary>
         public List<StoreApp> Stopped => Targets
-            .Where(t => !Removed.Contains(t) && !Failed.Any(f => ReferenceEquals(f.App, t)))
+            .Where(t => !Removed.Contains(t) && !Failed.Any(f => ReferenceEquals(f.App, t)) && !ReferenceEquals(t, ErrorOn))
             .ToList();
     }
 
@@ -407,21 +475,17 @@ public sealed partial class ProgramsViewModel
         var run = new RemoveCheckedAppsRun(plan.All);
         await RunBusyAsync("Удаляем отмеченные приложения…", async ct =>
         {
-            try
-            {
-                await RemoveEachAsync(run, ct);
-            }
-            finally
-            {
-                ReportProgress(-1, "Обновляем список приложений…");
-                await RescanStoreAppsAsync();
-            }
+            await RemoveEachAsync(run, ct);
+            ReportProgress(-1, "Обновляем список приложений…");
+            await RescanStoreAppsAsync();
         });
-        if (run.Finished)
-            ShowInfo("Удаление отмеченных приложений", RemoveCheckedAppsSummary(run));
+        (run.Error is null ? ShowInfo : ShowError)("Удаление отмеченных приложений", RemoveCheckedAppsSummary(run));
     }
 
-    /// <summary>Like "Удалить лишние": one restore point, then the apps one by one; «Отмена» stops before the next one.</summary>
+    /// <summary>
+    /// Like "Удалить лишние": one restore point, then the apps one by one; «Отмена» stops before the next one. An unexpected error stops
+    /// the batch too: it is logged and reported with what was done, in the one message.
+    /// </summary>
     private async Task RemoveEachAsync(RemoveCheckedAppsRun run, CancellationToken ct)
     {
         var targets = run.Targets;
@@ -433,19 +497,26 @@ public sealed partial class ProgramsViewModel
             {
                 ct.ThrowIfCancellationRequested();
                 var app = targets[i];
+                run.Current = app;
                 ReportProgress(100.0 * i / targets.Count, $"Удаляем «{app.DisplayName}» ({i + 1} из {targets.Count})…");
                 var (success, message) = await _service.RemoveStoreAppAsync(app, ct);
                 if (success)
                     run.Removed.Add(app);
                 else
                     run.Failed.Add((app, message));
+                run.Current = null;
             }
         }
         catch (OperationCanceledException)
         {
             Log.Info("Удаление отмеченных приложений Microsoft Store остановлено пользователем");
         }
-        run.Finished = true;
+        catch (Exception ex)
+        {
+            run.Error = ex;
+            run.ErrorOn = run.Current;
+            Log.Error("Удаление отмеченных приложений Microsoft Store", ex);
+        }
     }
 
     /// <summary>The question before "Удалить отмеченные" on the Store tab: exactly the apps that will be removed, hidden ones first.</summary>
@@ -470,7 +541,7 @@ public sealed partial class ProgramsViewModel
 
     /// <summary>
     /// The one message after "Удалить отмеченные" on the Store tab. An app «Отмена» stopped counts as removed when the list, read
-    /// again without an error, no longer has it.
+    /// again without an error, no longer has it. An error that stopped the batch is named right after the count.
     /// </summary>
     private string RemoveCheckedAppsSummary(RemoveCheckedAppsRun run)
     {
@@ -482,8 +553,12 @@ public sealed partial class ProgramsViewModel
         {
             $"Удалено {Format.Count(removed, "приложение", "приложения", "приложений")} из {run.Targets.Count}.",
         };
+        if (run.Error is { } error)
+            sections.Add(run.ErrorOn is { } on
+                ? $"Остановлено из-за ошибки на «{on.DisplayName}»: {ErrorText.For(error)}."
+                : $"Остановлено из-за ошибки: {ErrorText.For(error)}.");
         AddSection(sections, $"Не удалось удалить ({run.Failed.Count}):", run.Failed.Select(f => $"{f.App.DisplayName} — {f.Error}").ToList());
-        AddSection(sections, $"Не удалены из-за отмены ({stopped.Count}):", stopped);
+        AddSection(sections, $"Не удалены из-за {(run.Error is null ? "отмены" : "ошибки")} ({stopped.Count}):", stopped);
         if (removed > 0)
             sections.Add("Приложения из Microsoft Store можно вернуть через Microsoft Store.");
         return string.Join("\n\n", sections);

@@ -1,6 +1,4 @@
 using System.IO;
-using System.Runtime.ExceptionServices;
-using System.Windows.Threading;
 using Microsoft.Win32;
 using PcCleaner.Core;
 using PcCleaner.Modules.Programs;
@@ -41,6 +39,7 @@ public sealed class ProgramsCheckedTests : IDisposable
 
     private readonly List<(string Title, string Message)> _questions = new();
     private readonly List<(string Title, string Message)> _infos = new();
+    private readonly List<(string Title, string Message)> _errors = new();
 
     /// <summary>The Store apps Windows "has" (full names); the faked removal takes them out.</summary>
     private readonly List<StoreAppRecord> _store = new();
@@ -76,41 +75,6 @@ public sealed class ProgramsCheckedTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Runs an async test body on one thread with a dispatcher, like the app's UI thread: the lists are WPF CollectionViews, which
-    /// refuse changes from another thread (the test runner's continuations hop between threads).
-    /// </summary>
-    private static void OnUiThread(Func<Task> body)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            var dispatcher = Dispatcher.CurrentDispatcher;
-            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
-            dispatcher.BeginInvoke(async () =>
-            {
-                try
-                {
-                    await body();
-                }
-                catch (Exception ex)
-                {
-                    failure = ex;
-                }
-                finally
-                {
-                    dispatcher.InvokeShutdown();
-                }
-            });
-            Dispatcher.Run();
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromMinutes(2)), "the test body did not finish");
-        if (failure is not null)
-            ExceptionDispatchInfo.Capture(failure).Throw();
-    }
-
     // ---------------------------------------------------------------- sandbox
 
     private string MainPath => $@"{SandboxRoot}\{_id}\Main\Uninstall";
@@ -139,6 +103,15 @@ public sealed class ProgramsCheckedTests : IDisposable
     }
 
     private void AddRuntime() => AddProgram(RuntimeName, quiet: true, publisher: "Microsoft Corporation");
+
+    /// <summary>A "broken" entry: its uninstaller is gone (the folder exists), there is no install folder.</summary>
+    private void AddBroken(string displayName)
+        => AddEntry(KeyOf(displayName), new()
+        {
+            ["DisplayName"] = displayName,
+            ["Publisher"] = "Vendor",
+            ["UninstallString"] = $"\"{Path.Combine(_work, "uninstall-gone.exe")}\"",
+        });
 
     private static string KeyOf(string displayName) => displayName.Replace(' ', '_');
 
@@ -196,6 +169,7 @@ public sealed class ProgramsCheckedTests : IDisposable
                 return Answer;
             },
             ShowInfo = (title, message) => _infos.Add((title, message)),
+            ShowError = (title, message) => _errors.Add((title, message)),
         };
         _vm = vm;
         await vm.RefreshCommand.ExecuteAsync(null);
@@ -243,7 +217,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     // ================================================================ Programs: checking
 
     [Fact]
-    public void Runtimes_CannotBeChecked_ByAClickByCodeOrByTheHeader() => OnUiThread(async () =>
+    public void Runtimes_CannotBeChecked_ByAClickByCodeOrByTheHeader() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddRuntime();
@@ -275,7 +249,75 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void RowClickAndHeader_FollowTheChecks() => OnUiThread(async () =>
+    public void ProgramsWithoutAnUninstaller_CannotBeChecked_AndTheHeaderUnderBrokenChecksNothing() => UiThread.Run(async () =>
+    {
+        AddProgram("Alpha App");
+        AddBroken("Gone App");
+        AddEntry("NoUninstaller", new() { ["DisplayName"] = "No Uninstaller App", ["Publisher"] = "Vendor" });
+        var vm = await LoadAsync();
+        var gone = Program(vm, "Gone App");
+        var none = Program(vm, "No Uninstaller App");
+
+        Assert.True(gone.IsBroken);
+        Assert.False(gone.CanCheck);
+        Assert.Equal("Деинсталлятор не найден — уберите запись кнопкой «Убрать запись из списка»", gone.CheckTooltip);
+        Assert.False(none.IsBroken);
+        Assert.False(none.CanUninstall);
+        Assert.False(none.CanCheck);
+        Assert.Equal("У программы не указан деинсталлятор. Попробуйте удалить её через «Параметры» → «Приложения».", none.CheckTooltip);
+        gone.IsChecked = true;
+        Assert.False(vm.ToggleProgramCheckCommand.CanExecute(none));
+        Assert.Equal(0, vm.CheckedProgramsCount);
+
+        vm.ShowFilterCommand.Execute("Broken"); // «Битые»: only the broken entry is listed
+        Assert.Equal(new[] { gone }, vm.ProgramsView.Cast<InstalledProgram>());
+        Assert.False(vm.ToggleAllVisibleProgramsCommand.CanExecute(null));
+        vm.ToggleAllVisibleProgramsCommand.Execute(null);
+        Assert.Equal(0, vm.CheckedProgramsCount);
+        Assert.False(vm.AllVisibleProgramsChecked);
+    });
+
+    [Fact]
+    public void UninstallChecked_ProgramsThatBrokeAfterTheyWereChecked_AreSkippedWithTheReason_WithoutARestorePoint() => UiThread.Run(async () =>
+    {
+        AddProgram("Alpha App");
+        AddProgram("Beta App");
+        var vm = await LoadAsync();
+        Check(vm, "Alpha App", "Beta App");
+        Directory.Delete(Path.GetDirectoryName(_uninstallerPath)!, recursive: true); // their uninstaller is gone since the list was read
+
+        await vm.UninstallCheckedCommand.ExecuteAsync(null);
+
+        Assert.Empty(_calls); // nothing was started, so no restore point either
+        Assert.StartsWith("Удалено: 0 из 2.", Info);
+        Assert.Equal(new[] { "• Alpha App — деинсталлятор не найден", "• Beta App — деинсталлятор не найден" }, Section(Info, "Пропущены (2):"));
+        // The rescan shows them as broken entries, which can't be checked.
+        Assert.True(Program(vm, "Alpha App").IsBroken);
+        Assert.Equal(0, vm.CheckedProgramsCount);
+    });
+
+    [Fact]
+    public void UninstallChecked_AProgramThatIsARuntimeByItsTurn_IsSkipped_AndTheOthersGoOn() => UiThread.Run(async () =>
+    {
+        AddProgram("Alpha App");
+        AddProgram("Beta App");
+        var vm = await LoadAsync();
+        Check(vm, "Alpha App", "Beta App");
+        // Since the list was read, the same registry key describes a Microsoft runtime.
+        AddEntry(KeyOf("Alpha App"), new() { ["DisplayName"] = RuntimeName, ["Publisher"] = "Microsoft Corporation" });
+
+        await vm.UninstallCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, _calls.Count);
+        Assert.StartsWith("restore:", _calls[0]); // made before the first program that is really started
+        Assert.Equal("uninstall:Beta App:normal", _calls[1]);
+        Assert.StartsWith("Удалено: 1 из 2.", Info);
+        Assert.Equal(new[] { "• Alpha App — компонент, который нужен другим программам: такие удаляют по одному" },
+            Section(Info, "Пропущены (1):"));
+    });
+
+    [Fact]
+    public void RowClickAndHeader_FollowTheChecks() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -298,7 +340,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void Checks_SurviveARescan_ByRegistryKey_AndProgramsThatAreGoneLeaveThem() => OnUiThread(async () =>
+    public void Checks_SurviveARescan_ByRegistryKey_AndProgramsThatAreGoneLeaveThem() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -323,7 +365,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void AProgramThatTurnsOutToBeARuntime_LeavesTheChecks() => OnUiThread(async () =>
+    public void AProgramThatTurnsOutToBeARuntime_LeavesTheChecks() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         var vm = await LoadAsync();
@@ -343,7 +385,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     // ================================================================ Programs: «Удалить отмеченные»
 
     [Fact]
-    public void UninstallChecked_ConfirmNo_StartsNothing() => OnUiThread(async () =>
+    public void UninstallChecked_ConfirmNo_StartsNothing() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App", quiet: true);
         AddProgram("Beta App");
@@ -361,7 +403,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_Confirmed_OneRestorePoint_ThenOneByOne_QuietOnlyWhereTheInstallerAllows() => OnUiThread(async () =>
+    public void UninstallChecked_Confirmed_OneRestorePoint_ThenOneByOne_QuietOnlyWhereTheInstallerAllows() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App", quiet: true);
         AddProgram("Beta App");
@@ -382,7 +424,11 @@ public sealed class ProgramsCheckedTests : IDisposable
         Assert.Equal(3, _calls.Count);
         Assert.StartsWith("restore:", _calls[0]);
         Assert.Equal(new[] { "uninstall:Alpha App:quiet", "uninstall:Beta App:normal" }, _calls.Skip(1));
-        Assert.Equal(new[] { "Удаляем (1 из 2): Alpha App", "Удаляем (2 из 2): Beta App" }, _progress);
+        Assert.Equal(new[]
+        {
+            "Удаляем (1 из 2): Alpha App\nЖдём завершения тихого удаления. «Отмена» остановит только ожидание, а не само удаление.",
+            "Удаляем (2 из 2): Beta App\nЖдём завершения деинсталлятора. Если его окно уже закрыто, нажмите «Отмена».",
+        }, _progress);
 
         // One message; the list is read again: removed programs are gone and leave the checks.
         var (infoTitle, info) = Assert.Single(_infos);
@@ -395,7 +441,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_OneProgram_AsksAboutThatOne() => OnUiThread(async () =>
+    public void UninstallChecked_OneProgram_AsksAboutThatOne() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         var vm = await LoadAsync();
@@ -410,7 +456,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_CancelledWhileTheFirstRuns_StopsBeforeTheNext_AndNamesTheProgramsNotStarted() => OnUiThread(async () =>
+    public void UninstallChecked_CancelledWhileTheFirstRuns_StopsBeforeTheNext_AndNamesTheProgramsNotStarted() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -438,7 +484,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_CancelledWhileWaitingForTheUninstaller_SaysItMayContinue() => OnUiThread(async () =>
+    public void UninstallChecked_CancelledWhileWaitingForTheUninstaller_SaysItMayContinue() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -456,11 +502,85 @@ public sealed class ProgramsCheckedTests : IDisposable
         Assert.StartsWith("Удалено: 0 из 2.", Info);
         Assert.Equal(new[] { "• Alpha App" }, Section(Info, "Ожидание остановлено — удаление могло продолжиться:"));
         Assert.Equal(new[] { "• Beta App" }, Section(Info, "Не начаты из-за отмены (1):"));
-        Assert.Equal(2, vm.CheckedProgramsCount); // both are still installed
+        // Both are still installed. The interrupted one leaves the checks: its uninstaller may still be running, and the button must
+        // not start a second one; the one that was not started stays checked.
+        Assert.Equal(2, vm.Programs.Count);
+        Assert.False(Program(vm, "Alpha App").IsChecked);
+        Assert.True(Program(vm, "Beta App").IsChecked);
+        Assert.Equal(1, vm.CheckedProgramsCount);
     });
 
     [Fact]
-    public void UninstallChecked_CancelledWhileTheRestorePointIsMade_StartsNoProgram() => OnUiThread(async () =>
+    public void UninstallChecked_CancelledBetweenTwoPrograms_TheNextTurnNeverBegins() => UiThread.Run(async () =>
+    {
+        AddProgram("Alpha App");
+        AddProgram("Beta App");
+        var vm = await LoadAsync();
+        Check(vm, "Alpha App", "Beta App");
+        var texts = new List<string>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.BusyText))
+                texts.Add(vm.BusyText);
+        };
+        Uninstall = (p, ct) =>
+        {
+            vm.CancelCommand.Execute(null); // «Отмена» pressed just as the first uninstaller finishes
+            return RemoveIt(p, ct);
+        };
+
+        await vm.UninstallCheckedCommand.ExecuteAsync(null);
+
+        Assert.Contains(texts, t => t.StartsWith("Удаляем (1 из 2): Alpha App", StringComparison.Ordinal));
+        Assert.DoesNotContain(texts, t => t.Contains("(2 из 2)", StringComparison.Ordinal)); // the next turn did not even begin
+        Assert.Equal(new[] { "uninstall:Alpha App:normal" }, _calls.Where(c => c.StartsWith("uninstall:")));
+        Assert.Equal(new[] { "• Beta App" }, Section(Info, "Не начаты из-за отмены (1):"));
+        Assert.True(Program(vm, "Beta App").IsChecked);
+    });
+
+    [Fact]
+    public void ProgressWhileWaiting_NamesTheUninstaller_AndSpeaksOfAWindowOnlyWhenThereIsOne()
+    {
+        var normal = ProgramsViewModel.UninstallProgressText(2, 5, "Alpha App", quiet: false, "uninst.exe");
+        var quiet = ProgramsViewModel.UninstallProgressText(2, 5, "Alpha App", quiet: true, "uninst.exe");
+
+        Assert.Equal("Удаляем (2 из 5): Alpha App\nЖдём завершения деинсталлятора (uninst.exe). Если его окно уже закрыто, нажмите «Отмена».",
+            normal);
+        Assert.Equal("Удаляем (2 из 5): Alpha App\nЖдём завершения тихого удаления (uninst.exe). «Отмена» остановит только ожидание, " +
+                     "а не само удаление.", quiet);
+        Assert.DoesNotContain("окн", quiet);
+    }
+
+    [Fact]
+    public void UninstallChecked_AnErrorHalfWay_ShowsWhatWasDoneAndTheError_InOneMessage() => UiThread.Run(async () =>
+    {
+        AddProgram("Alpha App");
+        AddProgram("Beta App");
+        AddProgram("Gamma App");
+        var vm = await LoadAsync();
+        Check(vm, "Alpha App", "Beta App", "Gamma App");
+        Uninstall = (p, ct) => p.DisplayName == "Beta App" ? throw new InvalidOperationException("тестовая ошибка") : RemoveIt(p, ct);
+
+        await vm.UninstallCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { "uninstall:Alpha App:normal", "uninstall:Beta App:normal" }, _calls.Where(c => c.StartsWith("uninstall:")));
+        Assert.Empty(_infos);
+        var (title, message) = Assert.Single(_errors); // the one message, with the error in it
+        Assert.Equal("Удаление отмеченных программ", title);
+        Assert.StartsWith("Удалено: 1 из 3.", message);
+        Assert.Equal(new[] { "• Alpha App" }, Section(message, "Удалены (1):"));
+        Assert.Contains("Остановлено из-за ошибки на «Beta App»: тестовая ошибка.", message);
+        Assert.Equal(new[] { "• Gamma App" }, Section(message, "Не начаты из-за ошибки (1):"));
+        Assert.Contains(Log.Entries.ToList(), e => e.Level == LogLevel.Error && e.Message.Contains("Удаление отмеченных программ"));
+        // The list was read again; the program whose uninstaller may have started leaves the checks, the rest stays checked.
+        Assert.Equal(new[] { "Beta App", "Gamma App" }, vm.Programs.Select(p => p.DisplayName));
+        Assert.False(Program(vm, "Beta App").IsChecked);
+        Assert.True(Program(vm, "Gamma App").IsChecked);
+        Assert.False(vm.IsBusy);
+    });
+
+    [Fact]
+    public void UninstallChecked_CancelledWhileTheRestorePointIsMade_StartsNoProgram() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -482,7 +602,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_AProgramGoneBeforeItsTurn_CountsAsRemoved_AndIsNotLaunched() => OnUiThread(async () =>
+    public void UninstallChecked_AProgramGoneBeforeItsTurn_CountsAsRemoved_AndIsNotLaunched() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -505,7 +625,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_UsesTheProgramAsItIsNow_NotAsItWasScanned() => OnUiThread(async () =>
+    public void UninstallChecked_UsesTheProgramAsItIsNow_NotAsItWasScanned() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         var vm = await LoadAsync();
@@ -520,7 +640,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_Summary_GroupsTheOutcomes_AndWhatIsLeftStaysChecked() => OnUiThread(async () =>
+    public void UninstallChecked_Summary_GroupsTheOutcomes_AndWhatIsLeftStaysChecked() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -562,7 +682,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_StillInstalledButGoneAfterTheRescan_IsReportedAsRemoved() => OnUiThread(async () =>
+    public void UninstallChecked_StillInstalledButGoneAfterTheRescan_IsReportedAsRemoved() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         var vm = await LoadAsync();
@@ -580,7 +700,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_CheckedProgramsTheListDoesNotShow_AreNamedFirst_NeverFolded_AndRemovedFirst() => OnUiThread(async () =>
+    public void UninstallChecked_CheckedProgramsTheListDoesNotShow_AreNamedFirst_NeverFolded_AndRemovedFirst() => UiThread.Run(async () =>
     {
         var hidden = Enumerable.Range(1, 16).Select(i => $"Hidden Tool {i:00}").ToList();
         foreach (var name in hidden)
@@ -607,7 +727,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_ProgramsHiddenByAFilterChip_AreNamedAsHiddenToo() => OnUiThread(async () =>
+    public void UninstallChecked_ProgramsHiddenByAFilterChip_AreNamedAsHiddenToo() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddEntry("Amigo", new()
@@ -628,7 +748,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void UninstallChecked_NothingHidden_MeansNoHiddenHeading() => OnUiThread(async () =>
+    public void UninstallChecked_NothingHidden_MeansNoHiddenHeading() => UiThread.Run(async () =>
     {
         AddProgram("Alpha App");
         AddProgram("Beta App");
@@ -646,7 +766,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     // ================================================================ Store apps
 
     [Fact]
-    public void StoreApps_ProtectedAppsCannotBeChecked() => OnUiThread(async () =>
+    public void StoreApps_ProtectedAppsCannotBeChecked() => UiThread.Run(async () =>
     {
         _store.AddRange(Records(BingNews, WindowsStore, NotesApp));
         var vm = await LoadAsync();
@@ -674,7 +794,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void StoreApps_ChecksSurviveARescan_AndAppsThatBecameProtectedLeaveThem() => OnUiThread(async () =>
+    public void StoreApps_ChecksSurviveARescan_AndAppsThatBecameProtectedLeaveThem() => UiThread.Run(async () =>
     {
         _store.AddRange(Records(BingNews, CandyCrush, NotesApp));
         var vm = await LoadAsync();
@@ -699,7 +819,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void StoreApps_RemoveChecked_ConfirmNo_RemovesNothing() => OnUiThread(async () =>
+    public void StoreApps_RemoveChecked_ConfirmNo_RemovesNothing() => UiThread.Run(async () =>
     {
         _store.AddRange(Records(BingNews, CandyCrush));
         var vm = await LoadAsync();
@@ -715,7 +835,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void StoreApps_RemoveChecked_Confirmed_OneRestorePoint_RemovesInTheOrderOfTheQuestion_AndReportsOnce() => OnUiThread(async () =>
+    public void StoreApps_RemoveChecked_Confirmed_OneRestorePoint_RemovesInTheOrderOfTheQuestion_AndReportsOnce() => UiThread.Run(async () =>
     {
         _store.AddRange(Records(BingNews, CandyCrush, BingWeather, WindowsStore));
         var vm = await LoadAsync();
@@ -739,7 +859,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void StoreApps_RemoveChecked_FailuresAreNamed_AndStayChecked() => OnUiThread(async () =>
+    public void StoreApps_RemoveChecked_FailuresAreNamed_AndStayChecked() => UiThread.Run(async () =>
     {
         _store.AddRange(Records(BingNews, CandyCrush));
         var service = CreateService();
@@ -763,7 +883,7 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void StoreApps_RemoveChecked_Cancelled_StopsBeforeTheNext_AndNamesTheRest() => OnUiThread(async () =>
+    public void StoreApps_RemoveChecked_Cancelled_StopsBeforeTheNext_AndNamesTheRest() => UiThread.Run(async () =>
     {
         _store.AddRange(Records(BingNews, CandyCrush, BingWeather));
         var service = CreateService();
@@ -787,7 +907,32 @@ public sealed class ProgramsCheckedTests : IDisposable
     });
 
     [Fact]
-    public void StoreApps_CheckedAppsTheListDoesNotShow_AreNamedFirst() => OnUiThread(async () =>
+    public void StoreApps_RemoveChecked_AnErrorHalfWay_ShowsWhatWasDoneAndTheError() => UiThread.Run(async () =>
+    {
+        _store.AddRange(Records(BingNews, CandyCrush, BingWeather));
+        var service = CreateService();
+        var remove = service.RemoveStoreAppOverride!;
+        var vm = await LoadAsync(service);
+        CheckApps(vm, BingNews, CandyCrush, BingWeather);
+        var listed = vm.StoreAppsView.Cast<StoreApp>().Where(a => a.IsChecked).ToList();
+        service.RemoveStoreAppOverride = (app, ct) => app.PackageFullName == listed[1].PackageFullName
+            ? throw new InvalidOperationException("тестовая ошибка")
+            : remove(app, ct);
+
+        await vm.RemoveCheckedStoreAppsCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { $"remove:{listed[0].PackageFullName}" }, _calls.Where(c => c.StartsWith("remove:"))); // the second one threw
+        Assert.Empty(_infos);
+        var (title, message) = Assert.Single(_errors);
+        Assert.Equal("Удаление отмеченных приложений", title);
+        Assert.StartsWith("Удалено 1 приложение из 3.", message);
+        Assert.Contains($"Остановлено из-за ошибки на «{listed[1].DisplayName}»: тестовая ошибка.", message);
+        Assert.Equal(new[] { "• " + listed[2].DisplayName }, Section(message, "Не удалены из-за ошибки (1):"));
+        Assert.Equal(2, vm.CheckedStoreAppsCount); // the list was read again: only the removed app left the checks
+    });
+
+    [Fact]
+    public void StoreApps_CheckedAppsTheListDoesNotShow_AreNamedFirst() => UiThread.Run(async () =>
     {
         _store.AddRange(Records(BingNews, NotesApp));
         var vm = await LoadAsync();
