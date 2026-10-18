@@ -123,7 +123,7 @@ public sealed class OptimizerParityServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Dashboard_GameDvrFix_IsNotInTheSafeBatch_AndItsConsequenceIsShownBeforehand()
+    public async Task Dashboard_GameDvrFix_IsNotMarkedAutoFixSafe_AndItsConsequenceIsShownBeforehand()
     {
         var s = GoodSettings() with { GameModeValue = 0, GameDvrValue = 1, AppCaptureValue = 1 };
         var issues = await Create(GoodDesktop(), s).AnalyzeAsync(CancellationToken.None);

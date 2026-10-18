@@ -591,7 +591,7 @@
                             </Button>
                             <Button Style="{StaticResource AccentButton}" Command="{Binding FixAllCommand}" Padding="16,8"
                                     Visibility="{Binding HasFixAll, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Исправит всё, что можно исправить отсюда, кроме удаления программ и перезагрузки. Перед этим покажет полный список и попросит подтверждение.">
+                                    ToolTip="Исправит всё, что можно исправить отсюда, кроме действий, которые запускаются только отдельно: удаление программ, очистка Корзины, перезагрузка. Перед этим покажет полный список и попросит подтверждение.">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" FontSize="14" Text="&#xE90F;" />
                                     <TextBlock Text="{Binding FixAllText}" Margin="8,0,0,0" />

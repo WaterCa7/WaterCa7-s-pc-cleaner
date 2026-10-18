@@ -172,8 +172,9 @@ public class FixAllTests
         Assert.StartsWith("Будут исправлены проблемы (2):", many);
         Assert.Contains("Первое", many);
         Assert.Contains("Второе", many);
-        Assert.Contains("Каждое действие можно отменить вручную", many);
-        Assert.Contains("Удаление программ и перезагрузка сюда не входят", many);
+        Assert.Contains("удаляются насовсем", many);
+        Assert.DoesNotContain("уходят в Корзину", many);
+        Assert.Contains("очистка Корзины и перезагрузка сюда не входят", many);
         Assert.DoesNotContain("низкорисковые", many);
         Assert.StartsWith("Будет исправлено:", one);
     }

@@ -35,7 +35,7 @@ public sealed class HealthIssue : ObservableObject
     /// <summary>Optional fix. Returns a human-readable result message.</summary>
     public Func<CancellationToken, Task<string>>? FixAsync { get; init; }
 
-    /// <summary>True if the fix is safe enough to run from "Исправить всё" without per-item review.</summary>
+    /// <summary>True if the fix is low-risk: the row shows the «Безопасно исправить» badge. «Исправить всё» is gated by InFixAll.</summary>
     public bool AutoFixSafe { get; init; }
 
     /// <summary>Text of the fix button: "Исправить", or what exactly happens ("Перезагрузить", "Удалить программу").</summary>
