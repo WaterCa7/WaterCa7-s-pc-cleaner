@@ -460,6 +460,9 @@ public class SecurityDashboardSystemFixTests
     [InlineData("LocalHost:3128")]
     [InlineData("[::1]:8080")]
     [InlineData("http=127.0.0.1:8080;https=127.0.0.1:8080")]
+    [InlineData("127.0.0.1")]
+    [InlineData("127.0.0.2:8080")]
+    [InlineData("http=127.0.0.1:8080;https=[::1]:8080;socks=localhost:1080")]
     public async Task Proxy_OnThisComputer_StaysOutOfFixAll_ButKeepsItsOwnButton(string server)
     {
         using var sb = new SecuritySandbox();
@@ -484,6 +487,12 @@ public class SecurityDashboardSystemFixTests
     [InlineData("1.2.3.4:8080")]
     [InlineData("proxy.example.com:3128")]
     [InlineData("[2001:db8::1]:8080")] // contains "::1" but is not the loopback address
+    [InlineData("localhost.evil.example:8080")] // a name that only starts like a local one
+    [InlineData("127.0.0.1.evil.example:8080")]
+    [InlineData("evil-localhost:8080")]
+    [InlineData("127.0.0.1@evil.example:8080")]
+    [InlineData("http=127.0.0.1:8080;https=ads.example:443")] // one remote host in the list is enough
+    [InlineData("https=ads.example:443;http=127.0.0.1:8080")]
     public async Task Proxy_OnAnotherComputer_StaysInFixAll(string server)
     {
         using var sb = new SecuritySandbox();
@@ -515,6 +524,15 @@ public class SecurityDashboardSystemFixTests
     [InlineData("localhost:8080", true)]
     [InlineData("1.2.3.4:8080", false)]
     [InlineData("[2001:db8::1]:8080", false)]
+    [InlineData("127.0.0.1", true)]
+    [InlineData("::1", true)]
+    [InlineData(" http = 127.0.0.1:8080 ; https = LOCALHOST:8080 ", true)]
+    [InlineData("localhost.evil.example:8080", false)]
+    [InlineData("127.0.0.1.evil.example:8080", false)]
+    [InlineData("http=127.0.0.1:8080;https=ads.example:443", false)]
+    [InlineData("http=127.0.0.1:8080;", true)]
+    [InlineData(";", false)]
+    [InlineData("0.0.0.0:8080", false)]
     public void ProxyCheck_RecognisesAProxyOnThisComputer(string server, bool local)
     {
         var check = SecurityRules.EvaluateProxy(new ProxyState(true, true, server, null));
