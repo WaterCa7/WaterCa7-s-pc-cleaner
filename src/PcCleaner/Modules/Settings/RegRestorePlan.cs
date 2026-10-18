@@ -184,14 +184,14 @@ internal sealed class RegRestorePlan
         if (other.Count > 0)
         {
             sb.Append(LaunchChanges.Any() ? "Другие изменения в реестре:\n" : "Что изменится в реестре:\n");
-            sb.Append(SettingsViewModel.BulletList(other.Select(c => ChangeLine(c, 90)), MaxShownChanges));
+            sb.Append(BulkText.BulletList(other.Select(c => ChangeLine(c, 90)), MaxShownChanges));
         }
         if (NewKeys.Count > 0)
         {
             if (sb.Length > 0)
                 sb.Append('\n');
             sb.Append("Будут созданы разделы:\n");
-            sb.Append(SettingsViewModel.BulletList(NewKeys.Select(k => Visible(Relative(k), 80)), MaxShownKeys));
+            sb.Append(BulkText.BulletList(NewKeys.Select(k => Visible(Relative(k), 80)), MaxShownKeys));
         }
         if (Unchanged > 0)
         {
@@ -212,7 +212,7 @@ internal sealed class RegRestorePlan
             return null;
         return "Внимание: эти значения запускают программы. Восстанавливайте копию, только если узнаёте их — " +
                "папку с копиями могут изменить и другие программы, запущенные от вашего имени:\n" +
-               SettingsViewModel.BulletList(launch.Select(c => ChangeLine(c, 200)), MaxShownLaunch);
+               BulkText.BulletList(launch.Select(c => ChangeLine(c, 200)), MaxShownLaunch);
     }
 
     /// <summary>Every change in one line (written to the log when the confirmation had to shorten the lists).</summary>

@@ -75,7 +75,7 @@ public sealed partial class SettingsViewModel
 
         var message =
             (rows.Count == 1 ? "Вернуть файл из карантина на прежнее место?" : $"Вернуть из карантина {Format.Count(rows.Count, "файл", "файла", "файлов")}?") +
-            "\n\n" + BulletList(rows.Select(r => r.OriginalPath)) + "\n\n" +
+            "\n\n" + BulkText.BulletList(rows.Select(r => r.OriginalPath), 8) + "\n\n" +
             "Файл попал в карантин, потому что выглядел подозрительно. Восстанавливайте его, только если уверены, " +
             "что он нужен и безопасен: после восстановления он снова сможет запускаться. " +
             "При необходимости его можно будет снова отправить в карантин.";
@@ -141,7 +141,7 @@ public sealed partial class SettingsViewModel
             : $"Восстановлено: {restored} из {rows.Count}.";
         if (processed < rows.Count)
             header += " Остальные файлы не обработаны — операция была отменена.";
-        Dialogs.Info("Восстановление из карантина", header + "\n\n" + BulletList(results, 10));
+        Dialogs.Info("Восстановление из карантина", header + "\n\n" + BulkText.BulletList(results, 10));
     }
 
     private void DeleteQuarantine(List<QuarantineRow> rows)
@@ -151,7 +151,7 @@ public sealed partial class SettingsViewModel
 
         var message =
             (rows.Count == 1 ? "Удалить файл из карантина навсегда?" : $"Удалить навсегда {Format.Count(rows.Count, "файл", "файла", "файлов")} из карантина?") +
-            "\n\n" + BulletList(rows.Select(r => r.OriginalPath)) + "\n\n" +
+            "\n\n" + BulkText.BulletList(rows.Select(r => r.OriginalPath), 8) + "\n\n" +
             "Файлы будут стёрты без помещения в корзину — восстановить их будет нельзя.";
         if (!Dialogs.Confirm("Удаление из карантина", message))
             return;
@@ -170,6 +170,6 @@ public sealed partial class SettingsViewModel
         var header = deleted == rows.Count
             ? (deleted == 1 ? "Файл удалён навсегда." : $"Удалено файлов: {deleted}.")
             : $"Удалено: {deleted} из {rows.Count}.";
-        Dialogs.Info("Удаление из карантина", deleted == rows.Count ? header : header + "\n\n" + BulletList(results, 10));
+        Dialogs.Info("Удаление из карантина", deleted == rows.Count ? header : header + "\n\n" + BulkText.BulletList(results, 10));
     }
 }

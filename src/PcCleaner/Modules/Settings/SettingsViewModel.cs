@@ -163,13 +163,4 @@ public sealed partial class SettingsViewModel : PageViewModel
         IEnumerable list => list.OfType<T>().ToList(),
         _ => new List<T>(),
     };
-
-    internal static string BulletList(IEnumerable<string> lines, int max = 8)
-    {
-        var all = lines.ToList();
-        var shown = all.Take(max).Select(l => "• " + l).ToList();
-        if (all.Count > max)
-            shown.Add($"…и ещё {all.Count - max}");
-        return string.Join("\n", shown);
-    }
 }
