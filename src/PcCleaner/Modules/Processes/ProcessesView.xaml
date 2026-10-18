@@ -485,6 +485,8 @@
 
                         <DataGrid.Columns>
                             <!-- Checkboxes for "Завершить отмеченные"; the header one checks or clears all visible rows.
+                                 A program's box shows its processes' checks (all / some / none). Clicks go to the
+                                 view-model, which decides the new state (an indeterminate box becomes fully checked).
                                  Width 18 = the box alone (no caption gap), so it fits the 10 px cell padding on both sides. -->
                             <DataGridTemplateColumn Width="38" CanUserSort="False" CanUserResize="False">
                                 <DataGridTemplateColumn.Header>
@@ -495,8 +497,10 @@
                                 </DataGridTemplateColumn.Header>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate DataType="{x:Type local:ProcessItem}">
-                                        <CheckBox Width="18" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                  IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        <CheckBox IsThreeState="True" Width="18" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsChecked, Mode=OneWay}"
+                                                  Command="{Binding DataContext.ToggleCheckCommand, ElementName=Root}"
+                                                  CommandParameter="{Binding}"
                                                   IsEnabled="{Binding CanCheck}" ToolTip="{Binding CheckTooltip}"
                                                   ToolTipService.ShowOnDisabled="True" />
                                     </DataTemplate>

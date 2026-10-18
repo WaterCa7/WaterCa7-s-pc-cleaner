@@ -88,6 +88,7 @@ public sealed class ProcessesViewModel : PageViewModel
         Checked.Changed += (_, _) => OnChecksChanged();
         KillCheckedCommand = new AsyncRelayCommand(KillCheckedAsync, () => Checked.Count > 0);
         ClearChecksCommand = new RelayCommand(Checked.Clear);
+        ToggleCheckCommand = new RelayCommand(p => ToggleCheck(p as ProcessItem), p => p is ProcessItem { CanCheck: true });
         ToggleAllVisibleCommand = new RelayCommand(ToggleAllVisible, () => Items.Any(i => i.CanCheck));
     }
 
@@ -383,18 +384,20 @@ public sealed class ProcessesViewModel : PageViewModel
     public bool ShowResetFilters => HasLoaded && IsEmpty;
 
     /// <summary>
-    /// Checked processes and programs by <see cref="ProcessCheckKey"/> (rows read <see cref="ProcessItem.IsChecked"/> from
-    /// here), so the checks survive the 2-second refresh. A checked program stands for all its processes at action time.
+    /// Checked processes, by <see cref="ProcessKey"/> (PID + start time) only: rows and programs read
+    /// <see cref="ProcessItem.IsChecked"/> from here, so the checks survive the 2-second refresh and switching
+    /// "Группировать по программам" shows the same checks either way. Exactly these processes get ended.
     /// </summary>
-    internal CheckedSet<ProcessCheckKey> Checked { get; } = new();
+    internal CheckedSet<ProcessKey> Checked { get; } = new();
 
-    /// <summary>"Отмечено: N" of the bulk action bar.</summary>
+    /// <summary>"Отмечено: N" of the bulk action bar (processes).</summary>
     public int CheckedCount => Checked.Count;
 
-    /// <summary>Header checkbox: true = every visible row that can be checked is, false = none, null = some.</summary>
+    /// <summary>Header checkbox over the processes behind the visible rows: true = all checked, false = none, null = some.</summary>
     public bool? AllVisibleChecked => Checked.StateOf(VisibleCheckKeys());
 
-    private IEnumerable<ProcessCheckKey> VisibleCheckKeys() => Items.Where(i => i.CanCheck).Select(i => i.CheckKey);
+    /// <summary>A visible program stands for all its processes, a visible process for itself.</summary>
+    private IEnumerable<ProcessKey> VisibleCheckKeys() => Items.Where(i => i.CanCheck).SelectMany(i => i.CheckKeys);
 
     // ================================================================ commands
 
@@ -432,6 +435,9 @@ public sealed class ProcessesViewModel : PageViewModel
     /// <summary>"Снять отметки".</summary>
     public RelayCommand ClearChecksCommand { get; }
 
+    /// <summary>A row's checkbox click (parameter: the row). An indeterminate program becomes fully checked.</summary>
+    public RelayCommand ToggleCheckCommand { get; }
+
     /// <summary>Header checkbox click: checks every visible row that can be checked, or unchecks them when all are.</summary>
     public RelayCommand ToggleAllVisibleCommand { get; }
 
@@ -440,6 +446,14 @@ public sealed class ProcessesViewModel : PageViewModel
 
     /// <summary>Test seam: replaces <see cref="ProcessesService.Kill"/> for "Завершить отмеченные", so tests end nothing real.</summary>
     internal Func<IReadOnlyList<KillTarget>, KillReport>? KillOverride { get; set; }
+
+    /// <summary>"Завершить отмеченные" messages that are not errors (tests replace it).</summary>
+    internal Action<string, string> ShowInfo { get; set; } = Dialogs.Info;
+
+    internal Func<bool> IsElevated { get; set; } = () => Admin.IsElevated;
+
+    /// <summary>Offers the restart as administrator after "Завершить отмеченные" (tests replace it so nothing restarts).</summary>
+    internal Func<string, bool> RequireElevation { get; set; } = Admin.RequireElevation;
 
     private ProcessItem? Target(object? parameter) => parameter as ProcessItem ?? SelectedItem;
 
@@ -907,8 +921,9 @@ public sealed class ProcessesViewModel : PageViewModel
             OnPropertyChanged(nameof(SelectedItem));
         VisibleCount = desired.Count;
 
-        // Exited processes (and programs with no process left) leave the checks; the header follows the visible rows.
-        Checked.KeepOnly(_rows.Values.Select(r => r.CheckKey).Concat(_groups.Values.Select(g => g.CheckKey)));
+        // Exited processes, and ones that can no longer be ended, leave the checks (a disabled box is never checked or
+        // counted); the header follows the visible rows.
+        Checked.KeepOnly(_rows.Values.Where(r => r.CanCheck).Select(r => r.Key));
         OnPropertyChanged(nameof(AllVisibleChecked));
     }
 
@@ -1051,6 +1066,12 @@ public sealed class ProcessesViewModel : PageViewModel
         OnPropertyChanged(nameof(SuspiciousOnly));
         OnPropertyChanged(nameof(HideMicrosoft));
         UpdateViewSafe();
+    }
+
+    private static void ToggleCheck(ProcessItem? item)
+    {
+        if (item is not null)
+            item.IsChecked = item.IsChecked != true;
     }
 
     private void ToggleAllVisible()
@@ -1202,26 +1223,32 @@ public sealed class ProcessesViewModel : PageViewModel
     /// <summary>What "Завершить отмеченные" is about to do, taken from the checks right before the question.</summary>
     private sealed class CheckedKillPlan
     {
-        /// <summary>Processes to end: those of every checked program and every checked process, each once.</summary>
+        /// <summary>The checked processes that may be ended, each once.</summary>
         public List<ProcessRow> Victims { get; } = new();
 
-        /// <summary>One line per checked program or process: "Google Chrome (chrome.exe) — 3 процесса".</summary>
-        public List<string> Lines { get; } = new();
+        /// <summary>
+        /// Checked processes the list does not show right now (search, filters, or inside a collapsed program that is only
+        /// partly checked), one line per program with all their PIDs. They are ended too, so the question names them first.
+        /// </summary>
+        public List<string> HiddenLines { get; } = new();
 
-        /// <summary>Checked items that became protected after they were checked: left alone.</summary>
-        public List<string> Skipped { get; } = new();
+        /// <summary>What the list shows as checked, in list order: a fully checked program is one line.</summary>
+        public List<string> VisibleLines { get; } = new();
 
-        /// <summary>The processes each checked key stands for: the key is unchecked once all of them have ended.</summary>
-        public Dictionary<ProcessCheckKey, List<ProcessKey>> ByKey { get; } = new();
+        /// <summary>Checked processes that can no longer be ended (protection changed since the last list update).</summary>
+        public List<ProcessRow> Skipped { get; } = new();
     }
 
     private async Task KillCheckedAsync()
     {
         var plan = PlanCheckedKill();
+        // A disabled box is never checked: processes that became protected leave the checks right away.
+        Checked.SetAll(plan.Skipped.Select(r => r.Key), false);
         if (plan.Victims.Count == 0)
         {
             if (plan.Skipped.Count > 0)
-                Dialogs.Info("Процесс защищён", "Отмеченные процессы теперь защищены, завершать их нельзя:\n" + BulkText.BulletList(plan.Skipped));
+                ShowInfo("Процесс защищён", "Отмеченные процессы теперь защищены, завершать их нельзя:\n" +
+                                            BulkText.BulletList(plan.Skipped.Select(ProcessLine)));
             return;
         }
         var title = plan.Victims.Count > 1 ? "Завершить отмеченные процессы?" : "Завершить отмеченный процесс?";
@@ -1232,16 +1259,16 @@ public sealed class ProcessesViewModel : PageViewModel
         var kill = KillOverride ?? _service.Kill;
         var report = await Task.Run(() => kill(targets));
 
-        var ended = report.Killed.Concat(report.AlreadyExited).Select(t => new ProcessKey(t.Pid, t.CreateTime)).ToHashSet();
-        Checked.SetAll(plan.ByKey.Where(p => p.Value.All(ended.Contains)).Select(p => p.Key), false);
+        // Ended (or already gone) processes leave the checks; those that could not be ended stay checked.
+        Checked.SetAll(report.Killed.Concat(report.AlreadyExited).Select(t => new ProcessKey(t.Pid, t.CreateTime)), false);
 
         // BuildKillReport names the item only when there was a single process, which is then Victims[0].
-        if (report.Done == 0 && report.AccessDenied && !Admin.IsElevated)
-            Admin.RequireElevation("Завершение отмеченных процессов");
+        if (report.Done == 0 && report.AccessDenied && !IsElevated())
+            RequireElevation("Завершение отмеченных процессов");
         else if (report.Failed.Count > 0)
             Dialogs.Error("Не всё получилось", BuildKillReport(plan.Victims[0], report));
         else
-            Dialogs.Info("Готово", BuildKillReport(plan.Victims[0], report));
+            ShowInfo("Готово", BuildKillReport(plan.Victims[0], report));
 
         await SafeRefreshAsync();
     }
@@ -1249,60 +1276,87 @@ public sealed class ProcessesViewModel : PageViewModel
     private CheckedKillPlan PlanCheckedKill()
     {
         var plan = new CheckedKillPlan();
-        var taken = new HashSet<ProcessKey>();
         lock (_stateLock)
         {
-            var items = Checked.Keys
-                .Select(k => k.Group is { } group ? _groups.GetValueOrDefault(group) : (ProcessItem?)_rows.GetValueOrDefault(k.Process))
-                .OfType<ProcessItem>()
-                // Programs first: a checked process of a checked program is ended (and listed) once, with its program.
-                .OrderBy(i => i.IsGroup ? 0 : 1)
-                .ThenBy(i => i.FriendlyName, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-            foreach (var item in items)
+            foreach (var key in Checked.Keys)
             {
-                // A program's verdict is the worst of its processes, so a program that can still be checked has no
-                // protected process; one that became protected (a Windows process joined it) is left alone as a whole.
-                if (!item.CanCheck)
-                {
-                    plan.Skipped.Add(CheckedLine(item, InstancesOf(item)));
-                    continue;
-                }
-                var rows = InstancesOf(item);
-                plan.ByKey[item.CheckKey] = rows.Select(r => r.Key).ToList();
-                var fresh = rows.Where(r => taken.Add(r.Key)).ToList();
-                if (fresh.Count == 0)
-                    continue;
-                plan.Victims.AddRange(fresh);
-                plan.Lines.Add(CheckedLine(item, fresh));
+                if (!_rows.TryGetValue(key, out var row))
+                    continue; // exited: the next list update drops the check
+                (row.CanCheck ? plan.Victims : plan.Skipped).Add(row);
             }
+            var victims = plan.Victims.Select(r => r.Key).ToHashSet();
+
+            // What the list shows as checked: a fully checked program, or a checked process row.
+            var shown = new HashSet<ProcessKey>();
+            foreach (var item in Items)
+            {
+                IEnumerable<ProcessRow> rows = item switch
+                {
+                    ProcessGroup { IsChecked: true } program => program.Instances,
+                    ProcessRow r => new[] { r },
+                    _ => Array.Empty<ProcessRow>(),
+                };
+                var listed = rows.Where(r => victims.Contains(r.Key) && shown.Add(r.Key)).ToList();
+                if (listed.Count > 0)
+                    plan.VisibleLines.Add(CheckedLine(item, listed, allPids: false));
+            }
+
+            plan.HiddenLines.AddRange(plan.Victims.Where(r => !shown.Contains(r.Key))
+                .GroupBy(r => (ProcessItem?)r.Group ?? r)
+                .Select(g => CheckedLine(g.Key, g.OrderBy(r => r.Pid).ToList(), allPids: true))
+                .OrderBy(line => line, StringComparer.CurrentCultureIgnoreCase));
         }
         return plan;
     }
 
-    /// <summary>"Google Chrome (chrome.exe) — 3 процесса" or "notepad.exe, PID 4242".</summary>
-    private static string CheckedLine(ProcessItem item, List<ProcessRow> rows)
+    /// <summary>
+    /// "notepad.exe, PID 4242" or "Google Chrome (chrome.exe) — 3 процесса (PID 1, 2, 3)"; like the single kill's question,
+    /// a long PID list is cut after 15 unless <paramref name="allPids"/>.
+    /// </summary>
+    private static string CheckedLine(ProcessItem item, List<ProcessRow> rows, bool allPids)
     {
         var name = string.Equals(item.FriendlyName, item.ExeName, StringComparison.OrdinalIgnoreCase)
             ? item.ExeName
             : $"{item.FriendlyName} ({item.ExeName})";
-        return rows.Count == 1
-            ? $"{name}, PID {rows[0].Pid}"
-            : $"{name} — {Format.Count(rows.Count, "процесс", "процесса", "процессов")}";
+        if (rows.Count == 1)
+            return $"{name}, PID {rows[0].Pid}";
+        var cut = !allPids && rows.Count > 15;
+        var pids = string.Join(", ", rows.Take(cut ? 15 : rows.Count).Select(r => r.Pid)) + (cut ? ", …" : "");
+        return $"{name} — {Format.Count(rows.Count, "процесс", "процесса", "процессов")} (PID {pids})";
     }
+
+    private static string ProcessLine(ProcessRow row) => CheckedLine(row, new List<ProcessRow> { row }, allPids: true);
 
     private static string BuildCheckedKillMessage(CheckedKillPlan plan)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(plan.Victims.Count == 1
-            ? "Будет принудительно завершён процесс:"
-            : $"Будут принудительно завершены {Format.Count(plan.Victims.Count, "процесс", "процесса", "процессов")}:");
-        sb.AppendLine(BulkText.BulletList(plan.Lines));
+        var total = plan.Victims.Count == 1
+            ? "Будет принудительно завершён 1 процесс"
+            : $"Будут принудительно завершены {Format.Count(plan.Victims.Count, "процесс", "процесса", "процессов")}";
+        if (plan.HiddenLines.Count == 0)
+        {
+            sb.AppendLine(total + ":");
+            sb.AppendLine(BulkText.BulletList(plan.VisibleLines));
+        }
+        else
+        {
+            // They are ended too, so they come first and are never folded into "…и ещё N".
+            sb.AppendLine(total + ".");
+            sb.AppendLine();
+            sb.AppendLine("Не видны в списке сейчас:");
+            sb.AppendLine(BulkText.BulletList(plan.HiddenLines, plan.HiddenLines.Count));
+            if (plan.VisibleLines.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("В списке:");
+                sb.AppendLine(BulkText.BulletList(plan.VisibleLines));
+            }
+        }
         if (plan.Skipped.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("Эти отмеченные процессы теперь защищены и затронуты не будут:");
-            sb.AppendLine(BulkText.BulletList(plan.Skipped));
+            sb.AppendLine(BulkText.BulletList(plan.Skipped.Select(ProcessLine)));
         }
         sb.AppendLine();
         sb.Append("Несохранённые данные в этих программах будут потеряны. Если программа отвечает, лучше закройте её обычным способом.");

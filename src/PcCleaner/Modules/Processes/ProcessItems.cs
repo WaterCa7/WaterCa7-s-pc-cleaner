@@ -18,18 +18,6 @@ public enum ProcessStatusKind
 }
 
 /// <summary>
-/// What a checkbox of the process list stands for: one process (<see cref="Process"/>) or a whole program
-/// (<see cref="Group"/>, the program's group key). A program's key never equals a process's key, so checking a program
-/// does not check its processes one by one (they are taken at action time instead).
-/// </summary>
-internal readonly record struct ProcessCheckKey(ProcessKey Process, string? Group)
-{
-    public static ProcessCheckKey ForProcess(ProcessKey key) => new(key, null);
-
-    public static ProcessCheckKey ForProgram(string groupKey) => new(default, groupKey);
-}
-
-/// <summary>
 /// A row of the process grid: either a program (group of processes with the same executable) or a single process.
 /// Rows are long-lived and updated in place on every refresh so the grid keeps selection and scroll position.
 /// </summary>
@@ -449,37 +437,53 @@ public abstract class ProcessItem : ObservableObject
 
     // ---- checkbox ("Завершить отмеченные") ----
 
-    /// <summary>The page's checked set (null for rows made outside the page, which then stay unchecked).</summary>
-    internal CheckedSet<ProcessCheckKey>? Checks { get; init; }
+    /// <summary>
+    /// The page's checked PROCESSES (null for rows made outside the page, which then stay unchecked). A program has no
+    /// check of its own: its box shows and sets the checks of its processes.
+    /// </summary>
+    internal CheckedSet<ProcessKey>? Checks { get; init; }
 
-    internal abstract ProcessCheckKey CheckKey { get; }
+    /// <summary>The processes this row stands for: a process itself, or all current processes of a program.</summary>
+    internal abstract IEnumerable<ProcessKey> CheckKeys { get; }
 
-    /// <summary>Kept in the page's <see cref="CheckedSet{TKey}"/> by key, so the 2-second refresh never loses it.</summary>
-    public bool IsChecked
+    /// <summary>
+    /// A process: checked or not. A program: true when all its processes are checked, null when some, false when none;
+    /// setting it checks or unchecks all of them (a process that joins the program later is not checked).
+    /// </summary>
+    public bool? IsChecked
     {
-        get => Checks?.IsChecked(CheckKey) == true;
+        get => Checks is null ? false : Checks.StateOf(CheckKeys); // not "?? false": null means "some"
         set
         {
-            // A protected process is never checked: its checkbox is disabled, and code that sets it is refused too.
-            if (Checks is null || (value && !CanCheck))
+            // What can't be ended is never checked: its checkbox is disabled, and code that sets it is refused too.
+            if (Checks is null || (value == true && !CanCheck))
             {
                 OnPropertyChanged();
                 return;
             }
-            Checks.Set(CheckKey, value);
+            Checks.SetAll(CheckKeys, value == true);
         }
     }
 
     /// <summary>Only what may be terminated can be checked (for a program: none of its processes is protected).</summary>
-    public bool CanCheck => CanKill;
+    public virtual bool CanCheck => CanKill;
 
     /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
-    public string? CheckTooltip => CanCheck
+    public virtual string? CheckTooltip => CanCheck
         ? null
         : ProtectionReason == ProcessGuard.SelfText ? ProcessGuard.SelfText : CannotCheckText;
 
     /// <summary>The page's checked set changed: the checkbox reads it again.</summary>
     internal void OnCheckedChanged() => OnPropertyChanged(nameof(IsChecked));
+
+    internal void OnCanCheckChanged()
+    {
+        OnPropertyChanged(nameof(CanCheck));
+        OnPropertyChanged(nameof(CheckTooltip));
+    }
+
+    /// <summary>Called after the kill verdict changed (a program tells its processes: their checkboxes depend on it).</summary>
+    protected virtual void OnProtectionChanged() { }
 
     public string TrustButtonText => IsTrusted ? "Не доверять" : "Доверять";
 
@@ -536,8 +540,8 @@ public abstract class ProcessItem : ObservableObject
         OnPropertyChanged(nameof(ProtectionText));
         OnPropertyChanged(nameof(KillToolTip));
         OnPropertyChanged(nameof(KillTreeToolTip));
-        OnPropertyChanged(nameof(CanCheck));
-        OnPropertyChanged(nameof(CheckTooltip));
+        OnCanCheckChanged();
+        OnProtectionChanged();
     }
 
     internal void SetQuarantineBlockReason(string? reason)
@@ -580,7 +584,15 @@ public sealed class ProcessRow : ProcessItem
 
     internal ProcessKey Key => Info.Key;
 
-    internal override ProcessCheckKey CheckKey => ProcessCheckKey.ForProcess(Key);
+    internal override IEnumerable<ProcessKey> CheckKeys => new[] { Key };
+
+    /// <summary>
+    /// A process of a protected program can't be checked either (it can still be ended on its own with «Завершить»):
+    /// otherwise checks could hide behind the program's disabled box.
+    /// </summary>
+    public override bool CanCheck => CanKill && Group?.CanKill != false;
+
+    public override string? CheckTooltip => CanKill && Group is { CanKill: false } program ? program.CheckTooltip : base.CheckTooltip;
 
     internal long CreateTime { get; }
 
@@ -724,7 +736,13 @@ public sealed class ProcessGroup : ProcessItem
 
     internal string Key { get; }
 
-    internal override ProcessCheckKey CheckKey => ProcessCheckKey.ForProgram(Key);
+    internal override IEnumerable<ProcessKey> CheckKeys => _instances.Select(r => r.Key);
+
+    protected override void OnProtectionChanged()
+    {
+        foreach (var r in _instances)
+            r.OnCanCheckChanged();
+    }
 
     public IReadOnlyList<ProcessRow> Instances => _instances;
 
@@ -841,7 +859,12 @@ public sealed class ProcessGroup : ProcessItem
         var changed = instances.Count != _instances.Count || !instances.SequenceEqual(_instances);
         _instances = instances;
         foreach (var r in instances)
+        {
+            if (ReferenceEquals(r.Group, this))
+                continue;
             r.Group = this;
+            r.OnCanCheckChanged(); // it now follows this program's protection
+        }
         if (instances.Count > 0)
             _exeName = instances[0].ExeName;
         if (changed)
@@ -858,6 +881,7 @@ public sealed class ProcessGroup : ProcessItem
             OnPropertyChanged(nameof(ShowInstanceDetails));
             OnPropertyChanged(nameof(StartTimeText));
             OnPropertyChanged(nameof(KillToolTip));
+            OnPropertyChanged(nameof(IsChecked)); // e.g. a new, unchecked process makes a checked program "some"
             InvalidateSearchText();
         }
         if (instances.Count <= 1 && IsExpanded)

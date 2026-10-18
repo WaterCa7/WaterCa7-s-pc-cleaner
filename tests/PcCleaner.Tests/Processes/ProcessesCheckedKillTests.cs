@@ -6,8 +6,9 @@ using static PcCleaner.Tests.Processes.ProcessTestData;
 namespace PcCleaner.Tests.Processes;
 
 /// <summary>
-/// The checkbox column of «Процессы» and «Завершить отмеченные». Nothing is really terminated: the page's kill goes to
-/// <see cref="FakeKill"/>, which only records the targets (and, like a real kill, makes them vanish from the fake list).
+/// The checkbox column of «Процессы» and «Завершить отмеченные»: what is checked is what gets ended. Nothing is really
+/// terminated: the page's kill goes to <see cref="FakeKill"/>, which only records the targets (and, like a real kill,
+/// makes them vanish from the fake list).
 /// </summary>
 public class ProcessesCheckedKillTests
 {
@@ -23,10 +24,12 @@ public class ProcessesCheckedKillTests
         /// <summary>Error text for a process that "could not be ended", null for one that was.</summary>
         public Func<KillTarget, string?> FailWith { get; set; } = _ => null;
 
+        public bool AccessDenied { get; set; }
+
         public KillReport Kill(IReadOnlyList<KillTarget> targets)
         {
             Calls.Add(targets.ToList());
-            var report = new KillReport();
+            var report = new KillReport { AccessDenied = AccessDenied };
             foreach (var target in targets)
             {
                 if (FailWith(target) is { } error)
@@ -65,14 +68,31 @@ public class ProcessesCheckedKillTests
 
     private static ProcessRow RowOf(ProcessesViewModel vm, int pid) => vm.Rows.Single(r => r.Pid == pid);
 
+    /// <summary>Answers "Да" and keeps the question.</summary>
+    private static Func<string?> AnswerYes(ProcessesViewModel vm)
+    {
+        string? question = null;
+        vm.Confirm = (_, message) =>
+        {
+            question = message;
+            return true;
+        };
+        return () => question;
+    }
+
+    private static int[] EndedPids(FakeKill kill) => Assert.Single(kill.Calls).Select(t => t.Pid).OrderBy(p => p).ToArray();
+
+    // ---------------------------------------------------------------- checking
+
     [Fact]
-    public async Task Checks_SurviveTheRefresh()
+    public async Task CheckingAProgram_ChecksItsProcesses_AndTheChecksSurviveTheRefresh()
     {
         var (vm, source, clock, _) = await LoadAsync();
         var chrome = GroupOf(vm, "chrome.exe");
         chrome.IsChecked = true;
         RowOf(vm, 300).IsChecked = true;
-        Assert.Equal(2, vm.CheckedCount);
+        Assert.Equal(4, vm.CheckedCount); // chrome's 3 processes + evilupdater
+        Assert.True(RowOf(vm, 101).IsChecked);
 
         source.AddCpu(300, 5 * TimeSpan.TicksPerSecond); // reorders the list when sorted by CPU
         vm.SortBy("Cpu");
@@ -80,26 +100,24 @@ public class ProcessesCheckedKillTests
 
         Assert.Same(chrome, GroupOf(vm, "chrome.exe"));
         Assert.True(chrome.IsChecked);
-        Assert.True(RowOf(vm, 300).IsChecked);
-        Assert.False(RowOf(vm, 100).IsChecked); // a checked program does not check its processes one by one
-        Assert.Equal(2, vm.CheckedCount);
+        Assert.True(GroupOf(vm, "evilupdater.exe").IsChecked);
+        Assert.Equal(4, vm.CheckedCount);
     }
 
     [Fact]
     public async Task ExitedProcesses_DropOutOfTheChecks()
     {
         var (vm, source, clock, _) = await LoadAsync();
-        RowOf(vm, 100).IsChecked = true;
-        RowOf(vm, 101).IsChecked = true;
+        GroupOf(vm, "chrome.exe").IsChecked = true;
         GroupOf(vm, "evilupdater.exe").IsChecked = true;
-        Assert.Equal(3, vm.CheckedCount);
+        Assert.Equal(4, vm.CheckedCount);
 
         source.Remove(101);
         source.Remove(300); // the program's only process: the program leaves the list too
         await RefreshAsync(vm, clock);
 
-        Assert.Equal(1, vm.CheckedCount);
-        Assert.True(RowOf(vm, 100).IsChecked);
+        Assert.Equal(2, vm.CheckedCount);
+        Assert.True(GroupOf(vm, "chrome.exe").IsChecked);
     }
 
     [Fact]
@@ -110,22 +128,24 @@ public class ProcessesCheckedKillTests
         var system = GroupOf(vm, "System");
         var chrome = GroupOf(vm, "chrome.exe");
         Assert.False(svchost.CanCheck);
+        Assert.False(RowOf(vm, 200).CanCheck);
         Assert.False(system.CanCheck);
         Assert.Equal("Системный процесс Windows — его нельзя завершать", svchost.CheckTooltip);
         Assert.True(chrome.CanCheck);
         Assert.Null(chrome.CheckTooltip);
 
         svchost.IsChecked = true;
+        RowOf(vm, 200).IsChecked = true;
         Assert.False(svchost.IsChecked);
         Assert.Equal(0, vm.CheckedCount);
         Assert.False(vm.AllVisibleChecked);
 
         chrome.IsChecked = true;
-        Assert.Null(vm.AllVisibleChecked); // some of the rows that can be checked
+        Assert.Null(vm.AllVisibleChecked); // some of what can be checked
 
         vm.ToggleAllVisibleCommand.Execute(null);
         Assert.True(vm.AllVisibleChecked);
-        Assert.Equal(2, vm.CheckedCount); // chrome and evilupdater
+        Assert.Equal(4, vm.CheckedCount); // chrome's 3 and evilupdater
         Assert.False(svchost.IsChecked);
         Assert.False(system.IsChecked);
 
@@ -150,7 +170,7 @@ public class ProcessesCheckedKillTests
     }
 
     [Fact]
-    public async Task CheckAll_TakesOnlyTheRowsTheSearchShows()
+    public async Task CheckAll_TakesTheProcessesBehindTheVisibleRows()
     {
         var (vm, _, _, _) = await LoadAsync();
         var raised = new List<string?>();
@@ -160,7 +180,7 @@ public class ProcessesCheckedKillTests
         Assert.Contains(nameof(ProcessesViewModel.AllVisibleChecked), raised);
         vm.ToggleAllVisibleCommand.Execute(null);
         Assert.True(vm.AllVisibleChecked);
-        Assert.Equal(1, vm.CheckedCount);
+        Assert.Equal(3, vm.CheckedCount); // the collapsed program stands for its 3 processes
 
         vm.SearchText = "";
         Assert.Null(vm.AllVisibleChecked);
@@ -169,7 +189,7 @@ public class ProcessesCheckedKillTests
 
         vm.ToggleAllVisibleCommand.Execute(null); // "some" checks the rest
         Assert.True(vm.AllVisibleChecked);
-        Assert.Equal(2, vm.CheckedCount);
+        Assert.Equal(4, vm.CheckedCount);
     }
 
     [Fact]
@@ -193,6 +213,130 @@ public class ProcessesCheckedKillTests
     }
 
     [Fact]
+    public async Task CheckedProgram_ShowsItsProcessesChecked_WhenGroupingIsOff()
+    {
+        var (vm, _, _, kill) = await LoadAsync();
+        GroupOf(vm, "chrome.exe").IsChecked = true;
+
+        vm.GroupByProgram = false;
+        Assert.All(vm.Items.Where(i => i.ExeName == "chrome.exe"), i => Assert.True(i.IsChecked));
+        Assert.All(vm.Items.Where(i => i.ExeName != "chrome.exe"), i => Assert.False(i.IsChecked));
+        Assert.True(vm.AllVisibleChecked is null);
+
+        var question = AnswerYes(vm);
+        await vm.KillCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { 100, 101, 102 }, EndedPids(kill));
+        Assert.DoesNotContain("Не видны в списке сейчас", question());
+    }
+
+    [Fact]
+    public async Task CollapsedProgram_WithOneCheckedProcess_IsIndeterminate_AndOnlyThatProcessIsEnded()
+    {
+        var (vm, _, _, kill) = await LoadAsync();
+        var chrome = GroupOf(vm, "chrome.exe");
+        RowOf(vm, 101).IsChecked = true;
+        Assert.False(chrome.IsExpanded);
+        Assert.Null(chrome.IsChecked);
+
+        var question = AnswerYes(vm);
+        await vm.KillCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { 101 }, EndedPids(kill));
+        // Inside a collapsed program the process is not in the list: it is named on its own, with its PID.
+        Assert.Contains("Не видны в списке сейчас:", question());
+        Assert.Contains("PID 101", question());
+    }
+
+    [Fact]
+    public async Task ExpandedCheckedProgram_ShowsItsProcessesChecked_AndUncheckingOneLeavesItOut()
+    {
+        var (vm, _, _, kill) = await LoadAsync();
+        var chrome = GroupOf(vm, "chrome.exe");
+        chrome.IsChecked = true;
+        vm.ToggleExpand(chrome);
+        var children = vm.Items.Where(i => i.IsChild).Cast<ProcessRow>().ToList();
+        Assert.Equal(3, children.Count);
+        Assert.All(children, c => Assert.True(c.IsChecked));
+
+        var changes = new List<string?>();
+        chrome.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        vm.ToggleCheckCommand.Execute(RowOf(vm, 101)); // the row's own checkbox
+        Assert.False(RowOf(vm, 101).IsChecked);
+        Assert.Null(chrome.IsChecked);
+        Assert.Contains(nameof(ProcessItem.IsChecked), changes);
+
+        // Clicking the indeterminate program box checks all of it again, a second click clears it.
+        vm.ToggleCheckCommand.Execute(chrome);
+        Assert.True(chrome.IsChecked);
+        vm.ToggleCheckCommand.Execute(chrome);
+        Assert.False(chrome.IsChecked);
+        Assert.Equal(0, vm.CheckedCount);
+
+        chrome.IsChecked = true;
+        RowOf(vm, 101).IsChecked = false;
+        var question = AnswerYes(vm);
+        await vm.KillCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { 100, 102 }, EndedPids(kill));
+        Assert.DoesNotContain("Не видны в списке сейчас", question());
+    }
+
+    [Fact]
+    public async Task AProcessThatJoinsACheckedProgramLater_IsNotEnded()
+    {
+        var (vm, source, clock, kill) = await LoadAsync();
+        var chrome = GroupOf(vm, "chrome.exe");
+        chrome.IsChecked = true;
+
+        source.Add(103, "chrome.exe", ChromePath, parent: 100);
+        await RefreshAsync(vm, clock);
+        Assert.Equal(4, chrome.Count);
+        Assert.Null(chrome.IsChecked);
+        Assert.Equal(3, vm.CheckedCount);
+
+        AnswerYes(vm);
+        await vm.KillCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { 100, 101, 102 }, EndedPids(kill));
+    }
+
+    [Fact]
+    public async Task AProgramThatBecomesProtected_LosesItsChecks()
+    {
+        var fake = Path.Combine(Path.GetTempPath(), "svchost.exe"); // not the Windows one: may be ended
+        var (vm, source, clock, kill) = await LoadAsync(s =>
+        {
+            s.Add(700, "svchost.exe", fake);
+            s.Add(710, "notepad.exe", @"C:\Apps\notepad.exe");
+        });
+        var svchost = GroupOf(vm, "svchost.exe");
+        Assert.True(svchost.CanCheck);
+        svchost.IsChecked = true;
+        GroupOf(vm, "notepad.exe").IsChecked = true;
+        Assert.Equal(2, vm.CheckedCount);
+
+        // An svchost.exe whose file can't be read joins the only svchost.exe program and makes it protected.
+        source.Add(701, "svchost.exe", null);
+        await RefreshAsync(vm, clock);
+        Assert.Same(svchost, GroupOf(vm, "svchost.exe"));
+        Assert.Equal(2, svchost.Count);
+        Assert.False(svchost.CanCheck);
+        Assert.False(RowOf(vm, 700).CanCheck); // no check can hide behind the program's disabled box
+        Assert.False(svchost.IsChecked);
+        Assert.False(RowOf(vm, 700).IsChecked);
+        Assert.Equal(1, vm.CheckedCount);
+
+        AnswerYes(vm);
+        await vm.KillCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { 710 }, EndedPids(kill));
+        Assert.Contains(source.Enumerate(), p => p.Pid == 700);
+    }
+
+    // ---------------------------------------------------------------- "Завершить отмеченные"
+
+    [Fact]
     public async Task KillChecked_Declined_EndsNothing()
     {
         var (vm, source, _, kill) = await LoadAsync();
@@ -208,7 +352,7 @@ public class ProcessesCheckedKillTests
 
         Assert.NotNull(question);
         Assert.Empty(kill.Calls);
-        Assert.Equal(1, vm.CheckedCount);
+        Assert.Equal(3, vm.CheckedCount);
         Assert.Contains(source.Enumerate(), p => p.Pid == 100);
     }
 
@@ -217,7 +361,7 @@ public class ProcessesCheckedKillTests
     {
         var (vm, _, _, kill) = await LoadAsync();
         GroupOf(vm, "chrome.exe").IsChecked = true; // 100, 101, 102
-        RowOf(vm, 101).IsChecked = true; // also in the checked program
+        RowOf(vm, 101).IsChecked = true; // already checked with its program
         RowOf(vm, 300).IsChecked = true;
         var expected = vm.Rows.Where(r => r.Pid is 100 or 101 or 102 or 300)
             .Select(r => (r.Pid, r.CreateTime)).OrderBy(k => k.Pid).ToList();
@@ -235,8 +379,9 @@ public class ProcessesCheckedKillTests
         var targets = Assert.Single(kill.Calls);
         Assert.Equal(expected, targets.Select(t => (t.Pid, t.CreateTime)).OrderBy(k => k.Pid));
         Assert.Equal("Завершить отмеченные процессы?", title);
-        Assert.Contains("Google Chrome", question);
-        Assert.Contains("evilupdater.exe", question);
+        Assert.Contains("Google Chrome (chrome.exe) — 3 процесса (PID 100, 101, 102)", question);
+        Assert.Contains("evilupdater.exe, PID 300", question);
+        Assert.DoesNotContain("Не видны в списке сейчас", question);
         Assert.Contains("Несохранённые данные", question);
         Assert.DoesNotContain(ProcessGuard.ExplorerText, question);
         Assert.EndsWith("Продолжить?", question);
@@ -254,7 +399,7 @@ public class ProcessesCheckedKillTests
         kill.FailWith = t => t.Pid == 300 ? "нет доступа" : null;
         GroupOf(vm, "chrome.exe").IsChecked = true;
         GroupOf(vm, "evilupdater.exe").IsChecked = true;
-        vm.Confirm = (_, _) => true;
+        AnswerYes(vm);
 
         await vm.KillCheckedCommand.ExecuteAsync(null);
 
@@ -290,37 +435,74 @@ public class ProcessesCheckedKillTests
     }
 
     [Fact]
-    public async Task KillChecked_SkipsAProgramThatBecameProtectedAfterItWasChecked()
+    public async Task KillChecked_ListsHiddenChecksFirst_AndNeverFoldsThem()
     {
-        var fake = Path.Combine(Path.GetTempPath(), "svchost.exe"); // not the Windows one: may be ended
-        var (vm, source, clock, kill) = await LoadAsync(s =>
+        var (vm, _, _, kill) = await LoadAsync(source =>
         {
-            s.Add(700, "svchost.exe", fake);
-            s.Add(710, "notepad.exe", @"C:\Apps\notepad.exe");
+            for (var i = 1; i <= 15; i++)
+            {
+                source.Add(900 + i, $"tool{i:00}.exe", $@"C:\Apps\tool{i:00}.exe");
+                source.Add(950 + i, $"other{i:00}.exe", $@"C:\Apps\other{i:00}.exe");
+            }
         });
-        var svchost = GroupOf(vm, "svchost.exe");
-        Assert.True(svchost.CanCheck);
-        svchost.IsChecked = true;
-        GroupOf(vm, "notepad.exe").IsChecked = true;
+        vm.ToggleAllVisibleCommand.Execute(null);
+        Assert.Equal(30, vm.CheckedCount);
+        vm.SearchText = "tool"; // the "other" ones are checked but not in the list any more
 
-        // An svchost.exe whose file can't be read joins the only svchost.exe program and makes it protected.
-        source.Add(701, "svchost.exe", null);
-        await RefreshAsync(vm, clock);
-        Assert.Same(svchost, GroupOf(vm, "svchost.exe"));
-        Assert.Equal(2, svchost.Count);
-        Assert.False(svchost.CanCheck);
-
-        string? question = null;
-        vm.Confirm = (_, message) =>
-        {
-            question = message;
-            return true;
-        };
+        var question = AnswerYes(vm);
         await vm.KillCheckedCommand.ExecuteAsync(null);
 
-        Assert.Equal(new[] { 710 }, Assert.Single(kill.Calls).Select(t => t.Pid));
-        Assert.Contains("затронуты не будут", question);
-        Assert.Contains("svchost.exe", question);
-        Assert.Contains(source.Enumerate(), p => p.Pid == 700);
+        Assert.Equal(30, Assert.Single(kill.Calls).Count);
+        var text = question()!;
+        var hidden = text.IndexOf("Не видны в списке сейчас:", StringComparison.Ordinal);
+        Assert.True(hidden >= 0, text);
+        for (var i = 1; i <= 15; i++)
+            Assert.Contains($"other{i:00}.exe, PID {950 + i}", text);
+        Assert.True(hidden < text.IndexOf("tool01.exe", StringComparison.Ordinal), "the hidden part comes first");
+        Assert.True(text.IndexOf("other15.exe", StringComparison.Ordinal) < text.IndexOf("tool01.exe", StringComparison.Ordinal));
+        Assert.Contains("…и ещё 1", text); // only the visible part (15 lines) is folded
+        Assert.Single(text.Split('\n'), l => l.StartsWith("…и ещё", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task KillChecked_NothingEndedForLackOfRights_OffersTheAdminRestart()
+    {
+        var (vm, _, _, kill) = await LoadAsync();
+        kill.FailWith = _ => "нет доступа";
+        kill.AccessDenied = true;
+        string? elevation = null;
+        vm.IsElevated = () => false;
+        vm.RequireElevation = reason =>
+        {
+            elevation = reason;
+            return false;
+        };
+        GroupOf(vm, "evilupdater.exe").IsChecked = true;
+        AnswerYes(vm);
+
+        await vm.KillCheckedCommand.ExecuteAsync(null);
+
+        Assert.Equal("Завершение отмеченных процессов", elevation);
+        Assert.Equal(1, vm.CheckedCount); // still checked: nothing was ended
+    }
+
+    [Fact]
+    public async Task KillChecked_OnlyProtectedChecks_ShowsWhy_AndEndsNothing()
+    {
+        // Protection changed after the last list update (the next one would drop the check by itself).
+        var (vm, _, _, kill) = await LoadAsync();
+        vm.Checked.Set(RowOf(vm, 200).Key, true);
+        var asked = false;
+        vm.Confirm = (_, _) => asked = true;
+        (string Title, string Text)? info = null;
+        vm.ShowInfo = (title, text) => info = (title, text);
+
+        await vm.KillCheckedCommand.ExecuteAsync(null);
+
+        Assert.False(asked);
+        Assert.Empty(kill.Calls);
+        Assert.NotNull(info);
+        Assert.Contains("svchost.exe", info!.Value.Text);
+        Assert.Equal(0, vm.CheckedCount);
     }
 }
