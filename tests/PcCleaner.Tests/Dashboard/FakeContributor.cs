@@ -29,7 +29,7 @@ internal sealed class FakeContributor : IHealthContributor
     }
 
     public static HealthIssue Issue(string module, IssueSeverity severity, string title = "Проблема",
-        long reclaimable = 0, Func<CancellationToken, Task<string>>? fix = null, bool autoFixSafe = false)
+        long reclaimable = 0, Func<CancellationToken, Task<string>>? fix = null, bool autoFixSafe = false, bool inFixAll = true)
         => new()
         {
             Module = module,
@@ -39,6 +39,7 @@ internal sealed class FakeContributor : IHealthContributor
             ReclaimableBytes = reclaimable,
             FixAsync = fix,
             AutoFixSafe = autoFixSafe,
+            InFixAll = inFixAll,
             TargetPageKey = "Cleaner",
         };
 }

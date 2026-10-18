@@ -155,15 +155,26 @@ public sealed class IssueItem : ObservableObject
 
     internal void RaiseNeedsAdmin() => OnPropertyChanged(nameof(NeedsAdmin));
 
-    public string AutoFixHint => Issue.AutoFixSafe
-        ? "Безопасное исправление: входит в «Исправить безопасное»"
-        : "Перед исправлением программа покажет, что именно будет сделано";
+    public string AutoFixHint => Issue.InFixAll
+        ? "Входит в «Исправить всё»"
+        : "Не входит в «Исправить всё»: это действие запускается только отдельно";
+
+    /// <summary>The issue has a Windows settings page or a web page that helps with it.</summary>
+    public bool HasSettings => !string.IsNullOrWhiteSpace(Issue.SettingsUri);
+
+    /// <summary>Web pages are "Открыть страницу", Windows settings (ms-settings: and the like) are "Открыть настройки".</summary>
+    public string SettingsLabel => Uri.TryCreate(Issue.SettingsUri, UriKind.Absolute, out var uri)
+                                   && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+        ? "Открыть страницу"
+        : "Открыть настройки";
 
     public ICommand ToggleExpandCommand { get; }
 
     public ICommand? FixCommand { get; internal set; }
 
     public ICommand? OpenPageCommand { get; internal set; }
+
+    public ICommand? OpenSettingsCommand { get; internal set; }
 
     public ICommand? CopyCommand { get; internal set; }
 
@@ -246,8 +257,10 @@ public sealed record ScanOutcome(bool Cancelled, int? Score, IReadOnlyList<Modul
 }
 
 /// <summary>
-/// Result of "Исправить безопасное". <see cref="FreedBytes"/> = the scan's estimate of the fully completed fixes.
+/// Result of "Исправить всё". <see cref="FreedBytes"/> = the scan's estimate of the fully completed fixes.
 /// <see cref="Interrupted"/> = "Отмена" stopped a fix while it was running (it is counted neither fixed nor failed,
-/// but it may have changed part of what it promised).
+/// but it may have changed part of what it promised). <see cref="NeedAdmin"/> = how many of the failed fixes need
+/// administrator rights.
 /// </summary>
-public sealed record FixBatchResult(int Total, int Fixed, int Failed, bool Cancelled, long FreedBytes, bool Interrupted = false);
+public sealed record FixBatchResult(int Total, int Fixed, int Failed, bool Cancelled, long FreedBytes, bool Interrupted = false,
+    int NeedAdmin = 0);

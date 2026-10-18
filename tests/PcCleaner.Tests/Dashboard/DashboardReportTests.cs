@@ -819,7 +819,7 @@ public class DashboardReportViewModelTests
         Dialogs.ConfirmHandler = (_, _) => true;
         try
         {
-            await vm.FixSafeAsync();
+            await vm.FixAllAsync();
         }
         finally
         {
@@ -851,7 +851,7 @@ public class DashboardReportViewModelTests
         Dialogs.ConfirmHandler = (_, _) => true;
         try
         {
-            await vm.FixSafeAsync();
+            await vm.FixAllAsync();
         }
         finally
         {

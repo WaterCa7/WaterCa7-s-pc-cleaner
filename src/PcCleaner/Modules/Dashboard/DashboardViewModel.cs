@@ -81,7 +81,7 @@ public sealed class DashboardViewModel : PageViewModel
         _settingsOverride = settings;
 
         ScanCommand = new AsyncRelayCommand(ScanAsync, () => !IsBusy);
-        FixSafeCommand = new AsyncRelayCommand(FixSafeAsync, () => !IsBusy && SafeFixCount > 0);
+        FixAllCommand = new AsyncRelayCommand(FixAllAsync, () => !IsBusy && FixAllCount > 0);
         NavigateCommand = new RelayCommand(p => Navigate(p as string));
         // Restarting closes the app: never offer it while a scan or a batch of fixes is running.
         RequestAdminCommand = new RelayCommand(() => Admin.RequireElevation("полная проверка компьютера"),
@@ -133,13 +133,26 @@ public sealed class DashboardViewModel : PageViewModel
     /// <summary>Puts text on the clipboard (tests replace it; the real clipboard can be locked by another program).</summary>
     internal Action<string> SetClipboardText { get; set; } = Clipboard.SetText;
 
+    /// <summary>Opens a Windows settings page or a web page from an issue row (tests replace it so nothing is opened).</summary>
+    internal Action<string> OpenUri { get; set; } = ProcessRunner.ShellOpen;
+
+    /// <summary>
+    /// Offers to restart the app as administrator after "Исправить всё" (tests replace it so nothing restarts).
+    /// Gets what needs the rights; the result is true when the offer was shown.
+    /// </summary>
+    internal Func<string, bool> RequestElevation { get; set; } = reason =>
+    {
+        Admin.RequireElevation(reason);
+        return true;
+    };
+
     internal IReadOnlyList<HealthIssue> CurrentIssues => _issues;
 
     // ===================== Commands =====================
 
     public AsyncRelayCommand ScanCommand { get; }
 
-    public AsyncRelayCommand FixSafeCommand { get; }
+    public AsyncRelayCommand FixAllCommand { get; }
 
     public RelayCommand NavigateCommand { get; }
 
@@ -388,11 +401,12 @@ public sealed class DashboardViewModel : PageViewModel
         }
     }
 
-    public int SafeFixCount => _issues.Count(i => i.CanFix && i.AutoFixSafe);
+    /// <summary>Issues "Исправить всё" runs: fixable ones except those that open their own windows, restart or uninstall.</summary>
+    public int FixAllCount => _issues.Count(i => i.CanFix && i.InFixAll);
 
-    public bool HasSafeFixes => !IsScanning && SafeFixCount > 0;
+    public bool HasFixAll => !IsScanning && FixAllCount > 0;
 
-    public string FixSafeText => $"Исправить безопасное ({SafeFixCount})";
+    public string FixAllText => $"Исправить всё ({FixAllCount})";
 
     public int FixedCount
     {
@@ -731,9 +745,9 @@ public sealed class DashboardViewModel : PageViewModel
         OnPropertyChanged(nameof(ShowNoProblems));
         OnPropertyChanged(nameof(ShowScanningPlaceholder));
         OnPropertyChanged(nameof(ResultsSummaryText));
-        OnPropertyChanged(nameof(SafeFixCount));
-        OnPropertyChanged(nameof(HasSafeFixes));
-        OnPropertyChanged(nameof(FixSafeText));
+        OnPropertyChanged(nameof(FixAllCount));
+        OnPropertyChanged(nameof(HasFixAll));
+        OnPropertyChanged(nameof(FixAllText));
         RelayCommand.Refresh();
     }
 
@@ -938,6 +952,7 @@ public sealed class DashboardViewModel : PageViewModel
         var item = new IssueItem(issue);
         item.FixCommand = new AsyncRelayCommand(() => FixIssueAsync(item), () => !IsBusy && !item.IsFixing && item.Issue.CanFix);
         item.OpenPageCommand = new RelayCommand(() => Navigate(issue.TargetPageKey), () => item.HasTargetPage);
+        item.OpenSettingsCommand = new RelayCommand(() => OpenSettings(item), () => item.HasSettings);
         item.CopyCommand = new RelayCommand(() => CopyIssue(issue));
         item.SearchCommand = new RelayCommand(() => FileTools.SearchWeb(issue.Title ?? ""));
         // The UAC prompt must name what actually needs the rights (this fix), not the whole check.
@@ -948,6 +963,23 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     private IEnumerable<IssueItem> AllItems => _groups.SelectMany(g => g.AllItems);
+
+    /// <summary>"Открыть настройки" / "Открыть страницу" on a row. Only opens a page: nothing on the system changes.</summary>
+    private void OpenSettings(IssueItem item)
+    {
+        var uri = item.Issue.SettingsUri;
+        if (string.IsNullOrWhiteSpace(uri))
+            return;
+        try
+        {
+            OpenUri(uri);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Главная: не удалось открыть {uri}: {ErrorText.For(ex)}");
+            Dialogs.Error("Не удалось открыть", $"{uri}\n\n{ErrorText.Sentence(ex)}");
+        }
+    }
 
     // ===================== Fixes =====================
 
@@ -1084,27 +1116,28 @@ public sealed class DashboardViewModel : PageViewModel
     }
 
     /// <summary>
-    /// "Исправить безопасное (N)": ONE confirmation listing every CanFix &amp;&amp; AutoFixSafe issue → restore point →
-    /// fixes one by one → summary. Returns null if nothing was done.
+    /// "Исправить всё (N)": ONE confirmation listing every CanFix &amp;&amp; InFixAll issue → restore point →
+    /// fixes one by one → summary (→ offer to restart as administrator when some fixes needed the rights).
+    /// Returns null if nothing was done.
     /// </summary>
-    internal async Task<FixBatchResult?> FixSafeAsync()
+    internal async Task<FixBatchResult?> FixAllAsync()
     {
         if (IsBusy)
             return null;
-        var items = AllItems.Where(i => i.Issue.CanFix && i.Issue.AutoFixSafe).ToList();
+        var items = AllItems.Where(i => i.Issue.CanFix && i.Issue.InFixAll).ToList();
         if (items.Count == 0)
             return null;
 
-        if (!Dialogs.Confirm("Исправить безопасное", FixSafeConfirmText(items)))
+        if (!Dialogs.Confirm("Исправить всё", FixAllConfirmText(items)))
         {
-            Log.Info("Главная: безопасные исправления отменены пользователем");
+            Log.Info("Главная: «Исправить всё» отменено пользователем");
             return null;
         }
 
         FixBatchResult? batch = null;
-        await RunBusyAsync("Исправляем безопасные проблемы…", async ct =>
+        await RunBusyAsync("Исправляем…", async ct =>
         {
-            int ok = 0, failed = 0;
+            int ok = 0, failed = 0, needAdmin = 0;
             long freed = 0;
             var cancelled = false;
             var interrupted = false;
@@ -1112,7 +1145,7 @@ public sealed class DashboardViewModel : PageViewModel
             try
             {
                 ReportProgress(-1, "Создаём точку восстановления…");
-                await CreateRestorePointAsync("Безопасные исправления с главной страницы", ct);
+                await CreateRestorePointAsync("Исправления с главной страницы", ct);
 
                 for (var i = 0; i < items.Count; i++)
                 {
@@ -1134,6 +1167,8 @@ public sealed class DashboardViewModel : PageViewModel
                     else
                     {
                         failed++;
+                        if (item.FixFailed && HealthScoring.LooksLikeAdminRequired(item.Issue.FixResult))
+                            needAdmin++;
                     }
                 }
             }
@@ -1145,7 +1180,7 @@ public sealed class DashboardViewModel : PageViewModel
                 interrupted = running is not null;
             }
             ReportProgress(100);
-            batch = new FixBatchResult(items.Count, ok, failed, cancelled, freed, interrupted);
+            batch = new FixBatchResult(items.Count, ok, failed, cancelled, freed, interrupted, needAdmin);
         });
 
         AfterFixes();
@@ -1155,21 +1190,24 @@ public sealed class DashboardViewModel : PageViewModel
             ActionSummary = text;
             Log.Info("Главная: " + text);
             Dialogs.Info(batch.Cancelled ? "Исправление остановлено" : "Исправление завершено", text);
+            // The rights are asked for once, after the summary: the restart closes the program.
+            if (batch.NeedAdmin > 0 && !Admin.IsElevated)
+                RequestElevation("исправления, которым нужны права администратора");
         }
         return batch;
     }
 
     /// <summary>
-    /// The ONE confirmation of "Исправить безопасное". Every item is named: up to 20 one per line (with gain and module),
+    /// The ONE confirmation of "Исправить всё". Every item is named: up to 20 one per line (with gain and module),
     /// longer lists compactly per module so the message box still fits on the screen.
     /// </summary>
-    internal static string FixSafeConfirmText(IReadOnlyList<IssueItem> items)
+    internal static string FixAllConfirmText(IReadOnlyList<IssueItem> items)
     {
         const int maxDetailedLines = 20;
         var message = new StringBuilder();
         message.AppendLine(items.Count == 1
-            ? "Будет исправлена безопасная проблема:"
-            : $"Будут исправлены безопасные проблемы ({items.Count}):");
+            ? "Будет исправлено:"
+            : $"Будут исправлены проблемы ({items.Count}):");
         message.AppendLine();
         if (items.Count <= maxDetailedLines)
         {
@@ -1182,8 +1220,8 @@ public sealed class DashboardViewModel : PageViewModel
                 message.AppendLine($"• {module.Key} ({module.Count()}): " + string.Join("; ", module.Select(i => i.Issue.Title)));
         }
         message.AppendLine()
-            .AppendLine("Это низкорисковые действия: например, удаление временных файлов и кэша или включение " +
-                        "рекомендованных параметров Windows.")
+            .AppendLine("Каждое действие можно отменить вручную: файлы уходят в Корзину, настройки Windows включаются " +
+                        "и выключаются обратно. Удаление программ и перезагрузка сюда не входят — для них есть отдельные кнопки.")
             .AppendLine("Перед изменениями программа попробует создать точку восстановления Windows (если это включено " +
                         "в настройках и есть права администратора). Если в Windows выключена защита системы, точка не " +
                         "создаётся — программа её не включает сама. Всё сделанное запишется в журнал.")
@@ -1203,6 +1241,8 @@ public sealed class DashboardViewModel : PageViewModel
             sb.Append($" Освобождено примерно {Format.Bytes(r.FreedBytes)}.");
         if (r.Failed > 0)
             sb.Append($" Не получилось: {r.Failed} — причина указана в строке проблемы.");
+        if (r.NeedAdmin > 0)
+            sb.Append($" Для {r.NeedAdmin} нужны права администратора.");
         if (r.Interrupted)
             sb.Append(" Исправление, которое шло в момент отмены, остановлено на середине — часть изменений могла " +
                       "успеть выполниться (подробности — в строке проблемы).");

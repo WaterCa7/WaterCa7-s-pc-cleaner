@@ -227,12 +227,15 @@
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,12,14,12" MinWidth="120">
                         <Button x:Name="FixButton" Command="{Binding FixCommand}" Padding="14,7"
                                 Visibility="{Binding Issue.CanFix, Converter={StaticResource BoolToVis}}"
-                                ToolTip="Покажет, что будет сделано, и попросит подтверждение">
+                                ToolTip="{Binding AutoFixHint}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE90F;" Foreground="{StaticResource AccentBrush}" />
-                                <TextBlock x:Name="FixText" Text="Исправить" Margin="8,0,0,0" />
+                                <TextBlock x:Name="FixText" Text="{Binding Issue.FixLabel}" Margin="8,0,0,0" />
                             </StackPanel>
                         </Button>
+                        <Button Style="{StaticResource GhostButton}" Content="{Binding SettingsLabel}" Command="{Binding OpenSettingsCommand}" Margin="0,6,0,0"
+                                Foreground="{StaticResource MutedBrush}" ToolTip="Открыть окно Windows или страницу, которая поможет с этой проблемой"
+                                Visibility="{Binding HasSettings, Converter={StaticResource BoolToVis}}" />
                         <Border Style="{StaticResource Badge}" HorizontalAlignment="Center" Padding="10,5" Background="{StaticResource AccentSoftBrush}"
                                 Visibility="{Binding Issue.IsFixed, Converter={StaticResource BoolToVis}}">
                             <StackPanel Orientation="Horizontal">
@@ -586,12 +589,12 @@
                                     <TextBlock Text="Проверить снова" Margin="8,0,0,0" />
                                 </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource AccentButton}" Command="{Binding FixSafeCommand}" Padding="16,8"
-                                    Visibility="{Binding HasSafeFixes, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Исправит только низкорисковые проблемы (например, удалит временные файлы). Перед этим покажет полный список и попросит подтверждение.">
+                            <Button Style="{StaticResource AccentButton}" Command="{Binding FixAllCommand}" Padding="16,8"
+                                    Visibility="{Binding HasFixAll, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="Исправит всё, что можно исправить отсюда, кроме удаления программ и перезагрузки. Перед этим покажет полный список и попросит подтверждение.">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" FontSize="14" Text="&#xE90F;" />
-                                    <TextBlock Text="{Binding FixSafeText}" Margin="8,0,0,0" />
+                                    <TextBlock Text="{Binding FixAllText}" Margin="8,0,0,0" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>

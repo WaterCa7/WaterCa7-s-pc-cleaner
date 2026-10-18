@@ -38,6 +38,15 @@ public sealed class HealthIssue : ObservableObject
     /// <summary>True if the fix is safe enough to run from "Исправить всё" without per-item review.</summary>
     public bool AutoFixSafe { get; init; }
 
+    /// <summary>Text of the fix button: "Исправить", or what exactly happens ("Перезагрузить", "Удалить программу").</summary>
+    public string FixLabel { get; init; } = "Исправить";
+
+    /// <summary>False for fixes that open their own windows, restart the PC or remove programs: they are not run by "Исправить всё".</summary>
+    public bool InFixAll { get; init; } = true;
+
+    /// <summary>Windows settings page or web page that helps with the issue ("Открыть настройки" / "Открыть страницу").</summary>
+    public string? SettingsUri { get; init; }
+
     /// <summary>Page key (PageViewModel.Key) to open for details, e.g. "Startup".</summary>
     public string? TargetPageKey { get; init; }
 

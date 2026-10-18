@@ -191,7 +191,7 @@ public class DashboardViewModelRegressionTests
     }
 
     [Fact]
-    public async Task FixSafeConfirmation_NamesEveryItem_EvenForLongLists()
+    public async Task FixAllConfirmation_NamesEveryItem_EvenForLongLists()
     {
         var issues = Enumerable.Range(1, 25)
             .Select(i => Issue(i <= 15 ? "Очистка" : "Ускорение", IssueSeverity.Low, $"Пункт-{i:00}",
@@ -205,7 +205,7 @@ public class DashboardViewModelRegressionTests
         {
             message = m;
             return false;
-        }, () => vm.FixSafeAsync());
+        }, () => vm.FixAllAsync());
 
         Assert.Null(result);
         Assert.NotNull(message);
@@ -217,7 +217,7 @@ public class DashboardViewModelRegressionTests
     }
 
     [Fact]
-    public async Task FixSafe_CancelledWhileCreatingRestorePoint_FixesNothing_AndSaysSo()
+    public async Task FixAll_CancelledWhileCreatingRestorePoint_FixesNothing_AndSaysSo()
     {
         var fixes = 0;
         var vm = new DashboardViewModel(new IHealthContributor[]
@@ -237,7 +237,7 @@ public class DashboardViewModelRegressionTests
         };
         await vm.ScanCoreAsync(CancellationToken.None, persist: false);
 
-        var result = await WithConfirmAsync((_, _) => true, () => vm.FixSafeAsync());
+        var result = await WithConfirmAsync((_, _) => true, () => vm.FixAllAsync());
 
         Assert.NotNull(result);
         Assert.True(result!.Cancelled);
@@ -312,7 +312,7 @@ public class DashboardViewModelRegressionTests
         Task<FixBatchResult?> batch;
         try
         {
-            batch = vm.FixSafeAsync();
+            batch = vm.FixAllAsync();
         }
         finally
         {

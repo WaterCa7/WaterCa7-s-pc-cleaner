@@ -1,0 +1,316 @@
+using PcCleaner.Core;
+using PcCleaner.Modules.Dashboard;
+using Xunit;
+
+namespace PcCleaner.Tests.Dashboard;
+
+/// <summary>
+/// "Исправить всё (N)" on the Dashboard: which issues it takes (CanFix &amp;&amp; InFixAll, not only AutoFixSafe), the fix
+/// label and the settings link on every row.
+/// </summary>
+[Collection(DashboardSequentialCollection.Name)]
+public class FixAllTests
+{
+    public FixAllTests() => TestEnvironment.Init();
+
+    private sealed class Counter
+    {
+        public int Value;
+    }
+
+    private static Func<CancellationToken, Task<string>> Counting(Counter counter, string result = "Готово.")
+        => _ =>
+        {
+            Interlocked.Increment(ref counter.Value);
+            return Task.FromResult(result);
+        };
+
+    private static HealthIssue NewIssue(string title, Func<CancellationToken, Task<string>>? fix = null,
+        bool autoFixSafe = false, bool inFixAll = true, string? settingsUri = null, string fixLabel = "Исправить")
+        => new()
+        {
+            Module = "Ускорение",
+            Title = title,
+            Details = "Описание проблемы",
+            Severity = IssueSeverity.Medium,
+            FixAsync = fix,
+            AutoFixSafe = autoFixSafe,
+            InFixAll = inFixAll,
+            SettingsUri = settingsUri,
+            FixLabel = fixLabel,
+            TargetPageKey = "Optimizer",
+        };
+
+    private static async Task<DashboardViewModel> ScannedAsync(params HealthIssue[] issues)
+    {
+        var vm = new DashboardViewModel(new IHealthContributor[] { new FakeContributor("Ускорение", issues) }, new AppSettings())
+        {
+            CreateRestorePointAsync = (_, _) => Task.FromResult(false),
+            OpenUri = _ => throw new InvalidOperationException("a test must not open anything"),
+            RequestElevation = _ => throw new InvalidOperationException("a test must not restart the app"),
+        };
+        await vm.ScanCoreAsync(CancellationToken.None, persist: false);
+        return vm;
+    }
+
+    private static async Task<T> WithConfirm<T>(Func<string, string, bool> handler, Func<Task<T>> action)
+    {
+        var previous = Dialogs.ConfirmHandler;
+        Dialogs.ConfirmHandler = handler;
+        try
+        {
+            return await action();
+        }
+        finally
+        {
+            Dialogs.ConfirmHandler = previous;
+        }
+    }
+
+    private static IssueItem RowOf(DashboardViewModel vm, string title)
+        => vm.Groups.SelectMany(g => g.AllItems).Single(i => i.Issue.Title == title);
+
+    [Fact]
+    public void HealthIssue_Defaults()
+    {
+        var issue = new HealthIssue { Module = "M", Title = "T" };
+
+        Assert.Equal("Исправить", issue.FixLabel);
+        Assert.True(issue.InFixAll);
+        Assert.Null(issue.SettingsUri);
+    }
+
+    [Fact]
+    public async Task FixAllCount_CountsFixableInFixAllIssues()
+    {
+        var calls = new Counter();
+        var vm = await ScannedAsync(
+            NewIssue("Первое", Counting(calls)),
+            NewIssue("Второе", Counting(calls), autoFixSafe: true),
+            NewIssue("Перезагрузка", Counting(calls), inFixAll: false),
+            NewIssue("Совет без исправления"));
+
+        Assert.Equal(2, vm.FixAllCount);
+        Assert.Equal("Исправить всё (2)", vm.FixAllText);
+        Assert.True(vm.HasFixAll);
+        Assert.True(vm.FixAllCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task HasFixAll_IsFalse_WhenOnlyStandaloneFixesRemain()
+    {
+        var vm = await ScannedAsync(NewIssue("Перезагрузка", Counting(new Counter()), inFixAll: false));
+
+        Assert.Equal(0, vm.FixAllCount);
+        Assert.False(vm.HasFixAll);
+        Assert.False(vm.FixAllCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task FixAll_RunsOnlyInFixAllIssues()
+    {
+        var included = new Counter();
+        var standalone = new Counter();
+        var vm = await ScannedAsync(
+            NewIssue("Первое", Counting(included)),
+            NewIssue("Второе", Counting(included)),
+            NewIssue("Удалить программу", Counting(standalone), inFixAll: false));
+
+        var batch = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
+
+        Assert.NotNull(batch);
+        Assert.Equal(2, batch!.Total);
+        Assert.Equal(2, batch.Fixed);
+        Assert.Equal(2, included.Value);
+        Assert.Equal(0, standalone.Value);
+        Assert.False(RowOf(vm, "Удалить программу").Issue.IsFixed);
+        Assert.Equal(0, vm.FixAllCount);
+    }
+
+    [Fact]
+    public async Task FixAll_NotAutoFixSafeIssuesAreIncluded()
+    {
+        var calls = new Counter();
+        var vm = await ScannedAsync(NewIssue("Не помечено безопасным", Counting(calls), autoFixSafe: false, inFixAll: true));
+
+        var batch = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
+
+        Assert.Equal(1, batch!.Fixed);
+        Assert.Equal(1, calls.Value);
+        Assert.True(RowOf(vm, "Не помечено безопасным").Issue.IsFixed);
+    }
+
+    [Fact]
+    public async Task FixAll_DoesNothingWithoutConfirmation()
+    {
+        var calls = new Counter();
+        var vm = await ScannedAsync(NewIssue("Первое", Counting(calls)));
+        string? title = null;
+
+        var batch = await WithConfirm((t, _) =>
+        {
+            title = t;
+            return false;
+        }, () => vm.FixAllAsync());
+
+        Assert.Null(batch);
+        Assert.Equal("Исправить всё", title);
+        Assert.Equal(0, calls.Value);
+    }
+
+    [Fact]
+    public async Task FixAllConfirmText_NamesTheItemsAndExplainsWhatIsNotIncluded()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Первое", Counting(new Counter())),
+            NewIssue("Второе", Counting(new Counter())));
+        var items = vm.Groups.SelectMany(g => g.AllItems).ToList();
+
+        var many = DashboardViewModel.FixAllConfirmText(items);
+        var one = DashboardViewModel.FixAllConfirmText(items.Take(1).ToList());
+
+        Assert.StartsWith("Будут исправлены проблемы (2):", many);
+        Assert.Contains("Первое", many);
+        Assert.Contains("Второе", many);
+        Assert.Contains("Каждое действие можно отменить вручную", many);
+        Assert.Contains("Удаление программ и перезагрузка сюда не входят", many);
+        Assert.DoesNotContain("низкорисковые", many);
+        Assert.StartsWith("Будет исправлено:", one);
+    }
+
+    [Fact]
+    public async Task FixAll_AdminResults_OfferElevation()
+    {
+        var calls = new Counter();
+        var vm = await ScannedAsync(
+            NewIssue("Нужны права", _ => Task.FromResult("Нужны права администратора: служба не изменена.")),
+            NewIssue("Обычное", Counting(calls)));
+        var reasons = new List<string>();
+        vm.RequestElevation = reason =>
+        {
+            reasons.Add(reason);
+            return true;
+        };
+
+        var batch = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
+
+        Assert.NotNull(batch);
+        Assert.Equal(1, batch!.NeedAdmin);
+        Assert.Equal(1, batch.Failed);
+        Assert.Equal(1, batch.Fixed);
+        Assert.Contains("права администратора", vm.ActionSummary);
+        // An administrator session never asks to restart itself.
+        if (Admin.IsElevated)
+        {
+            Assert.Empty(reasons);
+        }
+        else
+        {
+            var reason = Assert.Single(reasons);
+            Assert.Equal("исправления, которым нужны права администратора", reason);
+        }
+    }
+
+    [Fact]
+    public async Task FixAll_WithoutAdminResults_DoesNotOfferElevation()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Не получилось", _ => Task.FromResult("Не удалось изменить параметр: файл занят.")),
+            NewIssue("Обычное", Counting(new Counter())));
+        var asked = 0;
+        vm.RequestElevation = _ =>
+        {
+            asked++;
+            return true;
+        };
+
+        var batch = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
+
+        Assert.Equal(0, batch!.NeedAdmin);
+        Assert.Equal(1, batch.Failed);
+        Assert.Equal(0, asked);
+        Assert.DoesNotContain("прав администратора", vm.ActionSummary);
+    }
+
+    [Fact]
+    public void BatchSummary_MentionsAdminRights_OnlyWhenSomeFixesNeedThem()
+    {
+        var with = DashboardViewModel.BatchSummaryText(new FixBatchResult(3, 1, 2, false, 0, NeedAdmin: 2));
+        var without = DashboardViewModel.BatchSummaryText(new FixBatchResult(3, 1, 2, false, 0));
+
+        Assert.Contains("Для 2 нужны права администратора.", with);
+        Assert.DoesNotContain("администратора", without);
+    }
+
+    [Fact]
+    public async Task IssueItem_FixLabelAndHint_FollowTheIssue()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Первое", Counting(new Counter()), fixLabel: "Перезагрузить"),
+            NewIssue("Второе", Counting(new Counter()), inFixAll: false));
+
+        var first = RowOf(vm, "Первое");
+        var second = RowOf(vm, "Второе");
+
+        Assert.Equal("Перезагрузить", first.Issue.FixLabel);
+        Assert.Equal("Входит в «Исправить всё»", first.AutoFixHint);
+        Assert.Equal("Не входит в «Исправить всё»: это действие запускается только отдельно", second.AutoFixHint);
+    }
+
+    [Fact]
+    public async Task IssueItem_SettingsLabel()
+    {
+        var vm = await ScannedAsync(
+            NewIssue("Настройки", settingsUri: "ms-settings:windowsupdate"),
+            NewIssue("Страница", settingsUri: "https://example.com/help"),
+            NewIssue("Без ссылки"));
+
+        var settings = RowOf(vm, "Настройки");
+        var page = RowOf(vm, "Страница");
+        var none = RowOf(vm, "Без ссылки");
+
+        Assert.True(settings.HasSettings);
+        Assert.Equal("Открыть настройки", settings.SettingsLabel);
+        Assert.True(page.HasSettings);
+        Assert.Equal("Открыть страницу", page.SettingsLabel);
+        Assert.False(none.HasSettings);
+        Assert.False(none.OpenSettingsCommand!.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task OpenSettings_OpensTheUri()
+    {
+        var vm = await ScannedAsync(NewIssue("Обновления", settingsUri: "ms-settings:windowsupdate"));
+        var opened = new List<string>();
+        vm.OpenUri = uri => opened.Add(uri);
+        var row = RowOf(vm, "Обновления");
+
+        Assert.True(row.OpenSettingsCommand!.CanExecute(null));
+        row.OpenSettingsCommand.Execute(null);
+
+        Assert.Equal(new[] { "ms-settings:windowsupdate" }, opened);
+    }
+
+    [Fact]
+    public async Task OpenSettings_WhenOpeningFails_ShowsAnError()
+    {
+        var vm = await ScannedAsync(NewIssue("Обновления", settingsUri: "ms-settings:windowsupdate"));
+        vm.OpenUri = _ => throw new InvalidOperationException("нет обработчика");
+        var row = RowOf(vm, "Обновления");
+
+        var previous = Dialogs.ErrorHandler;
+        string? shown = null;
+        Dialogs.ErrorHandler = (_, message) => shown = message;
+        try
+        {
+            row.OpenSettingsCommand!.Execute(null);
+        }
+        finally
+        {
+            Dialogs.ErrorHandler = previous;
+        }
+
+        Assert.NotNull(shown);
+        Assert.Contains("ms-settings:windowsupdate", shown);
+    }
+}

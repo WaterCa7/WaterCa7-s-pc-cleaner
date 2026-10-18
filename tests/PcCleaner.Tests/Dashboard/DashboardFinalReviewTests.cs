@@ -315,7 +315,7 @@ public class DashboardFinalReviewTests
     }
 
     [Fact]
-    public async Task FixSafe_StoppedInsideTheCleaning_DoesNotCountTheEstimateAsFreed()
+    public async Task FixAll_StoppedInsideTheCleaning_DoesNotCountTheEstimateAsFreed()
     {
         DashboardViewModel? vm = null;
         var nextRan = 0;
@@ -335,7 +335,7 @@ public class DashboardFinalReviewTests
         await vm.ScanCoreAsync(CancellationToken.None, persist: false);
         var before = vm.Score;
 
-        var result = await WithConfirm(() => vm.FixSafeAsync());
+        var result = await WithConfirm(() => vm.FixAllAsync());
 
         Assert.NotNull(result);
         Assert.True(result!.Cancelled);
@@ -355,7 +355,7 @@ public class DashboardFinalReviewTests
     }
 
     [Fact]
-    public async Task FixSafe_CountsOnlyCompletedFixesAsFreed()
+    public async Task FixAll_CountsOnlyCompletedFixesAsFreed()
     {
         DashboardViewModel? vm = null;
         var first = Issue("Очистка", IssueSeverity.Medium, "Временные файлы", reclaimable: 1000,
@@ -369,7 +369,7 @@ public class DashboardFinalReviewTests
         vm = Vm(new AppSettings(), new FakeContributor("Очистка", first, second));
         await vm.ScanCoreAsync(CancellationToken.None, persist: false);
 
-        var result = await WithConfirm(() => vm.FixSafeAsync());
+        var result = await WithConfirm(() => vm.FixAllAsync());
 
         Assert.Equal(1, result!.Fixed);
         Assert.True(result.Interrupted);

@@ -246,7 +246,7 @@ public class DashboardFixTests
                 fix: CountingFix(safe, order, "temp"), autoFixSafe: true),
             Issue("Очистка", IssueSeverity.Low, "Кэш браузеров", reclaimable: 500,
                 fix: CountingFix(safe, order, "cache"), autoFixSafe: true),
-            Issue("Очистка", IssueSeverity.High, "Отключить службу", fix: CountingFix(unsafeCounter, order, "service")),
+            Issue("Очистка", IssueSeverity.High, "Отключить службу", fix: CountingFix(unsafeCounter, order, "service"), inFixAll: false),
             Issue("Очистка", IssueSeverity.Info, "Совет без исправления", autoFixSafe: true));
         var vm = new DashboardViewModel(new IHealthContributor[] { contributor }, new AppSettings());
         vm.CreateRestorePointAsync = (_, _) =>
@@ -260,17 +260,17 @@ public class DashboardFixTests
     }
 
     [Fact]
-    public async Task FixSafe_DoesNothingWithoutConfirmation()
+    public async Task FixAll_DoesNothingWithoutConfirmation()
     {
         var (vm, order, safe, unsafeCounter) = await ScannedVm();
-        Assert.Equal(2, vm.SafeFixCount);
+        Assert.Equal(2, vm.FixAllCount);
         var asked = 0;
 
         var result = await WithConfirm((_, _) =>
         {
             asked++;
             return false;
-        }, () => vm.FixSafeAsync());
+        }, () => vm.FixAllAsync());
 
         Assert.Null(result);
         Assert.Equal(1, asked);
@@ -281,7 +281,7 @@ public class DashboardFixTests
     }
 
     [Fact]
-    public async Task FixSafe_RunsOnlyAutoFixSafeIssues_AfterOneConfirmation()
+    public async Task FixAll_RunsOnlyInFixAllIssues_AfterOneConfirmation()
     {
         var (vm, order, safe, unsafeCounter) = await ScannedVm();
         var scoreBefore = vm.Score;
@@ -293,7 +293,7 @@ public class DashboardFixTests
             asked++;
             message = m;
             return true;
-        }, () => vm.FixSafeAsync());
+        }, () => vm.FixAllAsync());
 
         Assert.NotNull(result);
         Assert.Equal(1, asked);
@@ -308,7 +308,7 @@ public class DashboardFixTests
         Assert.Equal(1500, result.FreedBytes);
         Assert.Equal(2, vm.FixedCount);
         Assert.True(vm.ShowRescanHint);
-        Assert.Equal(0, vm.SafeFixCount);
+        Assert.Equal(0, vm.FixAllCount);
         Assert.True(vm.Score > scoreBefore);
         Assert.Equal(0, vm.ReclaimableBytes);
         Assert.NotNull(vm.ActionSummary);
@@ -316,15 +316,15 @@ public class DashboardFixTests
     }
 
     [Fact]
-    public async Task FixSafe_WithNothingSafe_DoesNotAsk()
+    public async Task FixAll_WithNothingInFixAll_DoesNotAsk()
     {
         var vm = new DashboardViewModel(new IHealthContributor[]
         {
-            new FakeContributor("Ускорение", Issue("Ускорение", IssueSeverity.Medium, fix: _ => Task.FromResult("ok"))),
+            new FakeContributor("Ускорение", Issue("Ускорение", IssueSeverity.Medium, fix: _ => Task.FromResult("ok"), inFixAll: false)),
         }, new AppSettings()) { CreateRestorePointAsync = (_, _) => throw new InvalidOperationException() };
         await vm.ScanCoreAsync(CancellationToken.None, persist: false);
         var asked = 0;
-        var result = await WithConfirm((_, _) => ++asked > 0, () => vm.FixSafeAsync());
+        var result = await WithConfirm((_, _) => ++asked > 0, () => vm.FixAllAsync());
         Assert.Null(result);
         Assert.Equal(0, asked);
     }
@@ -401,7 +401,7 @@ public class DashboardFixTests
     }
 
     [Fact]
-    public async Task LongGroups_ShowFirstRows_ButFixSafeCoversAllOfThem()
+    public async Task LongGroups_ShowFirstRows_ButFixAllCoversAllOfThem()
     {
         var fixes = new Counter();
         var issues = Enumerable.Range(0, 11)
@@ -421,9 +421,9 @@ public class DashboardFixTests
         Assert.Equal(8, group.Items.Count);
         Assert.Equal(3, group.HiddenCount);
         Assert.Equal("Показать ещё 3", group.ShowAllText);
-        Assert.Equal(11, vm.SafeFixCount);
+        Assert.Equal(11, vm.FixAllCount);
 
-        var result = await WithConfirm((_, _) => true, () => vm.FixSafeAsync());
+        var result = await WithConfirm((_, _) => true, () => vm.FixAllAsync());
         Assert.Equal(11, result!.Fixed);
         Assert.Equal(11, fixes.Value);
         Assert.Equal("0 из 11", group.CountText);
