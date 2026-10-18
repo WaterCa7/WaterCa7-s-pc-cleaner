@@ -192,7 +192,7 @@ public class CleanerServiceTests
     }
 
     [Fact]
-    public void RecycleBinCleaning_UsesTheInjectedBin()
+    public async Task RecycleBinCleaning_UsesTheInjectedBin()
     {
         using var t = new CleanerTestFolder("service-bin-clean");
         var service = CreateService(t, out _, out var bin);
@@ -200,7 +200,7 @@ public class CleanerServiceTests
         bin.Items = 2;
         var category = service.LoadCategories().Single(c => c.Kind == CategoryKind.RecycleBin);
 
-        var result = service.CleanCategoryAsync(category, CancellationToken.None).GetAwaiter().GetResult();
+        var result = await service.CleanCategoryAsync(category, CancellationToken.None);
 
         Assert.Equal(1, bin.EmptyCalls);
         Assert.Equal(1000, result.FreedBytes);

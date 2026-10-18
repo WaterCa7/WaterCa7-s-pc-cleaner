@@ -93,7 +93,7 @@ public sealed class SplashViewModelTests : IDisposable
         var updates = Service();
         var splash = Splash(updates);
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Equal(UpdateState.UpToDate, updates.State);
         Assert.False(splash.IsVisible);
@@ -109,7 +109,7 @@ public sealed class SplashViewModelTests : IDisposable
         var updates = Service();
         var splash = Splash(updates);
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Equal(UpdateState.Ready, updates.State);
         Assert.Equal(1, _installCalls);
@@ -129,7 +129,7 @@ public sealed class SplashViewModelTests : IDisposable
             Delay = _delay.Delay,
         };
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Equal(1, _shutdownCalls);
         Assert.Equal(_newExe, File.ReadAllBytes(ExePath));
@@ -144,7 +144,7 @@ public sealed class SplashViewModelTests : IDisposable
         Publish("1.2.0");
         var splash = Splash(Service(), installSucceeds: false);
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Equal(1, _installCalls);
         Assert.Equal(0, _shutdownCalls);
@@ -160,7 +160,7 @@ public sealed class SplashViewModelTests : IDisposable
         var updates = Service();
         var splash = Splash(updates);
 
-        var run = splash.RunAsync(CancellationToken.None);
+        var run = Started(splash, CancellationToken.None);
         await Until(splash, () => splash.CanSkip);
 
         Assert.True(splash.IsVisible);
@@ -192,7 +192,7 @@ public sealed class SplashViewModelTests : IDisposable
         var updates = Service();
         var splash = Splash(updates);
 
-        var run = splash.RunAsync(CancellationToken.None);
+        var run = Started(splash, CancellationToken.None);
         await Until(splash, () => splash.IsVisible);
         Assert.False(splash.CanSkip);
         splash.SkipCommand.Execute(null); // nothing is downloading yet: a press now must not be remembered for later
@@ -223,7 +223,7 @@ public sealed class SplashViewModelTests : IDisposable
             Delay = _delay.Delay,
         };
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.False(splash.IsVisible);
         Assert.False(splash.ShowProgress);
@@ -236,7 +236,7 @@ public sealed class SplashViewModelTests : IDisposable
         var updates = Service(); // FakeHttp answers 404 to everything
         var splash = Splash(updates);
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Equal(UpdateState.Failed, updates.State);
         Assert.False(splash.IsVisible);
@@ -252,7 +252,7 @@ public sealed class SplashViewModelTests : IDisposable
         var updates = Service();
         var splash = Splash(updates);
 
-        var run = splash.RunAsync(CancellationToken.None);
+        var run = Started(splash, CancellationToken.None);
         await Until(splash, () => splash.IsVisible);
 
         Assert.Equal("Проверяем обновления…", splash.StatusText);
@@ -281,7 +281,7 @@ public sealed class SplashViewModelTests : IDisposable
         var updates = Service();
         var splash = Splash(updates);
 
-        var run = splash.RunAsync(CancellationToken.None);
+        var run = Started(splash, CancellationToken.None);
         await Until(splash, () => splash.CanSkip);
         _delay.TimeoutElapsed.TrySetResult(); // far too late: the check already reached the download
         await Task.Delay(50); // give a wrongly early close the chance to show up
@@ -304,7 +304,7 @@ public sealed class SplashViewModelTests : IDisposable
         var splash = Splash(updates);
         Assert.False(updates.CanUpdate);
 
-        var run = splash.RunAsync(CancellationToken.None);
+        var run = Started(splash, CancellationToken.None);
         await Until(splash, () => splash.IsVisible);
         await Task.Delay(50); // give a wrongly early close the chance to show up
 
@@ -327,7 +327,7 @@ public sealed class SplashViewModelTests : IDisposable
         _settings.AutoUpdate = false;
         var splash = Splash(Service());
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Contains(TimeSpan.FromMilliseconds(700), _delay.Requested); // it was shown, and held for the minimum time
         Assert.False(splash.IsVisible);
@@ -342,12 +342,12 @@ public sealed class SplashViewModelTests : IDisposable
         // A staged update that reaches the splash is one the install at startup just failed on (a locked exe, say).
         // Trying again straight away would burn the second of the two allowed install failures in one launch.
         Publish("1.2.0");
-        await Service().CheckAsync(manual: false, CancellationToken.None);
+        await Task.Run(() => Service().CheckAsync(manual: false, CancellationToken.None));
         _fakeHttp.Requests.Clear();
         var updates = Service();
         var splash = Splash(updates);
 
-        await splash.RunAsync(CancellationToken.None).WaitAsync(Timeout);
+        await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Equal(UpdateState.Ready, updates.State); // the banner in the window offers «Перезапустить сейчас»
         Assert.False(splash.IsVisible);
@@ -362,7 +362,7 @@ public sealed class SplashViewModelTests : IDisposable
         _http.Hold(ManifestUrl);
         using var cts = new CancellationTokenSource();
         var splash = new SplashViewModel(Service(), () => true, () => { }); // the real Task.Delay
-        var run = splash.RunAsync(cts.Token);
+        var run = Started(splash, cts.Token);
         await Until(splash, () => splash.IsVisible);
 
         cts.Cancel();
@@ -371,6 +371,14 @@ public sealed class SplashViewModelTests : IDisposable
         Assert.False(splash.IsVisible);
         _http.Release();
     }
+
+    /// <summary>
+    /// Starts the splash on the thread pool, as in the app where nothing waits for a free test thread. Started from the test
+    /// method itself, every await inside UpdateService resumed on xUnit's synchronization context, which has only as many
+    /// threads as the machine has cores: on a 2-core CI runner the step that ends the download queued behind other tests for
+    /// longer than <see cref="Timeout"/> (Skip_WhileDownloading_… failed there 4 times out of 7, never on 16 cores).
+    /// </summary>
+    private static Task Started(SplashViewModel splash, CancellationToken ct) => Task.Run(() => splash.RunAsync(ct));
 
     /// <summary>
     /// Waits until the background download ends and requires it to have succeeded. A failed download ends the wait at once
