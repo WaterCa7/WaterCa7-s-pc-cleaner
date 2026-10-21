@@ -30,6 +30,7 @@ public class LocalizationCatalogTests
         "Modules/Processes/",
         "Modules/Programs/",
         "Modules/Settings/",
+        "Modules/Startup/",
     };
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security;
 using Microsoft.Win32;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Startup;
@@ -70,7 +71,7 @@ public sealed partial class StartupService
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn($"Автозагрузка: нет доступа к {hiveName}\\{source.KeyPath}: {ex.Message}");
+                Log.Warn(T.F("Автозагрузка: нет доступа к {0}\\{1}: {2}", hiveName, source.KeyPath, ex.Message));
             }
         }
         return list;
@@ -97,7 +98,7 @@ public sealed partial class StartupService
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or SecurityException)
             {
-                Log.Warn($"Автозагрузка: нет доступа к папке {folder}: {ex.Message}");
+                Log.Warn(T.F("Автозагрузка: нет доступа к папке {0}: {1}", folder, ex.Message));
                 continue;
             }
 
@@ -155,17 +156,19 @@ public sealed partial class StartupService
     private async Task<StartupActionResult> SetApprovedAsync(StartupItem item, bool enable, CancellationToken ct)
     {
         if (item.ApprovedKeyPath is null || item.ApprovedValueName is null)
-            return StartupActionResult.Fail("Для этой записи Windows не поддерживает отключение.");
+            return StartupActionResult.Fail(T._("Для этой записи Windows не поддерживает отключение."));
         if (item.Scope == StartupScope.AllUsers && !_env.IsElevated())
-            return StartupActionResult.Admin("Записи для всех пользователей можно менять только с правами администратора.");
+            return StartupActionResult.Admin(T._("Записи для всех пользователей можно менять только с правами администратора."));
 
         var fullKey = $@"{StartupEnvironment.HiveName(item.ApprovedHive)}\{item.ApprovedKeyPath}";
         string? backup = null;
         if (KeyExists(item.ApprovedHive, item.ApprovedKeyPath))
         {
-            backup = await _env.BackupKey(fullKey, $"Автозагрузка: перед {(enable ? "включением" : "отключением")} «{item.DisplayName}»", ct);
+            backup = await _env.BackupKey(fullKey, enable
+                ? T.F("Автозагрузка: перед включением {0}", T.Quote(item.DisplayName))
+                : T.F("Автозагрузка: перед отключением {0}", T.Quote(item.DisplayName)), ct);
             if (backup is null)
-                return StartupActionResult.Fail("Не удалось сохранить резервную копию реестра — изменение отменено.");
+                return StartupActionResult.Fail(T._("Не удалось сохранить резервную копию реестра — изменение отменено."));
         }
 
         var nowUtc = DateTime.UtcNow;
@@ -173,18 +176,19 @@ public sealed partial class StartupService
         {
             using var root = RegistryKey.OpenBaseKey(item.ApprovedHive, RegistryView.Registry64);
             using var key = root.CreateSubKey(item.ApprovedKeyPath, writable: true)
-                            ?? throw new IOException($"Не удалось открыть {fullKey}");
+                            ?? throw new IOException(T.F("Не удалось открыть {0}", fullKey));
             key.SetValue(item.ApprovedValueName, enable ? StartupApproved.CreateEnabled() : StartupApproved.CreateDisabled(nowUtc),
                 RegistryValueKind.Binary);
         }, ct);
 
         item.IsEnabled = enable;
         item.DisabledTime = enable ? null : nowUtc.ToLocalTime();
-        Log.Action($"Автозагрузка: {(enable ? "включена" : "отключена")} запись «{item.DisplayName}» ({item.SourceText}, {item.ScopeText.ToLowerInvariant()}). " +
-                   $"Флаг записан в {fullKey}.");
+        Log.Action(enable
+            ? T.F("Автозагрузка: включена запись {0} ({1}, {2}). Флаг записан в {3}.", T.Quote(item.DisplayName), item.SourceText, item.ScopeText.ToLowerInvariant(), fullKey)
+            : T.F("Автозагрузка: отключена запись {0} ({1}, {2}). Флаг записан в {3}.", T.Quote(item.DisplayName), item.SourceText, item.ScopeText.ToLowerInvariant(), fullKey));
         return StartupActionResult.Ok(enable
-            ? $"«{item.DisplayName}» снова будет запускаться вместе с Windows."
-            : $"«{item.DisplayName}» больше не будет запускаться вместе с Windows. Включить обратно можно в любой момент.", backup);
+            ? T.F("{0} снова будет запускаться вместе с Windows.", T.Quote(item.DisplayName))
+            : T.F("{0} больше не будет запускаться вместе с Windows. Включить обратно можно в любой момент.", T.Quote(item.DisplayName)), backup);
     }
 
     /// <summary>Whether the Run value still exists, and its command as the scan reads it (null when it is no longer a string).</summary>
@@ -204,26 +208,26 @@ public sealed partial class StartupService
     private async Task<StartupActionResult> DeleteRegistryValueAsync(StartupItem item, bool onlyIfStillBroken, CancellationToken ct)
     {
         if (item.RegistryKeyPath is null)
-            return StartupActionResult.Fail("Неизвестное расположение записи.");
+            return StartupActionResult.Fail(T._("Неизвестное расположение записи."));
         if (item.Scope == StartupScope.AllUsers && !_env.IsElevated())
-            return StartupActionResult.Admin("Записи для всех пользователей можно удалять только с правами администратора.");
+            return StartupActionResult.Admin(T._("Записи для всех пользователей можно удалять только с правами администратора."));
 
         var valueName = item.RegistryValueName ?? "";
         var fullKey = $@"{StartupEnvironment.HiveName(item.Hive)}\{item.RegistryKeyPath}";
         var (exists, command) = await Task.Run(() => ReadRunValue(item), ct);
         if (!exists)
-            return StartupActionResult.Ok($"Записи «{item.DisplayName}» уже нет в реестре.");
+            return StartupActionResult.Ok(T.F("Записи {0} уже нет в реестре.", T.Quote(item.DisplayName)));
         if (onlyIfStillBroken && WhyNoLongerBroken(item, command, StartupTargets.Resolve(command)) is { } reason)
             return StartupActionResult.Skip(reason);
 
-        var backup = await _env.BackupKey(fullKey, $"Автозагрузка: перед удалением «{item.DisplayName}»", ct);
+        var backup = await _env.BackupKey(fullKey, T.F("Автозагрузка: перед удалением {0}", T.Quote(item.DisplayName)), ct);
         if (backup is null)
-            return StartupActionResult.Fail("Не удалось сохранить резервную копию раздела реестра — удаление отменено.");
+            return StartupActionResult.Fail(T._("Не удалось сохранить резервную копию раздела реестра — удаление отменено."));
 
         var deleted = await Task.Run(() =>
         {
             using var key = OpenKey(item.Hive, item.RegistryKeyPath, true)
-                            ?? throw new IOException($"Раздел {fullKey} не найден");
+                            ?? throw new IOException(T.F("Раздел {0} не найден", fullKey));
             // The value may have been rewritten while the backup was being exported.
             if (onlyIfStillBroken && ReadRunValue(key, valueName) is (true, var now) && !string.Equals(now, item.Command, StringComparison.Ordinal))
                 return false;
@@ -233,20 +237,20 @@ public sealed partial class StartupService
         if (!deleted)
             return StartupActionResult.Skip(ChangedSinceScan);
 
-        Log.Action($"Автозагрузка: удалена запись «{item.DisplayName}» из {fullKey} (команда: {item.Command}). " +
-                   $"Резервная копия: {Path.GetFileName(backup)}");
+        Log.Action(T.F("Автозагрузка: удалена запись {0} из {1} (команда: {2}). Резервная копия: {3}",
+            T.Quote(item.DisplayName), fullKey, item.Command, Path.GetFileName(backup)));
         return StartupActionResult.Ok(
-            $"Запись «{item.DisplayName}» удалена. Резервная копия: {backup} — чтобы вернуть запись, дважды щёлкните этот файл.", backup);
+            T.F("Запись {0} удалена. Резервная копия: {1} — чтобы вернуть запись, дважды щёлкните этот файл.", T.Quote(item.DisplayName), backup), backup);
     }
 
     private async Task<StartupActionResult> DeleteFolderItemAsync(StartupItem item, bool onlyIfStillBroken, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(item.FilePath))
-            return StartupActionResult.Fail("Неизвестное расположение ярлыка.");
+            return StartupActionResult.Fail(T._("Неизвестное расположение ярлыка."));
         if (item.Scope == StartupScope.AllUsers && !_env.IsElevated())
-            return StartupActionResult.Admin("Общую папку автозагрузки можно менять только с правами администратора.");
+            return StartupActionResult.Admin(T._("Общую папку автозагрузки можно менять только с правами администратора."));
         if (!File.Exists(item.FilePath))
-            return StartupActionResult.Ok($"Ярлыка «{item.DisplayName}» уже нет в папке автозагрузки.");
+            return StartupActionResult.Ok(T.F("Ярлыка {0} уже нет в папке автозагрузки.", T.Quote(item.DisplayName)));
         if (onlyIfStillBroken)
         {
             // An updater may have re-pointed the same shortcut to the new version of the program.
@@ -257,10 +261,10 @@ public sealed partial class StartupService
 
         var ok = await Task.Run(() => _env.RecycleFile(item.FilePath), ct);
         if (!ok)
-            return StartupActionResult.Fail("Не удалось переместить файл в Корзину (возможно, он открыт другой программой).");
+            return StartupActionResult.Fail(T._("Не удалось переместить файл в Корзину (возможно, он открыт другой программой)."));
 
-        Log.Action($"Автозагрузка: «{item.DisplayName}» убран из папки автозагрузки ({item.FilePath}) — файл перемещён в Корзину.");
-        return StartupActionResult.Ok($"«{item.DisplayName}» убран из автозагрузки. Ярлык лежит в Корзине — его можно восстановить оттуда.");
+        Log.Action(T.F("Автозагрузка: {0} убран из папки автозагрузки ({1}) — файл перемещён в Корзину.", T.Quote(item.DisplayName), item.FilePath));
+        return StartupActionResult.Ok(T.F("{0} убран из автозагрузки. Ярлык лежит в Корзине — его можно восстановить оттуда.", T.Quote(item.DisplayName)));
     }
 
     private static bool KeyExists(RegistryHive hive, string path)

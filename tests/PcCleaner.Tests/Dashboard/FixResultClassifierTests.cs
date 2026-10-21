@@ -29,6 +29,7 @@ public class FixResultClassifierTests
     private static readonly string[] ExpectedSkipped =
     {
         "Ошибка", // "Error": a word of the log levels / status texts, not a fix result
+        "не удалось: {0}", // ", failed: 1" in the banner of a bulk action on the Startup page: a piece of a status line, never a fix result
         "отменено", // "canceled": the state of a module scan; as a word it also ends successful texts ("… updates canceled.")
     };
 
@@ -127,6 +128,9 @@ public class FixResultClassifierTests
     /// </summary>
     private static readonly string[] ExpectedEnglishOnlyFailures =
     {
+        "Автозагрузка: не удалось запустить проверку Защитником: {0}", // log: contains "Could not start the scan: {0}."
+        "Автозагрузка: не удалось прочитать ярлык {0}: {1}", // log: contains "Could not read {0}: {1}"
+        "Автозагрузка: не удалось удалить {0}: {1}", // log: contains "Could not delete {0}: {1}"
         "Главная: не удалось восстановить состояние после ошибки проверки: {0}", // log: contains "Could not restore {0}: {1}"
         "Главная: не удалось запустить удаление «{0}»: {1}", // log: contains "Could not start the uninstall of “{0}”."
         "Главная: не удалось открыть {0}: {1}", // log
@@ -138,7 +142,9 @@ public class FixResultClassifierTests
         "Главная: не удалось сохранить отчёт в «{0}»: {1}", // log
         "Карантин: не удалось восстановить {0}: {1}", // log of the quarantine tab
         "Карантин: не удалось прочитать {0}: {1}", // log of the quarantine tab
+        "Карантин: не удалось удалить {0}: {1}", // log of the quarantine tab: contains "Could not delete {0}: {1}"
         "Обновление: не удалось запустить {0}: {1}", // log
+        "Обновление: не удалось удалить {0}: {1}", // log: contains "Could not delete {0}: {1}"
         "Остальные файлы не обработаны — операция была отменена.", // header of the quarantine tab: contains "the operation was canceled"
         "Очистка: не удалось оценить «{0}»: {1}", // log
         "Очистка: не удалось проверить запущенные программы: {0}", // log

@@ -51,10 +51,10 @@ public sealed partial class StartupViewModel : PageViewModel
         _service = service;
         SourceFilters = new[]
         {
-            new SourceFilterOption { Value = StartupSourceFilter.All, Title = "Все" },
-            new SourceFilterOption { Value = StartupSourceFilter.RegistryAndFolders, Title = "Реестр и папки" },
-            new SourceFilterOption { Value = StartupSourceFilter.Tasks, Title = "Планировщик" },
-            new SourceFilterOption { Value = StartupSourceFilter.Services, Title = "Службы" },
+            new SourceFilterOption { Value = StartupSourceFilter.All, Title = T._("Все") },
+            new SourceFilterOption { Value = StartupSourceFilter.RegistryAndFolders, Title = T._("Реестр и папки") },
+            new SourceFilterOption { Value = StartupSourceFilter.Tasks, Title = T._("Планировщик") },
+            new SourceFilterOption { Value = StartupSourceFilter.Services, Title = T._("Службы") },
         };
         _selectedSource = SourceFilters[0];
 
@@ -74,7 +74,7 @@ public sealed partial class StartupViewModel : PageViewModel
         OpenTaskSchedulerCommand = new RelayCommand(p => OpenTaskScheduler(ItemOf(p)), p => ItemOf(p) is { IsTask: true });
         OpenServicesCommand = new RelayCommand(p => OpenServices(ItemOf(p)), p => ItemOf(p) is { IsService: true });
         SetStatusFilterCommand = new RelayCommand(p => SetStatusFilter(p));
-        RestartAsAdminCommand = new RelayCommand(() => ElevatedRestart.RequireElevation("просмотр и изменение всех записей автозагрузки"),
+        RestartAsAdminCommand = new RelayCommand(() => ElevatedRestart.RequireElevation(T._("просмотр и изменение всех записей автозагрузки")),
             () => !IsElevated);
         DismissMessageCommand = new RelayCommand(() => Message = null);
 
@@ -229,26 +229,26 @@ public sealed partial class StartupViewModel : PageViewModel
     }
 
     public string ShownText => ShownCount == VisibleTotal
-        ? $"Записей: {Format.Number(VisibleTotal)}"
-        : $"Показано {Format.Number(ShownCount)} из {Format.Number(VisibleTotal)}";
+        ? T.F("Записей: {0}", Format.Number(VisibleTotal))
+        : T.F("Показано {0} из {1}", Format.Number(ShownCount), Format.Number(VisibleTotal));
 
-    public string DeleteBrokenText => $"Удалить битые записи ({DeletableBrokenCount})";
+    public string DeleteBrokenText => T.F("Удалить битые записи ({0})", DeletableBrokenCount);
 
-    public string WindowsTasksText => WindowsTaskCount > 0 ? $"Показать задания Windows ({WindowsTaskCount})" : "Показать задания Windows";
+    public string WindowsTasksText => WindowsTaskCount > 0 ? T.F("Показать задания Windows ({0})", WindowsTaskCount) : T._("Показать задания Windows");
 
     public string MicrosoftServicesText => MicrosoftServiceCount > 0
-        ? $"Показать службы Microsoft ({MicrosoftServiceCount})"
-        : "Показать службы Microsoft";
+        ? T.F("Показать службы Microsoft ({0})", MicrosoftServiceCount)
+        : T._("Показать службы Microsoft");
 
     public bool IsEmptyStateVisible => IsLoaded && ShownCount == 0;
 
-    public string EmptyTitle => VisibleTotal == 0 ? "Автозагрузка пуста" : "Ничего не найдено";
+    public string EmptyTitle => VisibleTotal == 0 ? T._("Автозагрузка пуста") : T._("Ничего не найдено");
 
     public string EmptyGlyph => VisibleTotal == 0 ? "\uE73E" : "\uE721";
 
     public string EmptyText => VisibleTotal == 0
-        ? "Вместе с Windows не запускается ни одной сторонней программы. Так держать!"
-        : "Измените фильтр или строку поиска.";
+        ? T._("Вместе с Windows не запускается ни одной сторонней программы. Так держать!")
+        : T._("Измените фильтр или строку поиска.");
 
     /// <summary>
     /// The page's one source of truth for the rights: the service's (<see cref="Admin.IsElevated"/> in the app, the sandbox's in tests),
@@ -328,7 +328,7 @@ public sealed partial class StartupViewModel : PageViewModel
             return _loadTask;
         if (IsBusy)
             return Task.CompletedTask;
-        _loadTask = RunBusyAsync("Собираем список автозагрузки…", async ct =>
+        _loadTask = RunBusyAsync(T._("Собираем список автозагрузки…"), async ct =>
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, external);
             var items = await _service.ScanAsync((percent, text) => ReportProgress(percent, text), linked.Token);
@@ -428,24 +428,24 @@ public sealed partial class StartupViewModel : PageViewModel
                 ShowMessage(item.ToggleBlockedReason);
                 return;
             }
-            var action = enable ? $"включение «{item.DisplayName}»" : $"отключение «{item.DisplayName}»";
+            var action = enable ? T.F("включение {0}", T.Quote(item.DisplayName)) : T.F("отключение {0}", T.Quote(item.DisplayName));
             if (item.RequiresAdmin && !IsElevated && !item.IsTask)
             {
                 ElevatedRestart.RequireElevation(action);
                 return;
             }
             if (NeedsToggleConfirm(item, enable) &&
-                !Dialogs.Confirm(enable ? "Включить автозапуск?" : "Отключить автозапуск?", BuildToggleConfirm(item, enable)))
+                !Dialogs.Confirm(enable ? T._("Включить автозапуск?") : T._("Отключить автозапуск?"), BuildToggleConfirm(item, enable)))
                 return;
 
             StartupActionResult? result = null;
-            await RunBusyAsync(enable ? $"Включаем «{item.DisplayName}»…" : $"Отключаем «{item.DisplayName}»…", async ct =>
+            await RunBusyAsync(enable ? T.F("Включаем {0}…", T.Quote(item.DisplayName)) : T.F("Отключаем {0}…", T.Quote(item.DisplayName)), async ct =>
             {
                 if (item.IsService)
                 {
-                    ReportProgress(-1, "Создаём точку восстановления…");
-                    await RestorePoint.TryCreateAsync($"Автозагрузка: служба {item.ServiceName}", ct);
-                    ReportProgress(-1, enable ? $"Включаем «{item.DisplayName}»…" : $"Отключаем «{item.DisplayName}»…");
+                    ReportProgress(-1, T._("Создаём точку восстановления…"));
+                    await RestorePoint.TryCreateAsync(T.F("Автозагрузка: служба {0}", item.ServiceName), ct);
+                    ReportProgress(-1, enable ? T.F("Включаем {0}…", T.Quote(item.DisplayName)) : T.F("Отключаем {0}…", T.Quote(item.DisplayName)));
                 }
                 result = await _service.SetEnabledAsync(item, enable, ct);
             });
@@ -460,7 +460,7 @@ public sealed partial class StartupViewModel : PageViewModel
             }
             ShowMessage(result.Message, !result.Success);
             if (result.Success && (item.Scope == StartupScope.AllUsers || item.IsService || item.IsTask))
-                Dialogs.Info("Автозагрузка", result.Message);
+                Dialogs.Info(T._("Автозагрузка"), result.Message);
         }
         finally
         {
@@ -484,43 +484,41 @@ public sealed partial class StartupViewModel : PageViewModel
             case StartupKind.Service:
                 if (enable)
                 {
-                    sb.AppendLine($"Вернуть службе «{item.DisplayName}» автоматический запуск?");
+                    sb.AppendLine(T.F("Вернуть службе {0} автоматический запуск?", T.Quote(item.DisplayName)));
                     sb.AppendLine();
-                    sb.AppendLine("Служба снова будет стартовать вместе с Windows.");
+                    sb.AppendLine(T._("Служба снова будет стартовать вместе с Windows."));
                 }
                 else
                 {
-                    sb.AppendLine($"Перевести службу «{item.DisplayName}» ({item.ServiceName}) в ручной режим запуска?");
+                    sb.AppendLine(T.F("Перевести службу {0} ({1}) в ручной режим запуска?", T.Quote(item.DisplayName), item.ServiceName));
                     sb.AppendLine();
-                    sb.AppendLine("Служба перестанет стартовать вместе с Windows, но программы смогут запустить её, когда она понадобится. " +
-                                  "Служба не удаляется.");
+                    sb.AppendLine(T._("Служба перестанет стартовать вместе с Windows, но программы смогут запустить её, когда она понадобится. Служба не удаляется."));
                     sb.AppendLine();
-                    sb.AppendLine("Прежний режим запуска будет запомнен — кнопка «Включить» вернёт его.");
+                    sb.AppendLine(T._("Прежний режим запуска будет запомнен — кнопка «Включить» вернёт его."));
                 }
-                sb.AppendLine("Перед изменением будет создана точка восстановления Windows (если это разрешено в настройках).");
+                sb.AppendLine(T._("Перед изменением будет создана точка восстановления Windows (если это разрешено в настройках)."));
                 break;
 
             case StartupKind.ScheduledTask:
                 sb.AppendLine(enable
-                    ? $"Включить задание планировщика «{item.DisplayName}»?"
-                    : $"Отключить задание планировщика «{item.DisplayName}»?");
+                    ? T.F("Включить задание планировщика {0}?", T.Quote(item.DisplayName))
+                    : T.F("Отключить задание планировщика {0}?", T.Quote(item.DisplayName)));
                 sb.AppendLine();
-                sb.AppendLine($"Путь: {item.TaskPath}");
-                sb.AppendLine($"Команда: {Shorten(item.Command)}");
+                sb.AppendLine(T.F("Путь: {0}", item.TaskPath));
+                sb.AppendLine(T.F("Команда: {0}", Shorten(item.Command)));
                 sb.AppendLine();
                 sb.AppendLine(enable
-                    ? "Задание снова будет запускаться " + (item.TriggerText ?? "автоматически") + "."
-                    : "Задание останется в планировщике, но перестанет запускаться. Включить его обратно можно здесь же.");
+                    ? T.F("Задание снова будет запускаться {0}.", item.TriggerText ?? T._("автоматически"))
+                    : T._("Задание останется в планировщике, но перестанет запускаться. Включить его обратно можно здесь же."));
                 break;
 
             default:
-                sb.AppendLine($"Отключить автозапуск «{item.DisplayName}» для всех пользователей компьютера?");
+                sb.AppendLine(T.F("Отключить автозапуск {0} для всех пользователей компьютера?", T.Quote(item.DisplayName)));
                 sb.AppendLine();
-                sb.AppendLine($"Команда: {Shorten(item.Command)}");
+                sb.AppendLine(T.F("Команда: {0}", Shorten(item.Command)));
                 sb.AppendLine();
-                sb.AppendLine("Запись не удаляется: Windows просто перестанет запускать программу при входе — так же, как в Диспетчере задач. " +
-                              "Включить её обратно можно здесь в любой момент.");
-                sb.AppendLine("Перед изменением сохраняется резервная копия раздела реестра.");
+                sb.AppendLine(T._("Запись не удаляется: Windows просто перестанет запускать программу при входе — так же, как в Диспетчере задач. Включить её обратно можно здесь в любой момент."));
+                sb.AppendLine(T._("Перед изменением сохраняется резервная копия раздела реестра."));
                 break;
         }
         return sb.ToString().TrimEnd();
@@ -535,20 +533,20 @@ public sealed partial class StartupViewModel : PageViewModel
         if (!item.CanDelete)
         {
             ShowMessage(item.IsService
-                ? "Службы не удаляются — их можно только перевести в ручной режим переключателем."
-                : "Системные записи Windows программа не удаляет.");
+                ? T._("Службы не удаляются — их можно только перевести в ручной режим переключателем.")
+                : T._("Системные записи Windows программа не удаляет."));
             return;
         }
         if (item.RequiresAdmin && !IsElevated && !item.IsTask)
         {
-            ElevatedRestart.RequireElevation($"удаление «{item.DisplayName}» из автозагрузки");
+            ElevatedRestart.RequireElevation(T.F("удаление {0} из автозагрузки", T.Quote(item.DisplayName)));
             return;
         }
-        if (!Dialogs.Confirm("Удалить из автозагрузки?", BuildDeleteConfirm(item)))
+        if (!Dialogs.Confirm(T._("Удалить из автозагрузки?"), BuildDeleteConfirm(item)))
             return;
 
         StartupActionResult? result = null;
-        await RunBusyAsync($"Удаляем «{item.DisplayName}» из автозагрузки…", async ct =>
+        await RunBusyAsync(T.F("Удаляем {0} из автозагрузки…", T.Quote(item.DisplayName)), async ct =>
         {
             result = await _service.DeleteAsync(item, ct);
         });
@@ -557,39 +555,37 @@ public sealed partial class StartupViewModel : PageViewModel
         if (result.NeedsAdmin)
         {
             ShowMessage(result.Message, isError: true);
-            ElevatedRestart.RequireElevation($"удаление «{item.DisplayName}» из автозагрузки");
+            ElevatedRestart.RequireElevation(T.F("удаление {0} из автозагрузки", T.Quote(item.DisplayName)));
             return;
         }
         ShowMessage(result.Message, !result.Success);
         if (result.Success)
         {
             RemoveItems(new[] { item });
-            Dialogs.Info("Автозагрузка", result.Message);
+            Dialogs.Info(T._("Автозагрузка"), result.Message);
         }
     }
 
     private static string BuildDeleteConfirm(StartupItem item)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Удалить «{item.DisplayName}» из автозагрузки?");
+        sb.AppendLine(T.F("Удалить {0} из автозагрузки?", T.Quote(item.DisplayName)));
         sb.AppendLine();
-        sb.AppendLine($"Источник: {item.SourceText} ({item.ScopeText.ToLowerInvariant()})");
-        sb.AppendLine($"Где: {item.LocationText}");
-        sb.AppendLine($"Команда: {Shorten(item.Command)}");
+        sb.AppendLine(T.F("Источник: {0} ({1})", item.SourceText, item.ScopeText.ToLowerInvariant()));
+        sb.AppendLine(T.F("Где: {0}", item.LocationText));
+        sb.AppendLine(T.F("Команда: {0}", Shorten(item.Command)));
         sb.AppendLine();
-        sb.AppendLine("Сама программа не удаляется — исчезнет только запись автозапуска.");
+        sb.AppendLine(T._("Сама программа не удаляется — исчезнет только запись автозапуска."));
         sb.AppendLine(item.Kind switch
         {
-            StartupKind.StartupFolder => "Ярлык будет перемещён в Корзину — при необходимости его можно восстановить оттуда.",
-            StartupKind.ScheduledTask => $"Перед удалением задание сохраняется в XML-файл ({AppPaths.BackupsDir}); " +
-                                         "восстановить его можно через «Планировщик заданий» → «Импортировать задачу».",
-            _ => $"Перед удалением сохраняется резервная копия раздела реестра ({AppPaths.BackupsDir}); " +
-                 "чтобы вернуть запись, достаточно дважды щёлкнуть .reg-файл.",
+            StartupKind.StartupFolder => T._("Ярлык будет перемещён в Корзину — при необходимости его можно восстановить оттуда."),
+            StartupKind.ScheduledTask => T.F("Перед удалением задание сохраняется в XML-файл ({0}); восстановить его можно через «Планировщик заданий» → «Импортировать задачу».", AppPaths.BackupsDir),
+            _ => T.F("Перед удалением сохраняется резервная копия раздела реестра ({0}); чтобы вернуть запись, достаточно дважды щёлкнуть .reg-файл.", AppPaths.BackupsDir),
         });
         if (!item.IsBroken && !item.IsRunOnce)
         {
             sb.AppendLine();
-            sb.AppendLine("Совет: если вы просто не хотите, чтобы программа запускалась сама, её достаточно отключить — это обратимо.");
+            sb.AppendLine(T._("Совет: если вы просто не хотите, чтобы программа запускалась сама, её достаточно отключить — это обратимо."));
         }
         return sb.ToString().TrimEnd();
     }
@@ -607,8 +603,8 @@ public sealed partial class StartupViewModel : PageViewModel
             if (broken.Count == 0)
             {
                 ShowMessage(candidates.Count == 0
-                    ? "Битых записей нет."
-                    : "Файлы этих записей снова на месте — удалять нечего. Список обновлён.");
+                    ? T._("Битых записей нет.")
+                    : T._("Файлы этих записей снова на месте — удалять нечего. Список обновлён."));
                 return;
             }
             reload |= await DeleteBrokenCoreAsync(broken);
@@ -628,32 +624,30 @@ public sealed partial class StartupViewModel : PageViewModel
         var skipped = broken.Count - allowed.Count;
         if (allowed.Count == 0)
         {
-            ElevatedRestart.RequireElevation("удаление битых записей автозагрузки для всех пользователей");
+            ElevatedRestart.RequireElevation(T._("удаление битых записей автозагрузки для всех пользователей"));
             return false;
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Удалить {Format.Count(allowed.Count, "битую запись", "битые записи", "битых записей")} из автозагрузки?");
+        sb.AppendLine(T.F("Удалить {0} из автозагрузки?", Format.Count(allowed.Count, "битую запись", "битые записи", "битых записей")));
         sb.AppendLine();
         foreach (var item in allowed.Take(15))
             sb.AppendLine($"• {item.DisplayName} — {item.SourceShort}: {Shorten(item.TargetFile ?? item.Command, 70)}");
         if (allowed.Count > 15)
-            sb.AppendLine($"• …и ещё {allowed.Count - 15}");
+            sb.AppendLine("• " + T.F("…и ещё {0}", allowed.Count - 15));
         sb.AppendLine();
-        sb.AppendLine("Эти записи ссылаются на файлы, которых больше нет, поэтому ничего не запускают. " +
-                      "Перед удалением сохраняются резервные копии: реестр — в .reg-файлы, задания — в XML, ярлыки — в Корзину.");
+        sb.AppendLine(T._("Эти записи ссылаются на файлы, которых больше нет, поэтому ничего не запускают. Перед удалением сохраняются резервные копии: реестр — в .reg-файлы, задания — в XML, ярлыки — в Корзину."));
         if (skipped > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"{Format.Count(skipped, "запись", "записи", "записей")} для всех пользователей " +
-                          $"{Format.Plural(skipped, "будет пропущена", "будут пропущены", "будут пропущены")} — " +
-                          "для них нужны права администратора.");
+            sb.AppendLine(T.F("{0} для всех пользователей {1} — для них нужны права администратора.",
+                Format.Count(skipped, "запись", "записи", "записей"), Format.Plural(skipped, "будет пропущена", "будут пропущены", "будут пропущены")));
         }
-        if (!Dialogs.Confirm("Удалить битые записи?", sb.ToString().TrimEnd()))
+        if (!Dialogs.Confirm(T._("Удалить битые записи?"), sb.ToString().TrimEnd()))
             return false;
 
         StartupBulkResult? result = null;
-        await RunBusyAsync("Удаляем битые записи…", async ct =>
+        await RunBusyAsync(T._("Удаляем битые записи…"), async ct =>
         {
             result = await _service.DeleteBrokenAsync(allowed, ct);
         });
@@ -662,9 +656,9 @@ public sealed partial class StartupViewModel : PageViewModel
         RemoveItems(result.Done);
         var summary = result.Summary;
         if (skipped > 0)
-            summary += $"{Environment.NewLine}{Environment.NewLine}Пропущено (нужны права администратора): {skipped}.";
+            summary += Environment.NewLine + Environment.NewLine + T.F("Пропущено (нужны права администратора): {0}.", skipped);
         ShowMessage(BrokenResultMessage(result), result.Failed.Count > 0);
-        Dialogs.Info("Битые записи", summary);
+        Dialogs.Info(T._("Битые записи"), summary);
         return result.Skipped.Count > 0;
     }
 
@@ -673,13 +667,13 @@ public sealed partial class StartupViewModel : PageViewModel
     {
         string text;
         if (result.Failed.Count > 0)
-            text = $"Удалено {result.Done.Count}, не удалось: {result.Failed.Count}.";
+            text = T.F("Удалено {0}, не удалось: {1}.", result.Done.Count, result.Failed.Count);
         else if (result.Done.Count == 0 && result.Skipped.Count > 0)
-            text = "Удалять нечего.";
+            text = T._("Удалять нечего.");
         else
-            text = $"Битые записи удалены: {result.Done.Count}.";
+            text = T.F("Битые записи удалены: {0}.", result.Done.Count);
         if (result.Skipped.Count > 0)
-            text += $" Оставлено без изменений (запись изменилась после проверки): {result.Skipped.Count}. Список обновлён.";
+            text += " " + T.F("Оставлено без изменений (запись изменилась после проверки): {0}. Список обновлён.", result.Skipped.Count);
         return text;
     }
 
@@ -710,7 +704,7 @@ public sealed partial class StartupViewModel : PageViewModel
         else if (!string.IsNullOrWhiteSpace(item.FilePath) && File.Exists(item.FilePath))
             ProcessRunner.ShowInExplorer(item.FilePath);
         else
-            Dialogs.Info("Файл не найден", $"Файл «{item.TargetFile ?? item.Command}» не найден на диске.\n\nЗапись находится здесь: {item.LocationText}");
+            Dialogs.Info(T._("Файл не найден"), T.F("Файл {0} не найден на диске.\n\nЗапись находится здесь: {1}", T.Quote(item.TargetFile ?? item.Command), item.LocationText));
     }
 
     private void CopyCommand(StartupItem? item)
@@ -718,7 +712,7 @@ public sealed partial class StartupViewModel : PageViewModel
         if (item is null)
             return;
         if (TrySetClipboard(item.Command))
-            ShowMessage("Команда скопирована в буфер обмена.");
+            ShowMessage(T._("Команда скопирована в буфер обмена."));
     }
 
     private void SearchWeb(StartupItem? item)
@@ -731,37 +725,40 @@ public sealed partial class StartupViewModel : PageViewModel
     {
         if (item?.TargetFile is null || item.TargetExists != true)
         {
-            Dialogs.Info("VirusTotal", "Файл не найден — проверять нечего.");
+            Dialogs.Info("VirusTotal", T._("Файл не найден — проверять нечего."));
             return;
         }
-        ShowMessage("Открываем отчёт VirusTotal по контрольной сумме файла. Сам файл никуда не отправляется.");
+        ShowMessage(T._("Открываем отчёт VirusTotal по контрольной сумме файла. Сам файл никуда не отправляется."));
         await FileTools.OpenVirusTotalAsync(item.TargetFile);
     }
+
+    /// <summary>Test seam: the Defender scan of one file (<see cref="FileTools.ScanWithDefenderAsync"/>).</summary>
+    internal Func<string, CancellationToken, Task<DefenderScanResult>> DefenderScan { get; set; } =
+        (path, ct) => FileTools.ScanWithDefenderAsync(path, ct);
 
     private async Task ScanWithDefenderAsync(StartupItem? item)
     {
         if (item?.TargetFile is null || item.TargetExists != true)
         {
-            Dialogs.Info("Защитник Windows", "Файл не найден — проверять нечего.");
+            Dialogs.Info(T._("Защитник Windows"), T._("Файл не найден — проверять нечего."));
             return;
         }
         var target = item.TargetFile;
-        await RunBusyAsync($"Защитник Windows проверяет {Path.GetFileName(target)}…", async ct =>
+        await RunBusyAsync(T.F("Защитник Windows проверяет {0}…", Path.GetFileName(target)), async ct =>
         {
-            string message;
-            var threat = false; // Defender's own verdict, not a word of the text
+            DefenderScanResult scan;
             try
             {
-                var scan = await FileTools.ScanWithDefenderAsync(target, ct);
-                (message, threat) = (scan.Text, scan.ThreatFound);
+                scan = await DefenderScan(target, ct);
             }
             catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
             {
-                Log.Warn($"Автозагрузка: не удалось запустить проверку Защитником: {ex.Message}");
-                message = $"Не удалось запустить проверку: {ErrorText.For(ex)}.";
+                Log.Warn(T.F("Автозагрузка: не удалось запустить проверку Защитником: {0}", ex.Message));
+                scan = new DefenderScanResult(T.F("Не удалось запустить проверку: {0}.", ErrorText.For(ex)), ThreatFound: false);
             }
-            ShowMessage($"Защитник Windows: {message}", threat);
-            Dialogs.Info("Защитник Windows", $"{item.DisplayName}\n{target}\n\n{message}");
+            // The verdict is the scan's own flag, never a word of its text (the text is Russian or English).
+            ShowMessage(T.F("Защитник Windows: {0}", scan.Text), scan.ThreatFound);
+            Dialogs.Info(T._("Защитник Windows"), $"{item.DisplayName}\n{target}\n\n{scan.Text}");
         });
     }
 
@@ -772,9 +769,8 @@ public sealed partial class StartupViewModel : PageViewModel
         // Interpreters (powershell.exe, rundll32.exe…) are trusted per entry, never as a file: see StartupService.TrustKey.
         var trusted = StartupService.SetTrusted(item, !item.IsTrusted, _service.Settings);
         ShowMessage(trusted
-            ? $"«{item.DisplayName}» отмечен как доверенный — предупреждения для него больше не показываются. " +
-              "Убрать его из доверенных можно здесь же или в «Настройках»."
-            : $"«{item.DisplayName}» больше не в списке доверенных — проверки снова включены.");
+            ? T.F("{0} отмечен как доверенный — предупреждения для него больше не показываются. Убрать его из доверенных можно здесь же или в «Настройках».", T.Quote(item.DisplayName))
+            : T.F("{0} больше не в списке доверенных — проверки снова включены.", T.Quote(item.DisplayName)));
 
         // The same program file may be used by several entries (the «Процессы» page checks the same file key).
         RefreshTrust();
@@ -808,14 +804,14 @@ public sealed partial class StartupViewModel : PageViewModel
     {
         ProcessRunner.ShellOpen("taskschd.msc");
         if (item?.TaskPath is { } path && TrySetClipboard(path))
-            ShowMessage($"Открываем «Планировщик заданий». Путь задания скопирован в буфер обмена: {path}");
+            ShowMessage(T.F("Открываем «Планировщик заданий». Путь задания скопирован в буфер обмена: {0}", path));
     }
 
     private void OpenServices(StartupItem? item)
     {
         ProcessRunner.ShellOpen("services.msc");
         if (item is not null)
-            ShowMessage($"Открываем список служб Windows. Найдите в нём «{item.DisplayName}».");
+            ShowMessage(T.F("Открываем список служб Windows. Найдите в нём {0}.", T.Quote(item.DisplayName)));
     }
 
     private bool TrySetClipboard(string text)
@@ -827,8 +823,8 @@ public sealed partial class StartupViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is COMException or ExternalException or ArgumentException)
         {
-            Log.Warn($"Не удалось скопировать в буфер обмена: {ex.Message}");
-            ShowMessage("Буфер обмена занят другой программой — попробуйте ещё раз.", true);
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
+            ShowMessage(T._("Буфер обмена занят другой программой — попробуйте ещё раз."), true);
             return false;
         }
     }

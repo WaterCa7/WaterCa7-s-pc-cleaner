@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.Win32;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Startup;
@@ -282,42 +283,42 @@ public sealed class StartupItem : ObservableObject
 
     // ---- display text ----
 
-    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? "(без имени)" : Name;
+    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? T._("(без имени)") : Name;
 
     public string PublisherText => !string.IsNullOrWhiteSpace(Publisher) ? Publisher!
-        : TargetExists == false ? "Файл не найден"
-        : "Издатель неизвестен";
+        : TargetExists == false ? T._("Файл не найден")
+        : T._("Издатель неизвестен");
 
-    public string SignatureText => Signature?.StatusText ?? (TargetExists == false ? "Файл не найден" : "Подпись не проверена");
+    public string SignatureText => Signature?.StatusText ?? (TargetExists == false ? T._("Файл не найден") : T._("Подпись не проверена"));
 
     /// <summary>Who the entry starts for; the grid shows the short form of the same wording (<see cref="SourceDetail"/>).</summary>
-    public string ScopeText => Scope == StartupScope.CurrentUser ? "Для вас" : "Для всех пользователей";
+    public string ScopeText => Scope == StartupScope.CurrentUser ? T._("Для вас") : T._("Для всех пользователей");
 
     public string SourceText => Kind switch
     {
-        StartupKind.RegistryRun => Is32Bit ? "Реестр: Run (32-бит)" : "Реестр: Run",
-        StartupKind.RegistryRunOnce => Is32Bit ? "Реестр: RunOnce (32-бит)" : "Реестр: RunOnce",
-        StartupKind.StartupFolder => "Папка «Автозагрузка»",
-        StartupKind.ScheduledTask => "Планировщик заданий",
-        _ => "Служба Windows",
+        StartupKind.RegistryRun => Is32Bit ? T._("Реестр: Run (32-бит)") : T._("Реестр: Run"),
+        StartupKind.RegistryRunOnce => Is32Bit ? T._("Реестр: RunOnce (32-бит)") : T._("Реестр: RunOnce"),
+        StartupKind.StartupFolder => T._("Папка «Автозагрузка»"),
+        StartupKind.ScheduledTask => T._("Планировщик заданий"),
+        _ => T._("Служба Windows"),
     };
 
     /// <summary>Short source label for the grid.</summary>
     public string SourceShort => Kind switch
     {
-        StartupKind.RegistryRun => "Реестр",
-        StartupKind.RegistryRunOnce => "Реестр, 1 раз",
-        StartupKind.StartupFolder => "Папка",
-        StartupKind.ScheduledTask => "Планировщик",
-        _ => "Служба",
+        StartupKind.RegistryRun => T._("Реестр"),
+        StartupKind.RegistryRunOnce => T._("Реестр, 1 раз"),
+        StartupKind.StartupFolder => T._("Папка"),
+        StartupKind.ScheduledTask => T._("Планировщик"),
+        _ => T._("Служба"),
     };
 
     /// <summary>Second line under the source in the grid.</summary>
     public string SourceDetail => Kind switch
     {
         StartupKind.ScheduledTask => TriggerText ?? "",
-        StartupKind.Service => ServiceStartMode == "delayed-auto" ? "отложенный запуск" : "автозапуск",
-        _ => Scope == StartupScope.CurrentUser ? "для вас" : "для всех",
+        StartupKind.Service => ServiceStartMode == "delayed-auto" ? T._("отложенный запуск") : T._("автозапуск"),
+        _ => Scope == StartupScope.CurrentUser ? T._("для вас") : T._("для всех"),
     };
 
     public string KindGlyph => Kind switch
@@ -330,20 +331,20 @@ public sealed class StartupItem : ObservableObject
 
     public string StateText => State switch
     {
-        StartupState.Broken => "Файл не найден",
-        StartupState.Pending => "Однократно",
-        StartupState.Enabled => "Включено",
-        _ => "Отключено",
+        StartupState.Broken => T._("Файл не найден"),
+        StartupState.Pending => T._("Однократно"),
+        StartupState.Enabled => T._("Включено"),
+        _ => T._("Отключено"),
     };
 
     public string StateTooltip => State switch
     {
-        StartupState.Broken => "Запись указывает на файл, которого больше нет. Она ничего не запускает — её можно безопасно удалить.",
-        StartupState.Pending => "Windows выполнит эту команду один раз при следующем входе и сама удалит запись.",
-        StartupState.Enabled => "Запускается автоматически вместе с Windows.",
+        StartupState.Broken => T._("Запись указывает на файл, которого больше нет. Она ничего не запускает — её можно безопасно удалить."),
+        StartupState.Pending => T._("Windows выполнит эту команду один раз при следующем входе и сама удалит запись."),
+        StartupState.Enabled => T._("Запускается автоматически вместе с Windows."),
         _ => DisabledTime is null
-            ? "Отключено: Windows не запускает эту запись."
-            : $"Отключено {Format.DateTime(DisabledTime)}: Windows не запускает эту запись.",
+            ? T._("Отключено: Windows не запускает эту запись.")
+            : T.F("Отключено {0}: Windows не запускает эту запись.", Format.DateTime(DisabledTime)),
     };
 
     public string StateGlyph => State switch
@@ -361,12 +362,12 @@ public sealed class StartupItem : ObservableObject
         _ => "\uE73E",
     };
 
-    public string RiskText => IsTrusted ? "Доверено" : RiskLevel switch
+    public string RiskText => IsTrusted ? T._("Доверено") : RiskLevel switch
     {
-        SuspicionLevel.High => "Высокий риск",
-        SuspicionLevel.Medium => "Подозрительно",
-        SuspicionLevel.Low => "Внимание",
-        _ => "Норма",
+        SuspicionLevel.High => T._("Высокий риск"),
+        SuspicionLevel.Medium => T._("Подозрительно"),
+        SuspicionLevel.Low => T._("Внимание"),
+        _ => T._("Норма"),
     };
 
     public string RiskTooltip
@@ -374,9 +375,9 @@ public sealed class StartupItem : ObservableObject
         get
         {
             if (IsTrusted)
-                return "Вы отметили эту запись как доверенную.";
+                return T._("Вы отметили эту запись как доверенную.");
             if (Suspicion.Reasons.Count == 0)
-                return IsMicrosoft ? "Компонент Microsoft с действительной подписью." : "Подозрительных признаков не найдено.";
+                return IsMicrosoft ? T._("Компонент Microsoft с действительной подписью.") : T._("Подозрительных признаков не найдено.");
             return string.Join(Environment.NewLine, Suspicion.Reasons.Select(r => "• " + r));
         }
     }
@@ -385,22 +386,22 @@ public sealed class StartupItem : ObservableObject
 
     public IReadOnlyList<string> Reasons => IsTrusted ? Array.Empty<string>() : Suspicion.Reasons;
 
-    public string ToggleActionText => IsEnabled ? "Отключить" : "Включить";
+    public string ToggleActionText => IsEnabled ? T._("Отключить") : T._("Включить");
 
-    public string TrustActionText => IsTrusted ? "Не доверять" : "Доверять";
+    public string TrustActionText => IsTrusted ? T._("Не доверять") : T._("Доверять");
 
     public string ToggleTooltip => !CanToggle
         ? ToggleBlockedReason
         : IsEnabled
-            ? "Отключить автозапуск (обратимо, как в Диспетчере задач)"
-            : "Снова включить автозапуск";
+            ? T._("Отключить автозапуск (обратимо, как в Диспетчере задач)")
+            : T._("Снова включить автозапуск");
 
     public string ToggleBlockedReason => IsRunOnce
-        ? "Однократный запуск нельзя отключить — Windows сама удалит запись после следующего входа. Если она не нужна, её можно удалить."
+        ? T._("Однократный запуск нельзя отключить — Windows сама удалит запись после следующего входа. Если она не нужна, её можно удалить.")
         : IsWindowsTask
-            ? "Это системное задание Windows — программа его не меняет."
+            ? T._("Это системное задание Windows — программа его не меняет.")
             : IsMicrosoftService
-                ? "Это системная служба Microsoft — программа её не меняет."
+                ? T._("Это системная служба Microsoft — программа её не меняет.")
                 : "";
 
     public string DisabledTimeText => DisabledTime is null ? "" : Format.DateTime(DisabledTime);
@@ -409,16 +410,16 @@ public sealed class StartupItem : ObservableObject
     public string Explanation => Kind switch
     {
         StartupKind.RegistryRun => Scope == StartupScope.CurrentUser
-            ? "Запись в разделе реестра Run. Программа запускается каждый раз, когда вы входите в Windows."
-            : "Запись в разделе реестра Run для всего компьютера. Программа запускается при входе любого пользователя.",
+            ? T._("Запись в разделе реестра Run. Программа запускается каждый раз, когда вы входите в Windows.")
+            : T._("Запись в разделе реестра Run для всего компьютера. Программа запускается при входе любого пользователя."),
         StartupKind.RegistryRunOnce =>
-            "Однократный запуск: Windows выполнит команду при следующем входе и сама удалит запись. Так обычно завершают установку программ и обновлений.",
+            T._("Однократный запуск: Windows выполнит команду при следующем входе и сама удалит запись. Так обычно завершают установку программ и обновлений."),
         StartupKind.StartupFolder => Scope == StartupScope.CurrentUser
-            ? "Ярлык в вашей папке «Автозагрузка». Всё, что лежит в этой папке, открывается при входе в Windows."
-            : "Ярлык в общей папке «Автозагрузка». Он открывается при входе любого пользователя.",
+            ? T._("Ярлык в вашей папке «Автозагрузка». Всё, что лежит в этой папке, открывается при входе в Windows.")
+            : T._("Ярлык в общей папке «Автозагрузка». Он открывается при входе любого пользователя."),
         StartupKind.ScheduledTask =>
-            $"Задание планировщика Windows, которое запускается {TriggerText ?? "автоматически"}. Часто так работают программы обновления.",
-        _ => "Служба Windows с автоматическим запуском. Работает в фоне с момента включения компьютера, даже до входа в систему.",
+            T.F("Задание планировщика Windows, которое запускается {0}. Часто так работают программы обновления.", TriggerText ?? T._("автоматически")),
+        _ => T._("Служба Windows с автоматическим запуском. Работает в фоне с момента включения компьютера, даже до входа в систему."),
     };
 
     /// <summary>Short safety advice for non-experts.</summary>
@@ -427,21 +428,22 @@ public sealed class StartupItem : ObservableObject
         get
         {
             if (IsProtected)
-                return "Это часть Windows. Оставьте как есть.";
+                return T._("Это часть Windows. Оставьте как есть.");
             if (IsBroken)
-                return "Файл программы удалён, поэтому запись ничего не запускает. Её можно спокойно удалить.";
+                return T._("Файл программы удалён, поэтому запись ничего не запускает. Её можно спокойно удалить.");
             if (IsSuspicious)
-                return "Запись выглядит необычно. Проверьте файл на VirusTotal или Защитником Windows. Если программа вам незнакома — " +
-                       (IsRunOnce ? "удалите эту запись (однократный запуск нельзя отключить)." : "отключите её.");
+                return IsRunOnce
+                    ? T._("Запись выглядит необычно. Проверьте файл на VirusTotal или Защитником Windows. Если программа вам незнакома — удалите эту запись (однократный запуск нельзя отключить).")
+                    : T._("Запись выглядит необычно. Проверьте файл на VirusTotal или Защитником Windows. Если программа вам незнакома — отключите её.");
             if (IsRunOnce)
-                return "Обычно эту запись лучше не трогать: Windows сама удалит её после следующего входа.";
+                return T._("Обычно эту запись лучше не трогать: Windows сама удалит её после следующего входа.");
             if (IsService)
-                return "Службы драйверов, антивирусов и резервного копирования лучше оставить. Ручной режим безопасен: служба запустится, когда понадобится программе.";
+                return T._("Службы драйверов, антивирусов и резервного копирования лучше оставить. Ручной режим безопасен: служба запустится, когда понадобится программе.");
             if (IsMicrosoft)
-                return "Компонент Microsoft. Отключайте, только если не пользуетесь этой функцией.";
+                return T._("Компонент Microsoft. Отключайте, только если не пользуетесь этой функцией.");
             if (IsTask)
-                return "Отключать безопасно: задание просто перестанет запускаться. Если это обновление программы, она будет обновляться, когда вы её откроете.";
-            return "Отключать безопасно: программа просто перестанет запускаться сама, а открыть её можно как обычно.";
+                return T._("Отключать безопасно: задание просто перестанет запускаться. Если это обновление программы, она будет обновляться, когда вы её откроете.");
+            return T._("Отключать безопасно: программа просто перестанет запускаться сама, а открыть её можно как обычно.");
         }
     }
 
@@ -451,7 +453,7 @@ public sealed class StartupItem : ObservableObject
         get
         {
             var file = string.IsNullOrWhiteSpace(TargetFile) ? null : Path.GetFileName(TargetFile);
-            return string.IsNullOrWhiteSpace(file) ? $"{DisplayName} автозагрузка что это" : $"{file} что это за процесс";
+            return string.IsNullOrWhiteSpace(file) ? T.F("{0} автозагрузка что это", DisplayName) : T.F("{0} что это за процесс", file);
         }
     }
 

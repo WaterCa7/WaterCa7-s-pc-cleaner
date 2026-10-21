@@ -5,6 +5,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Startup;
@@ -61,7 +62,7 @@ public sealed partial class StartupService
         }
         catch (Exception ex)
         {
-            Log.Warn($"Автозагрузка: планировщик заданий недоступен: {ex.Message}");
+            Log.Warn(T.F("Автозагрузка: планировщик заданий недоступен: {0}", ex.Message));
         }
         finally
         {
@@ -70,9 +71,9 @@ public sealed partial class StartupService
         }
 
         if (context is { Denied: > 0 })
-            Log.Warn($"Автозагрузка: без прав администратора пропущено объектов планировщика (заданий и папок): {context.Denied}");
+            Log.Warn(T.F("Автозагрузка: без прав администратора пропущено объектов планировщика (заданий и папок): {0}", context.Denied));
         if (context is { Failed: > 0 })
-            Log.Warn($"Автозагрузка: не удалось прочитать {Format.Count(context.Failed, "задание", "задания", "заданий")} планировщика ({context.FirstError})");
+            Log.Warn(T.F("Автозагрузка: не удалось прочитать {0} планировщика ({1})", Format.Count(context.Failed, "задание", "задания", "заданий"), context.FirstError));
         return list;
     }
 
@@ -204,7 +205,7 @@ public sealed partial class StartupService
             }
 
             var runsAsMe = IsCurrentUser(userId, context);
-            var triggerText = boot && logon ? "при включении и входе" : boot ? "при включении ПК" : "при входе";
+            var triggerText = boot && logon ? T._("при включении и входе") : boot ? T._("при включении ПК") : T._("при входе");
             return new StartupItem
             {
                 Id = $"task|{taskPath}",
@@ -265,9 +266,9 @@ public sealed partial class StartupService
         if (!string.IsNullOrWhiteSpace(classId))
         {
             var target = StartupTargets.ComServer(classId);
-            return (target is null ? $"COM-обработчик {classId}" : $"COM-обработчик {classId} ({target})", target);
+            return (target is null ? T.F("COM-обработчик {0}", classId) : T.F("COM-обработчик {0} ({1})", classId, target), target);
         }
-        return ("(нет команды запуска)", null);
+        return (T._("(нет команды запуска)"), null);
     }
 
     /// <summary>The current command and target of a registered task (IRegisteredTask), read again from the scheduler.</summary>
@@ -321,7 +322,7 @@ public sealed partial class StartupService
         object? service = null, folder = null, task = null;
         try
         {
-            var type = Type.GetTypeFromProgID("Schedule.Service") ?? throw new InvalidOperationException("Планировщик заданий недоступен.");
+            var type = Type.GetTypeFromProgID("Schedule.Service") ?? throw ErrorText.Own(new InvalidOperationException(T._("Планировщик заданий недоступен.")));
             service = Activator.CreateInstance(type);
             dynamic svc = service!;
             svc.Connect();
@@ -342,7 +343,7 @@ public sealed partial class StartupService
     private async Task<StartupActionResult> SetTaskEnabledAsync(StartupItem item, bool enable, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(item.TaskPath))
-            return StartupActionResult.Fail("Неизвестный путь задания.");
+            return StartupActionResult.Fail(T._("Неизвестный путь задания."));
         await RunOnTaskAsync(item.TaskPath, (_, task) =>
         {
             dynamic t = task;
@@ -350,16 +351,18 @@ public sealed partial class StartupService
         }, ct);
 
         item.IsEnabled = enable;
-        Log.Action($"Автозагрузка: задание планировщика «{item.TaskPath}» {(enable ? "включено" : "отключено")}.");
+        Log.Action(enable
+            ? T.F("Автозагрузка: задание планировщика {0} включено.", T.Quote(item.TaskPath))
+            : T.F("Автозагрузка: задание планировщика {0} отключено.", T.Quote(item.TaskPath)));
         return StartupActionResult.Ok(enable
-            ? $"Задание «{item.DisplayName}» снова включено."
-            : $"Задание «{item.DisplayName}» отключено. Оно осталось в планировщике — включить его можно здесь в любой момент.");
+            ? T.F("Задание {0} снова включено.", T.Quote(item.DisplayName))
+            : T.F("Задание {0} отключено. Оно осталось в планировщике — включить его можно здесь в любой момент.", T.Quote(item.DisplayName)));
     }
 
     private async Task<StartupActionResult> DeleteTaskAsync(StartupItem item, bool onlyIfStillBroken, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(item.TaskPath))
-            return StartupActionResult.Fail("Неизвестный путь задания.");
+            return StartupActionResult.Fail(T._("Неизвестный путь задания."));
 
         string? backupFile = null, skipReason = null;
         await RunOnTaskAsync(item.TaskPath, (folder, task) =>
@@ -382,7 +385,7 @@ public sealed partial class StartupService
             var file = Path.Combine(AppPaths.BackupsDir, $"{DateTime.Now:yyyyMMdd-HHmmss-fff}_Task_{safeName}.xml");
             File.WriteAllText(file, xml, Encoding.Unicode);
             if (!File.Exists(file) || new FileInfo(file).Length == 0)
-                throw new IOException("Не удалось сохранить резервную копию задания");
+                throw new IOException(T._("Не удалось сохранить резервную копию задания"));
             backupFile = file;
 
             dynamic f = folder;
@@ -392,10 +395,10 @@ public sealed partial class StartupService
         if (skipReason is not null)
             return StartupActionResult.Skip(skipReason);
 
-        Log.Action($"Автозагрузка: удалено задание планировщика «{item.TaskPath}» (команда: {item.Command}). " +
-                   $"Резервная копия: {Path.GetFileName(backupFile)}");
+        Log.Action(T.F("Автозагрузка: удалено задание планировщика {0} (команда: {1}). Резервная копия: {2}",
+            T.Quote(item.TaskPath), item.Command, Path.GetFileName(backupFile)));
         return StartupActionResult.Ok(
-            $"Задание «{item.DisplayName}» удалено. Его копия сохранена в {backupFile} — восстановить можно через " +
-            "«Планировщик заданий» → «Импортировать задачу».", backupFile);
+            T.F("Задание {0} удалено. Его копия сохранена в {1} — восстановить можно через «Планировщик заданий» → «Импортировать задачу».",
+                T.Quote(item.DisplayName), backupFile), backupFile);
     }
 }

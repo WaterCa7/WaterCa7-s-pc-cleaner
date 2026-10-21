@@ -226,9 +226,25 @@ How the code treats them:
 | родительский процесс | parent process |
 | копия (of a program) | copy / copies |
 
+## Startup
+
+| Русский | English |
+|---|---|
+| запись (of the startup list) | entry |
+| Включено / Отключено / Однократно | Enabled / Disabled / Once |
+| Отключить / Включить (an entry) | Disable / Enable |
+| Удалить из автозагрузки | Delete from startup |
+| Реестр: Run / Папка «Автозагрузка» / Планировщик заданий / Служба Windows | Registry: Run / Startup folder / Task Scheduler / Windows service |
+| для вас / для всех пользователей | for you / for all users |
+| отложенный запуск | delayed start |
+| ручной режим (of a service) | manual start |
+| задания Windows / службы Microsoft (hidden by default) | Windows tasks / Microsoft services |
+| Битые записи | Broken entries |
+
 Notes for the other pages:
 
 - The Russian «Готово» is both the status bar text and the title of a dialog after an action; one key has one English text, so it is “Ready”
   everywhere (a test pins the status bar).
+- «Не удалось удалить ({0}):» is shared by Programs and Startup, so it says “Could not remove ({0}):”.
 - A decision the program makes after a Defender scan comes from `DefenderScanResult.ThreatFound` (`FileTools.ScanWithDefenderAsync`), never from the
   words of the text; a decision about a process or an entry comes from its flags (`SuspicionFlags`, `SustainedCpu` for the miner heuristic).
