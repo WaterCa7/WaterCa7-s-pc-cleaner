@@ -512,7 +512,7 @@ public class CleanerKeyboardAndTooltipTests
     }
 
     [Fact]
-    public void Tooltips_SayWhyCleaningIsNotAvailable()
+    public async Task Tooltips_SayWhyCleaningIsNotAvailable()
     {
         using var t = new CleanerTestFolder("r3-tips");
         var service = CleanerServiceTests.CreateService(t, out var env, out _);
@@ -526,7 +526,7 @@ public class CleanerKeyboardAndTooltipTests
         Assert.StartsWith("Найти временные файлы", vm.AnalyzeTip);
         Assert.StartsWith("Список категорий ещё не готов", vm.UnselectAllTip);
 
-        vm.PreviewScanAsync(CancellationToken.None).GetAwaiter().GetResult();
+        await vm.PreviewScanAsync(CancellationToken.None);
         Assert.StartsWith("Удалить файлы в отмеченных категориях", vm.CleanTip);
         Assert.StartsWith("Проверить ещё раз", vm.AnalyzeTip);
 

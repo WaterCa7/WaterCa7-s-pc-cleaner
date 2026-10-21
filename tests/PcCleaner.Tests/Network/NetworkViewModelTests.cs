@@ -171,19 +171,19 @@ public class NetworkViewModelTests
     }
 
     [Fact]
-    public void ReadSockets_RealSystem_Works()
+    public async Task ReadSockets_RealSystem_Works()
     {
         // Read-only: TCP/UDP tables and process names of the real system.
-        var snapshot = new NetworkService().ReadSocketsAsync().GetAwaiter().GetResult();
+        var snapshot = await new NetworkService().ReadSocketsAsync();
         Assert.NotEmpty(snapshot.Entries);
         Assert.All(snapshot.Entries.Select(e => e.Pid).Distinct(), pid => Assert.True(snapshot.Processes.ContainsKey(pid)));
         Assert.Contains(snapshot.Entries, e => e.State == TcpState.Listen);
     }
 
     [Fact]
-    public void GetAdapters_RealSystem_SkipsFilterDriversAndLoopback()
+    public async Task GetAdapters_RealSystem_SkipsFilterDriversAndLoopback()
     {
-        var adapters = new NetworkService().GetAdaptersAsync().GetAwaiter().GetResult();
+        var adapters = await new NetworkService().GetAdaptersAsync();
         Assert.All(adapters, a =>
         {
             Assert.DoesNotContain("-0000", a.Name);
