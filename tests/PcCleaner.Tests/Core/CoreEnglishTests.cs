@@ -28,6 +28,23 @@ public class CoreEnglishTests
     // ----- ErrorText -----
 
     [Fact]
+    public void AnOfflineHttpRequest_SaysThereIsNoConnection_InBothLanguages()
+    {
+        // HttpClient without a network: the reason is the inner socket error, or nothing at all.
+        var withSocket = new System.Net.Http.HttpRequestException("No such host is known. (github.com:443)",
+            new System.Net.Sockets.SocketException(11001));
+        var bare = new System.Net.Http.HttpRequestException("An error occurred while sending the request.");
+
+        Assert.Equal(ErrorText.For(new System.Net.Sockets.SocketException(11001)), ErrorText.For(withSocket));
+        Assert.Equal("нет связи с сервером", ErrorText.For(bare));
+        using (TestLanguage.English())
+        {
+            Assert.Equal(ErrorText.For(new System.Net.Sockets.SocketException(11001)), ErrorText.For(withSocket));
+            Assert.Equal("no connection to the server", ErrorText.For(bare));
+        }
+    }
+
+    [Fact]
     public void TheCommonErrors_AreToldByTheirType_InEnglish()
     {
         using (TestLanguage.English())

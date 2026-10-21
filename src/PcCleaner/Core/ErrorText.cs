@@ -46,6 +46,9 @@ public static class ErrorText
             return For(aggregate.InnerExceptions[0]);
         if (ex is System.Reflection.TargetInvocationException { InnerException: { } inner })
             return For(inner);
+        // HttpClient without a network: the reason is the socket error inside (Windows' own text for its code), if there is one.
+        if (ex is System.Net.Http.HttpRequestException http)
+            return http.InnerException is { } cause ? For(cause) : T._("нет связи с сервером");
 
         // Translated by type, whatever the message: .NET writes these in English, and any Cyrillic in them is a path.
         var known = ex switch
