@@ -61,9 +61,9 @@ public sealed class BrowserExtension
         _ => "—",
     };
 
-    /// <summary>Extension page in the browser's add-on store.</summary>
+    /// <summary>Extension page in the browser's add-on store (the Firefox page in the language of the UI).</summary>
     public string? StoreUrl => Kind == BrowserKind.Firefox
-        ? $"https://addons.mozilla.org/ru/firefox/addon/{Uri.EscapeDataString(Id)}/"
+        ? $"https://addons.mozilla.org/{(T.IsEnglish ? "en-US" : "ru")}/firefox/addon/{Uri.EscapeDataString(Id)}/"
         : Browser.StartsWith("Edge", StringComparison.Ordinal)
             ? $"https://microsoftedge.microsoft.com/addons/detail/{Id}"
             : Browser.StartsWith("Opera", StringComparison.Ordinal)

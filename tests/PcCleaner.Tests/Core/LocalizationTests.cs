@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text.Json;
 using System.Windows.Controls;
 using System.Windows.Markup;
@@ -77,6 +78,119 @@ public class LocalizationRulesTests
     [InlineData("de", null, "ru-RU", "ru")]   // an unknown --lang is ignored
     public void StartupLanguage_IsTheArgument_ThenTheSetting_ThenTheSystem(string? argument, string? setting, string system, string expected)
         => Assert.Equal(expected, App.StartupLanguage(argument, setting, CultureInfo.GetCultureInfo(system)));
+
+    [Theory]
+    [InlineData("en", "ru", true, "en")]    // a screenshot run: --lang replaces the setting of its temp folder
+    [InlineData("ru", null, true, "ru")]
+    [InlineData(null, "ru", true, "ru")]    // no --lang: the setting stays
+    [InlineData("de", "ru", true, "ru")]    // an unknown --lang is ignored
+    [InlineData("en", "ru", false, "ru")]   // a real run: --lang is for that run only, the saved setting is not replaced
+    [InlineData("en", null, false, null)]
+    public void StartupLanguageSetting_IsTheArgument_OnlyInAScreenshotRun(string? argument, string? setting, bool screenshotRun, string? expected)
+        => Assert.Equal(expected, App.StartupLanguageSetting(argument, setting, screenshotRun));
+
+    // ----- the language of settings written before there was one: Russian (1.2 and earlier were Russian only) -----
+
+    [Theory]
+    [InlineData("ru-RU", "ru")]
+    [InlineData("ru-UA", "ru")]
+    [InlineData("en-US", "en")]
+    [InlineData("de-DE", "en")]
+    public void ANewInstall_SavesTheLanguageOfTheSystem(string system, string expected)
+    {
+        var settings = new AppSettings(); // there was no settings.json before this run
+        var saved = new List<string?>();
+
+        App.EnsureLanguageSaved(settings, CultureInfo.GetCultureInfo(system), s => saved.Add(s.Language));
+
+        // saved at once: the settings.json that the first run writes (the mode, the update check) must not look like an older install next time
+        Assert.Equal(expected, settings.Language);
+        Assert.Equal(new[] { expected }, saved);
+        Assert.Equal(expected, App.StartupLanguage(null, settings.Language, CultureInfo.GetCultureInfo(system)));
+    }
+
+    [Theory]
+    [InlineData("ru-RU")]
+    [InlineData("en-US")]
+    [InlineData("de-DE")]
+    [InlineData("")]
+    public void ExistingSettingsWithoutALanguage_AreFromAnOlderVersion_AndBecomeRussian(string system)
+    {
+        var settings = new AppSettings { ExistedOnLoad = true };
+        var saved = new List<string?>();
+
+        App.EnsureLanguageSaved(settings, CultureInfo.GetCultureInfo(system), s => saved.Add(s.Language));
+
+        Assert.Equal(T.Russian, settings.Language);
+        Assert.Equal(new[] { T.Russian }, saved);
+        Assert.Equal(T.Russian, App.StartupLanguage(null, settings.Language, CultureInfo.GetCultureInfo(system))); // also an English Windows
+    }
+
+    [Fact]
+    public void ASettingsFileOfVersion12_OnAnEnglishWindows_StartsInRussian_AlsoOnTheSecondRun()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "WaterCa7sPcCleaner.Tests", "lang-" + Guid.NewGuid().ToString("N") + ".json");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, "{ \"AutoUpdate\": false, \"RunAsAdmin\": true }");
+        var english = CultureInfo.GetCultureInfo("en-US");
+
+        var settings = AppSettings.Load(file);
+        App.EnsureLanguageSaved(settings, english, s => File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(s)));
+        var second = AppSettings.Load(file);
+        App.EnsureLanguageSaved(second, english, _ => Assert.Fail("the language is saved already"));
+
+        Assert.Equal(T.Russian, App.StartupLanguage(null, settings.Language, english));
+        Assert.Equal(T.Russian, App.StartupLanguage(null, second.Language, english));
+        Assert.False(second.AutoUpdate);
+    }
+
+    [Theory]
+    [InlineData("ru", "en-US")]
+    [InlineData("en", "ru-RU")]
+    [InlineData("en", "en-US")]
+    [InlineData("ru", "ru-RU")]
+    public void AChosenLanguage_IsNeverChanged_OrSaved(string language, string system)
+    {
+        foreach (var existed in new[] { false, true })
+        {
+            var settings = new AppSettings { Language = language, ExistedOnLoad = existed };
+
+            App.EnsureLanguageSaved(settings, CultureInfo.GetCultureInfo(system), _ => Assert.Fail("nothing to save"));
+
+            Assert.Equal(language, settings.Language);
+        }
+    }
+
+    [Fact]
+    public void AnUnknownLanguageInExistingSettings_CountsAsMissing()
+    {
+        var settings = new AppSettings { Language = "de", ExistedOnLoad = true };
+
+        App.EnsureLanguageSaved(settings, CultureInfo.GetCultureInfo("en-US"), _ => { });
+
+        Assert.Equal(T.Russian, settings.Language);
+    }
+
+    [Fact]
+    public void Load_TellsWhetherTheFileExisted_AndANewFileIsNotSaved()
+    {
+        TestEnvironment.Init(); // the warning about the broken file goes to the test log folder
+        var dir = Path.Combine(Path.GetTempPath(), "WaterCa7sPcCleaner.Tests", "load-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var missing = Path.Combine(dir, "missing.json");
+        var present = Path.Combine(dir, "present.json");
+        var broken = Path.Combine(dir, "broken.json");
+        File.WriteAllText(present, "{ \"Language\": \"en\" }");
+        File.WriteAllText(broken, "{ not json");
+
+        Assert.False(AppSettings.Load(missing).ExistedOnLoad);
+        Assert.False(File.Exists(missing));
+        var loaded = AppSettings.Load(present);
+        Assert.True(loaded.ExistedOnLoad);
+        Assert.Equal("en", loaded.Language);
+        Assert.True(AppSettings.Load(broken).ExistedOnLoad); // an unreadable file is still an older install
+        Assert.DoesNotContain("ExistedOnLoad", System.Text.Json.JsonSerializer.Serialize(loaded));
+    }
 
     [Fact]
     public void Use_RejectsAnUnknownLanguage()

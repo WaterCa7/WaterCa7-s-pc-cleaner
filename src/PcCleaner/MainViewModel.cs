@@ -250,7 +250,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
                 break;
             case UpdateState.Updated:
                 Dialogs.Info(T.F("Что нового в версии {0}", Updates.CurrentVersion.ToString(3)),
-                    string.IsNullOrWhiteSpace(Updates.Manifest?.Notes) ? T._("Описание изменений есть на странице релиза.") : Updates.Manifest!.Notes);
+                    UpdateBanner.WhatsNewText(Updates.Manifest?.Notes));
                 break;
             case UpdateState.ManualRequired:
                 ProcessRunner.ShellOpen(UpdateService.ReleasesUrl);

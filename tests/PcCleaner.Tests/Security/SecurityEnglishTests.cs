@@ -40,6 +40,18 @@ public sealed class SecurityEnglishTests
     private static void WriteHosts(SecuritySandbox sb, params string[] lines)
         => File.WriteAllText(sb.Env.HostsPath, string.Join("\r\n", lines) + "\r\n");
 
+    // ================================================================ the add-on page of Firefox follows the language
+
+    [Fact]
+    public void TheFirefoxAddOnPage_IsOfTheLanguageOfTheUi()
+    {
+        var firefox = new BrowserExtension { Browser = "Firefox", Id = "uBlock0@raymondhill.net", Name = "uBlock Origin", Kind = BrowserKind.Firefox };
+
+        Assert.Equal("https://addons.mozilla.org/ru/firefox/addon/uBlock0%40raymondhill.net/", firefox.StoreUrl);
+        using (TestLanguage.English())
+            Assert.Equal("https://addons.mozilla.org/en-US/firefox/addon/uBlock0%40raymondhill.net/", firefox.StoreUrl);
+    }
+
     // ================================================================ hosts
 
     [Fact]

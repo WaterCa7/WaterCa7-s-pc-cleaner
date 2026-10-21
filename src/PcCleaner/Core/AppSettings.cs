@@ -44,8 +44,10 @@ public sealed class AppSettings
     public bool RunAsAdmin { get; set; } = true;
 
     /// <summary>
-    /// UI language: "ru", "en", or null — as the system (ru-* → Russian, otherwise English). Read once at start
-    /// (<see cref="Localization.T"/>), so a change applies after a restart; anything else is reset by SettingsLogic.Sanitize.
+    /// UI language: "ru" or "en". Null only in settings that have none yet: <see cref="App.EnsureLanguageSaved"/> fills it at start —
+    /// Russian for settings written by an older version (they were Russian only), the system language (ru-* → Russian, otherwise
+    /// English) for a new install. Read once at start (<see cref="Localization.T"/>), so a change applies after a restart;
+    /// anything else is reset by SettingsLogic.Sanitize.
     /// </summary>
     public string? Language { get; set; }
 
@@ -67,21 +69,34 @@ public sealed class AppSettings
     /// </summary>
     public Dictionary<string, Dictionary<string, string>> ModuleData { get; set; } = new();
 
-    public static AppSettings Load()
+    /// <summary>
+    /// True when a settings.json existed when these settings were loaded (even an unreadable one); false for new settings. Not saved.
+    /// App uses it to tell an older install, which had no <see cref="Language"/> yet, from a new one.
+    /// </summary>
+    [JsonIgnore]
+    internal bool ExistedOnLoad { get; set; }
+
+    public static AppSettings Load() => Load(AppPaths.SettingsFile);
+
+    internal static AppSettings Load(string file)
     {
+        var existed = false;
         try
         {
-            if (File.Exists(AppPaths.SettingsFile))
+            if (File.Exists(file))
             {
-                var json = File.ReadAllText(AppPaths.SettingsFile);
-                return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+                existed = true;
+                var json = File.ReadAllText(file);
+                var loaded = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+                loaded.ExistedOnLoad = true;
+                return loaded;
             }
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Не удалось прочитать настройки, используются значения по умолчанию: {0}", ErrorText.For(ex)));
+            Log.Warn(T.F("Не удалось прочитать настройки, используются значения по умолчанию: {0}", ErrorText.For(ex)), ex);
         }
-        return new AppSettings();
+        return new AppSettings { ExistedOnLoad = existed };
     }
 
     private long _snapshotVersion;

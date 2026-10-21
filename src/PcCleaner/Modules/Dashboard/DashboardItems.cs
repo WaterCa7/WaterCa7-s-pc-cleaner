@@ -130,6 +130,7 @@ public sealed class IssueItem : ObservableObject
         if (simple == _isSimple)
             return;
         _isSimple = simple;
+        IsExpanded = false; // a row opened in the simple mode is not left open for the next time (it has its own notifications)
         OnPropertyChanged(nameof(IsSimple));
         OnPropertyChanged(nameof(ShowBadges));
         OnPropertyChanged(nameof(ShowDetails));

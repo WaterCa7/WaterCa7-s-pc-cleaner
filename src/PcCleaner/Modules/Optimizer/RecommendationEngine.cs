@@ -33,6 +33,8 @@ public static class RecommendationEngine
 
     public const string MbrToGptGuideUri = "https://learn.microsoft.com/ru-ru/windows/deployment/mbr-to-gpt";
 
+    public const string MbrToGptGuideUriEnglish = "https://learn.microsoft.com/en-us/windows/deployment/mbr-to-gpt";
+
     public static readonly TimeSpan DriverMaxAge = TimeSpan.FromDays(183);
     public static readonly TimeSpan BiosMaxAge = TimeSpan.FromDays(365 * 3);
     public static readonly TimeSpan UptimeLimit = TimeSpan.FromDays(7);
@@ -855,7 +857,7 @@ public static class RecommendationEngine
             Severity = IssueSeverity.Medium,
             CurrentValue = "Legacy BIOS (CSM)",
             Gain = T._("Быстрее загрузка, Secure Boot и Windows 11"),
-            SettingsUri = MbrToGptGuideUri,
+            SettingsUri = T.IsEnglish ? MbrToGptGuideUriEnglish : MbrToGptGuideUri,
             SettingsLabel = T._("Инструкция Microsoft"),
             Steps = new[]
             {

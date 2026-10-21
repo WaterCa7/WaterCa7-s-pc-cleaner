@@ -391,9 +391,13 @@ public static class HardwareText
 /// <summary>Classifies video adapters by name and PnP id.</summary>
 public static class GpuClassifier
 {
+    // The driver pages of the vendors: the Russian ones for the Russian UI, the English ones otherwise (see DriverUrl).
     public const string NvidiaDriverUrl = "https://www.nvidia.com/ru-ru/drivers/";
     public const string AmdDriverUrl = "https://www.amd.com/ru/support/download/drivers.html";
     public const string IntelDriverUrl = "https://www.intel.ru/content/www/ru/ru/support/detect.html";
+    public const string NvidiaDriverUrlEnglish = "https://www.nvidia.com/en-us/drivers/";
+    public const string AmdDriverUrlEnglish = "https://www.amd.com/en/support/download/drivers.html";
+    public const string IntelDriverUrlEnglish = "https://www.intel.com/content/www/us/en/support/detect.html";
 
     private static readonly string[] VirtualMarkers =
     {
@@ -496,11 +500,12 @@ public static class GpuClassifier
     public static bool IsFrameGenerationCapable(GpuInfo gpu)
         => gpu.Vendor == GpuVendor.Nvidia && Regex.IsMatch(gpu.Name, @"RTX\s?[45]0\d{2}", RegexOptions.IgnoreCase);
 
+    /// <summary>The driver page of the vendor in the language of the UI; null for a vendor without one.</summary>
     public static string? DriverUrl(GpuVendor vendor) => vendor switch
     {
-        GpuVendor.Nvidia => NvidiaDriverUrl,
-        GpuVendor.Amd => AmdDriverUrl,
-        GpuVendor.Intel => IntelDriverUrl,
+        GpuVendor.Nvidia => T.IsEnglish ? NvidiaDriverUrlEnglish : NvidiaDriverUrl,
+        GpuVendor.Amd => T.IsEnglish ? AmdDriverUrlEnglish : AmdDriverUrl,
+        GpuVendor.Intel => T.IsEnglish ? IntelDriverUrlEnglish : IntelDriverUrl,
         _ => null,
     };
 

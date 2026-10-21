@@ -2714,6 +2714,7 @@
   "Перезапуск от имени администратора отменён: учётная запись без прав администратора": "Restart as administrator canceled: the account has no administrator rights",
   "Перезапуск программы": "Restart the program",
   "Перезапуск с правами администратора не дал прав — работаем без них": "Restarting with administrator rights did not give them — carrying on without them",
+  "Перезапуск: не удалось запустить {0}: {1}": "Restart: could not start {0}: {1}",
   "Перезапустите программу от имени администратора и повторите.": "Restart the program as administrator and try again.",
   "Перезапустить как администратор": "Restart as administrator",
   "Перезапустить от имени администратора": "Restart as administrator",

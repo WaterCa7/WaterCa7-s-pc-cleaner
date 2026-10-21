@@ -155,6 +155,7 @@ public class FixResultClassifierTests
         "Очистка: не удалось проверить запущенные программы: {0}", // log: matched by "Could not check"
         "Очистка: не удалось узнать размер кэша оптимизации доставки: {0}", // log: matched by "Could not get the size"
         "Перезагрузка: не удалось запустить shutdown.exe: {0}", // log: matched by "Could not start …:"
+        "Перезапуск: не удалось запустить {0}: {1}", // log of the restart: matched by "Could not start …:"
         "Перезапустить как администратор", // a button label: matched by "Restart as administrator"
         "Программы: не удалось запустить PowerShell: {0}", // log: matched by "Could not start PowerShell: / Could not start …:"
         "Программы: не удалось прочитать название приложения: {0}", // log: matched by "Could not read …:"

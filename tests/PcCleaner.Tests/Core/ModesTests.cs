@@ -228,6 +228,22 @@ public class ModesRulesTests
         Assert.Equal(0, shutdowns);
     }
 
+    [Fact]
+    public void ARestartThatCannotStart_IsLoggedAsARestartProblem_AnUpdateThatCannotStart_AsAnUpdateProblem()
+    {
+        TestEnvironment.Init();
+        var marker = Guid.NewGuid().ToString("N");
+        var exe = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "no-such-" + marker, "WaterCa7sPcCleaner.exe"); // its folder does not exist
+
+        Assert.False(AppRestart.Start(exe, Array.Empty<string>()));
+        Assert.False(UpdateEnvironment.Start(exe, Array.Empty<string>()));
+
+        var lines = Log.Entries.ToList().Where(e => e.Level == LogLevel.Warning && e.Message.Contains(marker)).Select(e => e.Message).ToList();
+        Assert.Equal(2, lines.Count);
+        Assert.Single(lines, l => l.StartsWith("Перезапуск: не удалось запустить " + exe + ": ", StringComparison.Ordinal));
+        Assert.Single(lines, l => l.StartsWith("Обновление: не удалось запустить " + exe + ": ", StringComparison.Ordinal));
+    }
+
     // ----- screenshot mode -----
 
     private static List<FakePage> Pages(params string[] keys) => keys.Select(k => new FakePage(k)).ToList();

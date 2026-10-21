@@ -41,6 +41,15 @@ public class UpdateBannerTests
     public void Updated_WithoutNotes_StillShowsTheVersion()
         => Assert.Contains("1.2.0", UpdateBanner.For(UpdateState.Updated, null, new Version(1, 2, 0))!.Text);
 
+    [Theory]
+    [InlineData("Исправлена очистка кэша.\nДобавлен английский язык.", "Исправлена очистка кэша.\nДобавлен английский язык.")]
+    [InlineData("Fixed the cache cleanup.", "Fixed the cache cleanup.")]
+    [InlineData("", "Описание изменений есть на странице релиза.")]
+    [InlineData("  \n ", "Описание изменений есть на странице релиза.")]
+    [InlineData(null, "Описание изменений есть на странице релиза.")]
+    public void WhatsNewText_InRussian_IsTheNotesOfTheRelease(string? notes, string expected)
+        => Assert.Equal(expected, UpdateBanner.WhatsNewText(notes));
+
     [Fact]
     public void BusyWarning_NamesTheSections()
     {

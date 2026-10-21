@@ -235,7 +235,7 @@ internal static class SettingsLogic
             fixes++;
         }
 
-        // Only the exact codes: anything else means "as the system" (the start does the same with an unknown value).
+        // Only the exact codes: anything else means "none yet" (the start gives settings without a language Russian or the system's).
         if (settings.Language is not null && !T.IsSupported(settings.Language))
         {
             settings.Language = null;

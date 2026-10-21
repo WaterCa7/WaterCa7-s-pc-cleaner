@@ -43,7 +43,19 @@ public static class Log
 
     public static void Info(string message) => Write(LogLevel.Info, message);
 
+    /// <summary>A note about a failure that is handled: the same as <see cref="Warn(string, Exception?)"/> at the level Info.</summary>
+    public static void Info(string message, Exception? ex)
+        => Write(LogLevel.Info, message, null, ex is null ? null : $"{message} [{ex.GetType().Name}: {ex.Message}]");
+
     public static void Warn(string message) => Write(LogLevel.Warning, message);
+
+    /// <summary>
+    /// A warning about a failure. <paramref name="message"/> describes it in the language of the UI (with <see cref="ErrorText.For"/>,
+    /// never the raw message of the exception) and goes to the journal and the status bar; the log file also keeps the type of
+    /// <paramref name="ex"/> and its original message.
+    /// </summary>
+    public static void Warn(string message, Exception? ex)
+        => Write(LogLevel.Warning, message, null, ex is null ? null : $"{message} [{ex.GetType().Name}: {ex.Message}]");
 
     /// <summary>
     /// The journal and the status bar get a Russian description of <paramref name="ex"/> (<see cref="ErrorText"/>);

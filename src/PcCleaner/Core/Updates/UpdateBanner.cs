@@ -16,6 +16,15 @@ public sealed record UpdateBanner(string Text, string Action)
         _ => null,
     };
 
+    /// <summary>
+    /// The text of the «Что нового» dialog: the release notes of update.json. The author writes them in Russian, so the English UI
+    /// shows the pointer to the release page instead of Russian text (the same pointer as for a release without notes).
+    /// </summary>
+    public static string WhatsNewText(string? notes)
+        => string.IsNullOrWhiteSpace(notes) || (T.IsEnglish && ErrorText.HasCyrillic(notes))
+            ? T._("Описание изменений есть на странице релиза.")
+            : notes;
+
     public static string BusyWarning(IReadOnlyList<string> busyTitles)
     {
         var sections = string.Join(", ", busyTitles.Select(t => T.Quote(t)));

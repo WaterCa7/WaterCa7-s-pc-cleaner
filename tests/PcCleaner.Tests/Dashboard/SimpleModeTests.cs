@@ -446,6 +446,33 @@ public class SimpleModeDashboardTests
     }
 
     [Fact]
+    public async Task ARowOpenedInTheSimpleMode_IsClosedAgain_WhenTheModeChanges()
+    {
+        var settings = new AppSettings { UiMode = UiMode.Simple };
+        var vm = Create(settings, new FakeContributor("Очистка", new[] { NewIssue("Медленная сеть", target: "Network") }));
+        await vm.ScanCoreAsync(CancellationToken.None, persist: false);
+        var row = RowOf(vm, "Медленная сеть");
+        row.DetailsCommand.Execute(null);
+        Assert.True(row.IsExpanded);
+        Assert.Equal("Свернуть", row.DetailsText);
+        var shown = new List<string?>();
+        row.PropertyChanged += (_, e) => shown.Add(e.PropertyName);
+
+        settings.UiMode = UiMode.Expert;
+        vm.OnModeChanged();
+
+        Assert.False(row.IsExpanded); // not left open for the next time the simple mode is chosen
+        Assert.Contains(nameof(IssueItem.IsExpanded), shown);
+
+        settings.UiMode = UiMode.Simple;
+        vm.OnModeChanged();
+
+        Assert.False(row.IsExpanded);
+        Assert.False(row.ShowDetails);
+        Assert.Equal("Подробнее", row.DetailsText);
+    }
+
+    [Fact]
     public async Task TheRows_FollowTheMode_AlsoTheOnesBehindShowMore()
     {
         var issues = Enumerable.Range(1, IssueGroup.InitialVisible + 3).Select(i => NewIssue("Проблема " + i, target: "Network")).ToArray();

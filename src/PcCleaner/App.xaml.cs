@@ -42,6 +42,8 @@ public partial class App : Application
         AppServices.Settings.UiMode = StartupMode(ModeArg, AppServices.Settings.UiMode, ScreenshotDir is not null);
 
         // Before any text is made: the system UI language is read before UseLanguage replaces it.
+        AppServices.Settings.Language = StartupLanguageSetting(LanguageArg, AppServices.Settings.Language, ScreenshotDir is not null);
+        EnsureLanguageSaved(AppServices.Settings, CultureInfo.CurrentUICulture, s => s.Save());
         UseLanguage(StartupLanguage(LanguageArg, AppServices.Settings.Language, CultureInfo.CurrentUICulture));
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
@@ -143,6 +145,29 @@ public partial class App : Application
     /// <summary>The UI language of this run: --lang, else Настройки, else the system (ru-* → Russian, otherwise English).</summary>
     internal static string StartupLanguage(string? argument, string? setting, CultureInfo system)
         => T.ResolveLanguage(T.IsSupported(argument) ? argument : setting, system);
+
+    /// <summary>
+    /// The language setting of this run: Настройки, except that --lang replaces it in a screenshot run (its settings are in a temp
+    /// folder), so the picture of the Settings page marks the language it is taken in. A real run keeps the saved setting: --lang
+    /// only changes the language of that one run.
+    /// </summary>
+    internal static string? StartupLanguageSetting(string? argument, string? setting, bool screenshotRun)
+        => screenshotRun && T.IsSupported(argument) ? argument : setting;
+
+    /// <summary>
+    /// Settings without a language get one and are saved at once. Versions up to 1.2 were Russian only and never wrote a language, so
+    /// a settings.json that existed before this run belongs to an older install and stays Russian — also on an English Windows, also
+    /// in the run the updater starts with <c>--updated-from</c>. A new install takes the language of the system. Saving it right away
+    /// matters: the settings.json that the first run writes (the mode, the update check) must not look like an older install next time.
+    /// A language that is set ("ru" / "en") is never touched.
+    /// </summary>
+    internal static void EnsureLanguageSaved(AppSettings settings, CultureInfo system, Action<AppSettings> save)
+    {
+        if (T.IsSupported(settings.Language))
+            return;
+        settings.Language = settings.ExistedOnLoad ? T.Russian : T.ResolveLanguage(null, system);
+        save(settings);
+    }
 
     /// <summary>
     /// The mode of this run: Настройки, except that --mode replaces it in a screenshot run (its settings are in a temp folder).

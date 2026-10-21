@@ -37,8 +37,18 @@ internal static class AppRestart
 
     /// <summary>Starts this program again and closes this copy. False — and this copy goes on — when the new one did not start.</summary>
     internal static bool RestartNow()
-        => Restart(Environment.ProcessPath, Environment.GetCommandLineArgs().Skip(1).ToList(), UpdateEnvironment.Start,
+        => Restart(Environment.ProcessPath, Environment.GetCommandLineArgs().Skip(1).ToList(), Start,
             () => Application.Current?.Shutdown());
+
+    /// <summary>Starts the exe like the updater does; a failure is logged as a problem of the restart, not of an update.</summary>
+    internal static bool Start(string exe, IReadOnlyList<string> args)
+    {
+        if (UpdateEnvironment.TryStart(exe, args, out var error))
+            return true;
+        if (error is not null)
+            Log.Warn(T.F("Перезапуск: не удалось запустить {0}: {1}", exe, ErrorText.For(error)), error);
+        return false;
+    }
 
     /// <summary>The restart with everything outside replaceable: tests never start a process or close a window.</summary>
     internal static bool Restart(string? exe, IReadOnlyList<string> commandLine,

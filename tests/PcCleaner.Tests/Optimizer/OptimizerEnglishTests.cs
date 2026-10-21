@@ -256,6 +256,32 @@ public sealed class OptimizerEnglishTests
         }
     }
 
+    // ================================================================ links of the vendors and Microsoft follow the language
+
+    [Fact]
+    public void TheVendorAndGuideLinks_AreRussianInRussian_AndEnglishInEnglish()
+    {
+        var legacy = GoodDesktop() with { BootMode = BootMode.LegacyBios };
+        var oldNvidia = GoodDesktop() with { Gpus = new[] { Rtx3060(Now.AddMonths(-7)) } };
+        static string Guide(IEnumerable<Recommendation> items) => items.Find("BootMode")!.SettingsUri!;
+
+        Assert.Equal("https://www.nvidia.com/ru-ru/drivers/", GpuClassifier.DriverUrl(GpuVendor.Nvidia));
+        Assert.Equal("https://www.amd.com/ru/support/download/drivers.html", GpuClassifier.DriverUrl(GpuVendor.Amd));
+        Assert.Equal("https://www.intel.ru/content/www/ru/ru/support/detect.html", GpuClassifier.DriverUrl(GpuVendor.Intel));
+        Assert.Equal("https://learn.microsoft.com/ru-ru/windows/deployment/mbr-to-gpt", Guide(Evaluate(legacy, GoodSettings())));
+
+        using (TestLanguage.English())
+        {
+            Assert.Equal("https://www.nvidia.com/en-us/drivers/", GpuClassifier.DriverUrl(GpuVendor.Nvidia));
+            Assert.Equal("https://www.amd.com/en/support/download/drivers.html", GpuClassifier.DriverUrl(GpuVendor.Amd));
+            Assert.Equal("https://www.intel.com/content/www/us/en/support/detect.html", GpuClassifier.DriverUrl(GpuVendor.Intel));
+            Assert.Null(GpuClassifier.DriverUrl(GpuVendor.Unknown));
+            Assert.Equal("https://learn.microsoft.com/en-us/windows/deployment/mbr-to-gpt", Guide(Evaluate(legacy, GoodSettings())));
+            var driver = Evaluate(oldNvidia, GoodSettings()).First(r => r.Id.StartsWith("GpuDriver:", StringComparison.Ordinal));
+            Assert.Equal("https://www.nvidia.com/en-us/drivers/", driver.SettingsUri);
+        }
+    }
+
     // ================================================================ nothing Russian is left
 
     private static IEnumerable<(string Name, HardwareSnapshot Hardware, SettingsSnapshot Settings)> Scenarios()

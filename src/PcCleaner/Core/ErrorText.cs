@@ -151,7 +151,7 @@ public static class ErrorText
         return last > first && first >= 0 ? string.Concat(text.AsSpan(0, first), text.AsSpan(last + 1)) : text;
     }
 
-    private static bool HasCyrillic(string text)
+    internal static bool HasCyrillic(string text)
     {
         foreach (var c in text)
         {

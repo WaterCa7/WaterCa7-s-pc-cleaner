@@ -100,6 +100,21 @@ public class ShellEnglishTests
     }
 
     [Fact]
+    public void WhatsNew_InEnglish_NeverShowsRussianReleaseNotes()
+    {
+        using (TestLanguage.English())
+        {
+            // the notes of update.json are written in Russian: the English UI points to the release page instead
+            Assert.Equal("The list of changes is on the release page.", UpdateBanner.WhatsNewText("Исправлена очистка кэша.\nДобавлен английский язык."));
+            Assert.Equal("The list of changes is on the release page.", UpdateBanner.WhatsNewText("Fixed the cache cleanup. Добавлен английский язык."));
+            Assert.Equal("The list of changes is on the release page.", UpdateBanner.WhatsNewText(""));
+            Assert.Equal("The list of changes is on the release page.", UpdateBanner.WhatsNewText(null));
+            // notes that are already English are shown as they are
+            Assert.Equal("Fixed the cache cleanup.\nAdded English.", UpdateBanner.WhatsNewText("Fixed the cache cleanup.\nAdded English."));
+        }
+    }
+
+    [Fact]
     public void TheQuestionsBeforeARestart_AreEnglish()
     {
         using (TestLanguage.English())
