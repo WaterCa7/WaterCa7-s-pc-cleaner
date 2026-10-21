@@ -156,6 +156,12 @@ public class FixResultClassifierTests
         "Программы: не удалось запустить PowerShell: {0}", // log: contains "Could not start PowerShell: {0}."
         "Программы: не удалось прочитать название приложения: {0}", // log
         "Процессы: не удалось проверить подпись {0}: {1}", // log: contains "Could not check {0}"
+        "Ускорение: не удалось вернуть «{0}»: {1}", // log: contains "Could not revert “{0}”: {1}"
+        "Ускорение: не удалось вернуть план «{0}»: {1}", // log: contains "Could not restore the plan “{0}” …"
+        "Ускорение: не удалось запустить powercfg {0}: {1}", // log: contains "Could not start {0}: {1}"
+        "Ускорение: не удалось прочитать {0}\\{1}: {2}", // log: contains "Could not read {0}: {1}"
+        "Ускорение: не удалось прочитать {0}\\{1}\\{2}: {3}", // log: contains "Could not read {0}: {1}"
+        "Ускорение: не удалось прочитать сведения о батарее: {0}", // log: contains "Could not read {0}: {1}"
     };
 
     [Fact]

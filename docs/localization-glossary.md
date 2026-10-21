@@ -259,6 +259,32 @@ How the code treats them:
 | не меньше N (a size cut short) | at least N |
 | В Корзину / Удалить в корзину | To Recycle Bin / Move to Recycle Bin |
 
+## Speed up
+
+| Русский | English |
+|---|---|
+| Ускорение | Speed up |
+| рекомендация / Рекомендации | recommendation / Recommendations |
+| Уже в порядке | Already fine |
+| Применить / Применить все рекомендуемые | Apply / Apply all recommended |
+| Вернуть (a setting to its previous value) | Revert |
+| Как сделать (steps) | How to do it |
+| Ваш компьютер (hardware cards) | Your computer |
+| Высокий / Средний / Низкий эффект | High / Medium / Low impact |
+| Для сведения | For information |
+| Игровой режим Windows | Windows Game Mode |
+| планирование GPU с аппаратным ускорением | hardware-accelerated GPU scheduling |
+| быстрый запуск Windows | Windows Fast Startup |
+| файл подкачки | page file |
+| паспортная частота (memory) | rated speed |
+| одноканальный / двухканальный режим | single-channel / dual-channel mode |
+| план электропитания | power plan |
+| Параметры быстродействия (Windows window) | Performance Options |
+| Изменено программой | Changed by the program |
+
+Power plan names and other values that Windows gives (plan names, OS caption, monitor names) are shown as they are; only the program's own
+texts are translated. A tweak's title is computed in the current language (`RegistryTweak.Title`), not stored.
+
 Notes for the other pages:
 
 - The Russian «Готово» is both the status bar text and the title of a dialog after an action; one key has one English text, so it is “Ready”

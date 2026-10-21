@@ -3,6 +3,7 @@ using System.IO;
 using System.Security;
 using System.Text;
 using Microsoft.Win32;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -24,39 +25,50 @@ public sealed record RegistryValueSpec(RegistryHive Hive, string SubKey, string 
 }
 
 /// <summary>A reversible registry tweak: a named set of values.</summary>
-public sealed record RegistryTweak(string Id, string Title, IReadOnlyList<RegistryValueSpec> Values)
+public sealed record RegistryTweak(string Id, IReadOnlyList<RegistryValueSpec> Values)
 {
+    /// <summary>The name of the tweak in the language of the UI (it is not stored: a static tweak is made once, the language may change).</summary>
+    public string Title => Id switch
+    {
+        TweakIds.GameMode => T._("Игровой режим Windows"),
+        TweakIds.GameDvr => T._("Запись игр Xbox Game Bar"),
+        TweakIds.Hags => T._("Аппаратное ускорение планирования GPU"),
+        TweakIds.VisualEffects => T._("Упрощённые визуальные эффекты"),
+        TweakIds.Transparency => T._("Эффекты прозрачности"),
+        _ => Id,
+    };
+
     public bool NeedsAdmin => Values.Any(v => v.Hive != RegistryHive.CurrentUser);
 }
 
 /// <summary>Definitions of the registry tweaks offered by the module.</summary>
 public static class RegistryTweaks
 {
-    public static readonly RegistryTweak GameMode = new(TweakIds.GameMode, "Игровой режим Windows", new[]
+    public static readonly RegistryTweak GameMode = new(TweakIds.GameMode, new[]
     {
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled", RegistryValueKind.DWord, 1),
     });
 
-    public static readonly RegistryTweak GameDvr = new(TweakIds.GameDvr, "Запись игр Xbox Game Bar", new[]
+    public static readonly RegistryTweak GameDvr = new(TweakIds.GameDvr, new[]
     {
         new RegistryValueSpec(RegistryHive.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", RegistryValueKind.DWord, 0),
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", RegistryValueKind.DWord, 0),
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "HistoricalCaptureEnabled", RegistryValueKind.DWord, 0),
     });
 
-    public static readonly RegistryTweak Hags = new(TweakIds.Hags, "Аппаратное ускорение планирования GPU", new[]
+    public static readonly RegistryTweak Hags = new(TweakIds.Hags, new[]
     {
         new RegistryValueSpec(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", RegistryValueKind.DWord, 2),
     });
 
-    public static readonly RegistryTweak VisualEffects = new(TweakIds.VisualEffects, "Упрощённые визуальные эффекты", new[]
+    public static readonly RegistryTweak VisualEffects = new(TweakIds.VisualEffects, new[]
     {
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects", "VisualFXSetting", RegistryValueKind.DWord, 2),
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Control Panel\Desktop\WindowMetrics", "MinAnimate", RegistryValueKind.String, "0"),
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarAnimations", RegistryValueKind.DWord, 0),
     });
 
-    public static readonly RegistryTweak Transparency = new(TweakIds.Transparency, "Эффекты прозрачности", new[]
+    public static readonly RegistryTweak Transparency = new(TweakIds.Transparency, new[]
     {
         new RegistryValueSpec(RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", RegistryValueKind.DWord, 0),
     });
@@ -94,7 +106,7 @@ public sealed class RegistryTweakEngine
     {
         SandboxSubKey = string.IsNullOrWhiteSpace(sandboxSubKey) ? null : sandboxSubKey.Trim('\\');
         _settings = settings;
-        _backup = backup ?? ((key, ct) => RegistryBackup.ExportAsync(key, "WaterCa7s PC Cleaner: Ускорение", ct));
+        _backup = backup ?? ((key, ct) => RegistryBackup.ExportAsync(key, T._("WaterCa7s PC Cleaner: Ускорение"), ct));
     }
 
     public string? SandboxSubKey { get; }
@@ -123,7 +135,7 @@ public sealed class RegistryTweakEngine
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Ускорение: не удалось прочитать {spec.FullKey}\\{spec.ValueName}: {ex.Message}");
+            Log.Warn(T.F("Ускорение: не удалось прочитать {0}\\{1}: {2}", spec.FullKey, spec.ValueName, ex.Message));
             return (null, RegistryValueKind.Unknown);
         }
     }
@@ -138,7 +150,7 @@ public sealed class RegistryTweakEngine
             if (stored is null)
                 continue;
             lines.Add(stored == Missing
-                ? $"• {spec.FullKey} → {spec.ValueName}: значение будет удалено (до изменения его не было)"
+                ? T.F("• {0} → {1}: значение будет удалено (до изменения его не было)", spec.FullKey, spec.ValueName)
                 : $"• {spec.FullKey} → {spec.ValueName} = {DescribeEncoded(stored)}");
         }
         return lines;
@@ -147,15 +159,15 @@ public sealed class RegistryTweakEngine
     public async Task<TweakResult> ApplyAsync(RegistryTweak tweak, CancellationToken ct = default)
     {
         if (tweak.NeedsAdmin && SandboxSubKey is null && !Admin.IsElevated)
-            return new TweakResult(false, $"Для изменения «{tweak.Title}» нужны права администратора. Ничего не изменено.");
+            return new TweakResult(false, T.F("Для изменения «{0}» нужны права администратора. Ничего не изменено.", tweak.Title));
 
         if (IsApplied(tweak))
-            return new TweakResult(true, $"«{tweak.Title}»: настройка уже применена, менять ничего не нужно.");
+            return new TweakResult(true, T.F("«{0}»: настройка уже применена, менять ничего не нужно.", tweak.Title));
 
         // 1. Backup every existing key we are going to touch.
         if (!await BackupKeysAsync(tweak, ct))
             return new TweakResult(false,
-                "Не удалось создать резервную копию раздела реестра, поэтому изменение отменено. Подробности — в журнале.");
+                T._("Не удалось создать резервную копию раздела реестра, поэтому изменение отменено. Подробности — в журнале."), OpensWithFailure: true);
 
         ct.ThrowIfCancellationRequested();
 
@@ -183,29 +195,31 @@ public sealed class RegistryTweakEngine
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Ускорение: не удалось применить «{tweak.Title}»: {ex.Message}");
+            Log.Warn(T.F("Ускорение: не удалось применить «{0}»: {1}", tweak.Title, ex.Message));
             RollBack(tweak, written);
             if (storedNow)
                 ForgetState(tweak);
-            return new TweakResult(false, $"Не удалось изменить настройку «{tweak.Title}»: {ErrorText.For(ex)}. Изменения отменены.");
+            return new TweakResult(false, T.F("Не удалось изменить настройку «{0}»: {1}. Изменения отменены.", tweak.Title, ErrorText.For(ex)), OpensWithFailure: true);
         }
 
-        Log.Action($"Ускорение: применено «{tweak.Title}» ({string.Join("; ", tweak.Values.Select(v => v.Describe()))})" +
-                   (SandboxSubKey is null ? "" : $" [песочница {SandboxSubKey}]"));
-        return new TweakResult(true, $"«{tweak.Title}»: готово.", Changed: true);
+        var applied = string.Join("; ", tweak.Values.Select(v => v.Describe()));
+        Log.Action(SandboxSubKey is null
+            ? T.F("Ускорение: применено «{0}» ({1})", tweak.Title, applied)
+            : T.F("Ускорение: применено «{0}» ({1}) [песочница {2}]", tweak.Title, applied, SandboxSubKey));
+        return new TweakResult(true, T.F("«{0}»: готово.", tweak.Title), Changed: true);
     }
 
     public async Task<TweakResult> RevertAsync(RegistryTweak tweak, CancellationToken ct = default)
     {
         if (!HasStoredState(tweak.Id))
-            return new TweakResult(false, $"Для «{tweak.Title}» нет сохранённых прежних значений — возвращать нечего.");
+            return new TweakResult(false, T.F("Для «{0}» нет сохранённых прежних значений — возвращать нечего.", tweak.Title));
 
         if (tweak.NeedsAdmin && SandboxSubKey is null && !Admin.IsElevated)
-            return new TweakResult(false, $"Чтобы вернуть «{tweak.Title}», нужны права администратора. Ничего не изменено.");
+            return new TweakResult(false, T.F("Чтобы вернуть «{0}», нужны права администратора. Ничего не изменено.", tweak.Title));
 
         if (!await BackupKeysAsync(tweak, ct))
             return new TweakResult(false,
-                "Не удалось создать резервную копию раздела реестра, поэтому возврат отменён. Подробности — в журнале.");
+                T._("Не удалось создать резервную копию раздела реестра, поэтому возврат отменён. Подробности — в журнале."), OpensWithFailure: true);
 
         ct.ThrowIfCancellationRequested();
 
@@ -220,7 +234,7 @@ public sealed class RegistryTweakEngine
                 if (stored == Missing)
                 {
                     DeleteValue(spec);
-                    restored.Add($"{spec.ValueName} удалён");
+                    restored.Add(T.F("{0} удалён", spec.ValueName));
                 }
                 else if (TryDecode(stored, out var value, out var kind))
                 {
@@ -231,14 +245,16 @@ public sealed class RegistryTweakEngine
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Ускорение: не удалось вернуть «{tweak.Title}»: {ex.Message}");
-            return new TweakResult(false, $"Не удалось вернуть «{tweak.Title}»: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Ускорение: не удалось вернуть «{0}»: {1}", tweak.Title, ex.Message));
+            return new TweakResult(false, T.F("Не удалось вернуть «{0}»: {1}.", tweak.Title, ErrorText.For(ex)), OpensWithFailure: true);
         }
 
         ForgetState(tweak);
-        Log.Action($"Ускорение: возвращено прежнее значение «{tweak.Title}» ({string.Join("; ", restored)})" +
-                   (SandboxSubKey is null ? "" : $" [песочница {SandboxSubKey}]"));
-        return new TweakResult(true, $"«{tweak.Title}»: прежнее значение восстановлено.", Changed: true);
+        var restoredText = string.Join("; ", restored);
+        Log.Action(SandboxSubKey is null
+            ? T.F("Ускорение: возвращено прежнее значение «{0}» ({1})", tweak.Title, restoredText)
+            : T.F("Ускорение: возвращено прежнее значение «{0}» ({1}) [песочница {2}]", tweak.Title, restoredText, SandboxSubKey));
+        return new TweakResult(true, T.F("«{0}»: прежнее значение восстановлено.", tweak.Title), Changed: true);
     }
 
     // ----- helpers -----
@@ -284,7 +300,7 @@ public sealed class RegistryTweakEngine
         var (hive, subKey, _) = Resolve(spec);
         using var root = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64);
         using var key = root.CreateSubKey(subKey, writable: true)
-                        ?? throw new IOException($"не удалось открыть {spec.FullKey}");
+                        ?? throw ErrorText.Own(new IOException(T.F("не удалось открыть раздел реестра {0}", spec.FullKey)));
         key.SetValue(spec.ValueName, value, kind);
     }
 
@@ -310,7 +326,7 @@ public sealed class RegistryTweakEngine
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn($"Ускорение: не удалось откатить {spec.FullKey}\\{spec.ValueName}: {ex.Message}");
+                Log.Warn(T.F("Ускорение: не удалось откатить {0}\\{1}: {2}", spec.FullKey, spec.ValueName, ex.Message));
             }
         }
     }
@@ -409,7 +425,7 @@ public sealed class RegistryTweakEngine
     private static string DescribeEncoded(string encoded)
     {
         if (encoded == Missing)
-            return "(нет значения)";
+            return T._("(нет значения)");
         if (!TryDecode(encoded, out var value, out _))
             return encoded;
         return value switch

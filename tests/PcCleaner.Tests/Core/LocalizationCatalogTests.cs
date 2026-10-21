@@ -28,6 +28,7 @@ public class LocalizationCatalogTests
         "Modules/Cleaner/",
         "Modules/Dashboard/",
         "Modules/Disk/",
+        "Modules/Optimizer/",
         "Modules/Processes/",
         "Modules/Programs/",
         "Modules/Settings/",

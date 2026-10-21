@@ -1,3 +1,4 @@
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -123,15 +124,13 @@ public static class RecommendationEngine
         var amd = hw.Cpu?.Name.Contains("AMD", StringComparison.OrdinalIgnoreCase) == true;
         return new[]
         {
-            "Перезагрузите компьютер и сразу нажимайте Delete (или F2), чтобы открыть BIOS.",
+            T._("Перезагрузите компьютер и сразу нажимайте Delete (или F2), чтобы открыть BIOS."),
             amd
-                ? "Найдите пункт EXPO, DOCP или XMP — обычно он на главном экране BIOS или в разделе разгона (Ai Tweaker, OC, Extreme Tweaker)."
-                : "Найдите пункт XMP (Extreme Memory Profile) — обычно он на главном экране BIOS или в разделе разгона (Ai Tweaker, OC, Tweaker).",
-            "Выберите «Profile 1» и сохраните настройки клавишей F10.",
-            "Если после этого компьютер не запускается — подождите: многие платы сами сбрасывают неудачные настройки после 2–3 попыток. " +
-            "Иначе сбросьте BIOS (Clear CMOS) или выберите профиль с меньшей частотой.",
-            "Если пункта XMP нет или частота после включения не выросла, её ограничивает процессор или материнская плата " +
-            "(например, платы Intel на чипсетах H и B до 500-й серии). Тогда менять ничего не нужно.",
+                ? T._("Найдите пункт EXPO, DOCP или XMP — обычно он на главном экране BIOS или в разделе разгона (Ai Tweaker, OC, Extreme Tweaker).")
+                : T._("Найдите пункт XMP (Extreme Memory Profile) — обычно он на главном экране BIOS или в разделе разгона (Ai Tweaker, OC, Tweaker)."),
+            T._("Выберите «Profile 1» и сохраните настройки клавишей F10."),
+            T._("Если после этого компьютер не запускается — подождите: многие платы сами сбрасывают неудачные настройки после 2–3 попыток. Иначе сбросьте BIOS (Clear CMOS) или выберите профиль с меньшей частотой."),
+            T._("Если пункта XMP нет или частота после включения не выросла, её ограничивает процессор или материнская плата (например, платы Intel на чипсетах H и B до 500-й серии). Тогда менять ничего не нужно."),
         };
     }
 
@@ -213,7 +212,7 @@ public static class RecommendationEngine
         if (MemorySpeed(hw) is not { } speed)
             return;
         var (rated, configured, type) = (speed.Rated, speed.Configured, speed.Type);
-        var current = $"{configured} МГц из {rated} МГц";
+        var current = T.F("{0} МГц из {1} МГц", configured, rated);
 
         if (IsMemoryBelowRated(rated, configured))
         {
@@ -222,9 +221,8 @@ public static class RecommendationEngine
                 list.Add(new Recommendation
                 {
                     Id = "RamSpeed",
-                    Title = $"Память работает на {configured} МГц вместо {rated} МГц",
-                    Explanation = $"Модули поддерживают {rated} МГц, но в ноутбуках частоту памяти обычно ограничивает процессор " +
-                                  "или производитель, а включить XMP в BIOS ноутбука, как правило, нельзя. Это нормально — менять ничего не нужно.",
+                    Title = T.F("Память работает на {0} МГц вместо {1} МГц", configured, rated),
+                    Explanation = T.F("Модули поддерживают {0} МГц, но в ноутбуках частоту памяти обычно ограничивает процессор или производитель, а включить XMP в BIOS ноутбука, как правило, нельзя. Это нормально — менять ничего не нужно.", rated),
                     Category = RecommendationCategory.Hardware,
                     Kind = RecommendationKind.Info,
                     Impact = RecommendationImpact.Low,
@@ -240,12 +238,11 @@ public static class RecommendationEngine
                 list.Add(new Recommendation
                 {
                     Id = "RamSpeed",
-                    Title = $"Память работает на {configured} МГц вместо {rated} МГц",
-                    Explanation = (speed.PartNumber is { } part ? $"Модули ({part})" : "Модули") +
-                                  $" рассчитаны на {rated} МГц, но это обычная память без " +
-                                  "профиля XMP/EXPO, поэтому включать в BIOS нечего. Скорее всего, частоту ограничивает процессор или " +
-                                  "материнская плата — например, Intel Core i3/i5 10-го поколения и платы на чипсетах H410/B460 " +
-                                  "поддерживают не больше 2666 МГц. Обычно менять ничего не нужно.",
+                    Title = T.F("Память работает на {0} МГц вместо {1} МГц", configured, rated),
+                    Explanation = (speed.PartNumber is { } part
+                                      ? T.F("Модули ({0}) рассчитаны на {1} МГц, но это обычная память без профиля XMP/EXPO, поэтому включать в BIOS нечего.", part, rated)
+                                      : T.F("Модули рассчитаны на {0} МГц, но это обычная память без профиля XMP/EXPO, поэтому включать в BIOS нечего.", rated)) +
+                                  " " + T._("Скорее всего, частоту ограничивает процессор или материнская плата — например, Intel Core i3/i5 10-го поколения и платы на чипсетах H410/B460 поддерживают не больше 2666 МГц. Обычно менять ничего не нужно."),
                     Category = RecommendationCategory.Hardware,
                     Kind = RecommendationKind.Info,
                     Impact = RecommendationImpact.Low,
@@ -253,32 +250,28 @@ public static class RecommendationEngine
                     CurrentValue = current,
                     Steps = new[]
                     {
-                        "Посмотрите в характеристиках процессора на сайте Intel или AMD, какую частоту памяти он поддерживает " +
-                        "(строка «Типы памяти» или Max Memory Speed). Если там столько же, сколько сейчас, всё в порядке.",
-                        "Если процессор поддерживает больше, откройте BIOS (Delete или F2 при включении) и проверьте, не задана ли " +
-                        $"частота памяти (DRAM Frequency) вручную. Выберите Auto или {rated} МГц и сохраните настройки клавишей F10.",
+                        T._("Посмотрите в характеристиках процессора на сайте Intel или AMD, какую частоту памяти он поддерживает (строка «Типы памяти» или Max Memory Speed). Если там столько же, сколько сейчас, всё в порядке."),
+                        T.F("Если процессор поддерживает больше, откройте BIOS (Delete или F2 при включении) и проверьте, не задана ли частота памяти (DRAM Frequency) вручную. Выберите Auto или {0} МГц и сохраните настройки клавишей F10.", rated),
                     },
                 });
                 return;
             }
             var source = speed.FromPartNumber
-                ? $"Судя по маркировке модулей ({speed.PartNumber}), они рассчитаны на {rated} МГц"
-                : $"Модули рассчитаны на {rated} МГц";
+                ? T.F("Судя по маркировке модулей ({0}), они рассчитаны на {1} МГц", speed.PartNumber, rated)
+                : T.F("Модули рассчитаны на {0} МГц", rated);
             if (IsJedecSpeed(type, configured))
             {
                 list.Add(new Recommendation
                 {
                     Id = "RamSpeed",
-                    Title = "Память работает без XMP/EXPO",
-                    Explanation = $"{source}, но работают на стандартной частоте {type} — {configured} МГц. Так бывает, когда в BIOS " +
-                                  "не включён профиль XMP (у плат для AMD он называется EXPO или DOCP): без него любая память запускается " +
-                                  "на базовой частоте. Включение профиля бесплатно ускоряет память, а с ней — игры и тяжёлые программы.",
+                    Title = T._("Память работает без XMP/EXPO"),
+                    Explanation = T.F("{0}, но работают на стандартной частоте {1} — {2} МГц. Так бывает, когда в BIOS не включён профиль XMP (у плат для AMD он называется EXPO или DOCP): без него любая память запускается на базовой частоте. Включение профиля бесплатно ускоряет память, а с ней — игры и тяжёлые программы.", source, type, configured),
                     Category = RecommendationCategory.Hardware,
                     Kind = RecommendationKind.Manual,
                     Impact = RecommendationImpact.High,
                     Severity = IssueSeverity.High,
                     CurrentValue = current,
-                    Gain = "Быстрее игры и тяжёлые программы",
+                    Gain = T._("Быстрее игры и тяжёлые программы"),
                     Steps = XmpSteps(hw),
                 });
                 return;
@@ -286,16 +279,14 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "RamSpeed",
-                Title = $"Память работает на {configured} МГц вместо {rated} МГц",
-                Explanation = $"{source}, но сейчас работают медленнее. Обычно так бывает, когда в BIOS не включён " +
-                              "профиль разгона памяти XMP (у плат для AMD — EXPO или DOCP) или выбрана частота вручную. Включение профиля " +
-                              "бесплатно ускоряет память, а с ней — игры и тяжёлые программы.",
+                Title = T.F("Память работает на {0} МГц вместо {1} МГц", configured, rated),
+                Explanation = T.F("{0}, но сейчас работают медленнее. Обычно так бывает, когда в BIOS не включён профиль разгона памяти XMP (у плат для AMD — EXPO или DOCP) или выбрана частота вручную. Включение профиля бесплатно ускоряет память, а с ней — игры и тяжёлые программы.", source),
                 Category = RecommendationCategory.Hardware,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.High,
                 Severity = IssueSeverity.High,
                 CurrentValue = current,
-                Gain = "Быстрее игры и тяжёлые программы",
+                Gain = T._("Быстрее игры и тяжёлые программы"),
                 Steps = XmpSteps(hw),
             });
             return;
@@ -311,21 +302,19 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "RamBaseSpeed",
-                Title = $"Память работает на базовой частоте {configured} МГц",
-                Explanation = $"Это стандартная частота для {type}. Многие модули рассчитаны на большую (например, 3200–3600 МГц для DDR4 " +
-                              "или 6000 МГц для DDR5) — она указана на наклейке модуля. Windows сообщает не всегда точно, поэтому " +
-                              "проверьте: если модули быстрее, включите профиль XMP/EXPO в BIOS.",
+                Title = T.F("Память работает на базовой частоте {0} МГц", configured),
+                Explanation = T.F("Это стандартная частота для {0}. Многие модули рассчитаны на большую (например, 3200–3600 МГц для DDR4 или 6000 МГц для DDR5) — она указана на наклейке модуля. Windows сообщает не всегда точно, поэтому проверьте: если модули быстрее, включите профиль XMP/EXPO в BIOS.", type),
                 Category = RecommendationCategory.Hardware,
                 Kind = RecommendationKind.Info,
                 Impact = RecommendationImpact.Low,
                 Severity = IssueSeverity.Info,
-                CurrentValue = $"{configured} МГц",
+                CurrentValue = T.F("{0} МГц", configured),
                 Steps = XmpSteps(hw),
             });
             return;
         }
 
-        list.Add(Good("RamSpeed", "Память работает на паспортной частоте", $"{configured} МГц", RecommendationCategory.Hardware));
+        list.Add(Good("RamSpeed", T._("Память работает на паспортной частоте"), T.F("{0} МГц", configured), RecommendationCategory.Hardware));
     }
 
     private static void AddMemoryChannels(List<Recommendation> list, HardwareSnapshot hw)
@@ -338,29 +327,28 @@ public static class RecommendationEngine
         {
             if (hw.RamSlots == 1 || HardwareText.IsSolderedLowPowerMemory(mods[0].MemoryType))
                 return; // nothing can be added / soldered LPDDR is multi-channel by design
-            var slots = hw.RamSlots > 1 ? $", слотов на плате: {hw.RamSlots}" : "";
+            var slotCount = hw.RamSlots;
             list.Add(new Recommendation
             {
                 Id = "RamSingle",
-                Title = "Память работает в одноканальном режиме",
-                Explanation = $"Установлен всего один модуль памяти ({HardwareText.Gb(mods[0].CapacityBytes)}). С двумя одинаковыми модулями " +
-                              "память работает в двухканальном режиме и её пропускная способность почти удваивается — это заметно " +
-                              "в играх и особенно на встроенной графике." +
-                              (hw.IsLaptop ? " В некоторых ноутбуках свободного слота нет — проверьте это в характеристиках модели." : ""),
+                Title = T._("Память работает в одноканальном режиме"),
+                Explanation = T.F("Установлен всего один модуль памяти ({0}). С двумя одинаковыми модулями память работает в двухканальном режиме и её пропускная способность почти удваивается — это заметно в играх и особенно на встроенной графике.", HardwareText.Gb(mods[0].CapacityBytes)) +
+                              (hw.IsLaptop ? " " + T._("В некоторых ноутбуках свободного слота нет — проверьте это в характеристиках модели.") : ""),
                 Category = RecommendationCategory.Hardware,
                 Kind = RecommendationKind.Manual,
                 Impact = hw.IsLaptop ? RecommendationImpact.Low : RecommendationImpact.Medium,
                 Severity = hw.IsLaptop ? IssueSeverity.Low : IssueSeverity.Medium,
-                CurrentValue = $"1 модуль{slots}",
-                Gain = "Выше скорость памяти",
+                CurrentValue = slotCount > 1 ? T.F("1 модуль, слотов на плате: {0}", slotCount) : T._("1 модуль"),
+                Gain = T._("Выше скорость памяти"),
                 Steps = new[]
                 {
-                    $"Купите второй модуль такого же объёма и частоты ({HardwareText.Gb(mods[0].CapacityBytes)}, {HardwareText.MemoryTypeName(mods[0].MemoryType) ?? "того же типа"}, " +
-                    $"{(mods[0].RatedMhz > 0 ? HardwareText.Mhz(mods[0].RatedMhz) : "та же частота")}). Лучше всего — такой же модели.",
+                    T.F("Купите второй модуль такого же объёма и частоты ({0}, {1}, {2}).", HardwareText.Gb(mods[0].CapacityBytes),
+                        HardwareText.MemoryTypeName(mods[0].MemoryType) ?? T._("того же типа"),
+                        mods[0].RatedMhz > 0 ? HardwareText.Mhz(mods[0].RatedMhz) : T._("та же частота")) + " " + T._("Лучше всего — такой же модели."),
                     hw.IsLaptop
-                        ? "Установите его в свободный слот (как это сделать, написано в инструкции к ноутбуку)."
-                        : "Установите модули в слоты, рекомендованные в инструкции к материнской плате (обычно A2 и B2 — второй и четвёртый от процессора).",
-                    "Откройте этот раздел снова и убедитесь, что видны оба модуля.",
+                        ? T._("Установите его в свободный слот (как это сделать, написано в инструкции к ноутбуку).")
+                        : T._("Установите модули в слоты, рекомендованные в инструкции к материнской плате (обычно A2 и B2 — второй и четвёртый от процессора)."),
+                    T._("Откройте этот раздел снова и убедитесь, что видны оба модуля."),
                 },
             });
             return;
@@ -374,24 +362,23 @@ public static class RecommendationEngine
         {
             if (mods.Any(m => HardwareText.IsSolderedLowPowerMemory(m.MemoryType)))
                 return; // soldered memory cannot be moved to other slots
-            var both = mods.Count == 2 ? "оба модуля" : $"все {Format.Count(mods.Count, "модуль", "модуля", "модулей")}";
+            var both = mods.Count == 2 ? T._("оба модуля") : T.F("все {0}", Format.Count(mods.Count, "модуль", "модуля", "модулей"));
             list.Add(new Recommendation
             {
                 Id = "RamOneChannel",
-                Title = "Все модули памяти стоят в одном канале",
-                Explanation = $"Похоже, {both} установлены в слоты канала {channels[0].Key}. Тогда память работает в одноканальном режиме " +
-                              "и заметно медленнее, чем могла бы. Обычно модули ставят через один слот — так включается двухканальный режим.",
+                Title = T._("Все модули памяти стоят в одном канале"),
+                Explanation = T.F("Похоже, {0} установлены в слоты канала {1}. Тогда память работает в одноканальном режиме и заметно медленнее, чем могла бы. Обычно модули ставят через один слот — так включается двухканальный режим.", both, channels[0].Key),
                 Category = RecommendationCategory.Hardware,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.Medium,
                 Severity = IssueSeverity.Medium,
                 CurrentValue = string.Join(", ", mods.Select(m => m.DeviceLocator ?? m.BankLabel ?? "?")),
-                Gain = "Выше скорость памяти",
+                Gain = T._("Выше скорость памяти"),
                 Steps = new[]
                 {
-                    "Выключите компьютер и отключите его от розетки.",
-                    "Посмотрите в инструкции к материнской плате, в какие слоты ставить модули (для двух модулей обычно A2 и B2).",
-                    "Переставьте модули, включите компьютер и проверьте этот раздел ещё раз.",
+                    T._("Выключите компьютер и отключите его от розетки."),
+                    T._("Посмотрите в инструкции к материнской плате, в какие слоты ставить модули (для двух модулей обычно A2 и B2)."),
+                    T._("Переставьте модули, включите компьютер и проверьте этот раздел ещё раз."),
                 },
             });
             return;
@@ -415,26 +402,19 @@ public static class RecommendationEngine
                     list.Add(new Recommendation
                     {
                         Id = "RamAsymmetric",
-                        Title = "Переставьте модули памяти — часть памяти работает в одноканальном режиме",
-                        Explanation = $"В каналах установлен разный объём памяти (канал {channels[0].Key}: {HardwareText.Gb(a)}, " +
-                                      $"канал {channels[1].Key}: {HardwareText.Gb(b)}), поэтому {HardwareText.Gb(dual)} работают в быстром " +
-                                      $"двухканальном режиме, а оставшиеся {HardwareText.Gb(single)} — в одноканальном. Если поменять местами " +
-                                      $"два модуля, в каждом канале будет по {half} ({combo}) и вся память заработает в двухканальном режиме. " +
-                                      "Это бесплатно и занимает несколько минут.",
+                        Title = T._("Переставьте модули памяти — часть памяти работает в одноканальном режиме"),
+                        Explanation = T.F("В каналах установлен разный объём памяти (канал {0}: {1}, канал {2}: {3}), поэтому {4} работают в быстром двухканальном режиме, а оставшиеся {5} — в одноканальном. Если поменять местами два модуля, в каждом канале будет по {6} ({7}) и вся память заработает в двухканальном режиме. Это бесплатно и занимает несколько минут.", channels[0].Key, HardwareText.Gb(a), channels[1].Key, HardwareText.Gb(b), HardwareText.Gb(dual), HardwareText.Gb(single), half, combo),
                         Category = RecommendationCategory.Hardware,
                         Kind = RecommendationKind.Manual,
                         Impact = RecommendationImpact.Low,
                         Severity = IssueSeverity.Low,
-                        CurrentValue = $"Канал {channels[0].Key}: {HardwareText.Gb(a)} · канал {channels[1].Key}: {HardwareText.Gb(b)}",
-                        Gain = "Вся память в двухканальном режиме",
+                        CurrentValue = T.F("Канал {0}: {1} · канал {2}: {3}", channels[0].Key, HardwareText.Gb(a), channels[1].Key, HardwareText.Gb(b)),
+                        Gain = T._("Вся память в двухканальном режиме"),
                         Steps = new[]
                         {
-                            "Выключите компьютер, отключите его от розетки и снимите боковую крышку корпуса.",
-                            $"Поменяйте местами один модуль на {HardwareText.Gb(swap.FromA.CapacityBytes)} из канала {channels[0].Key} " +
-                            $"и один модуль на {HardwareText.Gb(swap.FromB.CapacityBytes)} из канала {channels[1].Key} (Windows называет " +
-                            $"их слоты «{SlotName(swap.FromA)}» и «{SlotName(swap.FromB)}»). Слоты одного канала обычно стоят рядом и " +
-                            "подписаны на плате буквой канала (A1, A2, B1, B2); точная схема — в инструкции к материнской плате.",
-                            $"Включите компьютер и откройте этот раздел снова: в каналах должно быть по {half}.",
+                            T._("Выключите компьютер, отключите его от розетки и снимите боковую крышку корпуса."),
+                            T.F("Поменяйте местами один модуль на {0} из канала {1} и один модуль на {2} из канала {3} (Windows называет их слоты «{4}» и «{5}»). Слоты одного канала обычно стоят рядом и подписаны на плате буквой канала (A1, A2, B1, B2); точная схема — в инструкции к материнской плате.", HardwareText.Gb(swap.FromA.CapacityBytes), channels[0].Key, HardwareText.Gb(swap.FromB.CapacityBytes), channels[1].Key, SlotName(swap.FromA), SlotName(swap.FromB)),
+                            T.F("Включите компьютер и откройте этот раздел снова: в каналах должно быть по {0}.", half),
                         },
                     });
                     return;
@@ -442,24 +422,21 @@ public static class RecommendationEngine
                 list.Add(new Recommendation
                 {
                     Id = "RamAsymmetric",
-                    Title = "Часть памяти работает в одноканальном режиме",
-                    Explanation = $"В каналах установлен разный объём памяти (канал {channels[0].Key}: {HardwareText.Gb(a)}, " +
-                                  $"канал {channels[1].Key}: {HardwareText.Gb(b)}). {HardwareText.Gb(dual)} работают в быстром двухканальном режиме, " +
-                                  $"а оставшиеся {HardwareText.Gb(single)} — в одноканальном. На практике разница невелика; " +
-                                  "для максимальной скорости ставьте одинаковые модули парами.",
+                    Title = T._("Часть памяти работает в одноканальном режиме"),
+                    Explanation = T.F("В каналах установлен разный объём памяти (канал {0}: {1}, канал {2}: {3}). {4} работают в быстром двухканальном режиме, а оставшиеся {5} — в одноканальном. На практике разница невелика; для максимальной скорости ставьте одинаковые модули парами.", channels[0].Key, HardwareText.Gb(a), channels[1].Key, HardwareText.Gb(b), HardwareText.Gb(dual), HardwareText.Gb(single)),
                     Category = RecommendationCategory.Hardware,
                     Kind = RecommendationKind.Info,
                     Impact = RecommendationImpact.Low,
                     Severity = IssueSeverity.Info,
-                    CurrentValue = $"Канал {channels[0].Key}: {HardwareText.Gb(a)} · канал {channels[1].Key}: {HardwareText.Gb(b)}",
+                    CurrentValue = T.F("Канал {0}: {1} · канал {2}: {3}", channels[0].Key, HardwareText.Gb(a), channels[1].Key, HardwareText.Gb(b)),
                 });
                 return;
             }
         }
 
         list.Add(Good("RamChannels",
-            channels.Count == 2 ? "Память работает в двухканальном режиме" : "Память работает в многоканальном режиме",
-            Format.Count(mods.Count, "модуль", "модуля", "модулей") + " в " + Format.Count(channels.Count, "канале", "каналах", "каналах"),
+            channels.Count == 2 ? T._("Память работает в двухканальном режиме") : T._("Память работает в многоканальном режиме"),
+            T.F("{0} в {1}", Format.Count(mods.Count, "модуль", "модуля", "модулей"), Format.Count(channels.Count, "канале", "каналах", "каналах")),
             RecommendationCategory.Hardware));
     }
 
@@ -496,21 +473,19 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "RamLow",
-                Title = $"Мало оперативной памяти: {gb}",
-                Explanation = "Для Windows 10/11 с браузером и мессенджерами нужно хотя бы 8 ГБ, для игр — 16 ГБ. Когда памяти не хватает, " +
-                              "Windows сбрасывает данные на диск, и компьютер начинает «тормозить». Добавить память — один из самых заметных " +
-                              "и недорогих апгрейдов.",
+                Title = T.F("Мало оперативной памяти: {0}", gb),
+                Explanation = T._("Для Windows 10/11 с браузером и мессенджерами нужно хотя бы 8 ГБ, для игр — 16 ГБ. Когда памяти не хватает, Windows сбрасывает данные на диск, и компьютер начинает «тормозить». Добавить память — один из самых заметных и недорогих апгрейдов."),
                 Category = RecommendationCategory.Hardware,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.High,
                 Severity = IssueSeverity.High,
                 CurrentValue = gb,
-                Gain = "Меньше «тормозов» при работе нескольких программ",
+                Gain = T._("Меньше «тормозов» при работе нескольких программ"),
                 Steps = new[]
                 {
-                    "Посмотрите в карточке «Оперативная память» выше тип памяти (DDR4, DDR5…) и количество свободных слотов.",
-                    "Купите модуль того же типа и частоты — лучше такого же объёма, как уже установленный, чтобы работал двухканальный режим.",
-                    "Если свободных слотов нет, замените модули на более ёмкие (например, 2 × 8 ГБ).",
+                    T._("Посмотрите в карточке «Оперативная память» выше тип памяти (DDR4, DDR5…) и количество свободных слотов."),
+                    T._("Купите модуль того же типа и частоты — лучше такого же объёма, как уже установленный, чтобы работал двухканальный режим."),
+                    T._("Если свободных слотов нет, замените модули на более ёмкие (например, 2 × 8 ГБ)."),
                 },
             });
         }
@@ -519,9 +494,8 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "RamGaming",
-                Title = $"{gb} памяти — маловато для современных игр",
-                Explanation = "Для офиса и браузера этого хватает, но современным играм желательно 16 ГБ: иначе возможны подтормаживания " +
-                              "и долгие загрузки, особенно если параллельно открыт браузер или Discord.",
+                Title = T.F("{0} памяти — маловато для современных игр", gb),
+                Explanation = T._("Для офиса и браузера этого хватает, но современным играм желательно 16 ГБ: иначе возможны подтормаживания и долгие загрузки, особенно если параллельно открыт браузер или Discord."),
                 Category = RecommendationCategory.Games,
                 Kind = RecommendationKind.Info,
                 Impact = RecommendationImpact.Low,
@@ -531,7 +505,7 @@ public static class RecommendationEngine
         }
         else
         {
-            list.Add(Good("RamAmount", "Оперативной памяти достаточно", gb, RecommendationCategory.Hardware));
+            list.Add(Good("RamAmount", T._("Оперативной памяти достаточно"), gb, RecommendationCategory.Hardware));
         }
     }
 
@@ -542,18 +516,16 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "RamLoad",
-            Title = $"Оперативная память почти заполнена ({s.MemoryLoadPercent}%)",
-            Explanation = $"Сейчас занято {Format.Bytes(s.MemoryUsedBytes)} из {Format.Bytes(s.MemoryTotalBytes)}. Когда свободной памяти мало, " +
-                          "Windows начинает активно использовать диск, и всё замедляется. Посмотрите, какие программы занимают больше всего " +
-                          "памяти, и закройте лишние.",
+            Title = T.F("Оперативная память почти заполнена ({0}%)", s.MemoryLoadPercent),
+            Explanation = T.F("Сейчас занято {0} из {1}. Когда свободной памяти мало, Windows начинает активно использовать диск, и всё замедляется. Посмотрите, какие программы занимают больше всего памяти, и закройте лишние.", Format.Bytes(s.MemoryUsedBytes), Format.Bytes(s.MemoryTotalBytes)),
             Category = RecommendationCategory.Maintenance,
             Kind = RecommendationKind.Manual,
             Impact = RecommendationImpact.Medium,
             Severity = IssueSeverity.Medium,
-            CurrentValue = $"Занято {s.MemoryLoadPercent}%",
-            Gain = "Освободится память",
+            CurrentValue = T.F("Занято {0}%", s.MemoryLoadPercent),
+            Gain = T._("Освободится память"),
             NavigateKey = "Processes",
-            NavigateLabel = "Открыть «Процессы»",
+            NavigateLabel = T._("Открыть «Процессы»"),
         });
     }
 
@@ -565,18 +537,16 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "CpuLoad",
-            Title = "Процессор загружен более чем на 90%",
-            Explanation = $"Пока шла проверка, процессор был занят на {text} (замер за 2 секунды, без учёта самой программы). " +
-                          "Когда процессор загружен до предела, всё работает с задержками. Откройте «Процессы» и посмотрите, что его " +
-                          "нагружает: часто это обновление Windows, проверка антивирусом или вкладки браузера, а бывает и скрытый майнер.",
+            Title = T._("Процессор загружен более чем на 90%"),
+            Explanation = T.F("Пока шла проверка, процессор был занят на {0} (замер за 2 секунды, без учёта самой программы). Когда процессор загружен до предела, всё работает с задержками. Откройте «Процессы» и посмотрите, что его нагружает: часто это обновление Windows, проверка антивирусом или вкладки браузера, а бывает и скрытый майнер.", text),
             Category = RecommendationCategory.Maintenance,
             Kind = RecommendationKind.Manual,
             Impact = RecommendationImpact.Medium,
             Severity = IssueSeverity.Medium,
-            CurrentValue = $"Загрузка {text}",
-            Gain = "Быстрее отклик системы",
+            CurrentValue = T.F("Загрузка {0}", text),
+            Gain = T._("Быстрее отклик системы"),
             NavigateKey = "Processes",
-            NavigateLabel = "Открыть «Процессы»",
+            NavigateLabel = T._("Открыть «Процессы»"),
         });
     }
 
@@ -587,38 +557,35 @@ public static class RecommendationEngine
         var text = HardwareText.Celsius(t);
         if (t < HighTemperatureC)
         {
-            list.Add(Good("Temperature", "Температура в норме", text, RecommendationCategory.Hardware));
+            list.Add(Good("Temperature", T._("Температура в норме"), text, RecommendationCategory.Hardware));
             return;
         }
         var steps = hw.IsLaptop
             ? new[]
             {
-                "Почистите вентиляционные решётки ноутбука и не ставьте его на мягкие поверхности — кровать, диван, колени.",
-                "Помогает охлаждающая подставка с вентиляторами.",
-                "Если ноутбуку больше 2–3 лет, отдайте его в сервис на чистку системы охлаждения и замену термопасты.",
-                "Точную температуру ядер под нагрузкой покажут бесплатные программы HWiNFO или Core Temp.",
+                T._("Почистите вентиляционные решётки ноутбука и не ставьте его на мягкие поверхности — кровать, диван, колени."),
+                T._("Помогает охлаждающая подставка с вентиляторами."),
+                T._("Если ноутбуку больше 2–3 лет, отдайте его в сервис на чистку системы охлаждения и замену термопасты."),
+                T._("Точную температуру ядер под нагрузкой покажут бесплатные программы HWiNFO или Core Temp."),
             }
             : new[]
             {
-                "Выключите компьютер, отключите его от розетки и почистите от пыли радиатор процессора, вентиляторы и пылевые " +
-                "фильтры корпуса — баллончиком со сжатым воздухом или мягкой кисточкой.",
-                "Проверьте, что все вентиляторы крутятся, а корпус не стоит вплотную к стене или батарее отопления.",
-                "Если компьютеру больше 2–3 лет, замените термопасту на процессоре (или попросите об этом сервис).",
-                "Точную температуру ядер под нагрузкой покажут бесплатные программы HWiNFO или Core Temp.",
+                T._("Выключите компьютер, отключите его от розетки и почистите от пыли радиатор процессора, вентиляторы и пылевые фильтры корпуса — баллончиком со сжатым воздухом или мягкой кисточкой."),
+                T._("Проверьте, что все вентиляторы крутятся, а корпус не стоит вплотную к стене или батарее отопления."),
+                T._("Если компьютеру больше 2–3 лет, замените термопасту на процессоре (или попросите об этом сервис)."),
+                T._("Точную температуру ядер под нагрузкой покажут бесплатные программы HWiNFO или Core Temp."),
             };
         list.Add(new Recommendation
         {
             Id = "Temperature",
-            Title = "Высокая температура",
-            Explanation = $"Датчик температуры показывает {text}. При перегреве процессор сбрасывает частоту, чтобы не повредиться " +
-                          "(это называется троттлингом), — компьютер начинает тормозить, а при сильном перегреве может внезапно " +
-                          "выключаться. Чаще всего виноваты пыль в радиаторе и вентиляторах или высохшая термопаста.",
+            Title = T._("Высокая температура"),
+            Explanation = T.F("Датчик температуры показывает {0}. При перегреве процессор сбрасывает частоту, чтобы не повредиться (это называется троттлингом), — компьютер начинает тормозить, а при сильном перегреве может внезапно выключаться. Чаще всего виноваты пыль в радиаторе и вентиляторах или высохшая термопаста.", text),
             Category = RecommendationCategory.Hardware,
             Kind = RecommendationKind.Manual,
             Impact = RecommendationImpact.High,
             Severity = IssueSeverity.High,
             CurrentValue = text,
-            Gain = "Без троттлинга и внезапных выключений",
+            Gain = T._("Без троттлинга и внезапных выключений"),
             Steps = steps,
         });
     }
@@ -630,40 +597,37 @@ public static class RecommendationEngine
         var disk = hw.SystemDisk;
         if (disk is null)
             return;
-        var model = string.IsNullOrWhiteSpace(disk.Model) ? "системный диск" : disk.Model;
+        var model = string.IsNullOrWhiteSpace(disk.Model) ? T._("системный диск") : disk.Model;
         if (disk.MediaKind == DiskMediaKind.Hdd)
         {
             list.Add(new Recommendation
             {
                 Id = "SystemHdd",
-                Title = "Установите SSD: Windows работает с жёсткого диска (HDD)",
-                Explanation = $"Системный диск {disk.DriveLetter}: ({model}) — механический. Это самая частая причина медленного включения " +
-                              "компьютера и долгого запуска программ. Переход на SSD ускоряет загрузку Windows в несколько раз — " +
-                              "это самый заметный апгрейд для старого ПК.",
+                Title = T._("Установите SSD: Windows работает с жёсткого диска (HDD)"),
+                Explanation = T.F("Системный диск {0}: ({1}) — механический. Это самая частая причина медленного включения компьютера и долгого запуска программ. Переход на SSD ускоряет загрузку Windows в несколько раз — это самый заметный апгрейд для старого ПК.", disk.DriveLetter, model),
                 Category = RecommendationCategory.Hardware,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.High,
                 Severity = IssueSeverity.High,
                 CurrentValue = $"HDD · {model}",
-                Gain = "Загрузка Windows и программ в разы быстрее",
+                Gain = T._("Загрузка Windows и программ в разы быстрее"),
                 Steps = new[]
                 {
                     hw.IsLaptop
-                        ? "Узнайте, какой SSD подходит вашему ноутбуку (2,5\" SATA или M.2 NVMe) — это есть в характеристиках модели."
-                        : "Купите SSD объёмом от 500 ГБ: M.2 NVMe, если на материнской плате есть слот M.2, иначе 2,5\" SATA.",
-                    "Перенесите систему программой клонирования от производителя SSD (например, Samsung Data Migration, Acronis для WD и Crucial) " +
-                    "или установите Windows на SSD заново.",
-                    "В BIOS выберите SSD первым в порядке загрузки (Boot Priority). Старый HDD можно оставить для файлов.",
+                        ? T._("Узнайте, какой SSD подходит вашему ноутбуку (2,5\" SATA или M.2 NVMe) — это есть в характеристиках модели.")
+                        : T._("Купите SSD объёмом от 500 ГБ: M.2 NVMe, если на материнской плате есть слот M.2, иначе 2,5\" SATA."),
+                    T._("Перенесите систему программой клонирования от производителя SSD (например, Samsung Data Migration, Acronis для WD и Crucial) или установите Windows на SSD заново."),
+                    T._("В BIOS выберите SSD первым в порядке загрузки (Boot Priority). Старый HDD можно оставить для файлов."),
                 },
             });
         }
         else if (disk.MediaKind == DiskMediaKind.Ssd)
         {
-            list.Add(Good("SystemSsd", "Windows установлена на SSD", model, RecommendationCategory.Hardware));
+            list.Add(Good("SystemSsd", T._("Windows установлена на SSD"), model, RecommendationCategory.Hardware));
         }
     }
 
-    private static string MonitorLabel(DisplayInfo d) => string.IsNullOrWhiteSpace(d.MonitorName) ? "Монитор" : d.MonitorName!;
+    private static string MonitorLabel(DisplayInfo d) => string.IsNullOrWhiteSpace(d.MonitorName) ? T._("Монитор") : d.MonitorName!;
 
     /// <summary>
     /// The monitor offers a noticeably higher refresh rate at the current resolution (at least +10 Hz and +10%:
@@ -687,28 +651,27 @@ public static class RecommendationEngine
                 list.Add(new Recommendation
                 {
                     Id = "Refresh:" + d.DeviceName,
-                    Title = $"Монитор поддерживает {max} Гц, а работает на {d.CurrentHz} Гц",
-                    Explanation = $"Сейчас изображение на мониторе «{name}» обновляется {Format.Count(d.CurrentHz, "раз", "раза", "раз")} в секунду, хотя он умеет {max}. " +
+                    Title = T.F("Монитор поддерживает {0} Гц, а работает на {1} Гц", max, d.CurrentHz),
+                    Explanation = T.F("Сейчас изображение на мониторе «{0}» обновляется {1} в секунду, хотя он умеет {2}.", name, Format.Count(d.CurrentHz, "раз", "раза", "раз"), max) + " " +
                                   (big
-                                      ? "Более высокая частота делает движение мыши, прокрутку и игры заметно плавнее. "
-                                      : "Разница небольшая, но в динамичных играх движение станет чуть плавнее. ") +
-                                  "Переключение безопасно и делается в параметрах Windows за минуту." +
-                                  (hw.IsLaptop ? " На ноутбуке высокая частота немного быстрее расходует батарею." : ""),
+                                      ? T._("Более высокая частота делает движение мыши, прокрутку и игры заметно плавнее.")
+                                      : T._("Разница небольшая, но в динамичных играх движение станет чуть плавнее.")) + " " +
+                                  T._("Переключение безопасно и делается в параметрах Windows за минуту.") +
+                                  (hw.IsLaptop ? " " + T._("На ноутбуке высокая частота немного быстрее расходует батарею.") : ""),
                     Category = RecommendationCategory.Games,
                     Kind = RecommendationKind.Manual,
                     Impact = impact,
                     Severity = SeverityOf(impact),
-                    CurrentValue = $"{d.CurrentHz} Гц при {d.Width}×{d.Height}",
-                    Gain = "Плавнее изображение",
+                    CurrentValue = T.F("{0} Гц при {1}×{2}", d.CurrentHz, d.Width, d.Height),
+                    Gain = T._("Плавнее изображение"),
                     SettingsUri = DisplaySettingsUri,
-                    SettingsLabel = "Открыть параметры дисплея",
+                    SettingsLabel = T._("Открыть параметры дисплея"),
                     Steps = new[]
                     {
-                        "Нажмите «Открыть параметры дисплея» (Параметры → Система → Дисплей → Расширенные параметры дисплея).",
-                        hw.Displays.Count > 1 ? $"Вверху выберите монитор «{name}»." : "Убедитесь, что выбран нужный монитор.",
-                        $"В списке «Выберите частоту обновления» выберите {max} Гц.",
-                        "Если нужной частоты нет — проверьте кабель: для высоких частот нужен DisplayPort или HDMI 2.0 и новее. " +
-                        "Также частоту можно выбрать в панели управления видеокарты.",
+                        T._("Нажмите «Открыть параметры дисплея» (Параметры → Система → Дисплей → Расширенные параметры дисплея)."),
+                        hw.Displays.Count > 1 ? T.F("Вверху выберите монитор «{0}».", name) : T._("Убедитесь, что выбран нужный монитор."),
+                        T.F("В списке «Выберите частоту обновления» выберите {0} Гц.", max),
+                        T._("Если нужной частоты нет — проверьте кабель: для высоких частот нужен DisplayPort или HDMI 2.0 и новее. Также частоту можно выбрать в панели управления видеокарты."),
                     },
                 });
             }
@@ -720,8 +683,8 @@ public static class RecommendationEngine
         if (fine.Count > 0)
         {
             list.Add(Good("Refresh",
-                fine.Count == 1 ? "Монитор работает на максимальной частоте" : "Мониторы работают на максимальной частоте",
-                string.Join(", ", fine.Select(d => fine.Count == 1 ? $"{d.CurrentHz} Гц" : $"{MonitorLabel(d)}: {d.CurrentHz} Гц")),
+                fine.Count == 1 ? T._("Монитор работает на максимальной частоте") : T._("Мониторы работают на максимальной частоте"),
+                string.Join(", ", fine.Select(d => fine.Count == 1 ? T.F("{0} Гц", d.CurrentHz) : T.F("{0}: {1} Гц", MonitorLabel(d), d.CurrentHz))),
                 RecommendationCategory.Games));
         }
     }
@@ -742,21 +705,19 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "MonitorOnIgpu",
-            Title = "Монитор подключён к материнской плате, а не к видеокарте",
-            Explanation = $"Основной монитор работает через встроенную графику ({HardwareText.CleanName(adapter)}), хотя в компьютере есть " +
-                          $"видеокарта {dgpu}. Игры при этом могут работать на слабой встроенной графике или терять производительность.",
+            Title = T._("Монитор подключён к материнской плате, а не к видеокарте"),
+            Explanation = T.F("Основной монитор работает через встроенную графику ({0}), хотя в компьютере есть видеокарта {1}. Игры при этом могут работать на слабой встроенной графике или терять производительность.", HardwareText.CleanName(adapter), dgpu),
             Category = RecommendationCategory.Games,
             Kind = RecommendationKind.Manual,
             Impact = RecommendationImpact.High,
             Severity = IssueSeverity.High,
-            CurrentValue = $"Подключён к {HardwareText.CleanName(adapter)}",
-            Gain = "Игры пойдут на видеокарте",
+            CurrentValue = T.F("Подключён к {0}", HardwareText.CleanName(adapter)),
+            Gain = T._("Игры пойдут на видеокарте"),
             Steps = new[]
             {
-                "Выключите компьютер.",
-                "Сзади системного блока переключите кабель монитора из разъёма материнской платы (вверху, рядом с USB) " +
-                "в разъём видеокарты (ниже, в горизонтальном ряду).",
-                "Включите компьютер — изображение появится через видеокарту.",
+                T._("Выключите компьютер."),
+                T._("Сзади системного блока переключите кабель монитора из разъёма материнской платы (вверху, рядом с USB) в разъём видеокарты (ниже, в горизонтальном ряду)."),
+                T._("Включите компьютер — изображение появится через видеокарту."),
             },
         });
     }
@@ -775,24 +736,22 @@ public static class RecommendationEngine
                 list.Add(new Recommendation
                 {
                     Id = "GpuNoDriver:" + (gpu.PnpDeviceId ?? gpu.Name),
-                    Title = "Не установлен драйвер видеокарты",
-                    Explanation = "Windows использует стандартный «базовый видеоадаптер»: нет аппаратного ускорения, игры и видео " +
-                                  "работают очень медленно или не запускаются, может быть недоступна нужная частота монитора. " +
-                                  "Установите драйвер с официального сайта производителя видеокарты.",
+                    Title = T._("Не установлен драйвер видеокарты"),
+                    Explanation = T._("Windows использует стандартный «базовый видеоадаптер»: нет аппаратного ускорения, игры и видео работают очень медленно или не запускаются, может быть недоступна нужная частота монитора. Установите драйвер с официального сайта производителя видеокарты."),
                     Category = RecommendationCategory.Hardware,
                     Kind = RecommendationKind.Manual,
                     Impact = RecommendationImpact.High,
                     Severity = IssueSeverity.High,
                     CurrentValue = name,
-                    Gain = "Заработает ускорение графики",
+                    Gain = T._("Заработает ускорение графики"),
                     SettingsUri = url ?? UpdateUri,
-                    SettingsLabel = url is null ? "Открыть Центр обновления" : $"Сайт {vendor}",
+                    SettingsLabel = url is null ? T._("Открыть Центр обновления") : T.F("Сайт {0}", vendor),
                     Steps = new[]
                     {
                         url is null
-                            ? "Откройте Центр обновления Windows и установите все обновления, включая необязательные (там бывают драйверы)."
-                            : $"Откройте сайт {vendor} кнопкой ниже и скачайте драйвер для своей видеокарты и Windows.",
-                        "Запустите установщик и следуйте подсказкам, затем перезагрузите компьютер.",
+                            ? T._("Откройте Центр обновления Windows и установите все обновления, включая необязательные (там бывают драйверы).")
+                            : T.F("Откройте сайт {0} кнопкой ниже и скачайте драйвер для своей видеокарты и Windows.", vendor),
+                        T._("Запустите установщик и следуйте подсказкам, затем перезагрузите компьютер."),
                     },
                 });
                 continue;
@@ -808,30 +767,29 @@ public static class RecommendationEngine
                     : gpu.DriverVersion;
                 var steps = new List<string>
                 {
-                    url is null ? "Найдите драйвер на сайте производителя видеокарты." : $"Откройте сайт {vendor} кнопкой «Сайт {vendor}».",
-                    $"Выберите свою модель ({name}) и версию Windows, скачайте и запустите установщик.",
+                    url is null ? T._("Найдите драйвер на сайте производителя видеокарты.") : T.F("Откройте сайт {0} кнопкой «Сайт {1}».", vendor, vendor),
+                    T.F("Выберите свою модель ({0}) и версию Windows, скачайте и запустите установщик.", name),
                 };
                 if (gpu.Vendor == GpuVendor.Nvidia)
-                    steps.Add("Удобнее всего — приложение NVIDIA App: оно само следит за обновлениями драйвера.");
+                    steps.Add(T._("Удобнее всего — приложение NVIDIA App: оно само следит за обновлениями драйвера."));
                 else if (gpu.Vendor == GpuVendor.Amd)
-                    steps.Add("Удобнее всего — AMD Software: Adrenalin Edition: оно само следит за обновлениями драйвера.");
+                    steps.Add(T._("Удобнее всего — AMD Software: Adrenalin Edition: оно само следит за обновлениями драйвера."));
                 if (hw.IsLaptop)
-                    steps.Add("Если универсальный драйвер не ставится, скачайте драйвер с сайта производителя ноутбука.");
-                steps.Add("После установки перезагрузите компьютер.");
+                    steps.Add(T._("Если универсальный драйвер не ставится, скачайте драйвер с сайта производителя ноутбука."));
+                steps.Add(T._("После установки перезагрузите компьютер."));
                 list.Add(new Recommendation
                 {
                     Id = "GpuDriver:" + gpu.Name,
-                    Title = $"Обновите драйвер видеокарты {name}",
-                    Explanation = $"Установленному драйверу уже {age} (версия {version} от {Format.Date(date)}). Новые драйверы исправляют " +
-                                  "ошибки и часто ускоряют свежие игры. Скачивайте драйвер только с официального сайта производителя.",
+                    Title = T.F("Обновите драйвер видеокарты {0}", name),
+                    Explanation = T.F("Установленному драйверу уже {0} (версия {1} от {2}). Новые драйверы исправляют ошибки и часто ускоряют свежие игры. Скачивайте драйвер только с официального сайта производителя.", age, version, Format.Date(date)),
                     Category = RecommendationCategory.Hardware,
                     Kind = RecommendationKind.Manual,
                     Impact = minor ? RecommendationImpact.Low : RecommendationImpact.Medium,
                     Severity = minor ? IssueSeverity.Low : IssueSeverity.Medium,
-                    CurrentValue = $"{version} от {Format.Date(date)}",
-                    Gain = "Исправления и ускорение в играх",
-                    SettingsUri = url ?? "https://www.google.com/search?q=" + Uri.EscapeDataString(name + " драйвер"),
-                    SettingsLabel = url is null ? "Найти драйвер" : $"Сайт {vendor}",
+                    CurrentValue = T.F("{0} от {1}", version, Format.Date(date)),
+                    Gain = T._("Исправления и ускорение в играх"),
+                    SettingsUri = url ?? "https://www.google.com/search?q=" + Uri.EscapeDataString(T.F("{0} драйвер", name)),
+                    SettingsLabel = url is null ? T._("Найти драйвер") : T.F("Сайт {0}", vendor),
                     Steps = steps,
                 });
             }
@@ -843,7 +801,7 @@ public static class RecommendationEngine
         if (fresh.Count > 0)
         {
             list.Add(Good("GpuDriver",
-                fresh.Count == 1 ? "Драйвер видеокарты свежий" : "Драйверы видеокарт свежие",
+                fresh.Count == 1 ? T._("Драйвер видеокарты свежий") : T._("Драйверы видеокарт свежие"),
                 string.Join(", ", fresh.Select(g => $"{HardwareText.CleanName(g.Name)}: {Format.Date(g.DriverDate)}")),
                 RecommendationCategory.Hardware));
         }
@@ -857,24 +815,21 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "BiosOld",
-            Title = $"Версия BIOS материнской платы вышла в {date.Year} году",
-            Explanation = "Возможно, для вашей платы уже есть более новая версия. Обновления BIOS исправляют ошибки, улучшают " +
-                          "совместимость с памятью и новыми процессорами и закрывают уязвимости. " +
-                          "Но прошивка BIOS — рискованная операция: обновляйте его, только если есть проблемы или нужна поддержка нового " +
-                          "железа, и строго по инструкции с сайта производителя платы.",
+            Title = T.F("Версия BIOS материнской платы вышла в {0} году", date.Year),
+            Explanation = T._("Возможно, для вашей платы уже есть более новая версия. Обновления BIOS исправляют ошибки, улучшают совместимость с памятью и новыми процессорами и закрывают уязвимости. Но прошивка BIOS — рискованная операция: обновляйте его, только если есть проблемы или нужна поддержка нового железа, и строго по инструкции с сайта производителя платы."),
             Category = RecommendationCategory.Hardware,
             Kind = RecommendationKind.Info,
             Impact = RecommendationImpact.Low,
             Severity = IssueSeverity.Info,
-            CurrentValue = $"Версия {hw.BiosVersion ?? "—"} от {Format.Date(date)}",
+            CurrentValue = T.F("Версия {0} от {1}", hw.BiosVersion ?? "—", Format.Date(date)),
             SettingsUri = board.Length > 0 ? "https://www.google.com/search?q=" + Uri.EscapeDataString(board + " BIOS") : null,
-            SettingsLabel = board.Length > 0 ? "Найти обновление" : null,
+            SettingsLabel = board.Length > 0 ? T._("Найти обновление") : null,
             Steps = board.Length > 0
                 ? new[]
                 {
-                    $"Найдите страницу своей платы ({board}) на официальном сайте производителя, раздел «Support» → «BIOS».",
-                    "Сравните версии: если новая исправляет то, что вам мешает, скачайте её и прочитайте инструкцию.",
-                    "Во время обновления не выключайте компьютер; для ноутбука подключите зарядку.",
+                    T.F("Найдите страницу своей платы ({0}) на официальном сайте производителя, раздел «Support» → «BIOS».", board),
+                    T._("Сравните версии: если новая исправляет то, что вам мешает, скачайте её и прочитайте инструкцию."),
+                    T._("Во время обновления не выключайте компьютер; для ноутбука подключите зарядку."),
                 }
                 : Array.Empty<string>(),
         });
@@ -884,7 +839,7 @@ public static class RecommendationEngine
     {
         if (hw.BootMode == BootMode.Uefi)
         {
-            list.Add(Good("BootMode", "Компьютер загружается в режиме UEFI", "UEFI", RecommendationCategory.Hardware));
+            list.Add(Good("BootMode", T._("Компьютер загружается в режиме UEFI"), "UEFI", RecommendationCategory.Hardware));
             return;
         }
         if (hw.BootMode != BootMode.LegacyBios)
@@ -892,37 +847,25 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "BootMode",
-            Title = "Компьютер загружается в режиме Legacy BIOS",
-            Explanation = "Windows запускается в устаревшем режиме совместимости (Legacy BIOS, он же CSM), а не в современном UEFI. " +
-                          "С UEFI компьютер включается быстрее, а ещё этот режим обязателен для безопасной загрузки (Secure Boot) и для " +
-                          "Windows 11. Переход — сложная операция для опытных пользователей: системный диск нужно преобразовать из MBR " +
-                          "в GPT, и ошибка может оставить компьютер без загружаемой Windows. Если всё работает и Windows 11 не нужна, " +
-                          "можно ничего не менять.",
+            Title = T._("Компьютер загружается в режиме Legacy BIOS"),
+            Explanation = T._("Windows запускается в устаревшем режиме совместимости (Legacy BIOS, он же CSM), а не в современном UEFI. С UEFI компьютер включается быстрее, а ещё этот режим обязателен для безопасной загрузки (Secure Boot) и для Windows 11. Переход — сложная операция для опытных пользователей: системный диск нужно преобразовать из MBR в GPT, и ошибка может оставить компьютер без загружаемой Windows. Если всё работает и Windows 11 не нужна, можно ничего не менять."),
             Category = RecommendationCategory.Hardware,
             Kind = RecommendationKind.Manual,
             Impact = RecommendationImpact.Medium,
             Severity = IssueSeverity.Medium,
             CurrentValue = "Legacy BIOS (CSM)",
-            Gain = "Быстрее загрузка, Secure Boot и Windows 11",
+            Gain = T._("Быстрее загрузка, Secure Boot и Windows 11"),
             SettingsUri = MbrToGptGuideUri,
-            SettingsLabel = "Инструкция Microsoft",
+            SettingsLabel = T._("Инструкция Microsoft"),
             Steps = new[]
             {
-                "Это сложная и рискованная операция. Сначала сохраните важные файлы на другой диск или в облако, а лучше сделайте " +
-                "полную резервную копию системы.",
-                "Если диск зашифрован (BitLocker или «Шифрование устройства»), запишите ключ восстановления и приостановите " +
-                "защиту: Панель управления → «Шифрование диска BitLocker» → «Приостановить защиту». Иначе после переключения " +
-                "BIOS Windows потребует ключ восстановления.",
-                "Убедитесь, что материнская плата умеет загружаться в режиме UEFI: такой пункт есть в BIOS почти всех плат, " +
-                "выпущенных после 2012 года.",
-                "Запустите «Командную строку» от имени администратора и выполните mbr2gpt /validate /allowFullOS — эта команда " +
-                "только проверяет диск и ничего не меняет.",
-                "Если проверка прошла без ошибок, выполните mbr2gpt /convert /allowFullOS. Если появилась ошибка — остановитесь: " +
-                "на этом диске преобразование небезопасно.",
-                "Сразу после преобразования перезагрузите компьютер, откройте BIOS (Delete или F2) и переключите режим загрузки " +
-                "на UEFI: выключите CSM (Legacy Support) или выберите Boot Mode → UEFI. Сохраните настройки клавишей F10.",
-                "Если Windows не загружается, проверьте в BIOS, что включён режим UEFI, а первым в порядке загрузки стоит " +
-                "Windows Boot Manager.",
+                T._("Это сложная и рискованная операция. Сначала сохраните важные файлы на другой диск или в облако, а лучше сделайте полную резервную копию системы."),
+                T._("Если диск зашифрован (BitLocker или «Шифрование устройства»), запишите ключ восстановления и приостановите защиту: Панель управления → «Шифрование диска BitLocker» → «Приостановить защиту». Иначе после переключения BIOS Windows потребует ключ восстановления."),
+                T._("Убедитесь, что материнская плата умеет загружаться в режиме UEFI: такой пункт есть в BIOS почти всех плат, выпущенных после 2012 года."),
+                T._("Запустите «Командную строку» от имени администратора и выполните mbr2gpt /validate /allowFullOS — эта команда только проверяет диск и ничего не меняет."),
+                T._("Если проверка прошла без ошибок, выполните mbr2gpt /convert /allowFullOS. Если появилась ошибка — остановитесь: на этом диске преобразование небезопасно."),
+                T._("Сразу после преобразования перезагрузите компьютер, откройте BIOS (Delete или F2) и переключите режим загрузки на UEFI: выключите CSM (Legacy Support) или выберите Boot Mode → UEFI. Сохраните настройки клавишей F10."),
+                T._("Если Windows не загружается, проверьте в BIOS, что включён режим UEFI, а первым в порядке загрузки стоит Windows Boot Manager."),
             },
         });
     }
@@ -932,8 +875,8 @@ public static class RecommendationEngine
         switch (hw.VirtualizationEnabled)
         {
             case true:
-                list.Add(Good("Virtualization", "Аппаратная виртуализация включена",
-                    hw.HypervisorPresent == true ? "Работает гипервизор Windows" : null, RecommendationCategory.Hardware));
+                list.Add(Good("Virtualization", T._("Аппаратная виртуализация включена"),
+                    hw.HypervisorPresent == true ? T._("Работает гипервизор Windows") : null, RecommendationCategory.Hardware));
                 return;
             case null:
                 return;
@@ -944,30 +887,26 @@ public static class RecommendationEngine
         var name = hw.Cpu?.Name ?? "";
         var intel = name.Contains("Intel", StringComparison.OrdinalIgnoreCase);
         var amd = name.Contains("AMD", StringComparison.OrdinalIgnoreCase);
-        var tech = intel ? "Intel VT-x" : amd ? "AMD SVM" : "Intel VT-x или AMD SVM";
+        var tech = intel ? "Intel VT-x" : amd ? "AMD SVM" : T._("Intel VT-x или AMD SVM");
         list.Add(new Recommendation
         {
             Id = "Virtualization",
-            Title = "Аппаратная виртуализация выключена в BIOS",
-            Explanation = $"Виртуализация процессора ({tech}) нужна для WSL, Docker, эмуляторов Android (BlueStacks, LDPlayer, " +
-                          "эмулятор Android Studio) и виртуальных машин (VirtualBox, VMware, Hyper-V). Без неё они работают очень медленно " +
-                          "или вовсе не запускаются. Если вы такими программами не пользуетесь, ничего менять не нужно.",
+            Title = T._("Аппаратная виртуализация выключена в BIOS"),
+            Explanation = T.F("Виртуализация процессора ({0}) нужна для WSL, Docker, эмуляторов Android (BlueStacks, LDPlayer, эмулятор Android Studio) и виртуальных машин (VirtualBox, VMware, Hyper-V). Без неё они работают очень медленно или вовсе не запускаются. Если вы такими программами не пользуетесь, ничего менять не нужно.", tech),
             Category = RecommendationCategory.Hardware,
             Kind = RecommendationKind.Info,
             Impact = RecommendationImpact.Low,
             Severity = IssueSeverity.Info,
-            CurrentValue = "Выключена",
+            CurrentValue = T._("Выключена"),
             Steps = new[]
             {
-                "Перезагрузите компьютер и сразу нажимайте Delete (или F2), чтобы открыть BIOS. На ноутбуках клавиша бывает " +
-                "другой — F1, F10 или Esc.",
+                T._("Перезагрузите компьютер и сразу нажимайте Delete (или F2), чтобы открыть BIOS. На ноутбуках клавиша бывает другой — F1, F10 или Esc."),
                 intel
-                    ? "Найдите пункт Intel Virtualization Technology (VT-x) — обычно он в разделе Advanced → CPU Configuration."
+                    ? T._("Найдите пункт Intel Virtualization Technology (VT-x) — обычно он в разделе Advanced → CPU Configuration.")
                     : amd
-                        ? "Найдите пункт SVM Mode (AMD-V) — обычно он в разделе Advanced → CPU Configuration или в разделе разгона (OC, Tweaker)."
-                        : "Найдите пункт Intel Virtualization Technology (VT-x) или SVM Mode (AMD-V) — обычно он в разделе " +
-                          "Advanced → CPU Configuration.",
-                "Переключите его в Enabled и сохраните настройки клавишей F10.",
+                        ? T._("Найдите пункт SVM Mode (AMD-V) — обычно он в разделе Advanced → CPU Configuration или в разделе разгона (OC, Tweaker).")
+                        : T._("Найдите пункт Intel Virtualization Technology (VT-x) или SVM Mode (AMD-V) — обычно он в разделе Advanced → CPU Configuration."),
+                T._("Переключите его в Enabled и сохраните настройки клавишей F10."),
             },
         });
     }
@@ -986,7 +925,7 @@ public static class RecommendationEngine
             return;
         if (wear <= BatteryWearLowPercent)
         {
-            list.Add(Good("Battery", "Батарея в хорошем состоянии", $"Износ {wear:0}%", RecommendationCategory.Hardware));
+            list.Add(Good("Battery", T._("Батарея в хорошем состоянии"), T.F("Износ {0:0}%", wear), RecommendationCategory.Hardware));
             return;
         }
         var replace = wear > BatteryWearMediumPercent;
@@ -994,30 +933,26 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "Battery",
-            Title = replace ? "Батарею стоит заменить" : $"Батарея изношена на {wear:0}%",
-            Explanation = $"Полностью заряженная батарея сейчас вмещает {HardwareText.WattHours(battery.FullChargedCapacityMwh)} из " +
-                          $"{HardwareText.WattHours(battery.DesignedCapacityMwh)} — {100 - wear:0}% от ёмкости новой. " +
+            Title = replace ? T._("Батарею стоит заменить") : T.F("Батарея изношена на {0:0}%", wear),
+            Explanation = T.F("Полностью заряженная батарея сейчас вмещает {0} из {1} — {2:0}% от ёмкости новой.", HardwareText.WattHours(battery.FullChargedCapacityMwh),
+                              HardwareText.WattHours(battery.DesignedCapacityMwh), 100 - wear) + " " +
                           (replace
-                              ? "Ноутбук работает от неё заметно меньше, чем раньше, а сильно изношенная батарея может внезапно " +
-                                "отключаться под нагрузкой. Замена вернёт прежнее время работы."
-                              : "Это обычный износ за несколько лет работы. Менять её пока не обязательно, но если ноутбук держит " +
-                                "заряд слишком мало, замена вернёт прежнее время работы."),
+                              ? T._("Ноутбук работает от неё заметно меньше, чем раньше, а сильно изношенная батарея может внезапно отключаться под нагрузкой. Замена вернёт прежнее время работы.")
+                              : T._("Это обычный износ за несколько лет работы. Менять её пока не обязательно, но если ноутбук держит заряд слишком мало, замена вернёт прежнее время работы.")),
             Category = RecommendationCategory.Hardware,
             Kind = RecommendationKind.Manual,
             Impact = impact,
             Severity = SeverityOf(impact),
-            CurrentValue = $"Износ {wear:0}%",
-            Gain = "Дольше работа без зарядки",
+            CurrentValue = T.F("Износ {0:0}%", wear),
+            Gain = T._("Дольше работа без зарядки"),
             SettingsUri = BatteryReportUri,
-            SettingsLabel = "Отчёт о батарее",
+            SettingsLabel = T._("Отчёт о батарее"),
             Steps = new[]
             {
-                "Нажмите «Отчёт о батарее» — Windows покажет историю ёмкости и время работы от батареи.",
-                "Найдите батарею для своей модели ноутбука (модель указана на наклейке снизу) — лучше оригинальную или от " +
-                "проверенного продавца.",
-                "Если батарея встроенная и не снимается, замените её в сервисном центре.",
-                "Чтобы новая батарея изнашивалась медленнее, включите в фирменной программе ноутбука ограничение заряда до 80%, " +
-                "если оно есть.",
+                T._("Нажмите «Отчёт о батарее» — Windows покажет историю ёмкости и время работы от батареи."),
+                T._("Найдите батарею для своей модели ноутбука (модель указана на наклейке снизу) — лучше оригинальную или от проверенного продавца."),
+                T._("Если батарея встроенная и не снимается, замените её в сервисном центре."),
+                T._("Чтобы новая батарея изнашивалась медленнее, включите в фирменной программе ноутбука ограничение заряда до 80%, если оно есть."),
             },
         });
     }
@@ -1037,7 +972,7 @@ public static class RecommendationEngine
         {
             if (kind is PowerPlanKind.HighPerformance or PowerPlanKind.UltimatePerformance)
             {
-                list.Add(Good("PowerPlan", "Включён производительный план электропитания", current, RecommendationCategory.Windows,
+                list.Add(Good("PowerPlan", T._("Включён производительный план электропитания"), current, RecommendationCategory.Windows,
                     TweakIds.PowerPlan));
                 return;
             }
@@ -1047,11 +982,8 @@ public static class RecommendationEngine
             var saver = kind == PowerPlanKind.PowerSaver;
             var impact = saver ? RecommendationImpact.High : RecommendationImpact.Medium;
             var why = saver
-                ? "План «Экономия энергии» ограничивает частоту процессора — компьютер работает заметно медленнее, чем может. " +
-                  "На настольном ПК экономия электричества копеечная, а потеря скорости ощутимая."
-                : $"Сейчас активен план «{current}»: в простое процессор снижает частоту и разгоняется с небольшой задержкой. " +
-                  "Производительный план держит процессор наготове — система откликается быстрее, а частота кадров в играх стабильнее. " +
-                  "Для настольного ПК это безопасно, расход электричества вырастет немного.";
+                ? T._("План «Экономия энергии» ограничивает частоту процессора — компьютер работает заметно медленнее, чем может. На настольном ПК экономия электричества копеечная, а потеря скорости ощутимая.")
+                : T.F("Сейчас активен план «{0}»: в простое процессор снижает частоту и разгоняется с небольшой задержкой. Производительный план держит процессор наготове — система откликается быстрее, а частота кадров в играх стабильнее. Для настольного ПК это безопасно, расход электричества вырастет немного.", current);
             var target = Find(PowerPlanKind.UltimatePerformance) ?? Find(PowerPlanKind.HighPerformance);
             if (target is not null)
             {
@@ -1059,21 +991,20 @@ public static class RecommendationEngine
                 list.Add(new Recommendation
                 {
                     Id = "PowerPlan",
-                    Title = $"Включите план электропитания «{targetName}»",
+                    Title = T.F("Включите план электропитания «{0}»", targetName),
                     Explanation = why,
                     Category = RecommendationCategory.Windows,
                     Kind = RecommendationKind.AutoFix,
                     Impact = impact,
                     Severity = SeverityOf(impact),
                     CurrentValue = current,
-                    Gain = "Быстрее отклик и стабильнее частоты процессора",
+                    Gain = T._("Быстрее отклик и стабильнее частоты процессора"),
                     FixId = TweakIds.PowerPlan,
                     FixArgument = target.Guid,
-                    ApplySummary = $"• Будет включён план электропитания «{targetName}» (сейчас «{current}»).\n" +
-                                   $"• Команда: powercfg /setactive {target.Guid}",
+                    ApplySummary = T.F("• Будет включён план электропитания «{0}» (сейчас «{1}»).\n• Команда: powercfg /setactive {2}", targetName, current, target.Guid),
                     IsSafe = true,
                     SettingsUri = "powercfg.cpl",
-                    SettingsLabel = "Электропитание",
+                    SettingsLabel = T._("Электропитание"),
                 });
             }
             else
@@ -1081,21 +1012,21 @@ public static class RecommendationEngine
                 list.Add(new Recommendation
                 {
                     Id = "PowerPlan",
-                    Title = "Включите режим максимальной производительности",
-                    Explanation = why + " Производительного плана в списке нет, но в Windows 11 можно выбрать режим питания.",
+                    Title = T._("Включите режим максимальной производительности"),
+                    Explanation = why + " " + T._("Производительного плана в списке нет, но в Windows 11 можно выбрать режим питания."),
                     Category = RecommendationCategory.Windows,
                     Kind = RecommendationKind.Manual,
                     Impact = impact,
                     Severity = SeverityOf(impact),
                     CurrentValue = current,
-                    Gain = "Быстрее отклик системы",
+                    Gain = T._("Быстрее отклик системы"),
                     SettingsUri = PowerUri,
-                    SettingsLabel = "Открыть параметры питания",
+                    SettingsLabel = T._("Открыть параметры питания"),
                     Steps = new[]
                     {
-                        "Нажмите «Открыть параметры питания» (Параметры → Система → Питание).",
-                        "В пункте «Режим питания» выберите «Максимальная производительность».",
-                        "В Windows 10 откройте «Панель управления → Электропитание» и выберите «Высокая производительность».",
+                        T._("Нажмите «Открыть параметры питания» (Параметры → Система → Питание)."),
+                        T._("В пункте «Режим питания» выберите «Максимальная производительность»."),
+                        T._("В Windows 10 откройте «Панель управления → Электропитание» и выберите «Высокая производительность»."),
                     },
                 });
             }
@@ -1111,22 +1042,19 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "PowerPlan",
-                Title = "Включите сбалансированный план электропитания",
-                Explanation = "План «Экономия энергии» сильно ограничивает процессор — ноутбук работает медленнее. " +
-                              "«Сбалансированный» план сам снижает частоты в простое и экономит батарею почти так же хорошо, " +
-                              "но не мешает работе.",
+                Title = T._("Включите сбалансированный план электропитания"),
+                Explanation = T._("План «Экономия энергии» сильно ограничивает процессор — ноутбук работает медленнее. «Сбалансированный» план сам снижает частоты в простое и экономит батарею почти так же хорошо, но не мешает работе."),
                 Category = RecommendationCategory.Windows,
                 Kind = RecommendationKind.AutoFix,
                 Impact = RecommendationImpact.Medium,
                 Severity = IssueSeverity.Medium,
                 CurrentValue = current,
-                Gain = "Ноутбук работает быстрее",
+                Gain = T._("Ноутбук работает быстрее"),
                 FixId = TweakIds.PowerPlan,
                 FixArgument = balanced.Guid,
-                ApplySummary = $"• Будет включён план электропитания «{PowerPlans.DisplayName(balanced)}» (сейчас «{current}»).\n" +
-                               $"• Команда: powercfg /setactive {balanced.Guid}",
+                ApplySummary = T.F("• Будет включён план электропитания «{0}» (сейчас «{1}»).\n• Команда: powercfg /setactive {2}", PowerPlans.DisplayName(balanced), current, balanced.Guid),
                 SettingsUri = "powercfg.cpl",
-                SettingsLabel = "Электропитание",
+                SettingsLabel = T._("Электропитание"),
             });
             return;
         }
@@ -1138,21 +1066,19 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "PowerPlan",
-                Title = "Ноутбук работает от батареи в режиме максимальной производительности",
-                Explanation = $"План «{current}» не даёт процессору экономить энергию, поэтому батарея садится заметно быстрее. " +
-                              "Для работы от батареи лучше «Сбалансированный» план, а производительный включайте, когда ноутбук на зарядке.",
+                Title = T._("Ноутбук работает от батареи в режиме максимальной производительности"),
+                Explanation = T.F("План «{0}» не даёт процессору экономить энергию, поэтому батарея садится заметно быстрее. Для работы от батареи лучше «Сбалансированный» план, а производительный включайте, когда ноутбук на зарядке.", current),
                 Category = RecommendationCategory.Windows,
                 Kind = RecommendationKind.AutoFix,
                 Impact = RecommendationImpact.Low,
                 Severity = IssueSeverity.Low,
-                CurrentValue = current + ", от батареи",
-                Gain = "Дольше работа от батареи",
+                CurrentValue = T.F("{0}, от батареи", current),
+                Gain = T._("Дольше работа от батареи"),
                 FixId = TweakIds.PowerPlan,
                 FixArgument = balanced.Guid,
-                ApplySummary = $"• Будет включён план электропитания «{PowerPlans.DisplayName(balanced)}» (сейчас «{current}»).\n" +
-                               $"• Команда: powercfg /setactive {balanced.Guid}",
+                ApplySummary = T.F("• Будет включён план электропитания «{0}» (сейчас «{1}»).\n• Команда: powercfg /setactive {2}", PowerPlans.DisplayName(balanced), current, balanced.Guid),
                 SettingsUri = "powercfg.cpl",
-                SettingsLabel = "Электропитание",
+                SettingsLabel = T._("Электропитание"),
             });
             return;
         }
@@ -1161,54 +1087,50 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "PowerPlanLaptopAc",
-                Title = "Для игр на зарядке можно включить максимальную производительность",
-                Explanation = "Сбалансированный план — правильный выбор для ноутбука. Но когда ноутбук подключён к сети и вы играете " +
-                              "или работаете в тяжёлых программах, режим максимальной производительности может прибавить скорости. " +
-                              "Не забудьте вернуть обычный режим при работе от батареи.",
+                Title = T._("Для игр на зарядке можно включить максимальную производительность"),
+                Explanation = T._("Сбалансированный план — правильный выбор для ноутбука. Но когда ноутбук подключён к сети и вы играете или работаете в тяжёлых программах, режим максимальной производительности может прибавить скорости. Не забудьте вернуть обычный режим при работе от батареи."),
                 Category = RecommendationCategory.Windows,
                 Kind = RecommendationKind.Info,
                 Impact = RecommendationImpact.Low,
                 Severity = IssueSeverity.Info,
-                CurrentValue = current + ", от сети",
+                CurrentValue = T.F("{0}, от сети", current),
                 SettingsUri = PowerUri,
-                SettingsLabel = "Открыть параметры питания",
+                SettingsLabel = T._("Открыть параметры питания"),
                 Steps = new[]
                 {
-                    "Нажмите «Открыть параметры питания» (Параметры → Система → Питание и батарея).",
-                    "В пункте «Режим питания» выберите «Максимальная производительность» — Windows запомнит его отдельно для работы от сети.",
+                    T._("Нажмите «Открыть параметры питания» (Параметры → Система → Питание и батарея)."),
+                    T._("В пункте «Режим питания» выберите «Максимальная производительность» — Windows запомнит его отдельно для работы от сети."),
                 },
             });
             return;
         }
         if (kind is PowerPlanKind.Balanced or PowerPlanKind.HighPerformance or PowerPlanKind.UltimatePerformance)
-            list.Add(Good("PowerPlan", "План электропитания подходит для ноутбука", current, RecommendationCategory.Windows, TweakIds.PowerPlan));
+            list.Add(Good("PowerPlan", T._("План электропитания подходит для ноутбука"), current, RecommendationCategory.Windows, TweakIds.PowerPlan));
     }
 
     private static void AddGameMode(List<Recommendation> list, SettingsSnapshot s)
     {
         if (s.GameModeEnabled)
         {
-            list.Add(Good("GameMode", "Игровой режим Windows включён", null, RecommendationCategory.Games, TweakIds.GameMode));
+            list.Add(Good("GameMode", T._("Игровой режим Windows включён"), null, RecommendationCategory.Games, TweakIds.GameMode));
             return;
         }
         list.Add(new Recommendation
         {
             Id = "GameMode",
-            Title = "Включите игровой режим Windows",
-            Explanation = "Игровой режим отдаёт приоритет запущенной игре: Windows не устанавливает обновления драйверов и не показывает " +
-                          "уведомления о перезагрузке во время игры, а фоновые задачи получают меньше ресурсов. Это стандартная " +
-                          "функция Windows — включать её безопасно.",
+            Title = T._("Включите игровой режим Windows"),
+            Explanation = T._("Игровой режим отдаёт приоритет запущенной игре: Windows не устанавливает обновления драйверов и не показывает уведомления о перезагрузке во время игры, а фоновые задачи получают меньше ресурсов. Это стандартная функция Windows — включать её безопасно."),
             Category = RecommendationCategory.Games,
             Kind = RecommendationKind.AutoFix,
             Impact = RecommendationImpact.Medium,
             Severity = IssueSeverity.Medium,
-            CurrentValue = "Выключен",
-            Gain = "Больше ресурсов для игр",
+            CurrentValue = T._("Выключен"),
+            Gain = T._("Больше ресурсов для игр"),
             FixId = TweakIds.GameMode,
-            ApplySummary = "• Будет включён игровой режим Windows.\n" + RegistryTweaks.Describe(RegistryTweaks.GameMode),
+            ApplySummary = T._("• Будет включён игровой режим Windows.") + "\n" + RegistryTweaks.Describe(RegistryTweaks.GameMode),
             IsSafe = true,
             SettingsUri = GameModeUri,
-            SettingsLabel = "Открыть параметры",
+            SettingsLabel = T._("Открыть параметры"),
         });
     }
 
@@ -1216,7 +1138,7 @@ public static class RecommendationEngine
     {
         if (!s.GameDvrActive)
         {
-            list.Add(Good("GameDvr", "Запись игр Xbox Game Bar отключена", null, RecommendationCategory.Games, TweakIds.GameDvr));
+            list.Add(Good("GameDvr", T._("Запись игр Xbox Game Bar отключена"), null, RecommendationCategory.Games, TweakIds.GameDvr));
             return;
         }
         // "Record what happened" (HistoricalCaptureEnabled, off by default) records the last minutes of every game all the time:
@@ -1226,26 +1148,22 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "GameDvr",
-            Title = background ? "Отключите фоновую запись игр Xbox Game Bar" : "Отключите запись игр Xbox Game Bar, если не пользуетесь ей",
+            Title = background ? T._("Отключите фоновую запись игр Xbox Game Bar") : T._("Отключите запись игр Xbox Game Bar, если не пользуетесь ей"),
             Explanation = background
-                ? "Включена фоновая запись: Xbox Game Bar постоянно записывает последние минуты игры, чтобы их можно было сохранить. " +
-                  "Это нагружает видеокарту и диск и может отнимать FPS, особенно на слабых видеокартах. Если вы не сохраняете клипы " +
-                  "через Win+Alt+G, запись лучше выключить. Само меню Game Bar (Win+G) продолжит открываться."
-                : "Постоянная фоновая запись выключена, но функция записи игр (Game DVR) включена и запускается вместе с играми. " +
-                  "Если вы не записываете клипы через Win+Alt+R, её можно выключить — на слабых компьютерах это иногда добавляет " +
-                  "пару FPS. Само меню Game Bar (Win+G) продолжит открываться.",
+                ? T._("Включена фоновая запись: Xbox Game Bar постоянно записывает последние минуты игры, чтобы их можно было сохранить. Это нагружает видеокарту и диск и может отнимать FPS, особенно на слабых видеокартах. Если вы не сохраняете клипы через Win+Alt+G, запись лучше выключить. Само меню Game Bar (Win+G) продолжит открываться.")
+                : T._("Постоянная фоновая запись выключена, но функция записи игр (Game DVR) включена и запускается вместе с играми. Если вы не записываете клипы через Win+Alt+R, её можно выключить — на слабых компьютерах это иногда добавляет пару FPS. Само меню Game Bar (Win+G) продолжит открываться."),
             Category = RecommendationCategory.Games,
             Kind = RecommendationKind.AutoFix,
             Impact = impact,
             Severity = SeverityOf(impact),
-            CurrentValue = background ? "Идёт фоновая запись" : "Запись клипов включена, фоновая запись выключена",
-            Gain = "Может прибавить FPS в играх",
+            CurrentValue = background ? T._("Идёт фоновая запись") : T._("Запись клипов включена, фоновая запись выключена"),
+            Gain = T._("Может прибавить FPS в играх"),
             FixId = TweakIds.GameDvr,
-            ApplySummary = "• Будет отключена запись игр Xbox Game Bar (Game DVR).\n" + RegistryTweaks.Describe(RegistryTweaks.GameDvr),
-            AfterApplyNote = "Скриншоты и запись клипов через Xbox Game Bar будут недоступны, пока вы не вернёте настройку.",
+            ApplySummary = T._("• Будет отключена запись игр Xbox Game Bar (Game DVR).") + "\n" + RegistryTweaks.Describe(RegistryTweaks.GameDvr),
+            AfterApplyNote = T._("Скриншоты и запись клипов через Xbox Game Bar будут недоступны, пока вы не вернёте настройку."),
             IsSafe = true,
             SettingsUri = CapturesUri,
-            SettingsLabel = "Открыть параметры",
+            SettingsLabel = T._("Открыть параметры"),
         });
     }
 
@@ -1256,15 +1174,15 @@ public static class RecommendationEngine
             return;
         if (s.HagsRegistryMode == 2)
         {
-            list.Add(Good("Hags", "Планирование GPU с аппаратным ускорением включено",
-                s.HagsActive == false ? "Включится после перезагрузки" : null, RecommendationCategory.Games, TweakIds.Hags));
+            list.Add(Good("Hags", T._("Планирование GPU с аппаратным ускорением включено"),
+                s.HagsActive == false ? T._("Включится после перезагрузки") : null, RecommendationCategory.Games, TweakIds.Hags));
             return;
         }
         var off = s.HagsRegistryMode == 1 || (s.HagsRegistryMode is null && s.HagsActive == false);
         if (!off)
         {
             if (s.HagsActive == true)
-                list.Add(Good("Hags", "Планирование GPU с аппаратным ускорением включено", null, RecommendationCategory.Games, TweakIds.Hags));
+                list.Add(Good("Hags", T._("Планирование GPU с аппаратным ускорением включено"), null, RecommendationCategory.Games, TweakIds.Hags));
             return;
         }
         var frameGen = hw.RealGpus.Any(GpuClassifier.IsFrameGenerationCapable);
@@ -1272,28 +1190,26 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "Hags",
-            Title = "Включите планирование GPU с аппаратным ускорением",
-            Explanation = "Видеокарта сама управляет очередью своих задач вместо процессора. Это немного снижает задержки и нагрузку " +
-                          "на процессор, а для DLSS Frame Generation на видеокартах NVIDIA RTX 40 и новее — обязательно. " +
-                          "Эффект зависит от игры: если появятся проблемы, верните настройку.",
+            Title = T._("Включите планирование GPU с аппаратным ускорением"),
+            Explanation = T._("Видеокарта сама управляет очередью своих задач вместо процессора. Это немного снижает задержки и нагрузку на процессор, а для DLSS Frame Generation на видеокартах NVIDIA RTX 40 и новее — обязательно. Эффект зависит от игры: если появятся проблемы, верните настройку."),
             Category = RecommendationCategory.Games,
             Kind = RecommendationKind.AutoFix,
             Impact = impact,
             Severity = SeverityOf(impact),
-            CurrentValue = "Выключено",
-            Gain = "Меньше задержек в играх",
+            CurrentValue = T._("Выключено"),
+            Gain = T._("Меньше задержек в играх"),
             FixId = TweakIds.Hags,
-            ApplySummary = "• Будет включено планирование GPU с аппаратным ускорением.\n" + RegistryTweaks.Describe(RegistryTweaks.Hags),
-            AfterApplyNote = "Изменение вступит в силу после перезагрузки компьютера.",
+            ApplySummary = T._("• Будет включено планирование GPU с аппаратным ускорением.") + "\n" + RegistryTweaks.Describe(RegistryTweaks.Hags),
+            AfterApplyNote = T._("Изменение вступит в силу после перезагрузки компьютера."),
             NeedsAdmin = true,
             NeedsRestart = true,
             SettingsUri = GraphicsUri,
-            SettingsLabel = "Открыть параметры графики",
+            SettingsLabel = T._("Открыть параметры графики"),
             Steps = new[]
             {
-                "Нажмите «Открыть параметры графики» (Параметры → Система → Дисплей → Графика).",
-                "Откройте «Изменить стандартные параметры графики» (в Windows 10 — пункт сразу на странице).",
-                "Включите «Планирование графического процессора с аппаратным ускорением» и перезагрузите компьютер.",
+                T._("Нажмите «Открыть параметры графики» (Параметры → Система → Дисплей → Графика)."),
+                T._("Откройте «Изменить стандартные параметры графики» (в Windows 10 — пункт сразу на странице)."),
+                T._("Включите «Планирование графического процессора с аппаратным ускорением» и перезагрузите компьютер."),
             },
         });
     }
@@ -1302,18 +1218,18 @@ public static class RecommendationEngine
     {
         var parts = new List<string>();
         if (RamBelow(hw, 8))
-            parts.Add($"всего {HardwareText.Gb(hw.TotalRamBytes)} памяти");
+            parts.Add(T.F("всего {0} памяти", HardwareText.Gb(hw.TotalRamBytes)));
         if (hw.Cpu is { LogicalProcessors: > 0 and <= 4 } cpu)
-            parts.Add($"процессор с {cpu.LogicalProcessors} {Format.Plural(cpu.LogicalProcessors, "потоком", "потоками", "потоками")}");
-        return string.Join(" и ", parts);
+            parts.Add(T.F("процессор с {0} {1}", cpu.LogicalProcessors, Format.Plural(cpu.LogicalProcessors, "потоком", "потоками", "потоками")));
+        return parts.Count == 2 ? T.F("{0} и {1}", parts[0], parts[1]) : string.Join("", parts);
     }
 
     private static string VisualFxText(int? value) => value switch
     {
-        1 => "Наилучший вид",
-        2 => "Наилучшее быстродействие",
-        3 => "Особые эффекты",
-        _ => "Выбирается Windows автоматически",
+        1 => T._("Наилучший вид"),
+        2 => T._("Наилучшее быстродействие"),
+        3 => T._("Особые эффекты"),
+        _ => T._("Выбирается Windows автоматически"),
     };
 
     private static void AddVisualEffects(List<Recommendation> list, HardwareSnapshot hw, SettingsSnapshot s)
@@ -1321,7 +1237,7 @@ public static class RecommendationEngine
         var weak = IsWeakPc(hw);
         if (s.VisualFxSetting == 2)
         {
-            list.Add(Good("VisualFx", "Визуальные эффекты настроены на быстродействие", VisualFxText(2), RecommendationCategory.Windows,
+            list.Add(Good("VisualFx", T._("Визуальные эффекты настроены на быстродействие"), VisualFxText(2), RecommendationCategory.Windows,
                 TweakIds.VisualEffects));
             return;
         }
@@ -1330,31 +1246,27 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "VisualFx",
-            Title = "Упростите визуальные эффекты Windows",
-            Explanation = $"На этом компьютере {WeakReason(hw)}. Анимации окон и другие визуальные эффекты отнимают ресурсы — без них " +
-                          "окна сворачиваются и открываются быстрее. «Применить» выключит анимацию окон и панели задач (подействует после " +
-                          "выхода из системы и повторного входа); остальные эффекты, например тени и плавное появление меню, можно " +
-                          "выключить в «Параметрах быстродействия» — см. «Как сделать».",
+            Title = T._("Упростите визуальные эффекты Windows"),
+            Explanation = T.F("На этом компьютере {0}. Анимации окон и другие визуальные эффекты отнимают ресурсы — без них окна сворачиваются и открываются быстрее. «Применить» выключит анимацию окон и панели задач (подействует после выхода из системы и повторного входа); остальные эффекты, например тени и плавное появление меню, можно выключить в «Параметрах быстродействия» — см. «Как сделать».", WeakReason(hw)),
             Category = RecommendationCategory.Windows,
             Kind = RecommendationKind.AutoFix,
             Impact = RecommendationImpact.Medium,
             Severity = IssueSeverity.Medium,
             CurrentValue = VisualFxText(s.VisualFxSetting),
-            Gain = "Отзывчивее интерфейс",
+            Gain = T._("Отзывчивее интерфейс"),
             FixId = TweakIds.VisualEffects,
-            ApplySummary = "• Будет выключена анимация сворачивания и разворачивания окон и анимация панели задач, а в окне " +
-                           "«Параметры быстродействия» будет отмечен режим «Обеспечить наилучшее быстродействие».\n" +
+            ApplySummary = T._("• Будет выключена анимация сворачивания и разворачивания окон и анимация панели задач, а в окне «Параметры быстродействия» будет отмечен режим «Обеспечить наилучшее быстродействие».") + "\n" +
                            RegistryTweaks.Describe(RegistryTweaks.VisualEffects),
-            AfterApplyNote = "Изменения полностью вступят в силу после выхода из системы и повторного входа.",
+            AfterApplyNote = T._("Изменения полностью вступят в силу после выхода из системы и повторного входа."),
             IsSafe = true,
             SettingsUri = PerformanceOptions,
-            SettingsLabel = "Параметры быстродействия",
+            SettingsLabel = T._("Параметры быстродействия"),
             Steps = new[]
             {
-                "Нажмите «Параметры быстродействия» — откроется окно «Визуальные эффекты».",
-                "Выберите «Обеспечить наилучшее быстродействие».",
-                "При желании отметьте «Сглаживание неровностей экранных шрифтов» и «Вывод эскизов вместо значков» — они почти не нагружают систему.",
-                "Нажмите «ОК».",
+                T._("Нажмите «Параметры быстродействия» — откроется окно «Визуальные эффекты»."),
+                T._("Выберите «Обеспечить наилучшее быстродействие»."),
+                T._("При желании отметьте «Сглаживание неровностей экранных шрифтов» и «Вывод эскизов вместо значков» — они почти не нагружают систему."),
+                T._("Нажмите «ОК»."),
             },
         });
     }
@@ -1365,26 +1277,25 @@ public static class RecommendationEngine
             return;
         if (!s.TransparencyEnabled)
         {
-            list.Add(Good("Transparency", "Эффекты прозрачности отключены", null, RecommendationCategory.Windows, TweakIds.Transparency));
+            list.Add(Good("Transparency", T._("Эффекты прозрачности отключены"), null, RecommendationCategory.Windows, TweakIds.Transparency));
             return;
         }
         list.Add(new Recommendation
         {
             Id = "Transparency",
-            Title = "Отключите эффекты прозрачности",
-            Explanation = "Полупрозрачные меню «Пуск», панель задач и окна дополнительно нагружают видеокарту. На слабом компьютере " +
-                          "их отключение делает интерфейс чуть отзывчивее, а внешний вид почти не меняется.",
+            Title = T._("Отключите эффекты прозрачности"),
+            Explanation = T._("Полупрозрачные меню «Пуск», панель задач и окна дополнительно нагружают видеокарту. На слабом компьютере их отключение делает интерфейс чуть отзывчивее, а внешний вид почти не меняется."),
             Category = RecommendationCategory.Windows,
             Kind = RecommendationKind.AutoFix,
             Impact = RecommendationImpact.Low,
             Severity = IssueSeverity.Low,
-            CurrentValue = "Включены",
-            Gain = "Чуть отзывчивее интерфейс",
+            CurrentValue = T._("Включены"),
+            Gain = T._("Чуть отзывчивее интерфейс"),
             FixId = TweakIds.Transparency,
-            ApplySummary = "• Будут отключены эффекты прозрачности.\n" + RegistryTweaks.Describe(RegistryTweaks.Transparency),
+            ApplySummary = T._("• Будут отключены эффекты прозрачности.") + "\n" + RegistryTweaks.Describe(RegistryTweaks.Transparency),
             IsSafe = true,
             SettingsUri = ColorsUri,
-            SettingsLabel = "Открыть параметры",
+            SettingsLabel = T._("Открыть параметры"),
         });
     }
 
@@ -1396,24 +1307,22 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "Pagefile",
-                Title = "Файл подкачки отключён",
-                Explanation = "Без файла подкачки при нехватке памяти программы и игры могут внезапно закрываться с ошибкой, даже если " +
-                              "памяти вроде бы достаточно. Рекомендуется вернуть автоматический размер — Windows сама решит, сколько " +
-                              "места на диске для этого нужно.",
+                Title = T._("Файл подкачки отключён"),
+                Explanation = T._("Без файла подкачки при нехватке памяти программы и игры могут внезапно закрываться с ошибкой, даже если памяти вроде бы достаточно. Рекомендуется вернуть автоматический размер — Windows сама решит, сколько места на диске для этого нужно."),
                 Category = RecommendationCategory.Windows,
                 Kind = RecommendationKind.Manual,
                 Impact = impact,
                 Severity = SeverityOf(impact),
-                CurrentValue = "Отключён",
-                Gain = "Меньше вылетов при нехватке памяти",
+                CurrentValue = T._("Отключён"),
+                Gain = T._("Меньше вылетов при нехватке памяти"),
                 SettingsUri = PerformanceOptions,
-                SettingsLabel = "Параметры быстродействия",
+                SettingsLabel = T._("Параметры быстродействия"),
                 Steps = new[]
                 {
-                    "Нажмите «Параметры быстродействия».",
-                    "Перейдите на вкладку «Дополнительно» и в блоке «Виртуальная память» нажмите «Изменить».",
-                    "Отметьте «Автоматически выбирать объём файла подкачки» и нажмите «ОК».",
-                    "Перезагрузите компьютер.",
+                    T._("Нажмите «Параметры быстродействия»."),
+                    T._("Перейдите на вкладку «Дополнительно» и в блоке «Виртуальная память» нажмите «Изменить»."),
+                    T._("Отметьте «Автоматически выбирать объём файла подкачки» и нажмите «ОК»."),
+                    T._("Перезагрузите компьютер."),
                 },
             });
             return;
@@ -1428,35 +1337,32 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "PagefileUsage",
-                Title = "Активно используется файл подкачки",
-                Explanation = $"Файл подкачки заполнен на {Format.Percent(Math.Round(usage))}: {used} из {allocated}. Windows переносит туда " +
-                              "то, что не помещается в оперативную память, а диск намного медленнее памяти — отсюда подтормаживания. " +
-                              "Это признак того, что оперативной памяти не хватает для ваших задач." +
-                              (onHdd ? " К тому же файл подкачки лежит на медленном жёстком диске (HDD) — это тормозит систему ещё сильнее." : ""),
+                Title = T._("Активно используется файл подкачки"),
+                Explanation = T.F("Файл подкачки заполнен на {0}: {1} из {2}. Windows переносит туда то, что не помещается в оперативную память, а диск намного медленнее памяти — отсюда подтормаживания. Это признак того, что оперативной памяти не хватает для ваших задач.", Format.Percent(Math.Round(usage)), used, allocated) +
+                              (onHdd ? " " + T._("К тому же файл подкачки лежит на медленном жёстком диске (HDD) — это тормозит систему ещё сильнее.") : ""),
                 Category = RecommendationCategory.Windows,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.Low,
                 Severity = IssueSeverity.Low,
-                CurrentValue = $"Занято {used} из {allocated}",
-                Gain = "Меньше подтормаживаний",
+                CurrentValue = T.F("Занято {0} из {1}", used, allocated),
+                Gain = T._("Меньше подтормаживаний"),
                 NavigateKey = "Processes",
-                NavigateLabel = "Открыть «Процессы»",
+                NavigateLabel = T._("Открыть «Процессы»"),
                 SettingsUri = PerformanceOptions,
-                SettingsLabel = "Параметры быстродействия",
+                SettingsLabel = T._("Параметры быстродействия"),
                 Steps = new[]
                 {
-                    "Закройте программы, которые занимают много памяти, — их видно в разделе «Процессы».",
-                    "Если так бывает постоянно, добавьте оперативной памяти — это самое действенное решение.",
-                    "Держите файл подкачки на SSD. Если он сейчас на жёстком диске, перенесите его: «Параметры быстродействия» → " +
-                    "«Дополнительно» → «Виртуальная память» → «Изменить».",
+                    T._("Закройте программы, которые занимают много памяти, — их видно в разделе «Процессы»."),
+                    T._("Если так бывает постоянно, добавьте оперативной памяти — это самое действенное решение."),
+                    T._("Держите файл подкачки на SSD. Если он сейчас на жёстком диске, перенесите его: «Параметры быстродействия» → «Дополнительно» → «Виртуальная память» → «Изменить»."),
                 },
             });
             return;
         }
         if (s.PagefileAutomatic == true || s.PagefileCount > 0)
         {
-            list.Add(Good("Pagefile", "Файл подкачки включён",
-                s.PagefileAutomatic == true ? "Размер выбирается автоматически" : "Размер задан вручную", RecommendationCategory.Windows));
+            list.Add(Good("Pagefile", T._("Файл подкачки включён"),
+                s.PagefileAutomatic == true ? T._("Размер выбирается автоматически") : T._("Размер задан вручную"), RecommendationCategory.Windows));
         }
     }
 
@@ -1467,25 +1373,21 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "FastStartup",
-            Title = "Включён быстрый запуск Windows",
-            Explanation = "Плюс: после «Завершения работы» компьютер включается быстрее. Минус: Windows выключается не полностью — " +
-                          "ядро системы и драйверы сохраняются на диск, как при гибернации. Поэтому часть обновлений и новых драйверов " +
-                          "применяется только после «Перезагрузки», после включения иногда сбоят устройства, а если на компьютере есть " +
-                          "вторая система (Linux или другая Windows), диск с Windows может оказаться недоступным. Если всё работает " +
-                          "нормально, оставьте как есть.",
+            Title = T._("Включён быстрый запуск Windows"),
+            Explanation = T._("Плюс: после «Завершения работы» компьютер включается быстрее. Минус: Windows выключается не полностью — ядро системы и драйверы сохраняются на диск, как при гибернации. Поэтому часть обновлений и новых драйверов применяется только после «Перезагрузки», после включения иногда сбоят устройства, а если на компьютере есть вторая система (Linux или другая Windows), диск с Windows может оказаться недоступным. Если всё работает нормально, оставьте как есть."),
             Category = RecommendationCategory.Windows,
             Kind = RecommendationKind.Info,
             Impact = RecommendationImpact.Low,
             Severity = IssueSeverity.Info,
-            CurrentValue = "Включён",
+            CurrentValue = T._("Включён"),
             SettingsUri = "powercfg.cpl",
-            SettingsLabel = "Электропитание",
+            SettingsLabel = T._("Электропитание"),
             Steps = new[]
             {
-                "Нажмите «Электропитание» (Панель управления → Электропитание).",
-                "Слева выберите «Действия кнопок питания».",
-                "Нажмите «Изменение параметров, которые сейчас недоступны» — для этого нужны права администратора.",
-                "Снимите флажок «Включить быстрый запуск (рекомендуется)» и нажмите «Сохранить изменения».",
+                T._("Нажмите «Электропитание» (Панель управления → Электропитание)."),
+                T._("Слева выберите «Действия кнопок питания»."),
+                T._("Нажмите «Изменение параметров, которые сейчас недоступны» — для этого нужны права администратора."),
+                T._("Снимите флажок «Включить быстрый запуск (рекомендуется)» и нажмите «Сохранить изменения»."),
             },
         });
     }
@@ -1497,22 +1399,21 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "PendingReboot",
-                Title = "Windows ждёт перезагрузки, чтобы завершить обновление",
-                Explanation = "Установленные обновления применятся только после перезагрузки. До этого часть системных файлов работает " +
-                              "в промежуточном состоянии, а новые обновления могут не устанавливаться.",
+                Title = T._("Windows ждёт перезагрузки, чтобы завершить обновление"),
+                Explanation = T._("Установленные обновления применятся только после перезагрузки. До этого часть системных файлов работает в промежуточном состоянии, а новые обновления могут не устанавливаться."),
                 Category = RecommendationCategory.Maintenance,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.Medium,
                 Severity = IssueSeverity.Medium,
-                CurrentValue = s.Uptime > TimeSpan.Zero ? $"Без перезагрузки: {Format.Duration(s.Uptime)}" : null,
-                Gain = "Завершится установка обновлений",
+                CurrentValue = s.Uptime > TimeSpan.Zero ? T.F("Без перезагрузки: {0}", Format.Duration(s.Uptime)) : null,
+                Gain = T._("Завершится установка обновлений"),
                 OffersRestart = true,
                 SettingsUri = UpdateUri,
-                SettingsLabel = "Центр обновления",
+                SettingsLabel = T._("Центр обновления"),
                 Steps = new[]
                 {
-                    "Сохраните открытые документы.",
-                    "Нажмите «Пуск» → «Выключение» → «Обновить и перезагрузить» (или просто «Перезагрузка»).",
+                    T._("Сохраните открытые документы."),
+                    T._("Нажмите «Пуск» → «Выключение» → «Обновить и перезагрузить» (или просто «Перезагрузка»)."),
                 },
             });
             return;
@@ -1522,27 +1423,25 @@ public static class RecommendationEngine
             list.Add(new Recommendation
             {
                 Id = "Uptime",
-                Title = $"Компьютер не перезагружался {HardwareText.DaysText(s.Uptime)}",
-                Explanation = "За долгую работу накапливаются утечки памяти и зависшие процессы, а часть обновлений ждёт перезагрузки. " +
-                              "Перезагрузка раз в несколько дней освежает систему. Учтите: при включённом быстром запуске обычное " +
-                              "«Завершение работы» не сбрасывает систему полностью — нужна именно «Перезагрузка».",
+                Title = T.F("Компьютер не перезагружался {0}", HardwareText.DaysText(s.Uptime)),
+                Explanation = T._("За долгую работу накапливаются утечки памяти и зависшие процессы, а часть обновлений ждёт перезагрузки. Перезагрузка раз в несколько дней освежает систему. Учтите: при включённом быстром запуске обычное «Завершение работы» не сбрасывает систему полностью — нужна именно «Перезагрузка»."),
                 Category = RecommendationCategory.Maintenance,
                 Kind = RecommendationKind.Manual,
                 Impact = RecommendationImpact.Low,
                 Severity = IssueSeverity.Low,
-                CurrentValue = $"Без перезагрузки: {Format.Duration(s.Uptime)}",
-                Gain = "Освежит систему",
+                CurrentValue = T.F("Без перезагрузки: {0}", Format.Duration(s.Uptime)),
+                Gain = T._("Освежит систему"),
                 OffersRestart = true,
                 Steps = new[]
                 {
-                    "Сохраните открытые документы.",
-                    "Нажмите «Пуск» → «Выключение» → «Перезагрузка».",
+                    T._("Сохраните открытые документы."),
+                    T._("Нажмите «Пуск» → «Выключение» → «Перезагрузка»."),
                 },
             });
             return;
         }
         if (s.Uptime > TimeSpan.Zero)
-            list.Add(Good("Uptime", "Компьютер недавно перезагружался", $"Без перезагрузки: {Format.Duration(s.Uptime)}",
+            list.Add(Good("Uptime", T._("Компьютер недавно перезагружался"), T.F("Без перезагрузки: {0}", Format.Duration(s.Uptime)),
                 RecommendationCategory.Maintenance));
     }
 
@@ -1551,41 +1450,38 @@ public static class RecommendationEngine
         list.Add(new Recommendation
         {
             Id = "Link:Startup",
-            Title = "Проверьте автозагрузку",
-            Explanation = "Программы, которые запускаются вместе с Windows, замедляют включение компьютера и занимают память в фоне. " +
-                          "Лишние можно безопасно отключить — это обратимо.",
+            Title = T._("Проверьте автозагрузку"),
+            Explanation = T._("Программы, которые запускаются вместе с Windows, замедляют включение компьютера и занимают память в фоне. Лишние можно безопасно отключить — это обратимо."),
             Category = RecommendationCategory.Maintenance,
             Kind = RecommendationKind.Navigate,
             Impact = RecommendationImpact.Low,
             Severity = IssueSeverity.Info,
             NavigateKey = "Startup",
-            NavigateLabel = "Открыть «Автозагрузку»",
+            NavigateLabel = T._("Открыть «Автозагрузку»"),
         });
         list.Add(new Recommendation
         {
             Id = "Link:Cleaner",
-            Title = "Очистите временные файлы",
-            Explanation = "Кэш браузеров, временные файлы и остатки обновлений занимают место. Когда системный диск почти заполнен, " +
-                          "Windows работает медленнее.",
+            Title = T._("Очистите временные файлы"),
+            Explanation = T._("Кэш браузеров, временные файлы и остатки обновлений занимают место. Когда системный диск почти заполнен, Windows работает медленнее."),
             Category = RecommendationCategory.Maintenance,
             Kind = RecommendationKind.Navigate,
             Impact = RecommendationImpact.Low,
             Severity = IssueSeverity.Info,
             NavigateKey = "Cleaner",
-            NavigateLabel = "Открыть «Очистку»",
+            NavigateLabel = T._("Открыть «Очистку»"),
         });
         list.Add(new Recommendation
         {
             Id = "Link:Disk",
-            Title = "Проверьте место на дисках",
-            Explanation = "Когда на системном диске остаётся меньше 10% свободного места, Windows и программы работают медленнее, " +
-                          "а обновления могут не устанавливаться. В разделе «Диски» видно, что занимает место.",
+            Title = T._("Проверьте место на дисках"),
+            Explanation = T._("Когда на системном диске остаётся меньше 10% свободного места, Windows и программы работают медленнее, а обновления могут не устанавливаться. В разделе «Диски» видно, что занимает место."),
             Category = RecommendationCategory.Maintenance,
             Kind = RecommendationKind.Navigate,
             Impact = RecommendationImpact.Low,
             Severity = IssueSeverity.Info,
             NavigateKey = "Disk",
-            NavigateLabel = "Открыть «Диски»",
+            NavigateLabel = T._("Открыть «Диски»"),
         });
     }
 }
