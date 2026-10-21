@@ -1,9 +1,44 @@
 # Localization glossary (Russian | English)
 
-The Russian text is the key of every UI text (`T._("…")`, `{loc:T '…'}`); the English text lives in
-`src/PcCleaner/Core/Localization/en.json`. Use these terms everywhere so the Windows app and the Mac app say the same thing.
+The Russian text is the key of a UI text (`T._("…")`, `{loc:T '…'}`); the English text lives in
+`src/PcCleaner/Core/Localization/en.json`. When one Russian text needs different English wording in different places, the key also
+carries a context (`T.Ctx("status", "Готово")`, see below). Use these terms everywhere so the Windows app and the Mac app say the same thing.
 Style: short, plain, sentence case, active voice, “you” for the user; product name «WaterCa7s PC Cleaner» is never translated;
 names of languages stay in their own language (Русский / English).
+
+## How to add or change a text
+
+1. **Wrap it.** C#: `T._("Текст")`; with values `T.F("Найдено {0} из {1}", a, b)` (placeholders numbered in the order of the Russian text,
+   format specifiers stay: `{0:N0}`); a word after a number `T.Plural(n, "файл", "файла", "файлов")` (`Format.Plural` / `Format.Count`
+   go through it; English uses the `one` and `many` entries only). XAML: `Text="{loc:T 'Проверить'}"` (also `Content`, `ToolTip`, `Header`,
+   `Title`, `AutomationProperties.Name`; the root needs `xmlns:loc="clr-namespace:PcCleaner.Core.Localization"`; an apostrophe inside is written `\'`).
+   The arguments are string literals or consts, never variables. Quotes around a name put by code: `T.Quote(name)`.
+2. **Add the English text** to `en.json`: a flat object `"Русский текст": "English text"`, keys sorted (ordinal), UTF-8, no comments, the same
+   `{n}` set as the key. Style and terms: this glossary.
+3. **Different English for the same Russian text** (gettext's msgctxt): `T.Ctx("context", "Текст")`, `T.CtxF`, `T.CtxPlural`, XAML
+   `{loc:T 'Текст', Context=name}`. The key is the context, U+0004 and the text (`"status\u0004Готово"`); without an entry for the context the
+   plain entry of the text counts. A context is a short Latin name. Use it only when one English text would be wrong in one of the places.
+4. **The Russian text is the key.** When you edit a Russian text, its en.json entry no longer matches: read the English value again (the meaning
+   may have changed) and re-key it. The catalog test fails on a missing text and on a stale entry; it covers the whole source tree
+   (`LocalizationCatalogTests.Enforced`), C# and XAML, and reports a Cyrillic literal that is not wrapped.
+5. **Whole sentences.** One entry per sentence with placeholders (`"Версия {0} установлена"`), never fragments glued together: word order differs
+   in English. Numbers, sizes and dates come from `Format` (it follows the UI language).
+6. **What not to wrap:** identifiers and data — page keys, setting names, registry paths and value names, command lines, file names, strings
+   parsed from tool output or compared with it, JSON properties, values saved to settings or backups, regexes, URLs. A text that is both shown and
+   compared is split: keep the key, wrap only the shown part. Russian words the program only *matches* (Windows output in Russian, the Russian
+   failure rules) go between the comment lines `// l10n:data-begin — why` and `// l10n:data-end`; a text that is shown never goes inside
+   (an unclosed `data-begin` fails the test).
+7. **Exceptions.** Show and log an exception with `ErrorText.For(ex)` / `ErrorText.Sentence(ex)`, never `ex.Message` (a Windows message in
+   another language would appear raw). A text the app writes itself is passed through `T._` where it is thrown and marked
+   `throw ErrorText.Own(new InvalidOperationException(T._("…")))`.
+8. **Failure texts stay recognisable.** The Dashboard decides whether a fix failed or needs administrator rights from the text
+   (`FixResultClassifier`): every en.json entry whose Russian key the Russian rules call a failure becomes an English matcher. So keep such an
+   English value a whole sentence ("Could not turn on the firewall: {0}." — not `"{0}"`, `"{0}: {1}"` or "Error"; at least 8 non-space
+   characters and 2 words outside the placeholders) and keep the failure meaning ("Could not …", "… was not changed", "… needs administrator
+   rights"). A side note appended to a successful result must not read like a failure: give it other wording ("No restore point was created.")
+   or, if its Russian key starts with «Не удалось», list the key in `FixResultClassifier.SideNoteKeys`.
+9. **Check.** `dotnet test tests\PcCleaner.Tests` (Russian output must not change: the tests run in Russian), then
+   `WaterCa7sPcCleaner.exe --screenshots <dir> --lang en --mode expert --no-scan` and look at the pictures for Russian leftovers and cut-off text.
 
 ## Pages and tabs
 
@@ -68,7 +103,8 @@ names of languages stay in their own language (Русский / English).
 | Сброс настроек | Reset settings |
 | Ограниченный режим | Limited mode |
 | Права администратора (status) | Administrator rights |
-| Готово (status bar) | Ready |
+| Готово (status bar, `T.Ctx("status", …)`) | Ready |
+| Готово (title of a dialog or a result) | Done |
 | Сделано для WaterCa7 | Made for WaterCa7 |
 
 ## Severity badges and log levels
@@ -111,6 +147,7 @@ names of languages stay in their own language (Русский / English).
 | 12 октября в 14:32 / 12 октября 2025 г. в 14:32 | Oct 12 at 14:32 / Oct 12, 2025 at 14:32 |
 | Главная: … (log line prefix) | Home: … |
 | Windows 11 Домашняя (edition from the registry) | Windows 11 Home (the registry name as it is) |
+| Майкрософт Windows 11 Домашняя (caption of a Russian Windows, Speed up card) | Microsoft Windows 11 Home (`SystemInfo.EnglishWindowsCaption`) |
 
 ## Rules that are easy to get wrong
 
@@ -158,6 +195,8 @@ names of languages stay in their own language (Русский / English).
 | деинсталлятор | uninstaller |
 | Убрать запись из списка | Remove entry from the list |
 | Удалить отмеченные | Uninstall checked |
+| Не удалось удалить ({0}): (summary of the uninstall, context `uninstall`) | Could not uninstall ({0}): |
+| Удалено: {0} из {1}. (summary of the uninstall, context `uninstall`) | Uninstalled {0} of {1}. |
 | Удалить лишние (preinstalled apps) | Remove extras |
 | Нежелательные / Недавние / Большие / Битые (filters) | Unwanted / Recent / Large / Broken |
 | Предустановленная, можно удалить | Preinstalled, can be removed |
@@ -282,14 +321,19 @@ How the code treats them:
 | Параметры быстродействия (Windows window) | Performance Options |
 | Изменено программой | Changed by the program |
 
-Power plan names and other values that Windows gives (plan names, OS caption, monitor names) are shown as they are; only the program's own
-texts are translated. A tweak's title is computed in the current language (`RegistryTweak.Title`), not stored.
+Power plan names and other values that Windows gives (plan names, monitor names) are shown as they are; only the program's own
+texts are translated. The one exception is the caption of the operating system on the Speed up card: the English run maps the edition of a
+Russian Windows (“Майкрософт Windows 11 Домашняя”) to English (“Microsoft Windows 11 Home”, `SystemInfo.EnglishWindowsCaption`); an
+edition that is not in `SystemInfo.Editions` stays as Windows gave it. A tweak's title is computed in the current language
+(`RegistryTweak.Title`), not stored.
 
 Notes for the other pages:
 
-- The Russian «Готово» is both the status bar text and the title of a dialog after an action; one key has one English text, so it is “Ready”
-  everywhere (a test pins the status bar).
-- «Не удалось удалить ({0}):» is shared by Programs and Startup, so it says “Could not remove ({0}):”.
+- The Russian «Готово» has two English texts: “Ready” in the status bar (`T.Ctx("status", "Готово")`, a test pins it) and “Done” as the title
+  of a dialog or a result (the plain entry).
+- «Не удалось удалить ({0}):» is “Could not uninstall ({0}):” in the summary of an uninstall in Programs (context `uninstall`) and “Could not
+  remove ({0}):” in Startup and in the “Remove extras” fix of Programs (the plain entry). «Удалено: {0} из {1}.» is “Uninstalled {0} of {1}.” in
+  Programs (context `uninstall`) and “Deleted: {0} of {1}.” in the quarantine list (the plain entry).
 - A decision the program makes after a Defender scan comes from `DefenderScanResult.ThreatFound` (`FileTools.ScanWithDefenderAsync`), never from the
   words of the text; a decision about a process or an entry comes from its flags (`SuspicionFlags`, `SustainedCpu` for the miner heuristic).
 
