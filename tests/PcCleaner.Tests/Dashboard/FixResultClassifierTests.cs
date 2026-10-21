@@ -122,55 +122,56 @@ public class FixResultClassifierTests
     }
 
     /// <summary>
-    /// Entries the Russian rules do NOT call a failure whose English text the English matchers do (the English text contains the text of
-    /// a failure entry): log lines and the like, never a fix result. A new divergence shows up here, so it is looked at: a fix result
-    /// among them would be judged differently in the two languages (give it its own wording, or add its key to
+    /// Entries the Russian rules do NOT call a failure whose English text the English matchers do (the English text contains a phrase
+    /// that the matcher of a failure entry looks for; the comment of each key names the matcher that fires): log lines and the like,
+    /// never a fix result. A new divergence shows up here, so it is looked at: a fix result among them would be judged differently
+    /// in the two languages (give it its own wording, or add its key to
     /// <see cref="FixResultClassifier.SideNoteKeys"/> when it is a side note of a successful result).
     /// </summary>
     private static readonly string[] ExpectedEnglishOnlyFailures =
     {
-        "Автозагрузка: не удалось запустить проверку Защитником: {0}", // log: contains "Could not start the scan: {0}."
-        "Автозагрузка: не удалось прочитать ярлык {0}: {1}", // log: contains "Could not read {0}: {1}"
-        "Автозагрузка: не удалось удалить {0}: {1}", // log: contains "Could not delete {0}: {1}"
-        "Безопасность: проверка «{0}» не удалась: {1}: {2}", // log of the Security scan: contains "check failed"
-        "Главная: не удалось восстановить состояние после ошибки проверки: {0}", // log: contains "Could not restore {0}: {1}"
-        "Главная: не удалось запустить удаление «{0}»: {1}", // log: contains "Could not start the uninstall of “{0}”."
-        "Главная: не удалось исправить «{0}» ({1}): {2}", // log: contains "Could not fix" (the prefix of a failed Security fix)
-        "Главная: не удалось открыть {0}: {1}", // log
-        "Главная: не удалось прочитать результат прошлой проверки: {0}", // log: contains "Could not read {0}: {1}"
-        "Главная: не удалось прочитать сведения о компьютере: {0}", // log
-        "Главная: не удалось прочитать сведения о системе из реестра: {0}", // log
-        "Главная: не удалось прочитать сведения о системном диске: {0}", // log
-        "Главная: не удалось скопировать отчёт в буфер обмена: {0}", // log
-        "Главная: не удалось сохранить отчёт в «{0}»: {1}", // log
-        "Диски: не удалось проверить {0}: {1}", // log: contains "Could not check {0}"
-        "Карантин: не удалось восстановить {0}: {1}", // log of the quarantine tab
-        "Карантин: не удалось прочитать {0}: {1}", // log of the quarantine tab
-        "Карантин: не удалось удалить {0}: {1}", // log of the quarantine tab: contains "Could not delete {0}: {1}"
-        "Обновление: не удалось запустить {0}: {1}", // log
-        "Обновление: не удалось удалить {0}: {1}", // log: contains "Could not delete {0}: {1}"
-        "Остальные файлы не обработаны — операция была отменена.", // header of the quarantine tab: contains "the operation was canceled"
-        "Очистка: не удалось оценить «{0}»: {1}", // log
-        "Очистка: не удалось проверить запущенные программы: {0}", // log
-        "Очистка: не удалось узнать размер кэша оптимизации доставки: {0}", // log: contains "Could not get the size"
-        "Перезагрузка: не удалось запустить shutdown.exe: {0}", // log: contains "could not start {0}: {1}"
-        "Перезапустить как администратор", // a button label: "Restart as administrator" is the matcher of «от имени администратора»
-        "Программы: не удалось запустить PowerShell: {0}", // log: contains "Could not start PowerShell: {0}."
-        "Программы: не удалось прочитать название приложения: {0}", // log
-        "Процессы: не удалось проверить подпись {0}: {1}", // log: contains "Could not check {0}"
-        "Сеть: не удалось запустить netsh: {0}", // log: contains "Could not start netsh: {0}."
-        "Сеть: не удалось очистить кэш DNS: {0}", // log: contains "Could not clear the DNS cache: {0}"
-        "Сеть: не удалось прочитать адаптер {0}: {1}", // log: contains "Could not read {0}: {1}"
-        "Сеть: не удалось прочитать политику брандмауэра: {0}", // log: contains "Could not read {0}: {1}"
-        "Сеть: не удалось прочитать счётчики трафика: {0}", // log: contains "Could not read {0}: {1}"
-        "Сеть: не удалось разобрать таблицу соединений: {0}", // log: contains "Could not read {0}: {1}"
-        "Сеть: проверка «{0}» не удалась: {1}", // log: contains "check failed"
-        "Ускорение: не удалось вернуть «{0}»: {1}", // log: contains "Could not revert “{0}”: {1}"
-        "Ускорение: не удалось вернуть план «{0}»: {1}", // log: contains "Could not restore the plan “{0}” …"
-        "Ускорение: не удалось запустить powercfg {0}: {1}", // log: contains "Could not start {0}: {1}"
-        "Ускорение: не удалось прочитать {0}\\{1}: {2}", // log: contains "Could not read {0}: {1}"
-        "Ускорение: не удалось прочитать {0}\\{1}\\{2}: {3}", // log: contains "Could not read {0}: {1}"
-        "Ускорение: не удалось прочитать сведения о батарее: {0}", // log: contains "Could not read {0}: {1}"
+        "Автозагрузка: не удалось запустить проверку Защитником: {0}", // log: matched by "Could not start …:"
+        "Автозагрузка: не удалось прочитать ярлык {0}: {1}", // log: matched by "Could not read …:"
+        "Автозагрузка: не удалось удалить {0}: {1}", // log: matched by "Could not delete …:"
+        "Безопасность: проверка «{0}» не удалась: {1}: {2}", // log of the Security scan: matched by "check failed"
+        "Главная: не удалось восстановить состояние после ошибки проверки: {0}", // log: matched by "Could not restore …:"
+        "Главная: не удалось запустить удаление «{0}»: {1}", // log: matched by "Could not start …: / Could not start the uninstall of “…”"
+        "Главная: не удалось исправить «{0}» ({1}): {2}", // log: matched by "Could not fix"
+        "Главная: не удалось открыть {0}: {1}", // log: matched by "Could not open / Could not open …:"
+        "Главная: не удалось прочитать результат прошлой проверки: {0}", // log: matched by "Could not read …:"
+        "Главная: не удалось прочитать сведения о компьютере: {0}", // log: matched by "Could not read …:"
+        "Главная: не удалось прочитать сведения о системе из реестра: {0}", // log: matched by "Could not read …:"
+        "Главная: не удалось прочитать сведения о системном диске: {0}", // log: matched by "Could not read …:"
+        "Главная: не удалось скопировать отчёт в буфер обмена: {0}", // log: matched by "Could not copy the report"
+        "Главная: не удалось сохранить отчёт в «{0}»: {1}", // log: matched by "Could not save the report"
+        "Диски: не удалось проверить {0}: {1}", // log: matched by "Could not check"
+        "Карантин: не удалось восстановить {0}: {1}", // log of the quarantine tab: matched by "Could not restore …:"
+        "Карантин: не удалось прочитать {0}: {1}", // log of the quarantine tab: matched by "Could not read …:"
+        "Карантин: не удалось удалить {0}: {1}", // log of the quarantine tab: matched by "Could not delete …:"
+        "Обновление: не удалось запустить {0}: {1}", // log: matched by "Could not start …:"
+        "Обновление: не удалось удалить {0}: {1}", // log: matched by "Could not delete …:"
+        "Остальные файлы не обработаны — операция была отменена.", // header of the quarantine tab: matched by "The operation was canceled / the operation was canceled"
+        "Очистка: не удалось оценить «{0}»: {1}", // log: matched by "Could not check"
+        "Очистка: не удалось проверить запущенные программы: {0}", // log: matched by "Could not check"
+        "Очистка: не удалось узнать размер кэша оптимизации доставки: {0}", // log: matched by "Could not get the size"
+        "Перезагрузка: не удалось запустить shutdown.exe: {0}", // log: matched by "Could not start …:"
+        "Перезапустить как администратор", // a button label: matched by "Restart as administrator"
+        "Программы: не удалось запустить PowerShell: {0}", // log: matched by "Could not start PowerShell: / Could not start …:"
+        "Программы: не удалось прочитать название приложения: {0}", // log: matched by "Could not read …:"
+        "Процессы: не удалось проверить подпись {0}: {1}", // log: matched by "Could not check"
+        "Сеть: не удалось запустить netsh: {0}", // log: matched by "Could not start netsh: / Could not start …:"
+        "Сеть: не удалось очистить кэш DNS: {0}", // log: matched by "Could not clear the DNS cache:"
+        "Сеть: не удалось прочитать адаптер {0}: {1}", // log: matched by "Could not read …:"
+        "Сеть: не удалось прочитать политику брандмауэра: {0}", // log: matched by "Could not read …:"
+        "Сеть: не удалось прочитать счётчики трафика: {0}", // log: matched by "Could not read …:"
+        "Сеть: не удалось разобрать таблицу соединений: {0}", // log: matched by "Could not read …: / Could not read the connection table"
+        "Сеть: проверка «{0}» не удалась: {1}", // log: matched by "check failed"
+        "Ускорение: не удалось вернуть «{0}»: {1}", // log: matched by "Could not revert “…”:"
+        "Ускорение: не удалось вернуть план «{0}»: {1}", // log: matched by "Could not restore …:"
+        "Ускорение: не удалось запустить powercfg {0}: {1}", // log: matched by "Could not start …:"
+        "Ускорение: не удалось прочитать {0}\\{1}: {2}", // log: matched by "Could not read …:"
+        "Ускорение: не удалось прочитать {0}\\{1}\\{2}: {3}", // log: matched by "Could not read …:"
+        "Ускорение: не удалось прочитать сведения о батарее: {0}", // log: matched by "Could not read …:"
     };
 
     [Fact]

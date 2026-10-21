@@ -251,6 +251,8 @@ public class SuspicionEnglishTests
             Assert.Equal("The program is installed in a temporary folder (Temp) — normal programs do not do that.",
                 ProgramRules.DescribeInstallLocationRisk(InTemp("weird-app")));
             Assert.Equal("The program's folder is in the Recycle Bin.", ProgramRules.DescribeInstallLocationRisk(@"C:\$Recycle.Bin\S-1\app"));
+            Assert.Equal("Located in the Recycle Bin", Suspicion.DescribeRiskyLocation(@"D:\$Recycle.Bin\S-1\a", isInstallFolder: true));
+            Assert.Equal("Runs from the Recycle Bin", Suspicion.DescribeRiskyLocation(@"D:\$Recycle.Bin\S-1\a.exe"));
         }
     }
 

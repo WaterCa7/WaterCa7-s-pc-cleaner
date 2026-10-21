@@ -62,7 +62,7 @@ public sealed class InstalledBrowsers
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Не удалось прочитать список браузеров Windows: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось прочитать список браузеров Windows: {0}", ErrorText.For(ex)));
             return false;
         }
         return registered.Any(exe => IsExecutableOf(browser, exe) && SafeFileExists(exe));
@@ -170,7 +170,7 @@ public sealed class InstalledBrowsers
                 }
                 catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
                 {
-                    Log.Warn(T.F("Не удалось прочитать список браузеров Windows: {0}", ex.Message));
+                    Log.Warn(T.F("Не удалось прочитать список браузеров Windows: {0}", ErrorText.For(ex)));
                 }
             }
         }

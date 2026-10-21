@@ -529,7 +529,7 @@ public sealed class ProcessesService : IHealthContributor
         if (error.InnerException is null)
         {
             // Any other refusal (e.g. "Системные файлы Windows нельзя помещать в карантин."): the quarantine list is fine,
-            // so there is nothing to check in «Настройки» — Core's own Russian reason says it all.
+            // so there is nothing to check in «Настройки» — the reason the quarantine gave (in the language of the UI) says it all.
             return $"{what} {LowerFirst(ErrorText.For(error))}.\n\n{path}";
         }
         return $"{what} " + T.F("не удалось прочитать или записать список карантина (файл index.json в папке карантина). Файл оставлен на месте, иначе его нельзя было бы потом восстановить.\n\n{0}\n\nОткройте «Настройки» → «Карантин», чтобы проверить список карантина, и повторите. Подробности — в журнале.", path);
@@ -769,7 +769,8 @@ internal static class ProcessIssues
         return new HealthIssue
         {
             Module = Module,
-            Title = T.F("{0} {1} {2} {3}", Format.Count(n, "копия", "копии", "копий"), fileName, Format.Plural(n, "занимает", "занимают", "занимают"),
+            // "3 копии chrome.exe занимают 1,2 ГБ": the context keeps this placeholder-only key from catching any other one.
+            Title = T.CtxF("copies", "{0} {1} {2} {3}", Format.Count(n, "копия", "копии", "копий"), fileName, Format.Plural(n, "занимает", "занимают", "занимают"),
                 Format.Bytes(bytes)),
             Details = details,
             Severity = IssueSeverity.Low,

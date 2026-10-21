@@ -110,9 +110,12 @@ public static class ErrorText
         return T.IsEnglish ? LowerFirstWord(text) : text;
     }
 
-    /// <summary>English UI: .NET's message of a file or I/O error, or a message the app wrote itself; never a Russian one.</summary>
+    /// <summary>
+    /// English UI: .NET's message of a file or I/O error (English text only, like <see cref="IsEnglishText"/>: a German or Chinese
+    /// Windows gives its own text, the quoted path aside), or a message the app wrote itself; never a Russian one.
+    /// </summary>
     private static bool ShowsEnglishMessage(Exception ex, string message)
-        => message.Length > 0 && !IsRussian(message) && (ex is IOException || ex.Data.Contains(OwnMarker));
+        => message.Length > 0 && !IsRussian(message) && (ex.Data.Contains(OwnMarker) || (ex is IOException && IsEnglishText(OutsideQuotes(message))));
 
     /// <summary>
     /// Windows' text in English: not empty, no Cyrillic, and no letters outside the Latin alphabet (a German or Chinese Windows
@@ -138,13 +141,14 @@ public static class ErrorText
     /// when the Windows user name does ("Access to the path 'C:\Users\Иван\…' is denied."). Everything from the first
     /// quote to the last one is skipped, so an apostrophe inside a path ("C:\Users\D'Arc\…") changes nothing.
     /// </summary>
-    private static bool IsRussian(string text)
+    private static bool IsRussian(string text) => HasCyrillic(OutsideQuotes(text));
+
+    /// <summary>The text without everything from the first single quote to the last one (the quoted path).</summary>
+    private static string OutsideQuotes(string text)
     {
         var first = text.IndexOf('\'');
         var last = text.LastIndexOf('\'');
-        if (last > first && first >= 0)
-            text = string.Concat(text.AsSpan(0, first), text.AsSpan(last + 1));
-        return HasCyrillic(text);
+        return last > first && first >= 0 ? string.Concat(text.AsSpan(0, first), text.AsSpan(last + 1)) : text;
     }
 
     private static bool HasCyrillic(string text)

@@ -280,7 +280,7 @@ public sealed class StartupEnglishTests
             Assert.Equal(("Task Scheduler", "Scheduler", "at sign-in"), (task.SourceText, task.SourceShort, task.SourceDetail));
             Assert.Equal(("Windows service", "Service", "delayed start"), (service.SourceText, service.SourceShort, service.SourceDetail));
             Assert.Equal("Disabled", disabled.StateText);
-            Assert.Equal("Disabled Oct 18, 2026 14:05: Windows does not run this entry.", disabled.StateTooltip);
+            Assert.Equal("Disabled on Oct 18, 2026 14:05: Windows does not run this entry.", disabled.StateTooltip);
             Assert.Equal(("File not found", "File not found", "Publisher unknown"), (broken.StateText, broken.SignatureText, run.PublisherText));
             Assert.Equal(("High risk", "Disable", "Trust"), (risky.RiskText, risky.ToggleActionText, risky.TrustActionText));
             Assert.Equal("Enable", disabled.ToggleActionText);
@@ -288,7 +288,7 @@ public sealed class StartupEnglishTests
             Assert.StartsWith("A run-once entry cannot be disabled", runOnce.ToggleBlockedReason);
             Assert.Equal("A Windows Task Scheduler task that runs at sign-in. Update programs often work this way.", task.Explanation);
             Assert.Equal("(no name)", Entry("").DisplayName);
-            Assert.Equal("Run startup what is this", run.SearchQuery);
+            Assert.Equal("what is Run in startup", run.SearchQuery);
             risky.IsTrusted = true;
             Assert.Equal(("Trusted", "Stop trusting"), (risky.RiskText, risky.TrustActionText));
             AssertEnglish(run.Explanation, runOnce.Explanation, folder.Explanation, service.Explanation, run.Advice, runOnce.Advice, service.Advice,

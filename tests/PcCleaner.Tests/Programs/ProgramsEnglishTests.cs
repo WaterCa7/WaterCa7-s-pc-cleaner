@@ -228,7 +228,7 @@ public sealed class ProgramsEnglishTests : IDisposable
         Assert.DoesNotMatch(Cyrillic, issue.Title + issue.Details + issue.Gain);
         Assert.Equal("Nothing was deleted.", ProgramsService.BrokenEntriesFixText(0, 0, Array.Empty<string>()).TrimEnd());
         var partial = ProgramsService.BrokenEntriesFixText(3, 1, new[] { "A: failed" });
-        Assert.Equal("Deleted 1 entry, backups saved. Could not delete: 1. Deleting was stopped — not processed: 1 entry.", partial);
+        Assert.Equal("Deleted 1 entry, backups saved. 1 could not be deleted. Deleting was stopped — not processed: 1 entry.", partial);
         Assert.True(HealthScoring.LooksLikeFailure(partial));
         Assert.False(HealthScoring.LooksLikeFailure(ProgramsService.BrokenEntriesFixText(2, 2, Array.Empty<string>())));
     }
@@ -325,6 +325,9 @@ public sealed class ProgramsEnglishTests : IDisposable
 
             var (title, question) = Assert.Single(_questions);
             Assert.Equal("Uninstall the checked programs?", title);
+            Assert.Equal("A silent uninstall runs without any questions from the uninstaller, and you will not be able to stop it half way.\n\n" +
+                         "Are you sure you want to uninstall “Contoso Editor” silently?",
+                T.F("Тихое удаление пройдёт без вопросов деинсталлятора, и остановить его на полпути не получится.\n\nТочно удалить «{0}» в тихом режиме?", "Contoso Editor"));
             Assert.StartsWith("Uninstall 2 programs:", question);
             Assert.Contains("• Contoso Editor — silent", question);
             Assert.Contains("• Fabrikam Viewer", question);

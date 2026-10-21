@@ -221,7 +221,7 @@ public sealed class ProcessesEnglishTests
         Assert.StartsWith("All processes of the program “chrome.exe” will be force-ended — 2 in total (PID 100, 101).", program);
         Assert.Contains("Unsaved data in the program will be lost.", program);
         Assert.EndsWith("Continue?", program);
-        Assert.StartsWith("“Google Chrome” (chrome.exe) (PID 100) and all the processes it started will be force-ended — 2 in total:", tree);
+        Assert.StartsWith("“Google Chrome” (chrome.exe), PID 100, and all the processes it started will be force-ended — 2 in total:", tree);
         AssertEnglish(program, tree);
     }
 

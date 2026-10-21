@@ -112,6 +112,57 @@ public class CoreEnglishTests
     }
 
     [Fact]
+    public void AnIoMessage_InAnotherLanguageThanEnglish_IsNeverShown_InEnglish()
+    {
+        using (TestLanguage.English())
+        {
+            // a German, Chinese or French Windows gives its own text (letters outside A-Z); the English UI says it in general words, like for Windows' text of a code
+            Assert.Equal("could not read or write the file", ErrorText.For(new IOException("Der Zugriff auf die Datei ist nicht möglich, weil sie größer als erlaubt ist.")));
+            Assert.Equal("could not read or write the file", ErrorText.For(new IOException("进程无法访问文件，因为另一个进程正在使用该文件。")));
+            Assert.Equal("could not read or write the file", ErrorText.For(new IOException("Le fichier existe déjà.")));
+            // English with a non-English path in quotes stays (a Windows user name can be anything)
+            Assert.Equal("the file 'C:\\Users\\Jürgen\\a.txt' already exists", ErrorText.For(new IOException("The file 'C:\\Users\\Jürgen\\a.txt' already exists.")));
+            Assert.Equal("the file 'C:\\Users\\张伟\\a.txt' already exists", ErrorText.For(new IOException("The file 'C:\\Users\\张伟\\a.txt' already exists.")));
+        }
+    }
+
+    [Fact]
+    public void TheWebSearchPhrases_AreWhatAPersonTypesIntoASearchBox()
+    {
+        using (TestLanguage.English())
+        {
+            Assert.Equal("do I need Contoso Editor", T.F("{0} нужна ли программа", "Contoso Editor"));
+            Assert.Equal("can I uninstall News Microsoft.BingNews", T.F("{0} {1} можно ли удалить", "News", "Microsoft.BingNews"));
+            Assert.Equal("what is the file a.dll", T.F("{0} что это за файл", "a.dll"));
+            Assert.Equal("what is the folder Temp", T.F("{0} что это за папка", "Temp"));
+            Assert.Equal("what is the process svchost.exe", T.F("{0} что это за процесс", "svchost.exe"));
+            Assert.Equal("what is Updater in startup", T.F("{0} автозагрузка что это", "Updater"));
+            Assert.Equal("Honey Chrome extension", T.F("{0} расширение {1}", "Honey", "Chrome"));
+        }
+        Assert.Equal("Contoso Editor нужна ли программа", T.F("{0} нужна ли программа", "Contoso Editor")); // Russian: as it was
+    }
+
+    [Fact]
+    public void AFewFilesLeftAlone_AreCounted_WithoutAGuessedPlural()
+    {
+        using (TestLanguage.English())
+        {
+            Assert.Equal("Logs newer than 30 days are not deleted (such files: 1).", T.F("Журналы моложе 30 дней не удаляются (таких файлов: {0}).", 1));
+            Assert.Equal("Fresh files are not deleted — programs may still be using them (such files: 2).",
+                T.F("Свежие файлы не удаляются — ими ещё могут пользоваться программы (таких файлов: {0}).", 2));
+        }
+    }
+
+    [Fact]
+    public void TheQuarantineConflictText_NamesAPathWithCyrillic_InEnglish()
+    {
+        // The path is in single quotes like .NET's own messages: Cyrillic of a user name in it does not make the English text Russian.
+        const string path = @"C:\Users\Иван\updater.exe";
+        using (TestLanguage.English())
+            Assert.Equal($"there is already a file at this path: '{path}'", ErrorText.For(new IOException(T.F("По этому пути уже есть файл: {0}", path))));
+    }
+
+    [Fact]
     public void AMessageTheAppWroteItself_IsShownAsItIs_InBothLanguages()
     {
         var ru = ErrorText.For(ErrorText.Own(new InvalidOperationException(T._("Системные файлы Windows нельзя помещать в карантин."))));

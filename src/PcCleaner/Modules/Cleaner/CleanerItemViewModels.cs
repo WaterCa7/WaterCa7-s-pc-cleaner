@@ -343,7 +343,7 @@ public sealed class CategoryItemViewModel : ObservableObject
     }
 }
 
-/// <summary>A titled group of categories ("Windows", "Браузеры", "Приложения и игры").</summary>
+/// <summary>A titled group of categories ("Windows", "Browsers", "Apps and games": the titles are texts of the UI language).</summary>
 public sealed class CategoryGroupViewModel : ObservableObject
 {
     public CategoryGroupViewModel(string name, string glyph, string note, string emptyText,

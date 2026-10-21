@@ -44,7 +44,10 @@ public static class FileTools
         ProcessRunner.ShellOpen($"https://www.virustotal.com/gui/file/{hash.ToLowerInvariant()}");
     }
 
-    /// <summary>Opens a web search for the text (e.g. a process or program name).</summary>
+    /// <summary>
+    /// Opens a web search for the text (e.g. a process or program name). The callers build the query with T.F in the language of
+    /// the UI ("{0} что это за файл" / "what is the file {0}"): its English entry is a search phrase, not a sentence of the UI.
+    /// </summary>
     public static void SearchWeb(string query)
         => ProcessRunner.ShellOpen("https://www.google.com/search?q=" + Uri.EscapeDataString(query));
 
