@@ -112,7 +112,7 @@ internal static class StartupNative
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Автозагрузка: не удалось прочитать ярлык {0}: {1}", Path.GetFileName(lnkPath), ex.Message));
+            Log.Warn(T.F("Автозагрузка: не удалось прочитать ярлык {0}: {1}", Path.GetFileName(lnkPath), ErrorText.For(ex)), ex);
             return null;
         }
         finally

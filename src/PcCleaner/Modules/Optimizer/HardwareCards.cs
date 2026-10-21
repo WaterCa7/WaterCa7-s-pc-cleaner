@@ -79,7 +79,7 @@ internal static class ClipboardText
         }
         catch (Exception ex) when (ex is ExternalException or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ErrorText.For(ex)), ex);
             return false;
         }
     }

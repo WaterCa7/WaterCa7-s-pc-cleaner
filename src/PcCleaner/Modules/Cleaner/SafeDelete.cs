@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -151,7 +152,7 @@ internal static class SafeDelete
             case ERROR_DIR_NOT_EMPTY:
                 return DeleteOutcome.Skipped;
             default:
-                error = $"{path}: {new Win32Exception(code).Message}";
+                error = $"{path}: {ErrorText.For(new Win32Exception(code))}";
                 return DeleteOutcome.Skipped;
         }
     }

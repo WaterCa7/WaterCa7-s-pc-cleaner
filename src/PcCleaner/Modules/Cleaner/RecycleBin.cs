@@ -48,7 +48,7 @@ internal sealed class ShellRecycleBin : IRecycleBin
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or COMException)
         {
-            Log.Warn(T.F("Очистка: SHEmptyRecycleBin недоступна: {0}", ex.Message));
+            Log.Warn(T.F("Очистка: SHEmptyRecycleBin недоступна: {0}", ErrorText.For(ex)), ex);
             error = ErrorText.For(ex);
             return false;
         }

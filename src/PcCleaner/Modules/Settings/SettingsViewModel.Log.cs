@@ -195,7 +195,7 @@ public sealed partial class SettingsViewModel
             {
                 if (attempt == 4)
                 {
-                    Log.Warn(T.F("Не удалось скопировать журнал в буфер обмена: {0}", ex.Message));
+                    Log.Warn(T.F("Не удалось скопировать журнал в буфер обмена: {0}", ErrorText.For(ex)), ex);
                     Dialogs.Info(T._("Журнал"), T._("Буфер обмена сейчас занят другой программой. Попробуйте ещё раз через пару секунд."));
                     return;
                 }
@@ -212,7 +212,7 @@ public sealed partial class SettingsViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn(T.F("Не удалось создать папку {0}: {1}", dir, ex.Message));
+            Log.Warn(T.F("Не удалось создать папку {0}: {1}", dir, ErrorText.For(ex)), ex);
         }
         ProcessRunner.ShowInExplorer(dir);
     }

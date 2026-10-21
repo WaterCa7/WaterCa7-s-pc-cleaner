@@ -167,6 +167,11 @@ public class DashboardSystemInfoTests
     [InlineData("Windows 10 Pro", 19045, "Windows 10 Pro")]
     [InlineData("Windows 10 Home Single Language", 22000, "Windows 11 Домашняя для одного языка")]
     [InlineData("Windows 10 Enterprise", 19044, "Windows 10 Корпоративная")]
+    [InlineData("Windows 10 Pro for Workstations", 19045, "Windows 10 Pro для рабочих станций")]
+    [InlineData("Windows 10 Pro for Workstations", 26100, "Windows 11 Pro для рабочих станций")]
+    [InlineData("Windows 11 Pro Education", 22631, "Windows 11 Pro для образовательных учреждений")]
+    [InlineData("Windows 11 Education", 22631, "Windows 11 для образовательных учреждений")]
+    [InlineData("Windows 10 Enterprise LTSC", 19044, "Windows 10 Корпоративная LTSC")]
     [InlineData(null, null, "Windows")]
     public void WindowsName_FixesWindows11AndTranslatesEdition(string? product, int? build, string expected)
         => Assert.Equal(expected, SystemInfo.WindowsName(product, build));

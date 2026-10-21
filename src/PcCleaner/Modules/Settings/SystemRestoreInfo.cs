@@ -46,7 +46,7 @@ internal static class SystemRestoreInfo
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException
                                        or System.IO.IOException)
         {
-            Log.Warn(T.F("Не удалось прочитать параметры восстановления системы: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось прочитать параметры восстановления системы: {0}", ErrorText.For(ex)), ex);
         }
         return new SystemRestoreStatus(frequency, fromRegistry, disabledByPolicy, protectionOn);
     }

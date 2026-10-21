@@ -181,7 +181,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn(T.F("Не удалось получить список дисков: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось получить список дисков: {0}", ErrorText.For(ex)), ex);
             return list;
         }
 
@@ -205,7 +205,7 @@ public sealed class DiskService : IHealthContributor
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
-                Log.Warn(T.F("Диск {0} недоступен: {1}", d.Name, ex.Message));
+                Log.Warn(T.F("Диск {0} недоступен: {1}", d.Name, ErrorText.For(ex)), ex);
             }
         }
         return list.OrderByDescending(d => d.IsSystemDrive).ThenBy(d => d.Letter).ToList();
@@ -322,7 +322,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось узнать состояние TRIM: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось узнать состояние TRIM: {0}", ErrorText.For(ex)), ex);
             return TrimState.Unknown;
         }
     }
@@ -349,7 +349,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn(T.F("Счётчики надёжности дисков недоступны: {0}", ex.Message));
+            Log.Warn(T.F("Счётчики надёжности дисков недоступны: {0}", ErrorText.For(ex)), ex);
             return new Dictionary<string, ReliabilityInfo>();
         }
     }
@@ -492,7 +492,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn(T.F("Не удалось прочитать корень диска {0}: {1}", root, ex.Message));
+            Log.Warn(T.F("Не удалось прочитать корень диска {0}: {1}", root, ErrorText.For(ex)), ex);
         }
         return result.OrderBy(f => Array.IndexOf(RootSystemFiles, f.Name)).ToList();
     }
@@ -526,7 +526,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось узнать размер точек восстановления: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось узнать размер точек восстановления: {0}", ErrorText.For(ex)), ex);
             return (new List<ShadowStorageInfo>(), false);
         }
     }
@@ -543,7 +543,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            Log.Warn(T.F("Диски: не удалось проверить {0}: {1}", what, ex.Message));
+            Log.Warn(T.F("Диски: не удалось проверить {0}: {1}", what, ErrorText.For(ex)), ex);
             return fallback;
         }
     }
@@ -950,7 +950,7 @@ public sealed class DiskService : IHealthContributor
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
             {
-                Log.Warn(T.F("Не удалось переместить в корзину {0}: {1}", path, ex.Message));
+                Log.Warn(T.F("Не удалось переместить в корзину {0}: {1}", path, ErrorText.For(ex)), ex);
                 outcome = ex is UnauthorizedAccessException
                     ? new RecycleOutcome(RecycleFailure.AccessDenied)
                     : new RecycleOutcome(RecycleFailure.Failed, ex.HResult);

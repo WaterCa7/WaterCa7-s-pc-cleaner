@@ -75,7 +75,7 @@ internal static class QuarantineActions
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
                                            or NotSupportedException)
             {
-                Log.Warn(T.F("Карантин: не удалось прочитать {0}: {1}", item.StoredPath, ex.Message));
+                Log.Warn(T.F("Карантин: не удалось прочитать {0}: {1}", item.StoredPath, ErrorText.For(ex)), ex);
             }
             rows.Add(new QuarantineRow(item, size, exists));
         }
@@ -137,20 +137,20 @@ internal static class QuarantineActions
         }
         catch (UnauthorizedAccessException ex)
         {
-            Log.Warn(T.F("Карантин: нет доступа для восстановления {0}: {1}", target, ex.Message));
+            Log.Warn(T.F("Карантин: нет доступа для восстановления {0}: {1}", target, ErrorText.For(ex)), ex);
             return new(QuarantineRestoreStatus.AccessDenied, target,
                 T._("Нет доступа к исходной папке. Попробуйте запустить программу от имени администратора."));
         }
         catch (IOException ex) when (File.Exists(target) || Directory.Exists(target))
         {
-            Log.Warn(T.F("Карантин: {0}", ex.Message));
+            Log.Warn(T.F("Карантин: {0}", ErrorText.For(ex)), ex);
             return new(QuarantineRestoreStatus.Conflict, target, T.F("По исходному пути уже есть файл: {0}", target));
         }
         catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException
                                        or System.Security.SecurityException or InvalidOperationException)
         {
             // InvalidOperationException: the quarantine list (index.json) cannot be read, so Core changed nothing.
-            Log.Warn(T.F("Карантин: не удалось восстановить {0}: {1}", item.OriginalPath, ex.Message));
+            Log.Warn(T.F("Карантин: не удалось восстановить {0}: {1}", item.OriginalPath, ErrorText.For(ex)), ex);
             return new(QuarantineRestoreStatus.Failed, target, T.F("Не удалось восстановить файл: {0}.", ErrorPhrase(ex)));
         }
 
@@ -174,7 +174,7 @@ internal static class QuarantineActions
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            Log.Warn(T.F("Карантин: не удалось удалить {0}: {1}", item.StoredPath, ex.Message));
+            Log.Warn(T.F("Карантин: не удалось удалить {0}: {1}", item.StoredPath, ErrorText.For(ex)), ex);
             return (false, T.F("{0}: не удалось удалить — {1}.", item.FileName, ErrorPhrase(ex)));
         }
     }

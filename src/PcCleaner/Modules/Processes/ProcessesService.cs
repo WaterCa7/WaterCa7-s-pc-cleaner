@@ -190,7 +190,7 @@ public sealed class ProcessesService : IHealthContributor
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: не удалось получить командные строки через WMI: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: не удалось получить командные строки через WMI: {0}", ErrorText.For(ex)), ex);
             processRows = Array.Empty<WmiProcessRow>();
             serviceRows = Array.Empty<WmiServiceRow>();
         }
@@ -284,7 +284,7 @@ public sealed class ProcessesService : IHealthContributor
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: не удалось проверить подпись {0}: {1}", path, ex.Message));
+            Log.Warn(T.F("Процессы: не удалось проверить подпись {0}: {1}", path, ErrorText.For(ex)), ex);
             return new SignatureInfo(SignatureStatus.Error, null);
         }
         finally
@@ -391,7 +391,7 @@ public sealed class ProcessesService : IHealthContributor
             catch (Exception ex) when (ex is Win32Exception or NotSupportedException or UnauthorizedAccessException)
             {
                 report.Failed.Add((t, ErrorText.For(ex)));
-                Log.Warn(T.F("Не удалось завершить {0} (PID {1}): {2}", t.Name, t.Pid, ex.Message));
+                Log.Warn(T.F("Не удалось завершить {0} (PID {1}): {2}", t.Name, t.Pid, ErrorText.For(ex)), ex);
             }
         }
         return report;

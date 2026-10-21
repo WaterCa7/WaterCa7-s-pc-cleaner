@@ -112,7 +112,7 @@ internal static class BackupCatalog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            Log.Warn(T.F("Не удалось прочитать папку резервных копий: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось прочитать папку резервных копий: {0}", ErrorText.For(ex)), ex);
             return new List<BackupEntry>();
         }
     }
@@ -237,7 +237,7 @@ internal static class BackupCatalog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn(T.F("Не удалось прочитать резервную копию {0}: {1}", Path.GetFileName(path), ex.Message));
+            Log.Warn(T.F("Не удалось прочитать резервную копию {0}: {1}", Path.GetFileName(path), ErrorText.For(ex)), ex);
         }
         return null;
     }
@@ -447,7 +447,7 @@ internal static class BackupCatalog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn(T.F("Не удалось удалить резервную копию {0}: {1}", name, ex.Message));
+            Log.Warn(T.F("Не удалось удалить резервную копию {0}: {1}", name, ErrorText.For(ex)), ex);
             return (false, T.F("Не удалось удалить файл: {0}.", ErrorText.For(ex)));
         }
 

@@ -51,7 +51,7 @@ public static class IpTables
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
-            Log.Warn(T.F("Сеть: не удалось разобрать таблицу соединений: {0}", ex.Message));
+            Log.Warn(T.F("Сеть: не удалось разобрать таблицу соединений: {0}", ErrorText.For(ex)), ex);
         }
     }
 

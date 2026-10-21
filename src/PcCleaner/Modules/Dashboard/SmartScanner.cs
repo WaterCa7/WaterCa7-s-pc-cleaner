@@ -75,7 +75,7 @@ public static class SmartScanner
             var kind = ex is UnauthorizedAccessException or SecurityException or Win32Exception or IOException
                 ? T._("нет доступа или файл занят")
                 : ex.GetType().Name;
-            Log.Warn(T.F("Главная: ошибка проверки модуля «{0}» ({1}): {2}", name, kind, ex.Message));
+            Log.Warn(T.F("Главная: ошибка проверки модуля «{0}» ({1}): {2}", name, kind, ErrorText.For(ex)), ex);
             return new ModuleScanResult(name, ModuleScanState.Failed, Array.Empty<HealthIssue>(), ErrorText.Sentence(ex), Elapsed());
         }
     }

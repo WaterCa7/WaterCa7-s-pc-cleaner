@@ -753,7 +753,7 @@ public sealed partial class StartupViewModel : PageViewModel
             }
             catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
             {
-                Log.Warn(T.F("Автозагрузка: не удалось запустить проверку Защитником: {0}", ex.Message));
+                Log.Warn(T.F("Автозагрузка: не удалось запустить проверку Защитником: {0}", ErrorText.For(ex)), ex);
                 scan = new DefenderScanResult(T.F("Не удалось запустить проверку: {0}.", ErrorText.For(ex)), ThreatFound: false);
             }
             // The verdict is the scan's own flag, never a word of its text (the text is Russian or English).
@@ -823,7 +823,7 @@ public sealed partial class StartupViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is COMException or ExternalException or ArgumentException)
         {
-            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ErrorText.For(ex)), ex);
             ShowMessage(T._("Буфер обмена занят другой программой — попробуйте ещё раз."), true);
             return false;
         }

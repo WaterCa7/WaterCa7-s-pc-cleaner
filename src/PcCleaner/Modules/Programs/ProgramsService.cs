@@ -136,7 +136,7 @@ public sealed class ProgramsService : IHealthContributor
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn(T.F("Программы: нет доступа к {0}\\{1}: {2}", source.HiveShortName, source.SubKeyPath, ex.Message));
+                Log.Warn(T.F("Программы: нет доступа к {0}\\{1}: {2}", source.HiveShortName, source.SubKeyPath, ErrorText.For(ex)), ex);
             }
             finally
             {
@@ -373,7 +373,7 @@ public sealed class ProgramsService : IHealthContributor
             {
                 records = Array.Empty<StoreAppRecord>();
                 error = T._("Не удалось запустить PowerShell для получения списка приложений.");
-                Log.Warn(T.F("Программы: не удалось запустить PowerShell: {0}", ex.Message));
+                Log.Warn(T.F("Программы: не удалось запустить PowerShell: {0}", ErrorText.For(ex)), ex);
             }
         }
 
@@ -532,7 +532,7 @@ public sealed class ProgramsService : IHealthContributor
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            Log.Warn(T.F("Не удалось запустить деинсталлятор «{0}»: {1}", p.DisplayName, ex.Message));
+            Log.Warn(T.F("Не удалось запустить деинсталлятор «{0}»: {1}", p.DisplayName, ErrorText.For(ex)), ex);
             return new UninstallOutcome(UninstallStatus.NotStarted, T.F("Не удалось запустить деинсталлятор: {0}.", ErrorText.For(ex)));
         }
 
@@ -639,7 +639,7 @@ public sealed class ProgramsService : IHealthContributor
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Не удалось удалить запись «{0}» ({1}): {2}", p.DisplayName, p.RegistryKeyPath, ex.Message));
+            Log.Warn(T.F("Не удалось удалить запись «{0}» ({1}): {2}", p.DisplayName, p.RegistryKeyPath, ErrorText.For(ex)), ex);
             return new EntryDeletionResult(false, T.F("Не удалось удалить запись: {0}.", ErrorText.For(ex)), backup);
         }
 
@@ -720,7 +720,7 @@ public sealed class ProgramsService : IHealthContributor
         }
         catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось запустить PowerShell для удаления «{0}»: {1}", app.DisplayName, ex.Message));
+            Log.Warn(T.F("Не удалось запустить PowerShell для удаления «{0}»: {1}", app.DisplayName, ErrorText.For(ex)), ex);
             return (false, T.F("Не удалось запустить PowerShell: {0}.", ErrorText.For(ex)));
         }
 

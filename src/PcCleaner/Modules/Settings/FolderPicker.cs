@@ -56,7 +56,7 @@ internal static class FolderPicker
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException)
         {
-            Log.Warn(T.F("Не удалось открыть окно выбора папки: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось открыть окно выбора папки: {0}", ErrorText.For(ex)), ex);
             Dialogs.Info(T._("Выбор папки"), T._("Не удалось открыть окно выбора папки. Введите путь вручную в поле слева."));
             return null;
         }

@@ -62,7 +62,7 @@ public sealed partial class StartupService
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Автозагрузка: планировщик заданий недоступен: {0}", ex.Message));
+            Log.Warn(T.F("Автозагрузка: планировщик заданий недоступен: {0}", ErrorText.For(ex)), ex);
         }
         finally
         {
@@ -86,7 +86,7 @@ public sealed partial class StartupService
             return;
         }
         context.Failed++;
-        context.FirstError ??= $"{ex.GetType().Name}: {ex.Message}";
+        context.FirstError ??= $"{ex.GetType().Name}: {ErrorText.For(ex)}";
     }
 
     private void WalkTaskFolder(object folderObject, List<StartupItem> list, TaskScanContext context, int depth)

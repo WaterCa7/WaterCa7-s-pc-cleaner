@@ -529,6 +529,9 @@ public sealed class OptimizerEnglishTests
     [InlineData("Майкрософт Windows 10 Корпоративная", "Windows 10 Enterprise", "Microsoft Windows 10 Enterprise")]
     [InlineData("Майкрософт Windows 11 для образовательных учреждений", "Windows 11 Education", "Microsoft Windows 11 Education")]
     [InlineData("Майкрософт Windows 11 Pro", "Windows 11 Pro", "Microsoft Windows 11 Pro")]
+    [InlineData("Майкрософт Windows 11 Pro для рабочих станций", "Windows 11 Pro for Workstations", "Microsoft Windows 11 Pro for Workstations")]
+    [InlineData("Майкрософт Windows 11 Pro для образовательных учреждений", "Windows 11 Pro Education", "Microsoft Windows 11 Pro Education")]
+    [InlineData("Майкрософт Windows 10 Корпоративная LTSC", "Windows 10 Enterprise LTSC", "Microsoft Windows 10 Enterprise LTSC")]
     [InlineData("Microsoft Windows 11 Home", "Windows 11 Home", "Microsoft Windows 11 Home")]
     public void TheEditionOfARussianWindows_IsInEnglish_InTheEnglishUi_AndAsWindowsGivesItInRussian(string caption, string title, string tooltipFirstLine)
     {

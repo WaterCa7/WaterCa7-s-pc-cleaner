@@ -73,7 +73,7 @@ internal static class RegFileParser
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn(T.F("Не удалось прочитать резервную копию {0}: {1}", Path.GetFileName(path), ex.Message));
+            Log.Warn(T.F("Не удалось прочитать резервную копию {0}: {1}", Path.GetFileName(path), ErrorText.For(ex)), ex);
             return null;
         }
     }

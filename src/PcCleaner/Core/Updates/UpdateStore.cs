@@ -104,7 +104,7 @@ public sealed class UpdateStore
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Log.Warn(T.F("Обновление: не удалось удалить {0}: {1}", dir, ex.Message));
+                Log.Warn(T.F("Обновление: не удалось удалить {0}: {1}", dir, ErrorText.For(ex)), ex);
             }
         }
         if (keep is null)

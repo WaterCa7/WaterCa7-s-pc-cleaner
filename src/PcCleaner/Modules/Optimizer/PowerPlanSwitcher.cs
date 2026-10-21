@@ -42,7 +42,7 @@ public sealed class PowerPlanSwitcher
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            Log.Warn(T.F("Ускорение: не удалось запустить powercfg {0}: {1}", args, ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось запустить powercfg {0}: {1}", args, ErrorText.For(ex)), ex);
             return new ProcessResult(-1, "", ErrorText.For(ex), false);
         }
     }

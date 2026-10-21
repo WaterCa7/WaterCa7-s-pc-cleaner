@@ -565,7 +565,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             if (_lastRefreshError != ex.Message)
             {
                 _lastRefreshError = ex.Message;
-                Log.Warn(T.F("Процессы: не удалось обновить список: {0}", ex.Message));
+                Log.Warn(T.F("Процессы: не удалось обновить список: {0}", ErrorText.For(ex)), ex);
             }
         }
     }
@@ -685,7 +685,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: не удалось загрузить командные строки: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: не удалось загрузить командные строки: {0}", ErrorText.For(ex)), ex);
         }
         finally
         {
@@ -722,7 +722,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: проверка подписи {0}: {1}", path, ex.Message));
+            Log.Warn(T.F("Процессы: проверка подписи {0}: {1}", path, ErrorText.For(ex)), ex);
         }
         Interlocked.Increment(ref _signaturesDone);
         OnDetailsChanged();
@@ -753,7 +753,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: не удалось обновить сведения: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: не удалось обновить сведения: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1007,7 +1007,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: не удалось обновить список: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: не удалось обновить список: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1327,7 +1327,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1358,7 +1358,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: проверка Защитником {0}: {1}", path, ex.Message));
+            Log.Warn(T.F("Процессы: проверка Защитником {0}: {1}", path, ErrorText.For(ex)), ex);
             result = T.F("Не удалось запустить проверку: {0}.", ErrorText.For(ex));
         }
         finally

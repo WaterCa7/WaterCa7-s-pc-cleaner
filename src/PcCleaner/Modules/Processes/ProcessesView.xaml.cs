@@ -78,7 +78,7 @@ public partial class ProcessesView : UserControl
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: состояние окна: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: состояние окна: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -98,7 +98,7 @@ public partial class ProcessesView : UserControl
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: прокрутка к строке: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: прокрутка к строке: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -114,7 +114,7 @@ public partial class ProcessesView : UserControl
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: сортировка: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: сортировка: {0}", ErrorText.For(ex)), ex);
         }
     }
 

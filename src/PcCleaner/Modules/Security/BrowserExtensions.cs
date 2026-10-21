@@ -144,7 +144,7 @@ public static class BrowserExtensionScanner
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
                                            or InvalidOperationException or JsonException)
             {
-                Log.Warn(T.F("Не удалось прочитать расширения {0}: {1}", root.Browser, ex.Message));
+                Log.Warn(T.F("Не удалось прочитать расширения {0}: {1}", root.Browser, ErrorText.For(ex)), ex);
             }
         }
         foreach (var ext in result)
@@ -503,7 +503,7 @@ public static class BrowserExtensionScanner
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось разобрать extensions.json ({0}): {1}", browser, ex.Message));
+            Log.Warn(T.F("Не удалось разобрать extensions.json ({0}): {1}", browser, ErrorText.For(ex)), ex);
         }
         return list;
     }

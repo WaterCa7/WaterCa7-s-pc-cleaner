@@ -32,7 +32,7 @@ public sealed partial class StartupService
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            Log.Warn(T.F("Автозагрузка: не удалось получить список служб: {0}", ex.Message));
+            Log.Warn(T.F("Автозагрузка: не удалось получить список служб: {0}", ErrorText.For(ex)), ex);
             return list;
         }
 
@@ -64,7 +64,7 @@ public sealed partial class StartupService
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Автозагрузка: нет доступа к списку служб в реестре: {0}", ex.Message));
+            Log.Warn(T.F("Автозагрузка: нет доступа к списку служб в реестре: {0}", ErrorText.For(ex)), ex);
         }
         finally
         {

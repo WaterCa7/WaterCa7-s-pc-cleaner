@@ -1066,7 +1066,7 @@ public sealed class DiskViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            Log.Warn(T.F("Диски: не удалось измерить {0}: {1}", path, ex.Message));
+            Log.Warn(T.F("Диски: не удалось измерить {0}: {1}", path, ErrorText.For(ex)), ex);
         }
         catch (Exception ex)
         {
@@ -1245,7 +1245,7 @@ public sealed class DiskViewModel : PageViewModel
         }
         catch (System.Runtime.InteropServices.ExternalException ex)
         {
-            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 

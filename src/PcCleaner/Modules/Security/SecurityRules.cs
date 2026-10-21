@@ -888,21 +888,27 @@ public static partial class SecurityRules
         "web companion", "safe search", "secure search", "quick search", "my search",
         "поиск", "купон", "скидк", "кешбэк", "кэшбэк", "покупк", "сравнение цен", "новая вкладка", "стартовая",
         "домашняя страница", "погода", "конвертер", "скачать видео",
-    // l10n:data-end
     };
+    // l10n:data-end
 
     // l10n:data-begin — the Russian store names of extensions, matched and never shown
-    /// <summary>Extensions that are commonly bundled with other software ("в нагрузку"): a part of the name and why it matters.</summary>
+    private const string SovetnikName = "советник";
+    private const string VisualBookmarksName = "визуальные закладки";
+    // l10n:data-end
+
+    /// <summary>
+    /// Extensions that are commonly bundled with other software ("в нагрузку"): a part of the name (matched, never shown) and why it
+    /// matters (shown, so every reason is a wrapped text outside the data regions).
+    /// </summary>
     private static readonly (string Pattern, Func<string> Reason)[] KnownBundledExtensions =
     {
-        ("советник", () => T._("«Советник» показывает рекламу товаров поверх сайтов магазинов и часто ставится «в нагрузку» к другим программам.")),
+        (SovetnikName, () => T._("«Советник» показывает рекламу товаров поверх сайтов магазинов и часто ставится «в нагрузку» к другим программам.")),
         ("sovetnik", () => T._("«Советник» показывает рекламу товаров поверх сайтов магазинов и часто ставится «в нагрузку» к другим программам.")),
-        ("визуальные закладки", () => T._("Заменяет новую вкладку на страницу Яндекса и часто ставится «в нагрузку» к другим программам.")),
+        (VisualBookmarksName, () => T._("Заменяет новую вкладку на страницу Яндекса и часто ставится «в нагрузку» к другим программам.")),
         ("visual bookmarks", () => T._("Заменяет новую вкладку и часто ставится «в нагрузку» к другим программам.")),
         ("mail.ru", () => T._("Расширения Mail.ru часто ставятся «в нагрузку» и меняют поиск и стартовую страницу.")),
         ("search manager", () => T._("Меняет поисковую систему браузера — типичное поведение рекламных программ.")),
     };
-    // l10n:data-end
 
     /// <summary>Returns a reason if the extension name looks like adware/PUP, otherwise null.</summary>
     public static string? SuspiciousExtensionReason(string? name)

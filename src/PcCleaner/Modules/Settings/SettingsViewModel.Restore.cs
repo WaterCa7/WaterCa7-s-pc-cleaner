@@ -187,7 +187,7 @@ public sealed partial class SettingsViewModel
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log.Warn(T.F("Не удалось обновить список точек восстановления: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось обновить список точек восстановления: {0}", ErrorText.For(ex)), ex);
         }
 
         var text = RestorePointText.Describe(outcome.Value, DateTime.Now, RestorePolicyWarning is not null);

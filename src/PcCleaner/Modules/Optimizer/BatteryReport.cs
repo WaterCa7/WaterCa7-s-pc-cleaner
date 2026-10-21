@@ -47,7 +47,7 @@ public sealed class BatteryReportGenerator
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            Log.Warn(T.F("Ускорение: нет доступа к папке для отчёта о батарее: {0}", ex.Message));
+            Log.Warn(T.F("Ускорение: нет доступа к папке для отчёта о батарее: {0}", ErrorText.For(ex)), ex);
             return new BatteryReportResult(false, T.F("Не удалось подготовить папку для отчёта: {0}.", ErrorText.For(ex)));
         }
 

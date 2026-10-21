@@ -373,7 +373,7 @@ public sealed class CleanerViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
-            Log.Warn(T.F("Очистка: не удалось проверить запущенные программы: {0}", ex.Message));
+            Log.Warn(T.F("Очистка: не удалось проверить запущенные программы: {0}", ErrorText.For(ex)), ex);
         }
     }
 

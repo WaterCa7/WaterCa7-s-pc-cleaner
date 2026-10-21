@@ -13,14 +13,19 @@ namespace PcCleaner.Tests.Core;
 /// {loc:T '…', Context=name} — needs the entry "context\u0004text" (the plain entry of the text is another one). In the enforced files also the words of Format.Plural/Format.Count (they go through T.Plural), and
 /// every text argument of T and Format must be a string literal or a const string, except in the pass-through files.
 /// "few" is Russian only. en.json: one JSON object of strings, keys sorted (ordinal) without repeats, English values
-/// (no Cyrillic) with the same {0} placeholders as the key, and no entry that no text of the source uses.
+/// (no Cyrillic) with the same {0} placeholders as the key, and no entry that no text of the source uses. A T.F / T.CtxF call passes
+/// exactly as many arguments as the highest placeholder of its text and of the English value needs (string.Format would throw).
 /// Lines starting with // and XAML comments are skipped.
 /// </summary>
 internal static class LocalizationCatalog
 {
     /// <param name="Context">The context of T.Ctx / T.CtxF / T.CtxPlural / {loc:T '…', Context=…}; null for a plain text.</param>
     /// <param name="IsImplicit">A word of Format.Plural/Format.Count: needs its entry only in an enforced file.</param>
-    private sealed record SourceText(string File, int Line, string Text, string? Context, bool IsFormat, bool IsImplicit)
+    /// <param name="Passed">
+    /// The number of arguments after the text of a T.F / T.CtxF call; null for any other call, and when a ready array is passed
+    /// (<c>T.F("…", new object[] { a, b })</c>, <c>T.F("…", list.ToArray())</c>), whose length is not known here.
+    /// </param>
+    private sealed record SourceText(string File, int Line, string Text, string? Context, bool IsFormat, bool IsImplicit, int? Passed = null)
     {
         /// <summary>The key of en.json.</summary>
         public string Key => Context is null ? Text : Context + '\u0004' + Text;
@@ -106,8 +111,14 @@ internal static class LocalizationCatalog
                 var shown = text.Context is null ? $"«{text.Text}»" : $"«{text.Text}» (context “{text.Context}”)";
                 if (text.IsFormat && !IsValidFormat(text.Text, ArgumentCount(text.Text)))
                     problems.Add($"{text.File}:{text.Line}: {shown} is not a valid format string");
-                else if (!catalog.ContainsKey(text.Key))
-                    problems.Add($"{text.File}:{text.Line}: {shown} has no entry in en.json");
+                else
+                {
+                    var hasEntry = catalog.TryGetValue(text.Key, out var english);
+                    if (!hasEntry)
+                        problems.Add($"{text.File}:{text.Line}: {shown} has no entry in en.json");
+                    if (text.IsFormat)
+                        problems.AddRange(ArgumentProblems(text, shown, english));
+                }
             }
         }
 
@@ -125,6 +136,21 @@ internal static class LocalizationCatalog
                 problems.Add($"en.json: «{value}» (for {shown}) is not a valid format string");
         }
         return problems;
+    }
+
+    /// <summary>
+    /// T.F / T.CtxF pass the arguments to string.Format, which throws when a placeholder has none ("… {1}" with one argument), in
+    /// the Russian text or in the English one. An argument no placeholder uses is a slip of the index as well.
+    /// </summary>
+    private static IEnumerable<string> ArgumentProblems(SourceText text, string shown, string? english)
+    {
+        if (text.Passed is not { } passed)
+            yield break;
+        var needed = Math.Max(ArgumentCount(text.Text), english is null ? 0 : ArgumentCount(english));
+        if (passed < needed)
+            yield return $"{text.File}:{text.Line}: {shown} uses {needed} argument(s) ({{0}}…{{{needed - 1}}}) but the call passes {passed}";
+        else if (passed > needed)
+            yield return $"{text.File}:{text.Line}: {shown} uses {needed} argument(s) but the call passes {passed}";
     }
 
     /// <summary>The wrapping calls and the positions of their arguments that hold a text (the others are a context, a number, other values).</summary>
@@ -152,7 +178,7 @@ internal static class LocalizationCatalog
     /// "Русский" (it is never translated), a const string that the code passes through T._ / T.F by its name, the plural
     /// words inside an interpolated string (<c>$"{Format.Count(n, "файл", "файла", "файлов")} …"</c>) and a region of Russian
     /// words the program matches against and never shows, between the comment lines <c>// l10n:data-begin</c> and
-    /// <c>// l10n:data-end</c>.
+    /// <c>// l10n:data-end</c>; a begin without its end is reported.
     /// </summary>
     /// <returns>One line per literal: "file:line: …".</returns>
     public static List<string> UnwrappedCyrillic(IEnumerable<(string Path, string Content)> files, IReadOnlyCollection<string> enforced)
@@ -172,6 +198,8 @@ internal static class LocalizationCatalog
                 continue;
             var code = WithoutCommentLines(content);
             var dataLines = DataRegionLines(content);
+            foreach (var line in UnclosedDataBegins(content))
+                problems.Add($"{path}:{line}: // l10n:data-begin has no // l10n:data-end (the region would swallow the rest of the file, or this one is nested)");
             var open = new List<(string Call, int Argument)>(); // for each open bracket: the name of the call for "(", else "", and the index of its current argument
             var i = 0;
             while (i < code.Length)
@@ -269,6 +297,32 @@ internal static class LocalizationCatalog
                 inside = false;
         }
         return lines;
+    }
+
+    /// <summary>The numbers of the "// l10n:data-begin" lines that are never closed by a "// l10n:data-end", or that start inside an open region.</summary>
+    private static List<int> UnclosedDataBegins(string content)
+    {
+        var problems = new List<int>();
+        int? open = null;
+        var number = 0;
+        foreach (var line in content.Split('\n'))
+        {
+            number++;
+            var text = line.Trim();
+            if (text.StartsWith("// l10n:data-begin", StringComparison.Ordinal))
+            {
+                if (open is { } nested)
+                    problems.Add(nested); // the earlier region is still open: it was never closed
+                open = number;
+            }
+            else if (text.StartsWith("// l10n:data-end", StringComparison.Ordinal))
+            {
+                open = null;
+            }
+        }
+        if (open is { } last)
+            problems.Add(last);
+        return problems;
     }
 
     /// <summary>An interpolated string without its Format.Count(…) / Format.Plural(…) / T.Plural(…) / T.CtxPlural(…) calls.</summary>
@@ -418,11 +472,24 @@ internal static class LocalizationCatalog
                 else if (method.StartsWith("Ctx", StringComparison.Ordinal) && context is null)
                     continue; // reported above: without the context the key is unknown
                 else
-                    texts.Add(new SourceText(file, line, text, context, IsFormat: method is "F" or "CtxF", IsImplicit: isImplicit));
+                    texts.Add(new SourceText(file, line, text, context, IsFormat: method is "F" or "CtxF", IsImplicit: isImplicit,
+                        Passed: method is "F" or "CtxF" ? PassedArguments(args, position + 1) : null));
             }
         }
         return texts;
     }
+
+    /// <summary>The arguments of a T.F / T.CtxF call after its text (<paramref name="first"/> is the index of the first one); null when a ready array is passed.</summary>
+    private static int? PassedArguments(IReadOnlyList<string> args, int first)
+    {
+        var count = Math.Max(0, args.Count - first);
+        if (count == 1 && ReadyArray.IsMatch(args[first]))
+            return null;
+        return count;
+    }
+
+    /// <summary>An argument that is an array for the <c>params object[]</c> of T.F: <c>new object[] { … }</c>, <c>new[] { … }</c>, <c>….ToArray()</c>.</summary>
+    private static readonly Regex ReadyArray = new(@"^new\s*(?:object\s*)?\[|\.ToArray\(\)$", RegexOptions.Compiled);
 
     /// <summary>const string Name = "…" of all files; null for a name with different values.</summary>
     private static Dictionary<string, string?> Consts(IEnumerable<(string Path, string Content)> files)

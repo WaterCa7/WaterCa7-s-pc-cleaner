@@ -34,7 +34,7 @@ public sealed record UpdateManifest(Version Version, DateTimeOffset Published, s
         }
         catch (JsonException ex)
         {
-            problem = T.F("update.json повреждён: {0}", ex.Message);
+            problem = T.F("update.json повреждён: {0}", ErrorText.For(ex));
             return null;
         }
         if (dto is null)

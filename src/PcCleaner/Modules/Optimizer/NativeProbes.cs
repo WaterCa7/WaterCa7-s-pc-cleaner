@@ -75,7 +75,7 @@ internal static class NativeProbes
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or MarshalDirectiveException)
         {
-            Log.Warn(T.F("Ускорение: не удалось получить список мониторов: {0}", ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось получить список мониторов: {0}", ErrorText.For(ex)), ex);
         }
         return list;
     }

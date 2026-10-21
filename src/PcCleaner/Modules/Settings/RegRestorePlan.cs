@@ -424,7 +424,7 @@ internal sealed class LockedRegCopy : IDisposable
             // Only what this call created is removed (never a file or folder that was there before).
             if (created)
                 Cleanup(path, dir);
-            Log.Warn(T.F("Не удалось подготовить резервную копию {0} к восстановлению: {1}", name, ex.Message));
+            Log.Warn(T.F("Не удалось подготовить резервную копию {0} к восстановлению: {1}", name, ErrorText.For(ex)), ex);
             return null;
         }
     }

@@ -66,7 +66,7 @@ public class LocalizationCatalogTests
     }
 
     [Fact]
-    public void TheEnforcedCsFiles_HaveNoCyrillicLiteralOutsideT()
+    public void TheEnforcedFiles_HaveNoRussianTextOutsideT_InCSharpAndXaml_AndNoUnclosedDataRegion()
     {
         var problems = LocalizationCatalog.UnwrappedCyrillic(SourceFiles(), Enforced);
 
@@ -255,9 +255,10 @@ public class LocalizationCatalogTests
     [InlineData("""{ "Найдено {0} из {1}": "Found {0} of {1} in {3}" }""")]
     public void DifferentPlaceholders_AreReported(string catalog)
     {
-        var problem = Assert.Single(Check(catalog, ("Pages/A.cs", "T.F(\"Найдено {0} из {1}\", a, b);")));
+        var problems = Check(catalog, ("Pages/A.cs", "T.F(\"Найдено {0} из {1}\", a, b);"));
 
-        Assert.Contains("placeholder", problem);
+        Assert.Contains(problems, p => p.Contains("placeholder"));
+        Assert.All(problems, p => Assert.True(p.Contains("placeholder") || p.Contains("passes 2"), p)); // {3} also has no argument
     }
 
     [Fact]
@@ -376,6 +377,106 @@ public class LocalizationCatalogTests
     public void AGoodCatalog_WithTheSameTexts_IsFine()
         => Assert.Empty(Check("""{ "А": "A", "Б": "B" }""", ("Pages/A.cs", "T._(\"А\");\nT._(\"Б\");")));
 
+    // ----- the arguments of T.F / T.CtxF: string.Format throws at run time when a placeholder has none -----
+
+    [Fact]
+    public void AFormatCall_WithFewerArgumentsThanPlaceholders_IsReported_WithTheFileAndLine()
+    {
+        var problems = Check("""{ "Найдено {0} из {1}": "Found {0} of {1}" }""", ("Pages/A.cs", "var a = 1;\nvar b = T.F(\"Найдено {0} из {1}\", found);"));
+
+        var problem = Assert.Single(problems);
+        Assert.Contains("Pages/A.cs:2", problem);
+        Assert.Contains("«Найдено {0} из {1}»", problem);
+        Assert.Contains("uses 2 argument", problem);
+        Assert.Contains("passes 1", problem);
+    }
+
+    [Fact]
+    public void AFormatCall_WithoutAnyArgument_ButWithAPlaceholder_IsReported()
+        => Assert.Contains("passes 0", Assert.Single(Check("""{ "Найдено {0}": "Found {0}" }""", ("Pages/A.cs", "T.F(\"Найдено {0}\");"))));
+
+    [Fact]
+    public void AFormatCall_WithFewerArgumentsThanTheEnglishValueUses_IsReported_AsWell()
+    {
+        // the Russian text needs one argument, the English value two: the English run would throw
+        var problems = Check("""{ "Найдено {0}": "Found {0} of {1}" }""", ("Pages/A.cs", "T.F(\"Найдено {0}\", found);"));
+
+        Assert.Contains(problems, p => p.Contains("placeholder"));
+        Assert.Contains(problems, p => p.Contains("uses 2 argument") && p.Contains("passes 1"));
+    }
+
+    [Fact]
+    public void AFormatCall_WithoutAnEntry_IsStillCheckedForItsArguments()
+    {
+        var problems = Check("{}", ("Pages/A.cs", "T.F(\"Найдено {0} из {1}\", found);"));
+
+        Assert.Equal(2, problems.Count);
+        Assert.Contains(problems, p => p.Contains("has no entry"));
+        Assert.Contains(problems, p => p.Contains("passes 1"));
+    }
+
+    [Fact]
+    public void AFormatCall_WithMoreArgumentsThanPlaceholders_IsReported()
+    {
+        var problems = Check("""{ "Найдено {0}": "Found {0}", "Привет": "Hello" }""",
+            ("Pages/A.cs", "T.F(\"Найдено {0}\", found, total);\nT.F(\"Привет\", name);"));
+
+        Assert.Equal(2, problems.Count);
+        Assert.Contains(problems, p => p.StartsWith("Pages/A.cs:1:") && p.Contains("uses 1 argument") && p.Contains("passes 2"));
+        Assert.Contains(problems, p => p.StartsWith("Pages/A.cs:2:") && p.Contains("uses 0 argument") && p.Contains("passes 1"));
+    }
+
+    [Fact]
+    public void ACtxFCall_IsCheckedForItsArguments_NotCountingTheContext()
+    {
+        const string catalog = """{ "c\u0004Найдено {0} из {1}": "Found {0} of {1}" }""";
+
+        Assert.Empty(Check(catalog, ("Pages/A.cs", "T.CtxF(\"c\", \"Найдено {0} из {1}\", a, b);")));
+        var problem = Assert.Single(Check(catalog, ("Pages/A.cs", "T.CtxF(\"c\", \"Найдено {0} из {1}\", a);")));
+        Assert.Contains("passes 1", problem);
+    }
+
+    [Fact]
+    public void FormatCalls_WithTheRightNumberOfArguments_AreFine()
+    {
+        const string catalog = """
+            {
+              "Найдено {0} из {1}": "Found {0} of {1}",
+              "Нет {0} и снова {0}": "No {0} and {0} again",
+              "Порядок {1} {0}": "Order {0} {1}",
+              "Привет": "Hello"
+            }
+            """;
+        var cs = """
+            T.F("Найдено {0} из {1}", Count(a, b), items.Where(i => i.Name == "x, y").Count());
+            T.F("Нет {0} и снова {0}", name);
+            T.F("Привет");
+            T.F("Порядок {1} {0}", $"{a:N0}, {b}", c ? "x" : "y");
+            """;
+
+        Assert.Empty(Check(catalog, ("Pages/A.cs", cs)));
+    }
+
+    [Fact]
+    public void AReadyArray_PassedToTheParamsOfTF_IsNotCounted()
+    {
+        var cs = """
+            T.F("Найдено {0} из {1}", new object[] { a, b });
+            T.F("Найдено {0} из {1}", new[] { a, b });
+            T.F("Найдено {0} из {1}", values.ToArray());
+            """;
+
+        Assert.Empty(Check("""{ "Найдено {0} из {1}": "Found {0} of {1}" }""", ("Pages/A.cs", cs)));
+    }
+
+    [Fact]
+    public void TheArgumentsOfOtherCalls_AreNotCounted()
+    {
+        const string catalog = """{ "c\u0004Один": "One", "Один": "One", "Пять": "Five", "Три": "Three" }""";
+
+        Assert.Empty(Check(catalog, ("Pages/A.cs", "T._(\"Один\");\nT.Ctx(\"c\", \"Один\");\nT.Plural(n, \"Три\", \"Трёх\", \"Пять\");")));
+    }
+
     // ----- texts with a context: T.Ctx / T.CtxF / T.CtxPlural / {loc:T '…', Context=…} -----
 
     [Fact]
@@ -455,9 +556,10 @@ public class LocalizationCatalogTests
     [InlineData("""{ "uninstall\u0004Удалено: {0} из {1}.": "Uninstalled {0} of {2}" }""")]
     public void DifferentPlaceholders_OfAContextEntry_AreReported(string catalog)
     {
-        var problem = Assert.Single(Check(catalog, ("Pages/A.cs", "T.CtxF(\"uninstall\", \"Удалено: {0} из {1}.\", a, b);")));
+        var problems = Check(catalog, ("Pages/A.cs", "T.CtxF(\"uninstall\", \"Удалено: {0} из {1}.\", a, b);"));
 
-        Assert.Contains("placeholder", problem);
+        Assert.Contains(problems, p => p.Contains("placeholder"));
+        Assert.All(problems, p => Assert.True(p.Contains("placeholder") || p.Contains("passes 2"), p)); // {2} also has no argument
     }
 
     [Fact]
@@ -698,6 +800,56 @@ public class LocalizationCatalogTests
         Assert.Equal(2, problems.Count);
         Assert.Contains("Pages/A.cs:1", problems[0]);
         Assert.Contains("Pages/A.cs:6", problems[1]);
+    }
+
+    [Fact]
+    public void ARegionMarkedAsData_WithoutItsEnd_IsReported_WithTheLineOfItsBegin()
+    {
+        var cs = """
+            var before = 1;
+            // l10n:data-begin — Russian words that are matched, never shown
+            var months = new[] { "января", "февраля" };
+            var shown = "Привет";
+            """;
+
+        var problems = Unwrapped(cs);
+
+        var problem = Assert.Single(problems); // the open region hides "Привет" too, so the one problem is the missing end
+        Assert.StartsWith("Pages/A.cs:2:", problem);
+        Assert.Contains("l10n:data-end", problem);
+    }
+
+    [Fact]
+    public void ARegionMarkedAsData_StartedInsideAnotherOne_LeavesTheFirstUnclosed()
+    {
+        var cs = """
+            // l10n:data-begin — first
+            var a = new[] { "января" };
+            // l10n:data-begin — second
+            var b = new[] { "февраля" };
+            // l10n:data-end
+            var shown = "Привет";
+            """;
+
+        var problem = Assert.Single(Unwrapped(cs).Where(p => p.Contains("l10n:data-end")));
+
+        Assert.StartsWith("Pages/A.cs:1:", problem);
+    }
+
+    [Fact]
+    public void ClosedRegionsOneAfterAnother_AreFine_AndAnUncheckedFileMayLeaveOneOpen()
+    {
+        var cs = """
+            // l10n:data-begin — one
+            var a = new[] { "января" };
+            // l10n:data-end
+            // l10n:data-begin — two
+            var b = new[] { "февраля" };
+            // l10n:data-end
+            """;
+
+        Assert.Empty(Unwrapped(cs));
+        Assert.Empty(Unwrapped("// l10n:data-begin — open\nvar a = 1;", "Other/A.cs"));
     }
 
     [Fact]

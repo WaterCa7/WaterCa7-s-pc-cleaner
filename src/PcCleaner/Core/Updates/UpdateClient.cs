@@ -5,12 +5,16 @@ using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
-/// <summary>A failed check or download; the message is Russian and goes to the log and the Settings page.</summary>
+/// <summary>
+/// A failed check or download; the message is the app's own text in the language of the UI (<see cref="ErrorText.Own"/>) and goes to
+/// the log and the Settings page.
+/// </summary>
 public sealed class UpdateException : Exception
 {
     public UpdateException(string message, Exception? inner = null)
         : base(message, inner)
     {
+        ErrorText.Own(this);
     }
 }
 

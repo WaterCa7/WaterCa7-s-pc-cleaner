@@ -195,7 +195,7 @@ internal static class ProgramIcons
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or ExternalException)
         {
-            Log.Warn(T.F("Программы: не удалось прочитать название приложения: {0}", ex.Message));
+            Log.Warn(T.F("Программы: не удалось прочитать название приложения: {0}", ErrorText.For(ex)), ex);
             return null;
         }
     }

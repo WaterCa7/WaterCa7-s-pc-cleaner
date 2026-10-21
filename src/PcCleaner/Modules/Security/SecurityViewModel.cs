@@ -870,7 +870,7 @@ public sealed class SecurityViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Log.Warn(T.F("Не удалось открыть Блокнот: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось открыть Блокнот: {0}", ErrorText.For(ex)), ex);
             Dialogs.Error(T._("Файл hosts"), T.F("Не удалось открыть Блокнот: {0}.", ErrorText.For(ex)));
         }
     }
@@ -988,7 +988,7 @@ public sealed class SecurityViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось открыть параметры BitLocker: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось открыть параметры BitLocker: {0}", ErrorText.For(ex)), ex);
             Dialogs.Error(T._("Шифрование диска"), T.F("Не удалось открыть параметры BitLocker: {0}.", ErrorText.For(ex)));
         }
     }

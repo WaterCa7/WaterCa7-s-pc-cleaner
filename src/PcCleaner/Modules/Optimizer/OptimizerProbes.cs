@@ -198,7 +198,7 @@ internal static class HardwareProbe
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException or OverflowException)
         {
-            Log.Warn(T.F("Ускорение: не удалось прочитать сведения о батарее: {0}", ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось прочитать сведения о батарее: {0}", ErrorText.For(ex)), ex);
             return new BatteryInfo { CapacityState = SensorState.Unknown };
         }
     }
@@ -322,7 +322,7 @@ internal static class HardwareProbe
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn(T.F("Ускорение: нет доступа к сведениям о видеопамяти: {0}", ex.Message));
+                Log.Warn(T.F("Ускорение: нет доступа к сведениям о видеопамяти: {0}", ErrorText.For(ex)), ex);
             }
         }
         return result;
@@ -603,7 +603,7 @@ internal sealed class SettingsProbe
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Ускорение: не удалось прочитать {0}\\{1}\\{2}: {3}", (hive == RegistryHive.LocalMachine ? "HKLM" : "HKCU"), subKey, name, ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось прочитать {0}\\{1}\\{2}: {3}", (hive == RegistryHive.LocalMachine ? "HKLM" : "HKCU"), subKey, name, ErrorText.For(ex)), ex);
             return null;
         }
     }

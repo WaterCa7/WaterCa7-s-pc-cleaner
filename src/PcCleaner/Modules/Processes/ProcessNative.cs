@@ -42,7 +42,7 @@ internal sealed class NativeProcessSource : IProcessSource
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                Log.Warn(T.F("Процессы: NtQuerySystemInformation недоступен ({0}), используется запасной способ", ex.Message));
+                Log.Warn(T.F("Процессы: NtQuerySystemInformation недоступен ({0}), используется запасной способ", ErrorText.For(ex)), ex);
             }
             _nativeFailed = true;
         }
@@ -141,7 +141,7 @@ internal sealed class NativeProcessSource : IProcessSource
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Процессы: не удалось получить список процессов: {0}", ex.Message));
+            Log.Warn(T.F("Процессы: не удалось получить список процессов: {0}", ErrorText.For(ex)), ex);
             return list;
         }
         foreach (var p in processes)

@@ -251,7 +251,10 @@ public static class FixResultClassifier
         /// <summary>English texts of the admin-only entries.</summary>
         public IReadOnlyList<Regex> AdminRequired { get; }
 
-        /// <summary>Russian keys of the failure / admin-only entries whose English text is too short to give a matcher (ordinal order).</summary>
+        /// <summary>
+        /// Keys of en.json for the failure / admin-only entries whose English text is too short to give a matcher (ordinal order). A key is the
+        /// Russian text, or for a text with a context (<c>T.Ctx</c>) the context, U+0004 and the Russian text, exactly as it stands in en.json.
+        /// </summary>
         public IReadOnlyList<string> Skipped { get; }
     }
 

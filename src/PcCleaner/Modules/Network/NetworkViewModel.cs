@@ -819,7 +819,7 @@ public sealed class NetworkViewModel : PageViewModel
             if (_lastTrafficError != ex.Message)
             {
                 _lastTrafficError = ex.Message;
-                Log.Warn(T.F("Сеть: не удалось обновить скорость: {0}", ex.Message));
+                Log.Warn(T.F("Сеть: не удалось обновить скорость: {0}", ErrorText.For(ex)), ex);
             }
         }
         finally
@@ -1233,7 +1233,7 @@ public sealed class NetworkViewModel : PageViewModel
         catch (Exception ex)
         {
             // Background work: a failure must never reach the dispatcher.
-            Log.Warn(T.F("Сеть: не удалось определить имя узла {0}: {1}", ip, ex.Message));
+            Log.Warn(T.F("Сеть: не удалось определить имя узла {0}: {1}", ip, ErrorText.For(ex)), ex);
         }
     }
 
@@ -1429,7 +1429,7 @@ public sealed class NetworkViewModel : PageViewModel
         }
         catch (System.Runtime.InteropServices.ExternalException ex)
         {
-            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 

@@ -621,7 +621,7 @@ public sealed class DashboardViewModel : PageViewModel
             }
             catch (Exception ex)
             {
-                Log.Warn(T.F("Главная: не удалось загрузить результат прошлой проверки: {0}", ex.Message));
+                Log.Warn(T.F("Главная: не удалось загрузить результат прошлой проверки: {0}", ErrorText.For(ex)), ex);
             }
             RaiseHero();
             OnPropertyChanged(nameof(ShowIntro));
@@ -677,7 +677,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Главная: не удалось прочитать сведения о компьютере: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось прочитать сведения о компьютере: {0}", ErrorText.For(ex)), ex);
             return null;
         }
     }
@@ -719,7 +719,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Главная: обновление показателей остановлено: {0}", ex.Message));
+            Log.Warn(T.F("Главная: обновление показателей остановлено: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -987,7 +987,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Главная: не удалось восстановить состояние после ошибки проверки: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось восстановить состояние после ошибки проверки: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1032,7 +1032,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Главная: не удалось сохранить результат проверки: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось сохранить результат проверки: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1224,7 +1224,7 @@ public sealed class DashboardViewModel : PageViewModel
             item.FixFailed = true;
             item.RaiseNeedsAdmin();
             if (ex is UnauthorizedAccessException or SecurityException or Win32Exception or IOException)
-                Log.Warn(T.F("Главная: не удалось исправить «{0}» ({1}): {2}", issue.Title, issue.Module, ex.Message));
+                Log.Warn(T.F("Главная: не удалось исправить «{0}» ({1}): {2}", issue.Title, issue.Module, ErrorText.For(ex)), ex);
             else
                 Log.Error(T.F("Главная: ошибка при исправлении «{0}» ({1})", issue.Title, issue.Module), ex);
             return false;
@@ -1492,7 +1492,7 @@ public sealed class DashboardViewModel : PageViewModel
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException
                                        or NotSupportedException or ArgumentException)
         {
-            Log.Warn(T.F("Главная: не удалось сохранить отчёт в «{0}»: {1}", path, ex.Message));
+            Log.Warn(T.F("Главная: не удалось сохранить отчёт в «{0}»: {1}", path, ErrorText.For(ex)), ex);
             SetReportStatus(T._("Отчёт не сохранён — выберите другую папку"), ok: false);
             Dialogs.Error(T._("Не удалось сохранить отчёт"),
                 T.F("{0}\n\n{1}\n\nПопробуйте сохранить отчёт в другую папку, например в «Документы».", path, ErrorText.Sentence(ex)));
@@ -1533,7 +1533,7 @@ public sealed class DashboardViewModel : PageViewModel
         catch (Exception ex)
         {
             // Another program may hold the clipboard open (CLIPBRD_E_CANT_OPEN) — an environment problem, not a bug.
-            Log.Warn(T.F("Главная: не удалось скопировать отчёт в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось скопировать отчёт в буфер обмена: {0}", ErrorText.For(ex)), ex);
             SetReportStatus(T._("Буфер обмена занят — попробуйте ещё раз"), ok: false);
             Dialogs.Error(T._("Не удалось скопировать отчёт"),
                 T._("Буфер обмена сейчас занят другой программой. Подождите пару секунд и нажмите «Скопировать отчёт» ещё раз или сохраните отчёт в файл."));
@@ -1594,7 +1594,7 @@ public sealed class DashboardViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 }

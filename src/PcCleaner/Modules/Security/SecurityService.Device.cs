@@ -131,7 +131,7 @@ public sealed partial class SecurityService
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
-            Log.Info(T.F("Безопасность: TPM Base Services недоступны ({0}), пробуем tpmtool", ex.Message));
+            Log.Info(T.F("Безопасность: TPM Base Services недоступны ({0}), пробуем tpmtool", ErrorText.For(ex)), ex);
         }
 
         // Note: without a console window tpmtool prints only the values, without the labels — then nothing is parsed
@@ -233,7 +233,7 @@ public sealed partial class SecurityService
         if (thread.Join(TimeSpan.FromSeconds(8)) && error is null)
             return SecurityRules.MapShellBitLocker(value);
 
-        Log.Info(T.F("Безопасность: свойство шифрования диска недоступно напрямую ({0}), читаем через PowerShell", error?.Message ?? T._("нет ответа")));
+        Log.Info(T.F("Безопасность: свойство шифрования диска недоступно напрямую ({0}), читаем через PowerShell", error is null ? T._("нет ответа") : ErrorText.For(error)), error);
         var r = ProcessRunner.PowerShellAsync(
                 $"$v = (New-Object -ComObject Shell.Application).NameSpace('{drive}').Self.ExtendedProperty('{property}')\r\n'VALUE:' + $v", TimeSpan.FromSeconds(30), ct)
             .GetAwaiter().GetResult();

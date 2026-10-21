@@ -316,7 +316,7 @@ public sealed class OptimizerViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Ускорение: не удалось обновить настройки: {0}", ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось обновить настройки: {0}", ErrorText.For(ex)), ex);
         }
     }
 

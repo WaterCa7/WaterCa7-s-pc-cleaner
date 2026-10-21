@@ -59,7 +59,7 @@ public static class SystemInfo
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Главная: не удалось прочитать сведения о системе из реестра: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось прочитать сведения о системе из реестра: {0}", ErrorText.For(ex)), ex);
         }
 
         var buildNumber = int.TryParse(build, out var b) ? b : (int?)null;
@@ -85,7 +85,7 @@ public static class SystemInfo
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Главная: не удалось получить сведения о видеокарте: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось получить сведения о видеокарте: {0}", ErrorText.For(ex)), ex);
             return Array.Empty<string>();
         }
     }
@@ -130,6 +130,7 @@ public static class SystemInfo
     {
         ("Home Single Language", "Домашняя для одного языка"),
         ("Home", "Домашняя"),
+        ("Pro for Workstations", "Pro для рабочих станций"),
         ("Professional", "Pro"),
         ("Enterprise", "Корпоративная"),
         ("Education", "для образовательных учреждений"),
@@ -228,7 +229,7 @@ public static class SystemInfo
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Главная: не удалось измерить загрузку процессора: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось измерить загрузку процессора: {0}", ErrorText.For(ex)), ex);
         }
 
         MemoryStatus? memory = null;
@@ -240,7 +241,7 @@ public static class SystemInfo
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Главная: не удалось получить сведения о памяти: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось получить сведения о памяти: {0}", ErrorText.For(ex)), ex);
         }
 
         var (driveName, total, free) = ReadSystemDrive();
@@ -259,7 +260,7 @@ public static class SystemInfo
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            Log.Warn(T.F("Главная: не удалось прочитать сведения о системном диске: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось прочитать сведения о системном диске: {0}", ErrorText.For(ex)), ex);
         }
         return (null, 0, 0);
     }

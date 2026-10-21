@@ -624,7 +624,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Программы: не удалось вычислить размеры или значки: {0}", ex.Message));
+            Log.Warn(T.F("Программы: не удалось вычислить размеры или значки: {0}", ErrorText.For(ex)), ex);
         }
         if (ReferenceEquals(programs.FirstOrDefault(), _programs.FirstOrDefault()))
             UpdateSummary();
@@ -1019,7 +1019,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 

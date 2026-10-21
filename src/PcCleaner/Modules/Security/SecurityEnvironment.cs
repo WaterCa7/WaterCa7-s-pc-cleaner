@@ -168,7 +168,7 @@ public sealed class SecurityEnvironment
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Нет доступа к {0}\\{1}: {2}", loc.FullPath, name, ex.Message));
+            Log.Warn(T.F("Нет доступа к {0}\\{1}: {2}", loc.FullPath, name, ErrorText.For(ex)), ex);
             return (false, null);
         }
     }

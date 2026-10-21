@@ -31,21 +31,28 @@ public static class StoreAppCatalog
     private const string LanguageReason = "Языковой пакет интерфейса Windows — без него сменится язык системы.";
     private const string OfficeReason = "Часть Microsoft Office: устанавливается и удаляется вместе с ним. Без компонента Office может работать с ошибками.";
 
-    /// <summary>The catalog in the language of the UI, built once per language (the language is fixed per run; tests switch it).</summary>
+    /// <summary>
+    /// The catalog in the language of the UI, built once per language (the language is fixed per run; tests switch it). The language
+    /// and its entries are published together in one immutable object through one field, so a reader on another thread never pairs
+    /// the entries of one language with the name of another.
+    /// </summary>
     private static Entry[] Entries
     {
         get
         {
+            var language = T.Language;
             var cached = _entries;
-            if (cached is { } known && known.Language == T.Language)
-                return known.Entries;
+            if (cached is not null && cached.Language == language)
+                return cached.Entries;
             var built = BuildEntries();
-            _entries = (T.Language, built);
+            _entries = new Built(language, built);
             return built;
         }
     }
 
-    private static (string Language, Entry[] Entries)? _entries;
+    private sealed record Built(string Language, Entry[] Entries);
+
+    private static volatile Built? _entries;
 
     /// <summary>Order matters: the first matching entry wins (protected entries go first).</summary>
     private static Entry[] BuildEntries() => new Entry[]

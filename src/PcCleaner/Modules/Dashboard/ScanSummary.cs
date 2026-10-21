@@ -119,7 +119,7 @@ public sealed record ScanSummary
         }
         catch (JsonException ex)
         {
-            Log.Warn(T.F("Главная: не удалось прочитать результат прошлой проверки: {0}", ex.Message));
+            Log.Warn(T.F("Главная: не удалось прочитать результат прошлой проверки: {0}", ErrorText.For(ex)), ex);
             return null;
         }
     }

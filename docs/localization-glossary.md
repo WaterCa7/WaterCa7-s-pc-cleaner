@@ -29,8 +29,9 @@ names of languages stay in their own language (Русский / English).
    failure rules) go between the comment lines `// l10n:data-begin — why` and `// l10n:data-end`; a text that is shown never goes inside
    (an unclosed `data-begin` fails the test).
 7. **Exceptions.** Show and log an exception with `ErrorText.For(ex)` / `ErrorText.Sentence(ex)`, never `ex.Message` (a Windows message in
-   another language would appear raw). A text the app writes itself is passed through `T._` where it is thrown and marked
-   `throw ErrorText.Own(new InvalidOperationException(T._("…")))`.
+   another language would appear raw). A handled failure goes to the log as `Log.Warn(T.F("…: {0}", ErrorText.For(ex)), ex)`: the journal
+   gets the phrase, the log file also the type and the original message. A text the app writes itself is passed through `T._` where it is
+   thrown and marked `throw ErrorText.Own(new InvalidOperationException(T._("…")))` (`UpdateException` marks itself).
 8. **Failure texts stay recognisable.** The Dashboard decides whether a fix failed or needs administrator rights from the text
    (`FixResultClassifier`): every en.json entry whose Russian key the Russian rules call a failure becomes an English matcher. So keep such an
    English value a whole sentence ("Could not turn on the firewall: {0}." — not `"{0}"`, `"{0}: {1}"` or "Error"; at least 8 non-space

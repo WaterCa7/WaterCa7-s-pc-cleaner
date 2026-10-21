@@ -119,7 +119,7 @@ public sealed class NetworkService : IHealthContributor
                                        or System.ComponentModel.Win32Exception or System.Net.Sockets.SocketException
                                        or System.Net.NetworkInformation.NetworkInformationException)
         {
-            Log.Warn(T.F("Сеть: проверка «{0}» не удалась: {1}", what, ex.Message));
+            Log.Warn(T.F("Сеть: проверка «{0}» не удалась: {1}", what, ErrorText.For(ex)), ex);
             return null;
         }
     }
@@ -136,7 +136,7 @@ public sealed class NetworkService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Net.NetworkInformation.NetworkInformationException)
         {
-            Log.Warn(T.F("Сеть: проверка «{0}» не удалась: {1}", what, ex.Message));
+            Log.Warn(T.F("Сеть: проверка «{0}» не удалась: {1}", what, ErrorText.For(ex)), ex);
             return null;
         }
     }

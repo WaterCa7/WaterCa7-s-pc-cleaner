@@ -85,7 +85,7 @@ public sealed class CleanerService : IHealthContributor
         }
         catch (Exception ex) when (IsExpected(ex))
         {
-            Log.Warn(T.F("Очистка: не удалось оценить «{0}»: {1}", category.Name, ex.Message));
+            Log.Warn(T.F("Очистка: не удалось оценить «{0}»: {1}", category.Name, ErrorText.For(ex)), ex);
             return new CategoryScanResult { CategoryId = category.Id, Error = T._("Не удалось прочитать папку") };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -189,7 +189,7 @@ public sealed class CleanerService : IHealthContributor
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            Log.Warn(T.F("Очистка: не удалось узнать размер кэша оптимизации доставки: {0}", ex.Message));
+            Log.Warn(T.F("Очистка: не удалось узнать размер кэша оптимизации доставки: {0}", ErrorText.For(ex)), ex);
         }
         return null;
     }
@@ -238,7 +238,7 @@ public sealed class CleanerService : IHealthContributor
         }
         catch (Exception ex) when (IsExpected(ex))
         {
-            Log.Warn(T.F("Очистка «{0}» не удалась: {1}", category.Name, ex.Message));
+            Log.Warn(T.F("Очистка «{0}» не удалась: {1}", category.Name, ErrorText.For(ex)), ex);
             result = new CategoryCleanResult { CategoryId = category.Id, Name = category.Name };
             result.Errors.Add(ErrorText.For(ex));
         }

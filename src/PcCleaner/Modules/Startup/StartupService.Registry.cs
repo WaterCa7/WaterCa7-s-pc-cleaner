@@ -71,7 +71,7 @@ public sealed partial class StartupService
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn(T.F("Автозагрузка: нет доступа к {0}\\{1}: {2}", hiveName, source.KeyPath, ex.Message));
+                Log.Warn(T.F("Автозагрузка: нет доступа к {0}\\{1}: {2}", hiveName, source.KeyPath, ErrorText.For(ex)), ex);
             }
         }
         return list;
@@ -98,7 +98,7 @@ public sealed partial class StartupService
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or SecurityException)
             {
-                Log.Warn(T.F("Автозагрузка: нет доступа к папке {0}: {1}", folder, ex.Message));
+                Log.Warn(T.F("Автозагрузка: нет доступа к папке {0}: {1}", folder, ErrorText.For(ex)), ex);
                 continue;
             }
 

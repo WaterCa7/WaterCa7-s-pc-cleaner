@@ -31,7 +31,7 @@ internal static class SystemTools
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Log.Warn(T.F("Не удалось запустить {0}: {1}", Path.GetFileName(exe), ex.Message));
+            Log.Warn(T.F("Не удалось запустить {0}: {1}", Path.GetFileName(exe), ErrorText.For(ex)), ex);
             return ToolLaunchResult.Failed;
         }
     }
@@ -111,7 +111,7 @@ internal static class SystemTools
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Log.Warn(T.F("Не удалось открыть {0}: {1}", target, ex.Message));
+            Log.Warn(T.F("Не удалось открыть {0}: {1}", target, ErrorText.For(ex)), ex);
         }
     }
 
@@ -146,7 +146,7 @@ internal static class SystemTools
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            Log.Warn(T.F("Не удалось открыть проводник для {0}: {1}", path, ex.Message));
+            Log.Warn(T.F("Не удалось открыть проводник для {0}: {1}", path, ErrorText.For(ex)), ex);
         }
     }
 
@@ -247,7 +247,7 @@ internal static class SystemTools
         }
         catch (Exception ex)
         {
-            Log.Warn(T.F("Ошибка обработки вывода: {0}", ex.Message));
+            Log.Warn(T.F("Ошибка обработки вывода: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -429,7 +429,7 @@ internal static class SafeRecycler
         }
         catch (Exception ex) when (ex is ArgumentException or IOException)
         {
-            Log.Warn(T.F("Не перемещено в корзину: {0}: {1}", path, ex.Message));
+            Log.Warn(T.F("Не перемещено в корзину: {0}: {1}", path, ErrorText.For(ex)), ex);
             return new RecycleOutcome(RecycleFailure.NoRecycleBin);
         }
 

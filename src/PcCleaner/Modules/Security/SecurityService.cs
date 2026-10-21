@@ -102,7 +102,7 @@ public sealed partial class SecurityService : IHealthContributor
             }
             catch (Exception ex)
             {
-                Log.Warn(T.F("Безопасность: проверка «{0}» не удалась: {1}: {2}", name, ex.GetType().Name, ex.Message));
+                Log.Warn(T.F("Безопасность: проверка «{0}» не удалась: {1}: {2}", name, ex.GetType().Name, ErrorText.For(ex)), ex);
                 result = fallback;
             }
             var n = Interlocked.Increment(ref done);
@@ -455,7 +455,7 @@ public sealed partial class SecurityService : IHealthContributor
             }
             catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn(T.F("Нет доступа к {0}: {1}", loc.FullPath, ex.Message));
+                Log.Warn(T.F("Нет доступа к {0}: {1}", loc.FullPath, ErrorText.For(ex)), ex);
                 if (!wow)
                     readable = false;
             }
@@ -580,7 +580,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log.Warn(T.F("Не удалось остановить проверку Защитником Windows: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось остановить проверку Защитником Windows: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -717,7 +717,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
-            Log.Warn(T.F("Не удалось изменить настройки UAC: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось изменить настройки UAC: {0}", ErrorText.For(ex)), ex);
             if (done.Count > 0)
                 Log.Action(T.F("UAC (частично): {0} ({1}). Резервная копия: {2}", string.Join(", ", done), loc.FullPath, Path.GetFileName(backup)));
             return SecurityActionResult.Failed(T.F("Не удалось изменить настройки UAC: {0}.", ErrorText.For(ex)) +
@@ -752,12 +752,12 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
         {
-            Log.Warn(T.F("Нет доступа к файлу hosts: {0}", ex.Message));
+            Log.Warn(T.F("Нет доступа к файлу hosts: {0}", ErrorText.For(ex)), ex);
             return SecurityActionResult.Fail(T._("Нет доступа к файлу hosts. Его может защищать антивирус — или программа запущена без прав администратора. Ничего не изменено."));
         }
         catch (IOException ex)
         {
-            Log.Warn(T.F("Не удалось изменить файл hosts: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось изменить файл hosts: {0}", ErrorText.For(ex)), ex);
             return SecurityActionResult.Failed(T.F("Не удалось изменить файл hosts: {0}.", ErrorText.For(ex)));
         }
     }
@@ -839,7 +839,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
-            Log.Warn(T.F("Не удалось восстановить Winlogon: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось восстановить Winlogon: {0}", ErrorText.For(ex)), ex);
             if (done.Count > 0)
             {
                 Log.Action(T.F("Winlogon восстановлен частично: {0}. Резервные копии: {1}", string.Join("; ", done),
@@ -884,7 +884,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
-            Log.Warn(T.F("Не удалось удалить перехват {0}: {1}", entry.ImageName, ex.Message));
+            Log.Warn(T.F("Не удалось удалить перехват {0}: {1}", entry.ImageName, ErrorText.For(ex)), ex);
             return SecurityActionResult.Failed(T.F("Не удалось удалить перехват: {0}.", ErrorText.For(ex)));
         }
         Log.Action(T.F("Удалён перехват запуска (IFEO Debugger) для {0}: «{1}». Резервная копия: {2}", entry.ImageName, entry.Debugger, Path.GetFileName(backup)));
@@ -943,7 +943,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
-            Log.Warn(T.F("Не удалось отключить прокси: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось отключить прокси: {0}", ErrorText.For(ex)), ex);
             return SecurityActionResult.Failed(T.F("Не удалось отключить прокси: {0}.", ErrorText.For(ex)));
         }
         if (Env.IsRealSystem)
@@ -1026,7 +1026,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
-            Log.Warn(T.F("Не удалось переключить подключение на «без прокси»: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось переключить подключение на «без прокси»: {0}", ErrorText.For(ex)), ex);
         }
         finally
         {
@@ -1047,7 +1047,7 @@ public sealed partial class SecurityService : IHealthContributor
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
-            Log.Warn(T.F("Не удалось уведомить систему об изменении прокси: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось уведомить систему об изменении прокси: {0}", ErrorText.For(ex)), ex);
         }
     }
 

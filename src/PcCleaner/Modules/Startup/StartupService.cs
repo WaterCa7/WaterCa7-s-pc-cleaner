@@ -538,12 +538,12 @@ public sealed partial class StartupService : IHealthContributor
         }
         catch (Exception ex) when (IsAccessDenied(ex))
         {
-            Log.Warn(T.F("Автозагрузка: нет прав на изменение {0}: {1}", T.Quote(item.DisplayName), ex.Message));
+            Log.Warn(T.F("Автозагрузка: нет прав на изменение {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
             return StartupActionResult.Admin(T._("Не хватает прав для этого изменения. Запустите программу от имени администратора."));
         }
         catch (Exception ex) when (ex is IOException or COMException or Win32Exception or InvalidOperationException)
         {
-            Log.Warn(T.F("Автозагрузка: не удалось изменить {0}: {1}", T.Quote(item.DisplayName), ex.Message));
+            Log.Warn(T.F("Автозагрузка: не удалось изменить {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
             return StartupActionResult.Fail(T.F("Не удалось изменить запись: {0}.", ErrorText.For(ex)));
         }
     }
@@ -576,12 +576,12 @@ public sealed partial class StartupService : IHealthContributor
         }
         catch (Exception ex) when (IsAccessDenied(ex))
         {
-            Log.Warn(T.F("Автозагрузка: нет прав на удаление {0}: {1}", T.Quote(item.DisplayName), ex.Message));
+            Log.Warn(T.F("Автозагрузка: нет прав на удаление {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
             return StartupActionResult.Admin(T._("Не хватает прав для удаления. Запустите программу от имени администратора."));
         }
         catch (Exception ex) when (ex is IOException or COMException or Win32Exception or InvalidOperationException)
         {
-            Log.Warn(T.F("Автозагрузка: не удалось удалить {0}: {1}", T.Quote(item.DisplayName), ex.Message));
+            Log.Warn(T.F("Автозагрузка: не удалось удалить {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
             return StartupActionResult.Fail(T.F("Не удалось удалить запись: {0}.", ErrorText.For(ex)));
         }
     }
@@ -652,7 +652,7 @@ public sealed partial class StartupService : IHealthContributor
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Автозагрузка: нет доступа к {0}\\{1}: {2}", StartupEnvironment.HiveName(hive), keyPath, ex.Message));
+            Log.Warn(T.F("Автозагрузка: нет доступа к {0}\\{1}: {2}", StartupEnvironment.HiveName(hive), keyPath, ErrorText.For(ex)), ex);
         }
         return result;
     }

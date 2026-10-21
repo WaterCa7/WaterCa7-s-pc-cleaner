@@ -440,7 +440,7 @@ public sealed class LargeFileViewModel
         }
         catch (Exception ex) when (ex is COMException or ExternalException)
         {
-            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ex.Message));
+            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 }

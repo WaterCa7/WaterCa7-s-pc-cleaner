@@ -53,7 +53,7 @@ internal static class WmiSensorQuery
         }
         catch (Exception ex) when (ex is ManagementException or COMException or TimeoutException)
         {
-            Log.Warn(T.F("Ускорение: WMI ({0}) «{1}»: {2}", scope, query, ex.Message.Trim()));
+            Log.Warn(T.F("Ускорение: WMI ({0}) «{1}»: {2}", scope, query, ErrorText.For(ex)), ex);
             return (rows, SensorState.Unknown);
         }
     }

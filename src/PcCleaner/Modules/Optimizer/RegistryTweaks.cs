@@ -135,7 +135,7 @@ public sealed class RegistryTweakEngine
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Ускорение: не удалось прочитать {0}\\{1}: {2}", spec.FullKey, spec.ValueName, ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось прочитать {0}\\{1}: {2}", spec.FullKey, spec.ValueName, ErrorText.For(ex)), ex);
             return (null, RegistryValueKind.Unknown);
         }
     }
@@ -195,7 +195,7 @@ public sealed class RegistryTweakEngine
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Ускорение: не удалось применить «{0}»: {1}", tweak.Title, ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось применить «{0}»: {1}", tweak.Title, ErrorText.For(ex)), ex);
             RollBack(tweak, written);
             if (storedNow)
                 ForgetState(tweak);
@@ -245,7 +245,7 @@ public sealed class RegistryTweakEngine
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn(T.F("Ускорение: не удалось вернуть «{0}»: {1}", tweak.Title, ex.Message));
+            Log.Warn(T.F("Ускорение: не удалось вернуть «{0}»: {1}", tweak.Title, ErrorText.For(ex)), ex);
             return new TweakResult(false, T.F("Не удалось вернуть «{0}»: {1}.", tweak.Title, ErrorText.For(ex)), OpensWithFailure: true);
         }
 
@@ -326,7 +326,7 @@ public sealed class RegistryTweakEngine
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn(T.F("Ускорение: не удалось откатить {0}\\{1}: {2}", spec.FullKey, spec.ValueName, ex.Message));
+                Log.Warn(T.F("Ускорение: не удалось откатить {0}\\{1}: {2}", spec.FullKey, spec.ValueName, ErrorText.For(ex)), ex);
             }
         }
     }

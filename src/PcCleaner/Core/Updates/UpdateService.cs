@@ -164,9 +164,9 @@ public sealed class UpdateService : ObservableObject
                                        UnauthorizedAccessException or UpdateException)
         {
             var offline = ex is HttpRequestException or OperationCanceledException;
-            Log.Info(offline ? T.F("Обновления: нет связи с GitHub — {0}", ex.Message) : T.F("Обновления: ошибка — {0}", ex.Message));
+            Log.Info(offline ? T.F("Обновления: нет связи с GitHub — {0}", ErrorText.For(ex)) : T.F("Обновления: ошибка — {0}", ErrorText.For(ex)), ex);
             State = UpdateState.Failed;
-            StatusText = offline ? T._("Не удалось проверить обновления: нет связи с GitHub.") : T.F("Не удалось обновиться: {0}.", ex.Message);
+            StatusText = offline ? T._("Не удалось проверить обновления: нет связи с GitHub.") : T.F("Не удалось обновиться: {0}.", ErrorText.For(ex));
         }
         finally
         {
@@ -221,16 +221,16 @@ public sealed class UpdateService : ObservableObject
         }
         catch (UnauthorizedAccessException ex)
         {
-            Log.Warn(T.F("Обновление до {0}: нет прав на запись в папку {1} — {2}", version, Path.GetDirectoryName(_env.ExePath), ex.Message));
+            Log.Warn(T.F("Обновление до {0}: нет прав на запись в папку {1} — {2}", version, Path.GetDirectoryName(_env.ExePath), ErrorText.For(ex)), ex);
             RequireManual(staged.Manifest, T._("нет прав на запись в папку программы"));
             return false;
         }
         catch (Exception ex) when (ex is IOException or UpdateException)
         {
             _store.RecordFailure(version);
-            Log.Warn(T.F("Обновление до {0} не установлено: {1}", version, ex.Message));
+            Log.Warn(T.F("Обновление до {0} не установлено: {1}", version, ErrorText.For(ex)), ex);
             State = UpdateState.Failed;
-            StatusText = T.F("Не удалось установить версию {0}: {1}. Попробуем при следующем запуске.", version, ex.Message);
+            StatusText = T.F("Не удалось установить версию {0}: {1}. Попробуем при следующем запуске.", version, ErrorText.For(ex));
             return false;
         }
         if (!_env.StartProcess(_env.ExePath, RestartArgs(args, CurrentVersion)))
