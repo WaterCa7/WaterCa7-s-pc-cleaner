@@ -1,3 +1,4 @@
+using PcCleaner.Core.Localization;
 namespace PcCleaner.Modules.Disk;
 
 /// <summary>TRIM setting of the file system (fsutil behavior query DisableDeleteNotify).</summary>
@@ -32,7 +33,7 @@ public sealed class PhysicalDiskInfo
     public long? BusType { get; init; }
     public long? MediaType { get; init; }
     public DiskHealth Health { get; init; }
-    public string OperationalStatus { get; init; } = "Нет данных";
+    public string OperationalStatus { get; init; } = T._("Нет данных");
     public bool OperationalOk { get; init; } = true;
     public long? SpindleSpeed { get; init; }
     public long SizeBytes { get; init; }

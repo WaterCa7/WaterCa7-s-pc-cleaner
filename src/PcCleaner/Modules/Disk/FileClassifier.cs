@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows.Media;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Disk;
 
@@ -48,28 +49,44 @@ internal static class FileClassifier
     private static readonly ulong ExeKey;
     private static readonly ulong SysKey;
 
-    public static readonly IReadOnlyList<CategoryInfo> Categories = new[]
+    private sealed record CategoryTable(string Language, IReadOnlyList<CategoryInfo> Items);
+
+    private static volatile CategoryTable? _categories;
+
+    /// <summary>The categories with names and descriptions in the UI language (rebuilt when the language changes).</summary>
+    public static IReadOnlyList<CategoryInfo> Categories
     {
-        new CategoryInfo(FileCategory.Video, "Видео", "", Color.FromRgb(0xF4, 0x72, 0xB6),
-            "Фильмы, записи экрана и другие видеофайлы (.mp4, .mkv, .avi…)."),
-        new CategoryInfo(FileCategory.Music, "Музыка", "", Color.FromRgb(0xA7, 0x8B, 0xFA),
-            "Музыка и другие звуковые файлы (.mp3, .flac, .wav…)."),
-        new CategoryInfo(FileCategory.Images, "Изображения", "", Color.FromRgb(0x60, 0xA5, 0xFA),
-            "Фотографии, картинки и макеты (.jpg, .png, .psd, RAW…)."),
-        new CategoryInfo(FileCategory.Archives, "Архивы", "", Color.FromRgb(0xFB, 0xBF, 0x24),
-            "Сжатые архивы (.zip, .rar, .7z…). Часто их уже распаковали и они больше не нужны."),
-        new CategoryInfo(FileCategory.DiskImages, "Образы дисков", "", Color.FromRgb(0xFB, 0x92, 0x3C),
-            "Образы дисков и виртуальных машин (.iso, .img, .vhdx…)."),
-        new CategoryInfo(FileCategory.Installers, "Установщики", "", Color.FromRgb(0xF8, 0x71, 0x71),
-            "Установочные файлы программ (.msi, а также .exe в «Загрузках» и на рабочем столе). После установки их обычно можно удалить."),
-        new CategoryInfo(FileCategory.Documents, "Документы", "", Color.FromRgb(0x34, 0xD3, 0x99),
-            "Документы, таблицы, презентации, PDF и книги."),
-        new CategoryInfo(FileCategory.Programs, "Игры и программы", "", Color.FromRgb(0x22, 0xD3, 0xEE),
-            "Установленные программы и игры (Program Files, Steam, Epic Games и другие библиотеки игр). Удаляйте их через раздел «Программы»."),
-        new CategoryInfo(FileCategory.System, "Системные", "", Color.FromRgb(0x94, 0xA3, 0xB8),
-            "Папка Windows, файлы подкачки и гибернации, служебные папки системы. Удалять их вручную нельзя."),
-        new CategoryInfo(FileCategory.Other, "Прочее", "", Color.FromRgb(0x64, 0x74, 0x8B),
-            "Всё остальное: данные программ, кэш, сохранения игр, файлы без расширения и т. п."),
+        get
+        {
+            var table = _categories;
+            if (table is null || table.Language != T.Language)
+                _categories = table = new CategoryTable(T.Language, BuildCategories());
+            return table.Items;
+        }
+    }
+
+    private static IReadOnlyList<CategoryInfo> BuildCategories() => new[]
+    {
+        new CategoryInfo(FileCategory.Video, T._("Видео"), "", Color.FromRgb(0xF4, 0x72, 0xB6),
+            T._("Фильмы, записи экрана и другие видеофайлы (.mp4, .mkv, .avi…).")),
+        new CategoryInfo(FileCategory.Music, T._("Музыка"), "", Color.FromRgb(0xA7, 0x8B, 0xFA),
+            T._("Музыка и другие звуковые файлы (.mp3, .flac, .wav…).")),
+        new CategoryInfo(FileCategory.Images, T._("Изображения"), "", Color.FromRgb(0x60, 0xA5, 0xFA),
+            T._("Фотографии, картинки и макеты (.jpg, .png, .psd, RAW…).")),
+        new CategoryInfo(FileCategory.Archives, T._("Архивы"), "", Color.FromRgb(0xFB, 0xBF, 0x24),
+            T._("Сжатые архивы (.zip, .rar, .7z…). Часто их уже распаковали и они больше не нужны.")),
+        new CategoryInfo(FileCategory.DiskImages, T._("Образы дисков"), "", Color.FromRgb(0xFB, 0x92, 0x3C),
+            T._("Образы дисков и виртуальных машин (.iso, .img, .vhdx…).")),
+        new CategoryInfo(FileCategory.Installers, T._("Установщики"), "", Color.FromRgb(0xF8, 0x71, 0x71),
+            T._("Установочные файлы программ (.msi, а также .exe в «Загрузках» и на рабочем столе). После установки их обычно можно удалить.")),
+        new CategoryInfo(FileCategory.Documents, T._("Документы"), "", Color.FromRgb(0x34, 0xD3, 0x99),
+            T._("Документы, таблицы, презентации, PDF и книги.")),
+        new CategoryInfo(FileCategory.Programs, T._("Игры и программы"), "", Color.FromRgb(0x22, 0xD3, 0xEE),
+            T._("Установленные программы и игры (Program Files, Steam, Epic Games и другие библиотеки игр). Удаляйте их через раздел «Программы».")),
+        new CategoryInfo(FileCategory.System, T._("Системные"), "", Color.FromRgb(0x94, 0xA3, 0xB8),
+            T._("Папка Windows, файлы подкачки и гибернации, служебные папки системы. Удалять их вручную нельзя.")),
+        new CategoryInfo(FileCategory.Other, T._("Прочее"), "", Color.FromRgb(0x64, 0x74, 0x8B),
+            T._("Всё остальное: данные программ, кэш, сохранения игр, файлы без расширения и т. п.")),
     };
 
     private static readonly string[] SystemRootFolders =

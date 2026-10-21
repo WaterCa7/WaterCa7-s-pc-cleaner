@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Disk;
@@ -25,12 +26,12 @@ internal static class SystemTools
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
         {
-            Log.Info($"{Path.GetFileName(exe)}: запуск отменён пользователем");
+            Log.Info(T.F("{0}: запуск отменён пользователем", Path.GetFileName(exe)));
             return ToolLaunchResult.Cancelled;
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Log.Warn($"Не удалось запустить {Path.GetFileName(exe)}: {ex.Message}");
+            Log.Warn(T.F("Не удалось запустить {0}: {1}", Path.GetFileName(exe), ex.Message));
             return ToolLaunchResult.Failed;
         }
     }
@@ -110,7 +111,7 @@ internal static class SystemTools
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Log.Warn($"Не удалось открыть {target}: {ex.Message}");
+            Log.Warn(T.F("Не удалось открыть {0}: {1}", target, ex.Message));
         }
     }
 
@@ -141,11 +142,11 @@ internal static class SystemTools
             if (arguments is not null)
                 Process.Start(ExplorerPath, arguments)?.Dispose();
             else
-                Dialogs.Info("Не найдено", $"Файл или папка больше не существует:\n{path}");
+                Dialogs.Info(T._("Не найдено"), T.F("Файл или папка больше не существует:\n{0}", path));
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            Log.Warn($"Не удалось открыть проводник для {path}: {ex.Message}");
+            Log.Warn(T.F("Не удалось открыть проводник для {0}: {1}", path, ex.Message));
         }
     }
 
@@ -246,7 +247,7 @@ internal static class SystemTools
         }
         catch (Exception ex)
         {
-            Log.Warn($"Ошибка обработки вывода: {ex.Message}");
+            Log.Warn(T.F("Ошибка обработки вывода: {0}", ex.Message));
         }
     }
 
@@ -378,15 +379,15 @@ internal readonly record struct RecycleOutcome(RecycleFailure Failure, int Code 
     public string Reason => Failure switch
     {
         RecycleFailure.None => "",
-        RecycleFailure.NoRecycleBin => "у этого диска нет корзины (флешка или сетевой диск), поэтому файл не тронут",
+        RecycleFailure.NoRecycleBin => T._("у этого диска нет корзины (флешка или сетевой диск), поэтому файл не тронут"),
         RecycleFailure.DeclinedPermanentDelete =>
-            "в корзину файл не помещается, а удалить его навсегда вы отказались — файл не тронут",
-        RecycleFailure.InUse => "файл открыт в другой программе — закройте её и повторите",
-        RecycleFailure.AccessDenied => "нет прав на удаление этого файла",
-        RecycleFailure.Missing => "файл уже удалён или перемещён",
+            T._("в корзину файл не помещается, а удалить его навсегда вы отказались — файл не тронут"),
+        RecycleFailure.InUse => T._("файл открыт в другой программе — закройте её и повторите"),
+        RecycleFailure.AccessDenied => T._("нет прав на удаление этого файла"),
+        RecycleFailure.Missing => T._("файл уже удалён или перемещён"),
         _ => Code == 0
-            ? "Windows не смогла переместить файл в корзину"
-            : $"Windows не смогла переместить файл в корзину (код {Code})",
+            ? T._("Windows не смогла переместить файл в корзину")
+            : T.F("Windows не смогла переместить файл в корзину (код {0})", Code),
     };
 }
 
@@ -422,13 +423,13 @@ internal static class SafeRecycler
             var root = Path.GetPathRoot(path);
             if (string.IsNullOrEmpty(root) || new DriveInfo(root).DriveType != DriveType.Fixed)
             {
-                Log.Warn($"Не перемещено в корзину (у этого диска нет корзины): {path}");
+                Log.Warn(T.F("Не перемещено в корзину (у этого диска нет корзины): {0}", path));
                 return new RecycleOutcome(RecycleFailure.NoRecycleBin);
             }
         }
         catch (Exception ex) when (ex is ArgumentException or IOException)
         {
-            Log.Warn($"Не перемещено в корзину: {path}: {ex.Message}");
+            Log.Warn(T.F("Не перемещено в корзину: {0}: {1}", path, ex.Message));
             return new RecycleOutcome(RecycleFailure.NoRecycleBin);
         }
 
@@ -441,9 +442,9 @@ internal static class SafeRecycler
         var rc = SHFileOperation(ref op);
         var outcome = Classify(rc, op.fAnyOperationsAborted, File.Exists(path), () => ProbeDelete(path));
         if (outcome.Success)
-            Log.Action($"Перемещено в корзину: {path}");
+            Log.Action(T.F("Перемещено в корзину: {0}", path));
         else
-            Log.Warn($"Не удалось переместить в корзину: {path} — {outcome.Reason} (код {rc})");
+            Log.Warn(T.F("Не удалось переместить в корзину: {0} — {1} (код {2})", path, outcome.Reason, rc));
         return outcome;
     }
 

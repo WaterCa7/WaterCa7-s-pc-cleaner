@@ -241,6 +241,24 @@ How the code treats them:
 | задания Windows / службы Microsoft (hidden by default) | Windows tasks / Microsoft services |
 | Битые записи | Broken entries |
 
+## Disks
+
+| Русский | English |
+|---|---|
+| Обзор / Что занимает место / Большие файлы / Советы по месту (tabs) | Overview / What takes up space / Large files / Space tips |
+| накопитель / физический диск | drive / physical drive |
+| том | volume |
+| Исправен / Предупреждение / Неисправен | Healthy / Warning / Unhealthy |
+| Износ / Наработка / Ошибки чтения | Wear / Power-on time / Read errors |
+| Оптимизировать (a drive) | Optimize |
+| дефрагментация / ReTrim | defragmentation / ReTrim |
+| файл гибернации / файл подкачки | hibernation file / page file |
+| точки восстановления системы | system restore points |
+| «Очистка диска» / «Защита системы» (Windows tools) | “Disk Cleanup” / “System Protection” |
+| Отметить / отмечено (a checkbox) | Check / checked |
+| не меньше N (a size cut short) | at least N |
+| В Корзину / Удалить в корзину | To Recycle Bin / Move to Recycle Bin |
+
 Notes for the other pages:
 
 - The Russian «Готово» is both the status bar text and the title of a dialog after an action; one key has one English text, so it is “Ready”

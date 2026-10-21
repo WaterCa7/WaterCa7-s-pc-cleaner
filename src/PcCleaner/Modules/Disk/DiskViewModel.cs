@@ -62,7 +62,7 @@ public sealed class DiskViewModel : PageViewModel
     public DiskViewModel(DiskService service)
     {
         _service = service;
-        _profileLocation = new LocationOption("Папка пользователя", KnownFolders.UserProfile, "\uE77B", null);
+        _profileLocation = new LocationOption(T._("Папка пользователя"), KnownFolders.UserProfile, "\uE77B", null);
 
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeSelectedAsync, () => !IsBusy && SelectedLocation is not null);
@@ -105,7 +105,8 @@ public sealed class DiskViewModel : PageViewModel
             if (string.IsNullOrEmpty(path))
                 return;
             var isFolder = p is FolderRow or BreadcrumbItem;
-            FileTools.SearchWeb($"{Path.GetFileName(Path.TrimEndingDirectorySeparator(path))} что это за {(isFolder ? "папка" : "файл")}");
+            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+            FileTools.SearchWeb(isFolder ? T.F("{0} что это за папка", name) : T.F("{0} что это за файл", name));
         });
         VirusTotalCommand = new AsyncRelayCommand(p => p is LargeFileRow row ? FileTools.OpenVirusTotalAsync(row.Path) : Task.CompletedTask);
 
@@ -131,10 +132,10 @@ public sealed class DiskViewModel : PageViewModel
         RecycleSuggestionCommand = new AsyncRelayCommand(
             p => p is SuggestionItem s ? RecycleSuggestionAsync(s) : Task.CompletedTask, _ => !IsBusy);
         DisableHibernationCommand = new AsyncRelayCommand(DisableHibernationAsync, () => !IsBusy);
-        DiskCleanupCommand = new AsyncRelayCommand(() => OpenToolAsync(_service.OpenDiskCleanup, "«Очистка диска»"));
+        DiskCleanupCommand = new AsyncRelayCommand(() => OpenToolAsync(_service.OpenDiskCleanup, T._("«Очистка диска»")));
         SystemProtectionCommand = new AsyncRelayCommand(() => OpenToolAsync(
             () => _service.OpenTool(SystemTools.Exe("SystemPropertiesProtection.exe"), "", "SystemPropertiesProtection"),
-            "«Защита системы»"));
+            T._("«Защита системы»")));
         OpenRecycleBinCommand = new RelayCommand(() => SystemTools.Open("shell:RecycleBinFolder"));
 
         OptimizeDriveCommand = new AsyncRelayCommand(p => p is DriveItem d ? OptimizeDriveAsync(d) : Task.CompletedTask, _ => !IsBusy);
@@ -331,8 +332,8 @@ public sealed class DiskViewModel : PageViewModel
     public bool HasLargestFiles => LargestFiles.Count > 0;
 
     public string LargestFilesTitle => _result is null
-        ? "Самые большие файлы"
-        : $"{Format.Count(LargestFiles.Count, "самый большой файл", "самых больших файла", "самых больших файлов")} в {AnalyzedPath}";
+        ? T._("Самые большие файлы")
+        : T.F("{0} в {1}", Format.Count(LargestFiles.Count, "самый большой файл", "самых больших файла", "самых больших файлов"), AnalyzedPath);
 
     public string SelectedFilesText
     {
@@ -419,7 +420,7 @@ public sealed class DiskViewModel : PageViewModel
         if (Directory.Exists(location.Path))
         {
             SelectedLocation = location;
-            await RunBusyAsync($"Анализ папки {location.Path}", async busyCt =>
+            await RunBusyAsync(T.F("Анализ папки {0}", location.Path), async busyCt =>
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, busyCt);
                 linked.CancelAfter(PreviewAnalysisLimit);
@@ -463,11 +464,11 @@ public sealed class DiskViewModel : PageViewModel
             OnPropertyChanged(nameof(ShowTrimWarning));
             RebuildLocations(overview.Drives);
             _overviewLoadedAt = DateTime.Now;
-            Log.Info($"Диски: сведения о {Format.Count(overview.Drives.Count, "диске", "дисках", "дисках")} получены за {sw.Elapsed.TotalSeconds:0.0} с");
+            Log.Info(T.F("Диски: сведения о {0} получены за {1:0.0} с", Format.Count(overview.Drives.Count, "диске", "дисках", "дисках"), sw.Elapsed.TotalSeconds));
         }
         catch (Exception ex)
         {
-            Log.Error("Диски: не удалось загрузить сведения о дисках", ex);
+            Log.Error(T._("Диски: не удалось загрузить сведения о дисках"), ex);
         }
         finally
         {
@@ -488,20 +489,20 @@ public sealed class DiskViewModel : PageViewModel
     {
         IsSuggestionsLoading = true;
         if (Suggestions.Count == 0)
-            SuggestionsSummary = "Ищем, что можно освободить…";
+            SuggestionsSummary = T._("Ищем, что можно освободить…");
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             var data = await _service.GetSuggestionsAsync(CancellationToken.None);
             Suggestions = new ObservableCollection<SuggestionItem>(BuildSuggestions(data));
             UpdateSuggestionsSummary();
-            Log.Info($"Диски: советы по месту подготовлены за {sw.Elapsed.TotalSeconds:0.0} с");
+            Log.Info(T.F("Диски: советы по месту подготовлены за {0:0.0} с", sw.Elapsed.TotalSeconds));
         }
         catch (Exception ex)
         {
-            Log.Error("Диски: не удалось подготовить советы по месту", ex);
+            Log.Error(T._("Диски: не удалось подготовить советы по месту"), ex);
             if (Suggestions.Count == 0)
-                SuggestionsSummary = "Не удалось подготовить советы — нажмите «Обновить»";
+                SuggestionsSummary = T._("Не удалось подготовить советы — нажмите «Обновить»");
         }
         finally
         {
@@ -515,14 +516,14 @@ public sealed class DiskViewModel : PageViewModel
         var list = new List<LocationOption>();
         foreach (var d in drives)
         {
-            var name = string.IsNullOrWhiteSpace(d.Label) ? "Локальный диск" : d.Label;
-            list.Add(new LocationOption($"Диск {d.Letter}: — {name}", d.RootPath, "\uEDA2", d.UsedBytes));
+            var name = string.IsNullOrWhiteSpace(d.Label) ? T._("Локальный диск") : d.Label;
+            list.Add(new LocationOption(T.F("Диск {0}: — {1}", d.Letter, name), d.RootPath, "\uEDA2", d.UsedBytes));
         }
         list.Add(_profileLocation);
-        AddFolder(list, "Загрузки", KnownFolders.Downloads, "\uE896");
-        AddFolder(list, "Документы", KnownFolders.Documents, "\uE8A5");
-        AddFolder(list, "Рабочий стол", KnownFolders.Desktop, "\uE7F4");
-        AddFolder(list, "Видео", KnownFolders.Videos, "\uE714");
+        AddFolder(list, T._("Загрузки"), KnownFolders.Downloads, "\uE896");
+        AddFolder(list, T._("Документы"), KnownFolders.Documents, "\uE8A5");
+        AddFolder(list, T._("Рабочий стол"), KnownFolders.Desktop, "\uE7F4");
+        AddFolder(list, T._("Видео"), KnownFolders.Videos, "\uE714");
         foreach (var custom in Locations.Where(l => l.Icon == "\uE838"))
         {
             if (list.All(l => !string.Equals(l.Path, custom.Path, StringComparison.OrdinalIgnoreCase)))
@@ -550,11 +551,11 @@ public sealed class DiskViewModel : PageViewModel
             return;
         if (!Directory.Exists(location.Path))
         {
-            Dialogs.Info("Папка не найдена", $"Папка больше не существует или недоступна:\n{location.Path}");
+            Dialogs.Info(T._("Папка не найдена"), T.F("Папка больше не существует или недоступна:\n{0}", location.Path));
             return;
         }
         SelectedTab = TabAnalyzer;
-        await RunBusyAsync($"Анализ {location.Path}", ct => RunAnalysisAsync(location, ct));
+        await RunBusyAsync(T.F("Анализ {0}", location.Path), ct => RunAnalysisAsync(location, ct));
     }
 
     private async Task AnalyzeDriveAsync(DriveItem drive)
@@ -579,14 +580,14 @@ public sealed class DiskViewModel : PageViewModel
             // no window (tests)
         }
 
-        var path = FolderPicker.Pick(owner, "Выберите папку для анализа", SelectedLocation?.Path);
+        var path = FolderPicker.Pick(owner, T._("Выберите папку для анализа"), SelectedLocation?.Path);
         if (string.IsNullOrWhiteSpace(path))
             return;
 
         var existing = Locations.FirstOrDefault(l => string.Equals(l.Path, path, StringComparison.OrdinalIgnoreCase));
         if (existing is null)
         {
-            existing = new LocationOption($"Папка: {ShortName(path)}", path, "\uE838", null);
+            existing = new LocationOption(T.F("Папка: {0}", ShortName(path)), path, "\uE838", null);
             Locations.Add(existing);
         }
         SelectedLocation = existing;
@@ -606,16 +607,17 @@ public sealed class DiskViewModel : PageViewModel
             if (ct.IsCancellationRequested)
             {
                 if (!cancelReported)
-                    ReportProgress(-1, "Останавливаем анализ…");
+                    ReportProgress(-1, T._("Останавливаем анализ…"));
                 cancelReported = true;
                 continue;
             }
             var bytes = analyzer.BytesScanned;
             double percent = location.ExpectedBytes is > 0 ? Math.Min(99, 100.0 * bytes / location.ExpectedBytes.Value) : -1;
             var current = analyzer.CurrentPath;
-            ReportProgress(percent,
-                $"Просмотрено {Format.Count(analyzer.FilesScanned, "файл", "файла", "файлов")} ({Format.Bytes(bytes)})" +
-                (current is null ? "" : $" — {current}"));
+            var scanned = Format.Count(analyzer.FilesScanned, "файл", "файла", "файлов");
+            ReportProgress(percent, current is null
+                ? T.F("Просмотрено {0} ({1})", scanned, Format.Bytes(bytes))
+                : T.F("Просмотрено {0} ({1}) — {2}", scanned, Format.Bytes(bytes), current));
         }
         var result = await task;
         // The protection check resolves links (file system calls), so it runs off the UI thread.
@@ -645,27 +647,29 @@ public sealed class DiskViewModel : PageViewModel
 
         var notes = new List<BadgeItem>();
         if (result.IsPartial)
-            notes.Add(new BadgeItem("Анализ остановлен — данные неполные", Tone.Warning,
-                "Анализ был остановлен до завершения, поэтому размеры папок показаны не полностью. Запустите его снова, чтобы увидеть всё."));
+            notes.Add(new BadgeItem(T._("Анализ остановлен — данные неполные"), Tone.Warning,
+                T._("Анализ был остановлен до завершения, поэтому размеры папок показаны не полностью. Запустите его снова, чтобы увидеть всё.")));
         if (result.InaccessibleFolders > 0)
-            notes.Add(new BadgeItem($"Нет доступа: {Format.Count(result.InaccessibleFolders, "папка", "папки", "папок")}", Tone.Warning,
-                "Эти папки не удалось прочитать, и их размер не учтён." +
-                (Admin.IsElevated ? "" : " С правами администратора программа увидит больше.")));
+            notes.Add(new BadgeItem(T.F("Нет доступа: {0}", Format.Count(result.InaccessibleFolders, "папка", "папки", "папок")), Tone.Warning,
+                Admin.IsElevated
+                    ? T._("Эти папки не удалось прочитать, и их размер не учтён.")
+                    : T._("Эти папки не удалось прочитать, и их размер не учтён. С правами администратора программа увидит больше.")));
         if (result.SkippedLinks > 0)
-            notes.Add(new BadgeItem($"Ссылок пропущено: {Format.Number(result.SkippedLinks)}", Tone.Neutral,
-                "Ссылки (junction/symlink) ведут в другие папки или на другие диски. Их содержимое здесь не учитывается, " +
-                "чтобы не посчитать одни и те же файлы дважды."));
+            notes.Add(new BadgeItem(T.F("Ссылок пропущено: {0}", Format.Number(result.SkippedLinks)), Tone.Neutral,
+                T._("Ссылки (junction/symlink) ведут в другие папки или на другие диски. Их содержимое здесь не учитывается, чтобы не посчитать одни и те же файлы дважды.")));
         if (result.CloudOnlyFiles > 0)
-            notes.Add(new BadgeItem($"Только в облаке: {Format.Count(result.CloudOnlyFiles, "файл", "файла", "файлов")}", Tone.Info,
-                "Файлы OneDrive, которые хранятся только в облаке, не занимают место на этом диске и не учитываются."));
+            notes.Add(new BadgeItem(T.F("Только в облаке: {0}", Format.Count(result.CloudOnlyFiles, "файл", "файла", "файлов")), Tone.Info,
+                T._("Файлы OneDrive, которые хранятся только в облаке, не занимают место на этом диске и не учитываются.")));
         AnalysisNotes = notes;
 
         UpdateAnalysisSummary();
         RebuildCategories();
         NavigateTo(result.Root);
-        Log.Info($"Диски: анализ {result.Root.FullPath} — {Format.Bytes(result.TotalBytes)}, " +
-                 $"{Format.Count(result.FileCount, "файл", "файла", "файлов")} за {Format.Duration(result.Elapsed)}" +
-                 (result.IsPartial ? " (остановлен, данные неполные)" : ""));
+        Log.Info(result.IsPartial
+            ? T.F("Диски: анализ {0} — {1}, {2} за {3} (остановлен, данные неполные)", result.Root.FullPath, Format.Bytes(result.TotalBytes),
+                Format.Count(result.FileCount, "файл", "файла", "файлов"), Format.Duration(result.Elapsed))
+            : T.F("Диски: анализ {0} — {1}, {2} за {3}", result.Root.FullPath, Format.Bytes(result.TotalBytes),
+                Format.Count(result.FileCount, "файл", "файла", "файлов"), Format.Duration(result.Elapsed)));
 
         OnPropertyChanged(nameof(HasAnalysis));
         OnPropertyChanged(nameof(AnalyzedPath));
@@ -675,7 +679,7 @@ public sealed class DiskViewModel : PageViewModel
 
     private string? RiskNoteFor(FileHit hit)
         => _service.RiskNote(hit.Path) ?? (hit.Category == FileCategory.Programs
-            ? "Файл установленной игры или программы — после удаления она может перестать работать. Игры и программы лучше удалять в разделе «Программы» или в их лаунчере."
+            ? T._("Файл установленной игры или программы — после удаления она может перестать работать. Игры и программы лучше удалять в разделе «Программы» или в их лаунчере.")
             : null);
 
     private void UpdateAnalysisSummary()
@@ -684,8 +688,7 @@ public sealed class DiskViewModel : PageViewModel
             return;
         var root = _result.Root;
         AnalysisSummary =
-            $"{Format.Bytes(root.TotalBytes)} · {Format.Count(root.TotalFiles, "файл", "файла", "файлов")} · " +
-            $"{Format.Count(root.TotalFolders, "папка", "папки", "папок")} · проверено за {Format.Duration(_result.Elapsed)}";
+            T.F("{0} · {1} · {2} · проверено за {3}", Format.Bytes(root.TotalBytes), Format.Count(root.TotalFiles, "файл", "файла", "файлов"), Format.Count(root.TotalFolders, "папка", "папки", "папок"), Format.Duration(_result.Elapsed));
     }
 
     private void RebuildCategories()
@@ -707,7 +710,7 @@ public sealed class DiskViewModel : PageViewModel
             .Select(c => new FolderRow(c, c.Name, c.TotalBytes, c.TotalFiles, 100.0 * c.TotalBytes / total, false))
             .ToList();
         if (node.OwnFiles > 0)
-            rows.Add(new FolderRow(node, "Файлы в этой папке", node.OwnBytes, node.OwnFiles, 100.0 * node.OwnBytes / total, true));
+            rows.Add(new FolderRow(node, T._("Файлы в этой папке"), node.OwnBytes, node.OwnFiles, 100.0 * node.OwnBytes / total, true));
         rows = rows.OrderBy(r => r.IsLink).ThenByDescending(r => r.Bytes).ToList();
         FolderRows = new ObservableCollection<FolderRow>(rows);
 
@@ -727,8 +730,8 @@ public sealed class DiskViewModel : PageViewModel
         var selected = LargestFiles.Where(r => r.IsChecked).ToList();
         HasSelectedFiles = selected.Count > 0;
         SelectedFilesText = selected.Count == 0
-            ? "Отметьте файлы, которые больше не нужны"
-            : $"Отмечено {Format.Count(selected.Count, "файл", "файла", "файлов")} — {Format.Bytes(selected.Sum(r => r.Size))}";
+            ? T._("Отметьте файлы, которые больше не нужны")
+            : T.F("Отмечено {0} — {1}", Format.Count(selected.Count, "файл", "файла", "файлов"), Format.Bytes(selected.Sum(r => r.Size)));
     }
 
     // ------------------------------------------------------------------ recycle
@@ -749,8 +752,8 @@ public sealed class DiskViewModel : PageViewModel
         if (files.Count == 0)
         {
             suggestion.IsExpanded = true;
-            Dialogs.Info("Ничего не отмечено",
-                "Отметьте галочками файлы, которые больше не нужны (или нажмите «Отметить все»), а затем нажмите «Удалить в корзину».");
+            Dialogs.Info(T._("Ничего не отмечено"),
+                T._("Отметьте галочками файлы, которые больше не нужны (или нажмите «Отметить все»), а затем нажмите «Удалить в корзину»."));
             return;
         }
         await RecycleWithConfirmAsync(files);
@@ -764,7 +767,7 @@ public sealed class DiskViewModel : PageViewModel
             return; // another operation is running; the buttons are disabled anyway
         if (files.Count == 0)
         {
-            Dialogs.Info("Ничего не отмечено", "Отметьте галочками файлы, которые больше не нужны.");
+            Dialogs.Info(T._("Ничего не отмечено"), T._("Отметьте галочками файлы, которые больше не нужны."));
             return;
         }
         // Synchronous on purpose (at most a few hundred metadata look-ups): no await before the confirmation, so no
@@ -773,40 +776,38 @@ public sealed class DiskViewModel : PageViewModel
         var allowed = files.Except(blocked).ToList();
         if (allowed.Count == 0)
         {
-            Dialogs.Info("Удаление недоступно",
-                "Эти файлы относятся к Windows или установленным программам — удалять их отсюда нельзя.");
+            Dialogs.Info(T._("Удаление недоступно"),
+                T._("Эти файлы относятся к Windows или установленным программам — удалять их отсюда нельзя."));
             return;
         }
 
         var total = allowed.Sum(f => f.Size);
         var message = new StringBuilder();
-        message.AppendLine($"Переместить в корзину {Format.Count(allowed.Count, "файл", "файла", "файлов")} общим размером {Format.Bytes(total)}?");
+        message.AppendLine(T.F("Переместить в корзину {0} общим размером {1}?", Format.Count(allowed.Count, "файл", "файла", "файлов"), Format.Bytes(total)));
         message.AppendLine();
         foreach (var f in allowed.Take(12))
             message.AppendLine($"• {Path.GetFileName(f.Path)} — {Format.Bytes(f.Size)}");
         if (allowed.Count > 12)
-            message.AppendLine($"… и ещё {Format.Count(allowed.Count - 12, "файл", "файла", "файлов")}");
+            message.AppendLine(T.F("… и ещё {0}", Format.Count(allowed.Count - 12, "файл", "файла", "файлов")));
         var risky = allowed.Count(f => f.RiskNote is not null);
         if (risky > 0)
         {
             message.AppendLine();
-            message.AppendLine($"Внимание: {Format.Count(risky, "файл относится", "файла относятся", "файлов относятся")} к установленным программам, " +
-                               "играм или их данным (AppData) — после удаления они могут работать неправильно.");
+            message.AppendLine(T.F("Внимание: {0} к установленным программам, играм или их данным (AppData) — после удаления они могут работать неправильно.", Format.Count(risky, "файл относится", "файла относятся", "файлов относятся")));
         }
         if (blocked.Count > 0)
         {
             message.AppendLine();
-            message.AppendLine($"{Format.Count(blocked.Count, "системный файл", "системных файла", "системных файлов")} " +
-                               $"{Format.Plural(blocked.Count, "будет пропущен", "будут пропущены", "будет пропущено")}.");
+            message.AppendLine(T.F("{0} {1}.", Format.Count(blocked.Count, "системный файл", "системных файла", "системных файлов"),
+                Format.Plural(blocked.Count, "будет пропущен", "будут пропущены", "будет пропущено")));
         }
         message.AppendLine();
-        message.AppendLine("Файлы можно будет вернуть из корзины, пока она не очищена. " +
-                           "Место на диске освободится после очистки корзины.");
-        if (!Dialogs.Confirm("Удалить в корзину", message.ToString()))
+        message.AppendLine(T._("Файлы можно будет вернуть из корзины, пока она не очищена. Место на диске освободится после очистки корзины."));
+        if (!Dialogs.Confirm(T._("Удалить в корзину"), message.ToString()))
             return;
 
         RecycleResult? result = null;
-        await RunBusyAsync("Перемещаем файлы в корзину…", async _ =>
+        await RunBusyAsync(T._("Перемещаем файлы в корзину…"), async _ =>
         {
             var batch = allowed.Select(f => (f.Path, f.Size)).ToList();
             result = await SystemTools.RunSta(() => _service.RecycleFiles(batch));
@@ -815,30 +816,28 @@ public sealed class DiskViewModel : PageViewModel
             return;
 
         if (result.Recycled.Count > 0)
-            Log.Action($"Диски: в корзину перемещено {Format.Count(result.Recycled.Count, "файл", "файла", "файлов")} " +
-                       $"({Format.Bytes(result.RecycledBytes)})");
+            Log.Action(T.F("Диски: в корзину перемещено {0} ({1})", Format.Count(result.Recycled.Count, "файл", "файла", "файлов"), Format.Bytes(result.RecycledBytes)));
         OnFilesRecycled(result.Recycled);
 
         var summary = new StringBuilder();
         summary.AppendLine(result.Recycled.Count > 0
-            ? $"Перемещено в корзину: {Format.Count(result.Recycled.Count, "файл", "файла", "файлов")} ({Format.Bytes(result.RecycledBytes)})."
-            : "Ни один файл не был перемещён в корзину.");
+            ? T.F("Перемещено в корзину: {0} ({1}).", Format.Count(result.Recycled.Count, "файл", "файла", "файлов"), Format.Bytes(result.RecycledBytes))
+            : T._("Ни один файл не был перемещён в корзину."));
         if (result.Skipped.Count > 0)
         {
             summary.AppendLine();
-            summary.AppendLine($"Не перемещено: {Format.Count(result.Skipped.Count, "файл", "файла", "файлов")}");
+            summary.AppendLine(T.F("Не перемещено: {0}", Format.Count(result.Skipped.Count, "файл", "файла", "файлов")));
             foreach (var (path, reason) in result.Skipped.Take(6))
                 summary.AppendLine($"• {Path.GetFileName(path)} — {reason}");
             if (result.Skipped.Count > 6)
-                summary.AppendLine($"… и ещё {Format.Count(result.Skipped.Count - 6, "файл", "файла", "файлов")}");
+                summary.AppendLine(T.F("… и ещё {0}", Format.Count(result.Skipped.Count - 6, "файл", "файла", "файлов")));
         }
         if (result.Recycled.Count > 0)
         {
             summary.AppendLine();
-            summary.AppendLine("Чтобы место на диске действительно освободилось, очистите корзину. " +
-                               "Передумали — восстановите файлы из корзины.");
+            summary.AppendLine(T._("Чтобы место на диске действительно освободилось, очистите корзину. Передумали — восстановите файлы из корзины."));
         }
-        Dialogs.Info("Готово", summary.ToString().TrimEnd());
+        Dialogs.Info(T._("Готово"), summary.ToString().TrimEnd());
     }
 
     /// <summary>Removes recycled files from all lists and subtracts them from the analysis.</summary>
@@ -918,38 +917,37 @@ public sealed class DiskViewModel : PageViewModel
         foreach (var group in data.OldDownloads)
         {
             var item = new SuggestionItem(SuggestionKind.OldDownloads, DownloadsAdvisor.GroupIcon(group.Kind), Tone.Warning,
-                DownloadsAdvisor.GroupTitle(group.Kind) + " в «Загрузках»",
+                DownloadsAdvisor.GroupTitleInDownloads(group.Kind),
                 DownloadsAdvisor.GroupDescription(group.Kind, DownloadsAdvisor.DefaultAgeDays), group.TotalBytes)
             {
                 CountsAsReclaimable = true,
                 ShortName = group.Kind switch
                 {
-                    DownloadKind.Installers => "старые установщики",
-                    DownloadKind.Archives => "старые архивы",
-                    _ => "старые образы дисков",
+                    DownloadKind.Installers => T._("старые установщики"),
+                    DownloadKind.Archives => T._("старые архивы"),
+                    _ => T._("старые образы дисков"),
                 },
             };
             item.AddFiles(group.Files.Select(f => new SuggestionFile(f, AgeText(f, now))));
-            item.Actions.Add(new SuggestionAction("Удалить отмеченные в корзину", RecycleSuggestionCommand, item, IsDanger: true,
-                ToolTip: "Отмеченные файлы будут перемещены в корзину — их можно восстановить."));
+            item.Actions.Add(new SuggestionAction(T._("Удалить отмеченные в корзину"), RecycleSuggestionCommand, item, IsDanger: true,
+                ToolTip: T._("Отмеченные файлы будут перемещены в корзину — их можно восстановить.")));
             if (!string.IsNullOrEmpty(data.DownloadsPath))
-                item.Actions.Add(new SuggestionAction("Открыть «Загрузки»", OpenPathCommand, data.DownloadsPath));
+                item.Actions.Add(new SuggestionAction(T._("Открыть «Загрузки»"), OpenPathCommand, data.DownloadsPath));
             list.Add(item);
         }
 
         if (data.BigVideos.Count > 0)
         {
-            var item = new SuggestionItem(SuggestionKind.BigVideos, "\uE714", Tone.Info, "Большие видеофайлы",
-                "Фильмы и записи больше 1 ГБ в папках «Видео», «Загрузки», «Документы» и на рабочем столе. " +
-                "Если вы их уже посмотрели, удалите их или перенесите на другой диск.",
+            var item = new SuggestionItem(SuggestionKind.BigVideos, "\uE714", Tone.Info, T._("Большие видеофайлы"),
+                T._("Фильмы и записи больше 1 ГБ в папках «Видео», «Загрузки», «Документы» и на рабочем столе. Если вы их уже посмотрели, удалите их или перенесите на другой диск."),
                 data.BigVideos.Sum(v => v.Size))
             {
                 CountsAsReclaimable = true,
-                ShortName = "большие видео",
+                ShortName = T._("большие видео"),
             };
-            item.AddFiles(data.BigVideos.Select(f => new SuggestionFile(f, $"изменён {Format.Date(f.ModifiedLocal)}")));
-            item.Actions.Add(new SuggestionAction("Удалить отмеченные в корзину", RecycleSuggestionCommand, item, IsDanger: true,
-                ToolTip: "Отмеченные файлы будут перемещены в корзину — их можно восстановить."));
+            item.AddFiles(data.BigVideos.Select(f => new SuggestionFile(f, T.F("изменён {0}", Format.Date(f.ModifiedLocal)))));
+            item.Actions.Add(new SuggestionAction(T._("Удалить отмеченные в корзину"), RecycleSuggestionCommand, item, IsDanger: true,
+                ToolTip: T._("Отмеченные файлы будут перемещены в корзину — их можно восстановить.")));
             list.Add(item);
         }
 
@@ -958,34 +956,32 @@ public sealed class DiskViewModel : PageViewModel
                                                           f.Path.StartsWith(systemRoot, StringComparison.OrdinalIgnoreCase));
         if (hiber is not null)
         {
-            var item = new SuggestionItem(SuggestionKind.Hibernation, "\uE708", Tone.Info, "Файл гибернации hiberfil.sys",
-                $"В нём Windows сохраняет содержимое оперативной памяти для гибернации и «Быстрого запуска». Если вы не пользуетесь " +
-                $"гибернацией, её можно отключить — освободится {Format.Bytes(hiber.Size)}. Обычный спящий режим продолжит работать.",
+            var item = new SuggestionItem(SuggestionKind.Hibernation, "\uE708", Tone.Info, T._("Файл гибернации hiberfil.sys"),
+                T.F("В нём Windows сохраняет содержимое оперативной памяти для гибернации и «Быстрого запуска». Если вы не пользуетесь гибернацией, её можно отключить — освободится {0}. Обычный спящий режим продолжит работать.", Format.Bytes(hiber.Size)),
                 hiber.Size)
             {
                 CountsAsReclaimable = true,
-                ShortName = "файл гибернации",
-                Note = "Вернуть гибернацию можно командой «powercfg /h on» от имени администратора.",
+                ShortName = T._("файл гибернации"),
+                Note = T._("Вернуть гибернацию можно командой «powercfg /h on» от имени администратора."),
             };
-            item.Actions.Add(new SuggestionAction("Отключить гибернацию", DisableHibernationCommand, null, IsAccent: true,
-                ToolTip: "Выполнит «powercfg /h off». Нужны права администратора."));
+            item.Actions.Add(new SuggestionAction(T._("Отключить гибернацию"), DisableHibernationCommand, null, IsAccent: true,
+                ToolTip: T._("Выполнит «powercfg /h off». Нужны права администратора.")));
             list.Add(item);
         }
 
         if (data.WindowsOldPath is not null)
         {
-            var item = new SuggestionItem(SuggestionKind.WindowsOld, "\uE777", Tone.Warning, "Папка Windows.old — прежняя версия Windows",
-                "Осталась после обновления Windows. Если всё работает нормально, удалите её через «Очистку диска»: нажмите " +
-                "«Очистить системные файлы» и отметьте «Предыдущие установки Windows». После этого вернуться к прежней версии будет нельзя.",
+            var item = new SuggestionItem(SuggestionKind.WindowsOld, "\uE777", Tone.Warning, T._("Папка Windows.old — прежняя версия Windows"),
+                T._("Осталась после обновления Windows. Если всё работает нормально, удалите её через «Очистку диска»: нажмите «Очистить системные файлы» и отметьте «Предыдущие установки Windows». После этого вернуться к прежней версии будет нельзя."),
                 data.WindowsOldBytes)
             {
                 CountsAsReclaimable = true,
-                ShortName = "папка Windows.old",
-                Note = "Сама программа эту папку не трогает — удаляет её только «Очистка диска» Windows.",
+                ShortName = T._("папка Windows.old"),
+                Note = T._("Сама программа эту папку не трогает — удаляет её только «Очистка диска» Windows."),
             };
-            item.SetSize(data.WindowsOldBytes, data.WindowsOldPartial ? "не меньше " : "");
-            item.Actions.Add(new SuggestionAction("Открыть «Очистку диска»", DiskCleanupCommand, null, IsAccent: true));
-            item.Actions.Add(new SuggestionAction("Показать в проводнике", ShowInExplorerCommand, data.WindowsOldPath));
+            item.SetSize(data.WindowsOldBytes, data.WindowsOldPartial);
+            item.Actions.Add(new SuggestionAction(T._("Открыть «Очистку диска»"), DiskCleanupCommand, null, IsAccent: true));
+            item.Actions.Add(new SuggestionAction(T._("Показать в проводнике"), ShowInExplorerCommand, data.WindowsOldPath));
             list.Add(item);
             if (data.WindowsOldPartial)
                 StartRefineFolderSize(item, data.WindowsOldPath);
@@ -993,15 +989,14 @@ public sealed class DiskViewModel : PageViewModel
 
         if (data.RecycleBinBytes > 0)
         {
-            var item = new SuggestionItem(SuggestionKind.RecycleBin, "\uE74D", Tone.Neutral, "Корзина",
-                $"В корзине {Format.Count(data.RecycleBinItems, "объект", "объекта", "объектов")}. Удалённые файлы продолжают занимать " +
-                "место, пока корзина не очищена. Посмотрите, нет ли там нужного, и очистите её (это можно сделать в разделе «Очистка»).",
+            var item = new SuggestionItem(SuggestionKind.RecycleBin, "\uE74D", Tone.Neutral, T._("Корзина"),
+                T.F("В корзине {0}. Удалённые файлы продолжают занимать место, пока корзина не очищена. Посмотрите, нет ли там нужного, и очистите её (это можно сделать в разделе «Очистка»).", Format.Count(data.RecycleBinItems, "объект", "объекта", "объектов")),
                 data.RecycleBinBytes)
             {
                 CountsAsReclaimable = true,
-                ShortName = "корзина",
+                ShortName = T._("корзина"),
             };
-            item.Actions.Add(new SuggestionAction("Открыть корзину", OpenRecycleBinCommand, null));
+            item.Actions.Add(new SuggestionAction(T._("Открыть корзину"), OpenRecycleBinCommand, null));
             list.Add(item);
         }
 
@@ -1009,10 +1004,8 @@ public sealed class DiskViewModel : PageViewModel
         if (pageFiles.Count > 0)
         {
             var details = string.Join(", ", pageFiles.Select(f => $"{f.Path} — {Format.Bytes(f.Size)}"));
-            var item = new SuggestionItem(SuggestionKind.PageFile, "\uE964", Tone.Neutral, "Файл подкачки",
-                "Windows использует pagefile.sys как продолжение оперативной памяти, а swapfile.sys — для приложений из Microsoft Store. " +
-                "Удалять или отключать их не нужно: без файла подкачки программы могут вылетать при нехватке памяти. " +
-                "Размером Windows управляет сама.",
+            var item = new SuggestionItem(SuggestionKind.PageFile, "\uE964", Tone.Neutral, T._("Файл подкачки"),
+                T._("Windows использует pagefile.sys как продолжение оперативной памяти, а swapfile.sys — для приложений из Microsoft Store. Удалять или отключать их не нужно: без файла подкачки программы могут вылетать при нехватке памяти. Размером Windows управляет сама."),
                 pageFiles.Sum(f => f.Size))
             {
                 Note = details,
@@ -1024,19 +1017,19 @@ public sealed class DiskViewModel : PageViewModel
         {
             var used = data.ShadowStorage.Sum(s => s.UsedBytes ?? 0);
             var parts = data.ShadowStorage
-                .Select(s => $"{s.Volume} — занято {(s.UsedBytes is { } u ? Format.Bytes(u) : "?")}" +
-                             (s.MaxBytes is { } m ? $" из {Format.Bytes(m)} разрешённых" : ", без ограничения"))
+                .Select(s => s.MaxBytes is { } m
+                    ? T.F("{0} — занято {1} из {2} разрешённых", s.Volume, s.UsedBytes is { } u ? Format.Bytes(u) : "?", Format.Bytes(m))
+                    : T.F("{0} — занято {1}, без ограничения", s.Volume, s.UsedBytes is { } v ? Format.Bytes(v) : "?"))
                 .ToList();
-            var description = "Точки восстановления позволяют откатить Windows, если после установки программы или драйвера что-то " +
-                              "сломалось. Уменьшить лимит места или удалить старые точки можно в окне «Защита системы» → «Настроить».";
-            var item = new SuggestionItem(SuggestionKind.ShadowStorage, "\uE81C", Tone.Neutral, "Точки восстановления системы",
+            var description = T._("Точки восстановления позволяют откатить Windows, если после установки программы или драйвера что-то сломалось. Уменьшить лимит места или удалить старые точки можно в окне «Защита системы» → «Настроить».");
+            var item = new SuggestionItem(SuggestionKind.ShadowStorage, "\uE81C", Tone.Neutral, T._("Точки восстановления системы"),
                 description, used)
             {
                 Note = data.ShadowStorageNeedsAdmin
-                    ? "Сколько места они занимают, видно только при запуске программы от имени администратора."
-                    : parts.Count > 0 ? string.Join("; ", parts) : "Точек восстановления пока нет.",
+                    ? T._("Сколько места они занимают, видно только при запуске программы от имени администратора.")
+                    : parts.Count > 0 ? string.Join("; ", parts) : T._("Точек восстановления пока нет."),
             };
-            item.Actions.Add(new SuggestionAction("Открыть «Защиту системы»", SystemProtectionCommand, null));
+            item.Actions.Add(new SuggestionAction(T._("Открыть «Защиту системы»"), SystemProtectionCommand, null));
             list.Add(item);
         }
 
@@ -1064,7 +1057,7 @@ public sealed class DiskViewModel : PageViewModel
         {
             var (bytes, complete) = await DiskService.MeasureFolderAsync(path, TimeSpan.FromMinutes(3), ct);
             if (bytes > item.Bytes || complete)
-                item.SetSize(Math.Max(bytes, item.Bytes), complete ? "" : "не меньше ");
+                item.SetSize(Math.Max(bytes, item.Bytes), !complete);
             UpdateSuggestionsSummary();
         }
         catch (OperationCanceledException)
@@ -1073,11 +1066,11 @@ public sealed class DiskViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            Log.Warn($"Диски: не удалось измерить {path}: {ex.Message}");
+            Log.Warn(T.F("Диски: не удалось измерить {0}: {1}", path, ex.Message));
         }
         catch (Exception ex)
         {
-            Log.Error($"Диски: ошибка при измерении {path}", ex);
+            Log.Error(T.F("Диски: ошибка при измерении {0}", path), ex);
         }
     }
 
@@ -1085,8 +1078,8 @@ public sealed class DiskViewModel : PageViewModel
     {
         var days = (int)(now - f.NewestTimeLocal).TotalDays;
         return days >= 365
-            ? $"скачан {Format.Date(f.NewestTimeLocal)} (больше года назад)"
-            : $"скачан {Format.Date(f.NewestTimeLocal)} ({Format.Count(days, "день", "дня", "дней")} назад)";
+            ? T.F("скачан {0} (больше года назад)", Format.Date(f.NewestTimeLocal))
+            : T.F("скачан {0} ({1} назад)", Format.Date(f.NewestTimeLocal), Format.Count(days, "день", "дня", "дней"));
     }
 
     private void UpdateSuggestionsSummary()
@@ -1094,8 +1087,8 @@ public sealed class DiskViewModel : PageViewModel
         var reclaimable = Suggestions.Where(s => s.CountsAsReclaimable).ToList();
         var total = reclaimable.Sum(s => s.Bytes);
         SuggestionsSummary = total > 0
-            ? $"Можно освободить до {Format.Bytes(total)}"
-            : "Крупных лишних файлов не найдено";
+            ? T.F("Можно освободить до {0}", Format.Bytes(total))
+            : T._("Крупных лишних файлов не найдено");
 
         var names = reclaimable.Where(s => s.Bytes > 0 && s.ShortName.Length > 0)
             .OrderByDescending(s => s.Bytes)
@@ -1110,7 +1103,7 @@ public sealed class DiskViewModel : PageViewModel
         var shown = string.Join(", ", names.Take(3));
         shown = char.ToUpper(shown[0], Format.Ru) + shown[1..];
         SuggestionsTeaser = names.Count > 3
-            ? $"{shown} и ещё {Format.Count(names.Count - 3, "совет", "совета", "советов")}."
+            ? T.F("{0} и ещё {1}.", shown, Format.Count(names.Count - 3, "совет", "совета", "советов"))
             : shown + ".";
     }
 
@@ -1118,40 +1111,33 @@ public sealed class DiskViewModel : PageViewModel
 
     private async Task DisableHibernationAsync()
     {
-        if (!ElevatedRestart.RequireElevation("Отключить гибернацию"))
+        if (!ElevatedRestart.RequireElevation(T._("Отключить гибернацию")))
             return;
         var hiber = DiskService.FindSystemFilesIn(_service.SystemDriveRoot).FirstOrDefault(f => f.Name == "hiberfil.sys");
         var size = hiber is null ? "" : $" ({Format.Bytes(hiber.Size)})";
-        if (!Dialogs.Confirm("Отключить гибернацию",
-                "Что произойдёт:\n" +
-                $"• Windows удалит файл hiberfil.sys{size} с диска {_service.SystemDriveRoot.TrimEnd('\\')}.\n" +
-                "• Режим гибернации и «Быстрый запуск» станут недоступны. Обычный спящий режим продолжит работать.\n" +
-                "• Включение компьютера после полного выключения может стать на несколько секунд дольше.\n\n" +
-                "Как вернуть: выполните от имени администратора команду powercfg /h on.\n\nПродолжить?"))
+        if (!Dialogs.Confirm(T._("Отключить гибернацию"),
+                T.F("Что произойдёт:\n• Windows удалит файл hiberfil.sys{0} с диска {1}.\n• Режим гибернации и «Быстрый запуск» станут недоступны. Обычный спящий режим продолжит работать.\n• Включение компьютера после полного выключения может стать на несколько секунд дольше.\n\nКак вернуть: выполните от имени администратора команду powercfg /h on.\n\nПродолжить?", size, _service.SystemDriveRoot.TrimEnd('\\'))))
             return;
 
         string? message = null;
-        await RunBusyAsync("Отключаем гибернацию…", async ct => message = await _service.DisableHibernationAsync(ct));
+        await RunBusyAsync(T._("Отключаем гибернацию…"), async ct => message = await _service.DisableHibernationAsync(ct));
         if (message is null)
             return;
-        Dialogs.Info("Гибернация", message);
+        Dialogs.Info(T._("Гибернация"), message);
         _ = LoadSuggestionsAsync();
         _ = LoadOverviewAsync();
     }
 
     private async Task EnableTrimAsync()
     {
-        if (!ElevatedRestart.RequireElevation("Включить TRIM"))
+        if (!ElevatedRestart.RequireElevation(T._("Включить TRIM")))
             return;
-        if (!Dialogs.Confirm("Включить TRIM",
-                "Windows снова начнёт сообщать SSD, какие блоки освободились после удаления файлов. Это сохраняет скорость " +
-                "записи и продлевает жизнь накопителя. Для обычных жёстких дисков это безопасно — они просто игнорируют команду.\n\n" +
-                "Будет выполнена команда: fsutil behavior set DisableDeleteNotify 0\n" +
-                "Как вернуть: fsutil behavior set DisableDeleteNotify 1 (не рекомендуется).\n\nПродолжить?"))
+        if (!Dialogs.Confirm(T._("Включить TRIM"),
+                T._("Windows снова начнёт сообщать SSD, какие блоки освободились после удаления файлов. Это сохраняет скорость записи и продлевает жизнь накопителя. Для обычных жёстких дисков это безопасно — они просто игнорируют команду.\n\nБудет выполнена команда: fsutil behavior set DisableDeleteNotify 0\nКак вернуть: fsutil behavior set DisableDeleteNotify 1 (не рекомендуется).\n\nПродолжить?")))
             return;
 
         string? message = null;
-        await RunBusyAsync("Включаем TRIM…", async ct => message = await _service.EnableTrimAsync(ct));
+        await RunBusyAsync(T._("Включаем TRIM…"), async ct => message = await _service.EnableTrimAsync(ct));
         if (message is null)
             return;
         Dialogs.Info("TRIM", message);
@@ -1161,33 +1147,25 @@ public sealed class DiskViewModel : PageViewModel
     private async Task OptimizeDriveAsync(DriveItem drive)
     {
         var letter = drive.Letter;
-        if (!ElevatedRestart.RequireElevation($"Оптимизировать диск {letter}:"))
+        if (!ElevatedRestart.RequireElevation(T.F("Оптимизировать диск {0}:", letter)))
             return;
 
         var text = drive.Kind switch
         {
             DriveKind.Hdd =>
-                $"Дефрагментировать диск {letter}: (HDD)?\n\n" +
-                "Части файлов на жёстком диске будут собраны в непрерывные участки — так он читает их быстрее. " +
-                "Это может занять от нескольких минут до нескольких часов (зависит от размера и заполненности диска). " +
-                "Файлы не удаляются и не меняются. Работать за компьютером можно, но он может притормаживать.\n\n" +
-                "Остановить можно в любой момент кнопкой «Отмена» — уже сделанная работа сохранится.",
+                T.F("Дефрагментировать диск {0}: (HDD)?\n\nЧасти файлов на жёстком диске будут собраны в непрерывные участки — так он читает их быстрее. Это может занять от нескольких минут до нескольких часов (зависит от размера и заполненности диска). Файлы не удаляются и не меняются. Работать за компьютером можно, но он может притормаживать.\n\nОстановить можно в любой момент кнопкой «Отмена» — уже сделанная работа сохранится.", letter),
             DriveKind.Ssd or DriveKind.NvmeSsd or DriveKind.Scm =>
-                $"Оптимизировать диск {letter}: (SSD)?\n\n" +
-                "Windows выполнит ReTrim: сообщит накопителю обо всех свободных блоках, чтобы он не замедлялся. " +
-                "Обычно это занимает от нескольких секунд до пары минут. Файлы не удаляются и не меняются.",
+                T.F("Оптимизировать диск {0}: (SSD)?\n\nWindows выполнит ReTrim: сообщит накопителю обо всех свободных блоках, чтобы он не замедлялся. Обычно это занимает от нескольких секунд до пары минут. Файлы не удаляются и не меняются.", letter),
             _ =>
-                $"Оптимизировать диск {letter}:?\n\nWindows сама выберет подходящий способ (дефрагментация для HDD, ReTrim для SSD). " +
-                "Файлы не удаляются и не меняются.",
+                T.F("Оптимизировать диск {0}:?\n\nWindows сама выберет подходящий способ (дефрагментация для HDD, ReTrim для SSD). Файлы не удаляются и не меняются.", letter),
         };
-        text += "\n\nWindows и так оптимизирует диски по расписанию раз в неделю — вручную это нужно, только если вы давно не " +
-                "включали компьютер надолго или заметили замедление.\n\nБудет выполнена команда: defrag " + letter + ": /O";
-        if (!Dialogs.Confirm("Оптимизация диска", text))
+        text += T.F("\n\nWindows и так оптимизирует диски по расписанию раз в неделю — вручную это нужно, только если вы давно не включали компьютер надолго или заметили замедление.\n\nБудет выполнена команда: defrag {0}: /O", letter);
+        if (!Dialogs.Confirm(T._("Оптимизация диска"), text))
             return;
 
         OptimizeOutcome? outcome = null;
         var cancelled = false;
-        await RunBusyAsync($"Оптимизация диска {letter}:…", async ct =>
+        await RunBusyAsync(T.F("Оптимизация диска {0}:…", letter), async ct =>
         {
             double lastPercent = -1;
             try
@@ -1198,7 +1176,7 @@ public sealed class DiskViewModel : PageViewModel
                     var percent = ToolOutputParsers.ParseProgressPercent(line);
                     if (percent is not null)
                         lastPercent = percent.Value;
-                    ReportProgress(lastPercent, $"Диск {letter}: {line.Trim()}");
+                    ReportProgress(lastPercent, T.F("Диск {0}: {1}", letter, line.Trim()));
                 }, ct);
             }
             catch (OperationCanceledException)
@@ -1212,12 +1190,12 @@ public sealed class DiskViewModel : PageViewModel
         {
             // Errors were already reported by RunBusyAsync; only a user cancel needs its own message.
             if (cancelled)
-                Dialogs.Info("Оптимизация остановлена",
-                    $"Оптимизация диска {letter}: остановлена. Уже выполненная часть работы сохранилась — её можно продолжить в любой момент.");
+                Dialogs.Info(T._("Оптимизация остановлена"),
+                    T.F("Оптимизация диска {0}: остановлена. Уже выполненная часть работы сохранилась — её можно продолжить в любой момент.", letter));
             return;
         }
         var details = string.IsNullOrWhiteSpace(outcome.Output) ? "" : "\n\n" + LastLines(outcome.Output, 14);
-        Dialogs.Info(outcome.Success ? "Оптимизация завершена" : "Оптимизация не выполнена", outcome.Summary + details);
+        Dialogs.Info(outcome.Success ? T._("Оптимизация завершена") : T._("Оптимизация не выполнена"), outcome.Summary + details);
         _ = LoadOverviewAsync();
     }
 
@@ -1228,18 +1206,18 @@ public sealed class DiskViewModel : PageViewModel
         switch (result)
         {
             case ToolLaunchResult.Started:
-                Log.Info($"Открыто окно {displayName}");
+                Log.Info(T.F("Открыто окно {0}", displayName));
                 // The command stays busy (its buttons disabled) while the window appears.
                 await Task.Delay(ToolLaunchCooldown);
                 break;
             case ToolLaunchResult.AlreadyOpen:
-                Dialogs.Info("Окно уже открыто", $"Окно {displayName} уже открыто — переключитесь на него через панель задач.");
+                Dialogs.Info(T._("Окно уже открыто"), T.F("Окно {0} уже открыто — переключитесь на него через панель задач.", displayName));
                 break;
             case ToolLaunchResult.Cancelled:
                 // The user answered "No" in the UAC prompt: nothing to report (already logged).
                 break;
             default:
-                Dialogs.Error("Не удалось открыть", $"Не удалось открыть окно {displayName}. Подробности — в журнале (раздел «Настройки»).");
+                Dialogs.Error(T._("Не удалось открыть"), T.F("Не удалось открыть окно {0}. Подробности — в журнале (раздел «Настройки»).", displayName));
                 break;
         }
     }
@@ -1267,7 +1245,7 @@ public sealed class DiskViewModel : PageViewModel
         }
         catch (System.Runtime.InteropServices.ExternalException ex)
         {
-            Log.Warn($"Не удалось скопировать путь в буфер обмена: {ex.Message}");
+            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ex.Message));
         }
     }
 

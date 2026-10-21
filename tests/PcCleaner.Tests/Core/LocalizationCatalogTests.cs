@@ -27,6 +27,7 @@ public class LocalizationCatalogTests
         "MainWindow.xaml.cs",
         "Modules/Cleaner/",
         "Modules/Dashboard/",
+        "Modules/Disk/",
         "Modules/Processes/",
         "Modules/Programs/",
         "Modules/Settings/",

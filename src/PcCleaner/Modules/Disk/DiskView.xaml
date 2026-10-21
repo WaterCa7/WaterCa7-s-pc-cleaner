@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Disk"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:DiskViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700">
@@ -47,50 +48,50 @@
 
         <!-- Context menu of folder rows -->
         <ContextMenu x:Key="FolderMenu" x:Shared="False">
-            <MenuItem Header="Открыть папку в списке"
+            <MenuItem Header="{loc:T 'Открыть папку в списке'}"
                       Command="{Binding PlacementTarget.Tag.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" IsEnabled="{Binding CanOpen}" />
-            <MenuItem Header="Показать в проводнике"
+            <MenuItem Header="{loc:T 'Показать в проводнике'}"
                       Command="{Binding PlacementTarget.Tag.ShowInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
-            <MenuItem Header="Копировать путь"
+            <MenuItem Header="{loc:T 'Копировать путь'}"
                       Command="{Binding PlacementTarget.Tag.CopyPathCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
-            <MenuItem Header="Что это за папка? (поиск в интернете)"
+            <MenuItem Header="{loc:T 'Что это за папка? (поиск в интернете)'}"
                       Command="{Binding PlacementTarget.Tag.SearchWebCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
         </ContextMenu>
 
         <!-- Context menu of the largest files -->
         <ContextMenu x:Key="FileMenu" x:Shared="False">
-            <MenuItem Header="Показать в проводнике"
+            <MenuItem Header="{loc:T 'Показать в проводнике'}"
                       Command="{Binding PlacementTarget.Tag.ShowInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
-            <MenuItem Header="Копировать путь"
+            <MenuItem Header="{loc:T 'Копировать путь'}"
                       Command="{Binding PlacementTarget.Tag.CopyPathCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
-            <MenuItem Header="Что это за файл? (поиск в интернете)"
+            <MenuItem Header="{loc:T 'Что это за файл? (поиск в интернете)'}"
                       Command="{Binding PlacementTarget.Tag.SearchWebCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
-            <MenuItem Header="Проверить на VirusTotal"
+            <MenuItem Header="{loc:T 'Проверить на VirusTotal'}"
                       Command="{Binding PlacementTarget.Tag.VirusTotalCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}"
                       Visibility="{Binding IsExecutable, Converter={StaticResource BoolToVis}}" />
             <Separator />
-            <MenuItem Header="Удалить в корзину…"
+            <MenuItem Header="{loc:T 'Удалить в корзину…'}"
                       Command="{Binding PlacementTarget.Tag.RecycleFileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" Foreground="{StaticResource DangerBrush}" />
         </ContextMenu>
 
         <!-- Context menu of files inside suggestions -->
         <ContextMenu x:Key="SuggestionFileMenu" x:Shared="False">
-            <MenuItem Header="Показать в проводнике"
+            <MenuItem Header="{loc:T 'Показать в проводнике'}"
                       Command="{Binding PlacementTarget.Tag.ShowInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
-            <MenuItem Header="Копировать путь"
+            <MenuItem Header="{loc:T 'Копировать путь'}"
                       Command="{Binding PlacementTarget.Tag.CopyPathCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
-            <MenuItem Header="Что это за файл? (поиск в интернете)"
+            <MenuItem Header="{loc:T 'Что это за файл? (поиск в интернете)'}"
                       Command="{Binding PlacementTarget.Tag.SearchWebCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding}" />
         </ContextMenu>
@@ -115,7 +116,7 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xEDA2;" FontSize="14" Margin="0,0,8,0" />
-                        <TextBlock Text="Обзор" />
+                        <TextBlock Text="{loc:T 'Обзор'}" />
                     </StackPanel>
                 </TabItem.Header>
 
@@ -125,7 +126,7 @@
                         <Border Style="{StaticResource Card}" Margin="0,0,0,12"
                                 Visibility="{Binding ShowDrivesLoading, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
-                                <TextBlock Text="Загружаем сведения о дисках…" Style="{StaticResource Muted}" Margin="0,0,0,8" />
+                                <TextBlock Text="{loc:T 'Загружаем сведения о дисках…'}" Style="{StaticResource Muted}" Margin="0,0,0,8" />
                                 <ProgressBar IsIndeterminate="True" />
                             </StackPanel>
                         </Border>
@@ -137,9 +138,9 @@
                                 <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="20"
                                            Foreground="{StaticResource WarningBrush}" VerticalAlignment="Top" Margin="0,2,12,0" />
                                 <StackPanel>
-                                    <TextBlock Text="Не удалось получить сведения о дисках" Style="{StaticResource H3}" />
+                                    <TextBlock Text="{loc:T 'Не удалось получить сведения о дисках'}" Style="{StaticResource H3}" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
-                                               Text="Windows не сообщила ни об одном готовом локальном диске. Нажмите «Обновить» справа вверху, чтобы попробовать ещё раз." />
+                                               Text="{loc:T 'Windows не сообщила ни об одном готовом локальном диске. Нажмите «Обновить» справа вверху, чтобы попробовать ещё раз.'}" />
                                 </StackPanel>
                             </DockPanel>
                         </Border>
@@ -218,7 +219,7 @@
                                                                TextWrapping="Wrap" />
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal" Visibility="{Binding ShowTrim, Converter={StaticResource BoolToVis}}"
-                                                            ToolTip="TRIM сообщает SSD об удалённых данных, чтобы накопитель не замедлялся со временем. Должен быть включён.">
+                                                            ToolTip="{loc:T 'TRIM сообщает SSD об удалённых данных, чтобы накопитель не замедлялся со временем. Должен быть включён.'}">
                                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE945;" FontSize="13" Margin="0,0,6,0"
                                                                Foreground="{Binding TrimTone, Converter={StaticResource ToneBrush}}" />
                                                     <TextBlock Text="{Binding TrimText}" FontSize="12.5"
@@ -231,10 +232,10 @@
                                                 <Button Style="{StaticResource AccentButton}" Margin="0,6,8,0"
                                                         Command="{Binding DataContext.AnalyzeDriveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
-                                                        ToolTip="Показать, какие папки и файлы занимают место на этом диске. Ничего не удаляется.">
+                                                        ToolTip="{loc:T 'Показать, какие папки и файлы занимают место на этом диске. Ничего не удаляется.'}">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE9D2;" FontSize="14" Margin="0,0,7,0" />
-                                                        <TextBlock Text="Что занимает место" />
+                                                        <TextBlock Text="{loc:T 'Что занимает место'}" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Margin="0,6,8,0" ToolTip="{Binding OptimizeToolTip}"
@@ -247,10 +248,10 @@
                                                 </Button>
                                                 <Button Style="{StaticResource GhostButton}" Margin="0,6,0,0" Padding="10,7"
                                                         Command="{Binding DataContext.OpenDriveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        CommandParameter="{Binding}" ToolTip="Открыть диск в проводнике">
+                                                        CommandParameter="{Binding}" ToolTip="{loc:T 'Открыть диск в проводнике'}">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="14" Margin="0,0,7,0" />
-                                                        <TextBlock Text="Открыть" />
+                                                        <TextBlock Text="{loc:T 'Открыть'}" />
                                                     </StackPanel>
                                                 </Button>
                                             </WrapPanel>
@@ -279,7 +280,7 @@
                                     <TextBlock Text="{Binding SuggestionsTeaser}" Style="{StaticResource Muted}" Margin="0,2,0,0"
                                                TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding SuggestionsTeaser}" />
                                 </StackPanel>
-                                <Button Grid.Column="2" Content="Смотреть советы" VerticalAlignment="Center"
+                                <Button Grid.Column="2" Content="{loc:T 'Смотреть советы'}" VerticalAlignment="Center"
                                         Command="{Binding GoToSuggestionsCommand}" />
                             </Grid>
                         </Border>
@@ -296,12 +297,12 @@
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="20" Foreground="{StaticResource WarningBrush}"
                                            VerticalAlignment="Top" Margin="0,2,12,0" />
                                 <StackPanel Grid.Column="1">
-                                    <TextBlock Text="TRIM выключен" Style="{StaticResource H3}" />
+                                    <TextBlock Text="{loc:T 'TRIM выключен'}" Style="{StaticResource H3}" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,4,12,0"
-                                               Text="Без TRIM твердотельный накопитель со временем записывает всё медленнее и быстрее изнашивается. Обычно TRIM включён — возможно, его отключила какая-то программа-«оптимизатор»." />
+                                               Text="{loc:T 'Без TRIM твердотельный накопитель со временем записывает всё медленнее и быстрее изнашивается. Обычно TRIM включён — возможно, его отключила какая-то программа-«оптимизатор».'}" />
                                 </StackPanel>
-                                <Button Grid.Column="2" Style="{StaticResource AccentButton}" Content="Включить TRIM" VerticalAlignment="Center"
-                                        Command="{Binding EnableTrimCommand}" ToolTip="Нужны права администратора" />
+                                <Button Grid.Column="2" Style="{StaticResource AccentButton}" Content="{loc:T 'Включить TRIM'}" VerticalAlignment="Center"
+                                        Command="{Binding EnableTrimCommand}" ToolTip="{loc:T 'Нужны права администратора'}" />
                             </Grid>
                         </Border>
 
@@ -309,9 +310,9 @@
                         <Border Style="{StaticResource Card}" Margin="0,0,0,12"
                                 Visibility="{Binding HasPhysicalDisks, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
-                                <TextBlock Text="Физические накопители" Style="{StaticResource H3}" />
+                                <TextBlock Text="{loc:T 'Физические накопители'}" Style="{StaticResource H3}" />
                                 <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,6"
-                                           Text="Модель, тип и состояние каждого диска по данным Windows. Если накопитель сообщит о проблемах, программа предупредит вас." />
+                                           Text="{loc:T 'Модель, тип и состояние каждого диска по данным Windows. Если накопитель сообщит о проблемах, программа предупредит вас.'}" />
                                 <ItemsControl ItemsSource="{Binding PhysicalDisks}" Focusable="False">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type local:PhysicalDiskItem}">
@@ -350,7 +351,7 @@
                                                         </ItemsControl>
                                                         <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0" FontSize="12"
                                                                    Visibility="{Binding ShowNoCounters, Converter={StaticResource BoolToVis}}"
-                                                                   Text="Накопитель не сообщает температуру и износ (так бывает с USB-дисками и некоторыми контроллерами)." />
+                                                                   Text="{loc:T 'Накопитель не сообщает температуру и износ (так бывает с USB-дисками и некоторыми контроллерами).'}" />
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
@@ -364,10 +365,10 @@
                                     <DockPanel>
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE946;" FontSize="15"
                                                    Foreground="{StaticResource InfoBrush}" Margin="0,0,10,0" />
-                                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Перезапустить от имени администратора"
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="{loc:T 'Перезапустить от имени администратора'}"
                                                 Command="{Binding RestartAsAdminCommand}" VerticalAlignment="Center" Margin="12,0,0,0" />
                                         <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"
-                                                   Text="Температура, износ и наработка накопителей видны при запуске программы от имени администратора." />
+                                                   Text="{loc:T 'Температура, износ и наработка накопителей видны при запуске программы от имени администратора.'}" />
                                     </DockPanel>
                                 </Border>
                             </StackPanel>
@@ -377,7 +378,7 @@
                             <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE946;" FontSize="14"
                                        Foreground="{StaticResource MutedBrush}" VerticalAlignment="Top" Margin="0,1,8,0" />
                             <TextBlock Style="{StaticResource Muted}"
-                                       Text="Windows сама оптимизирует диски по расписанию раз в неделю: для SSD выполняет TRIM, для жёстких дисков — дефрагментацию. Запускать это вручную нужно редко." />
+                                       Text="{loc:T 'Windows сама оптимизирует диски по расписанию раз в неделю: для SSD выполняет TRIM, для жёстких дисков — дефрагментацию. Запускать это вручную нужно редко.'}" />
                         </DockPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -388,7 +389,7 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE9D2;" FontSize="14" Margin="0,0,8,0" />
-                        <TextBlock Text="Что занимает место" />
+                        <TextBlock Text="{loc:T 'Что занимает место'}" />
                     </StackPanel>
                 </TabItem.Header>
 
@@ -408,7 +409,7 @@
                             <ColumnDefinition Width="0.01*" />
                         </Grid.ColumnDefinitions>
                         <ComboBox ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation, Mode=TwoWay}" MinWidth="200"
-                                  ToolTip="Что проанализировать: целый диск или одну из ваших папок">
+                                  ToolTip="{loc:T 'Что проанализировать: целый диск или одну из ваших папок'}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate DataType="{x:Type local:LocationOption}">
                                     <DockPanel>
@@ -422,17 +423,17 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                         <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding PickFolderCommand}"
-                                ToolTip="Выбрать любую папку на компьютере и сразу проанализировать её">
+                                ToolTip="{loc:T 'Выбрать любую папку на компьютере и сразу проанализировать её'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="14" Margin="0,0,7,0" />
-                                <TextBlock Text="Выбрать папку…" />
+                                <TextBlock Text="{loc:T 'Выбрать папку…'}" />
                             </StackPanel>
                         </Button>
                         <Button Grid.Column="2" Margin="8,0,0,0" Style="{StaticResource AccentButton}" Command="{Binding AnalyzeCommand}"
-                                ToolTip="Посчитать размеры папок и найти самые большие файлы. Ничего не удаляется.">
+                                ToolTip="{loc:T 'Посчитать размеры папок и найти самые большие файлы. Ничего не удаляется.'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="14" Margin="0,0,7,0" />
-                                <TextBlock Text="Анализировать" />
+                                <TextBlock Text="{loc:T 'Анализировать'}" />
                             </StackPanel>
                         </Button>
                     </Grid>
@@ -446,13 +447,13 @@
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE9D2;" FontSize="28" HorizontalAlignment="Center"
                                            Foreground="{StaticResource AccentBrush}" />
                             </Border>
-                            <TextBlock Text="Узнайте, что занимает место" Style="{StaticResource H2}" HorizontalAlignment="Center" Margin="0,16,0,6" />
+                            <TextBlock Text="{loc:T 'Узнайте, что занимает место'}" Style="{StaticResource H2}" HorizontalAlignment="Center" Margin="0,16,0,6" />
                             <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" FontSize="13"
-                                       Text="Выберите диск или папку и нажмите «Анализировать». Программа посчитает размер каждой папки, найдёт самые большие файлы и покажет, сколько места занимают видео, игры, архивы и другие типы файлов." />
+                                       Text="{loc:T 'Выберите диск или папку и нажмите «Анализировать». Программа посчитает размер каждой папки, найдёт самые большие файлы и покажет, сколько места занимают видео, игры, архивы и другие типы файлов.'}" />
                             <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" Margin="0,10,0,0"
-                                       Text="Анализ только читает диск и ничего не удаляет. Целый диск на 1–2 ТБ проверяется за пару минут." />
+                                       Text="{loc:T 'Анализ только читает диск и ничего не удаляет. Целый диск на 1–2 ТБ проверяется за пару минут.'}" />
                             <Button Style="{StaticResource AccentButton}" HorizontalAlignment="Center" Margin="0,18,0,0" Padding="20,9"
-                                    Command="{Binding AnalyzeCommand}" Content="Анализировать" />
+                                    Command="{Binding AnalyzeCommand}" Content="{loc:T 'Анализировать'}" />
                         </StackPanel>
                     </Border>
 
@@ -488,7 +489,7 @@
                                 <!-- Breadcrumb -->
                                 <DockPanel DockPanel.Dock="Top" Margin="2,0,0,8">
                                     <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Padding="6,4" Margin="0,0,6,0"
-                                            Command="{Binding UpCommand}" ToolTip="На уровень вверх (Backspace)" VerticalAlignment="Top">
+                                            Command="{Binding UpCommand}" ToolTip="{loc:T 'На уровень вверх (Backspace)'}" VerticalAlignment="Top">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE74A;" FontSize="13" />
                                     </Button>
                                     <TextBlock DockPanel.Dock="Right" Text="{Binding CurrentFolderSize}" Style="{StaticResource Muted}"
@@ -511,14 +512,14 @@
                                 </DockPanel>
 
                                 <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Muted}" FontSize="11.5" Margin="2,8,0,0"
-                                           Text="Двойной щелчок — открыть папку · правая кнопка мыши — другие действия" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                           Text="{loc:T 'Двойной щелчок — открыть папку · правая кнопка мыши — другие действия'}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
 
                                 <Grid>
                                     <DataGrid x:Name="FoldersGrid" ItemsSource="{Binding FolderRows}" RowStyle="{StaticResource FolderRowStyle}"
                                               SelectionMode="Single" CanUserSortColumns="False" CanUserReorderColumns="False"
                                               MouseDoubleClick="FoldersGrid_MouseDoubleClick" PreviewKeyDown="FoldersGrid_PreviewKeyDown">
                                         <DataGrid.Columns>
-                                            <DataGridTemplateColumn Header="Папка" Width="*" MinWidth="120">
+                                            <DataGridTemplateColumn Header="{loc:T 'Папка'}" Width="*" MinWidth="120">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate DataType="{x:Type local:FolderRow}">
                                                         <DockPanel Background="Transparent" ToolTip="{Binding ToolTip}">
@@ -527,21 +528,21 @@
                                                                        Foreground="{Binding IconTone, Converter={StaticResource ToneBrush}}" />
                                                             <Border DockPanel.Dock="Right" Style="{StaticResource Badge}" Margin="6,0,0,0"
                                                                     Visibility="{Binding IsLink, Converter={StaticResource BoolToVis}}">
-                                                                <TextBlock Text="ссылка" FontSize="11" Foreground="{StaticResource MutedBrush}" />
+                                                                <TextBlock Text="{loc:T 'ссылка'}" FontSize="11" Foreground="{StaticResource MutedBrush}" />
                                                             </Border>
                                                             <Border DockPanel.Dock="Right" Style="{StaticResource Badge}" Margin="6,0,0,0"
                                                                     Background="{StaticResource WarningSoftBrush}"
                                                                     Visibility="{Binding IsInaccessible, Converter={StaticResource BoolToVis}}">
-                                                                <TextBlock Text="нет доступа" FontSize="11" Foreground="{StaticResource WarningBrush}" />
+                                                                <TextBlock Text="{loc:T 'нет доступа'}" FontSize="11" Foreground="{StaticResource WarningBrush}" />
                                                             </Border>
                                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                                         </DockPanel>
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" Width="84"
+                                            <DataGridTextColumn Header="{loc:T 'Размер'}" Binding="{Binding SizeText}" Width="84"
                                                                 ElementStyle="{StaticResource RightText}" />
-                                            <DataGridTemplateColumn Header="Доля" Width="118">
+                                            <DataGridTemplateColumn Header="{loc:T 'Доля'}" Width="118">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate DataType="{x:Type local:FolderRow}">
                                                         <Grid>
@@ -557,11 +558,11 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTextColumn Header="Файлов" Binding="{Binding FilesText}" Width="78"
+                                            <DataGridTextColumn Header="{loc:T 'Файлов'}" Binding="{Binding FilesText}" Width="78"
                                                                 ElementStyle="{StaticResource RightText}" />
                                         </DataGrid.Columns>
                                     </DataGrid>
-                                    <TextBlock Text="Эта папка пуста." Style="{StaticResource Muted}" HorizontalAlignment="Center"
+                                    <TextBlock Text="{loc:T 'Эта папка пуста.'}" Style="{StaticResource Muted}" HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
                                                Visibility="{Binding FolderRows.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                                 </Grid>
@@ -572,8 +573,8 @@
                         <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,12">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                    <TextBlock Text="По типам файлов" Style="{StaticResource H3}" />
-                                    <TextBlock Text="Для всей проанализированной папки" Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0" />
+                                    <TextBlock Text="{loc:T 'По типам файлов'}" Style="{StaticResource H3}" />
+                                    <TextBlock Text="{loc:T 'Для всей проанализированной папки'}" Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <ItemsControl ItemsSource="{Binding Categories}" Focusable="False">
@@ -618,7 +619,7 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE8A5;" FontSize="14" Margin="0,0,8,0" />
-                        <TextBlock Text="Большие файлы" />
+                        <TextBlock Text="{loc:T 'Большие файлы'}" />
                     </StackPanel>
                 </TabItem.Header>
 
@@ -637,11 +638,11 @@
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE8A5;" FontSize="28" HorizontalAlignment="Center"
                                            Foreground="{StaticResource InfoBrush}" />
                             </Border>
-                            <TextBlock Text="Здесь появятся самые большие файлы" Style="{StaticResource H2}" HorizontalAlignment="Center"
+                            <TextBlock Text="{loc:T 'Здесь появятся самые большие файлы'}" Style="{StaticResource H2}" HorizontalAlignment="Center"
                                        Margin="0,16,0,6" />
                             <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" FontSize="13"
-                                       Text="Сначала проанализируйте диск или папку на вкладке «Что занимает место» — программа найдёт 100 самых больших файлов, и ненужные можно будет отправить в корзину." />
-                            <Button HorizontalAlignment="Center" Margin="0,18,0,0" Padding="18,8" Content="Перейти к анализу"
+                                       Text="{loc:T 'Сначала проанализируйте диск или папку на вкладке «Что занимает место» — программа найдёт 100 самых больших файлов, и ненужные можно будет отправить в корзину.'}" />
+                            <Button HorizontalAlignment="Center" Margin="0,18,0,0" Padding="18,8" Content="{loc:T 'Перейти к анализу'}"
                                     Command="{Binding GoToAnalyzerCommand}" />
                         </StackPanel>
                     </Border>
@@ -658,13 +659,13 @@
                             <TextBlock Text="{Binding SelectedFilesText}" Style="{StaticResource Muted}" Margin="0,3,0,0" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource GhostButton}" Content="Снять отметки" Command="{Binding ClearSelectionCommand}"
+                            <Button Style="{StaticResource GhostButton}" Content="{loc:T 'Снять отметки'}" Command="{Binding ClearSelectionCommand}"
                                     Margin="0,0,8,0" />
                             <Button Style="{StaticResource DangerButton}" Command="{Binding RecycleCheckedFilesCommand}"
-                                    ToolTip="Переместить отмеченные файлы в корзину. Их можно будет восстановить.">
+                                    ToolTip="{loc:T 'Переместить отмеченные файлы в корзину. Их можно будет восстановить.'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" Margin="0,0,7,0" />
-                                    <TextBlock Text="Удалить в корзину" />
+                                    <TextBlock Text="{loc:T 'Удалить в корзину'}" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -680,11 +681,11 @@
                                         <DataTemplate DataType="{x:Type local:LargeFileRow}">
                                             <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                       IsEnabled="{Binding CanSelect}" HorizontalAlignment="Center"
-                                                      ToolTip="Отметить для удаления в корзину" />
+                                                      ToolTip="{loc:T 'Отметить для удаления в корзину'}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Файл" Width="1.4*" MinWidth="140" SortMemberPath="Name">
+                                <DataGridTemplateColumn Header="{loc:T 'Файл'}" Width="1.4*" MinWidth="140" SortMemberPath="Name">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate DataType="{x:Type local:LargeFileRow}">
                                             <DockPanel Background="Transparent" ToolTip="{Binding ToolTip}">
@@ -701,13 +702,13 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Папка" Binding="{Binding Folder}" Width="1.6*" MinWidth="120"
+                                <DataGridTextColumn Header="{loc:T 'Папка'}" Binding="{Binding Folder}" Width="1.6*" MinWidth="120"
                                                     ElementStyle="{StaticResource MutedCell}" />
-                                <DataGridTextColumn Header="Тип" Binding="{Binding CategoryName}" Width="118"
+                                <DataGridTextColumn Header="{loc:T 'Тип'}" Binding="{Binding CategoryName}" Width="118"
                                                     ElementStyle="{StaticResource MutedCell}" />
-                                <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" SortMemberPath="Size" Width="86"
+                                <DataGridTextColumn Header="{loc:T 'Размер'}" Binding="{Binding SizeText}" SortMemberPath="Size" Width="86"
                                                     ElementStyle="{StaticResource RightText}" />
-                                <DataGridTextColumn Header="Изменён" Binding="{Binding ModifiedText}" SortMemberPath="Hit.ModifiedUtc" Width="92"
+                                <DataGridTextColumn Header="{loc:T 'Изменён'}" Binding="{Binding ModifiedText}" SortMemberPath="Hit.ModifiedUtc" Width="92"
                                                     ElementStyle="{StaticResource MutedCell}" />
                             </DataGrid.Columns>
                         </DataGrid>
@@ -720,7 +721,7 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xEA80;" FontSize="14" Margin="0,0,8,0" />
-                        <TextBlock Text="Советы по месту" />
+                        <TextBlock Text="{loc:T 'Советы по месту'}" />
                     </StackPanel>
                 </TabItem.Header>
 
@@ -740,7 +741,7 @@
                                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding SuggestionsSummary}" Style="{StaticResource H2}" Margin="0" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
-                                               Text="Ничего не удаляется без вашего подтверждения: файлы отправляются в корзину, а системные настройки меняются только после вопроса." />
+                                               Text="{loc:T 'Ничего не удаляется без вашего подтверждения: файлы отправляются в корзину, а системные настройки меняются только после вопроса.'}" />
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -749,7 +750,7 @@
                         <Border Style="{StaticResource Card}" Margin="0,0,0,12"
                                 Visibility="{Binding IsSuggestionsLoading, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
-                                <TextBlock Text="Ищем, что можно освободить: старые загрузки, большие видео, системные файлы…" Style="{StaticResource Muted}"
+                                <TextBlock Text="{loc:T 'Ищем, что можно освободить: старые загрузки, большие видео, системные файлы…'}" Style="{StaticResource Muted}"
                                            Margin="0,0,0,8" />
                                 <ProgressBar IsIndeterminate="True" />
                             </StackPanel>
@@ -804,7 +805,7 @@
                                                         Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                                                     <StackPanel>
                                                         <DockPanel Margin="2,0,2,6">
-                                                            <Button DockPanel.Dock="Left" Style="{StaticResource LinkButton}" Content="Отметить все / снять"
+                                                            <Button DockPanel.Dock="Left" Style="{StaticResource LinkButton}" Content="{loc:T 'Отметить все / снять'}"
                                                                     Command="{Binding DataContext.CheckAllCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}" />
                                                             <TextBlock Text="{Binding CheckedText}" Style="{StaticResource Muted}" HorizontalAlignment="Right" />
@@ -858,10 +859,10 @@
 
         <!-- Refresh (top right, next to the tabs) -->
         <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource GhostButton}" Margin="0,2,0,0"
-                Command="{Binding RefreshCommand}" ToolTip="Заново получить сведения о дисках и советы по месту">
+                Command="{Binding RefreshCommand}" ToolTip="{loc:T 'Заново получить сведения о дисках и советы по месту'}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" Margin="0,0,7,0" />
-                <TextBlock Text="Обновить" />
+                <TextBlock Text="{loc:T 'Обновить'}" />
             </StackPanel>
         </Button>
     </Grid>

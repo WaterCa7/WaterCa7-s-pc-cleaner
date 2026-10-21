@@ -29,6 +29,7 @@ public class FixResultClassifierTests
     private static readonly string[] ExpectedSkipped =
     {
         "Ошибка", // "Error": a word of the log levels / status texts, not a fix result
+        "Прервано", // "Aborted": a status label of a physical disk (Disks page), never a fix result
         "не удалось: {0}", // ", failed: 1" in the banner of a bulk action on the Startup page: a piece of a status line, never a fix result
         "отменено", // "canceled": the state of a module scan; as a word it also ends successful texts ("… updates canceled.")
     };
@@ -140,6 +141,7 @@ public class FixResultClassifierTests
         "Главная: не удалось прочитать сведения о системном диске: {0}", // log
         "Главная: не удалось скопировать отчёт в буфер обмена: {0}", // log
         "Главная: не удалось сохранить отчёт в «{0}»: {1}", // log
+        "Диски: не удалось проверить {0}: {1}", // log: contains "Could not check {0}"
         "Карантин: не удалось восстановить {0}: {1}", // log of the quarantine tab
         "Карантин: не удалось прочитать {0}: {1}", // log of the quarantine tab
         "Карантин: не удалось удалить {0}: {1}", // log of the quarantine tab: contains "Could not delete {0}: {1}"
