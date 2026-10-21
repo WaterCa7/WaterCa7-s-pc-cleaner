@@ -3,6 +3,7 @@ using System.IO;
 using System.Security;
 using System.ServiceProcess;
 using Microsoft.Win32;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Startup;
@@ -31,7 +32,7 @@ public sealed partial class StartupService
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            Log.Warn($"Автозагрузка: не удалось получить список служб: {ex.Message}");
+            Log.Warn(T.F("Автозагрузка: не удалось получить список служб: {0}", ErrorText.For(ex)), ex);
             return list;
         }
 
@@ -63,7 +64,7 @@ public sealed partial class StartupService
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Автозагрузка: нет доступа к списку служб в реестре: {ex.Message}");
+            Log.Warn(T.F("Автозагрузка: нет доступа к списку служб в реестре: {0}", ErrorText.For(ex)), ex);
         }
         finally
         {
@@ -99,16 +100,16 @@ public sealed partial class StartupService
             displayName = string.IsNullOrWhiteSpace(service.DisplayName) ? name : service.DisplayName;
             status = service.Status switch
             {
-                ServiceControllerStatus.Running => "Работает",
-                ServiceControllerStatus.Stopped => "Остановлена",
-                ServiceControllerStatus.Paused => "Приостановлена",
-                _ => "Запускается или останавливается",
+                ServiceControllerStatus.Running => T._("Работает"),
+                ServiceControllerStatus.Stopped => T._("Остановлена"),
+                ServiceControllerStatus.Paused => T._("Приостановлена"),
+                _ => T._("Запускается или останавливается"),
             };
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
             displayName = name;
-            status = "Неизвестно";
+            status = T._("Неизвестно");
         }
 
         var description = StartupNative.ResolveIndirectString(key.GetValue("Description") as string);
@@ -134,11 +135,11 @@ public sealed partial class StartupService
     {
         var name = item.ServiceName;
         if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(new[] { '"', '\r', '\n' }) >= 0)
-            return StartupActionResult.Fail("Некорректное имя службы.");
+            return StartupActionResult.Fail(T._("Некорректное имя службы."));
         if (item.IsProtected)
             return StartupActionResult.Fail(item.ToggleBlockedReason);
         if (!_env.IsElevated())
-            return StartupActionResult.Admin("Тип запуска службы можно изменить только с правами администратора.");
+            return StartupActionResult.Admin(T._("Тип запуска службы можно изменить только с правами администратора."));
 
         var settings = AppServices.Settings;
         var settingKey = ServiceSettingKey(name);
@@ -148,12 +149,12 @@ public sealed partial class StartupService
         var sc = Path.Combine(System.Environment.SystemDirectory, "sc.exe");
         var result = await ProcessRunner.RunAsync(sc, $"config \"{name}\" start= {mode}", TimeSpan.FromSeconds(30), ct);
         if (result.ExitCode == 5)
-            return StartupActionResult.Admin("Windows не разрешила изменить службу: нужны права администратора.");
+            return StartupActionResult.Admin(T._("Windows не разрешила изменить службу: нужны права администратора."));
         if (!result.Success)
         {
             var text = (result.StdOut + " " + result.StdErr).Trim();
-            Log.Warn($"Автозагрузка: sc.exe config {name} start= {mode} -> код {result.ExitCode}: {text}");
-            return StartupActionResult.Fail($"Не удалось изменить тип запуска службы (код {result.ExitCode}).");
+            Log.Warn(T.F("Автозагрузка: sc.exe config {0} start= {1} -> код {2}: {3}", name, mode, result.ExitCode, text));
+            return StartupActionResult.Fail(T.F("Не удалось изменить тип запуска службы (код {0}).", result.ExitCode));
         }
 
         if (enable)
@@ -162,13 +163,12 @@ public sealed partial class StartupService
             settings.SetModuleValue(ModuleKey, settingKey, previous);
         item.IsEnabled = enable;
 
-        var modeText = mode == "delayed-auto" ? "автоматически (отложенный запуск)" : "автоматически";
+        var modeText = mode == "delayed-auto" ? T._("автоматически (отложенный запуск)") : T._("автоматически");
         Log.Action(enable
-            ? $"Автозагрузка: службе «{item.DisplayName}» ({name}) возвращён тип запуска «{modeText}»."
-            : $"Автозагрузка: служба «{item.DisplayName}» ({name}) переведена в ручной режим запуска (было: {previous}).");
+            ? T.F("Автозагрузка: службе {0} ({1}) возвращён тип запуска {2}.", T.Quote(item.DisplayName), name, T.Quote(modeText))
+            : T.F("Автозагрузка: служба {0} ({1}) переведена в ручной режим запуска (было: {2}).", T.Quote(item.DisplayName), name, previous));
         return StartupActionResult.Ok(enable
-            ? $"Служба «{item.DisplayName}» снова запускается {modeText}."
-            : $"Служба «{item.DisplayName}» переведена в ручной режим: она больше не стартует вместе с Windows, " +
-              "но программы смогут запустить её при необходимости. Кнопка «Включить» вернёт прежний режим.");
+            ? T.F("Служба {0} снова запускается {1}.", T.Quote(item.DisplayName), modeText)
+            : T.F("Служба {0} переведена в ручной режим: она больше не стартует вместе с Windows, но программы смогут запустить её при необходимости. Кнопка «Включить» вернёт прежний режим.", T.Quote(item.DisplayName)));
     }
 }

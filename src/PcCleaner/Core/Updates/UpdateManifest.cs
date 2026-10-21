@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -33,45 +34,45 @@ public sealed record UpdateManifest(Version Version, DateTimeOffset Published, s
         }
         catch (JsonException ex)
         {
-            problem = $"update.json повреждён: {ex.Message}";
+            problem = T.F("update.json повреждён: {0}", ErrorText.For(ex));
             return null;
         }
         if (dto is null)
         {
-            problem = "update.json пуст";
+            problem = T._("update.json пуст");
             return null;
         }
         if (!TryParseVersion(dto.Version, out var version))
         {
-            problem = $"неверная версия «{dto.Version}»";
+            problem = T.F("неверная версия «{0}»", dto.Version);
             return null;
         }
         if (dto.Files is null || !dto.Files.TryGetValue(Platform, out var file) || file is null)
         {
-            problem = $"в update.json нет файла для {Platform}";
+            problem = T.F("в update.json нет файла для {0}", Platform);
             return null;
         }
         var name = file.Name ?? "";
         if (name.Length == 0 || name != Path.GetFileName(name) || !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
-            problem = $"неверное имя файла «{name}»";
+            problem = T.F("неверное имя файла «{0}»", name);
             return null;
         }
         var url = $"{DownloadPrefix}v{version}/{name}";
         if (!string.Equals(file.Url, url, StringComparison.Ordinal))
         {
-            problem = $"ссылка «{file.Url}» не ведёт на релиз v{version} этого репозитория";
+            problem = T.F("ссылка «{0}» не ведёт на релиз v{1} этого репозитория", file.Url, version);
             return null;
         }
         if (file.Size < MinSize || file.Size > MaxSize)
         {
-            problem = $"неправдоподобный размер файла: {file.Size} байт";
+            problem = T.F("неправдоподобный размер файла: {0} байт", file.Size);
             return null;
         }
         var sha = (file.Sha256 ?? "").ToLowerInvariant();
         if (!Sha256Hex.IsMatch(sha))
         {
-            problem = "неверная контрольная сумма SHA-256";
+            problem = T._("неверная контрольная сумма SHA-256");
             return null;
         }
         problem = null;

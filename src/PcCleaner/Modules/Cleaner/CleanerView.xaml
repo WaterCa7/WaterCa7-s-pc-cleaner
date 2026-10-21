@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Cleaner"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:CleanerViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700">
@@ -15,7 +16,7 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
-            <Setter Property="ToolTip" Value="Подробнее: папки и самые большие файлы (Пробел или Enter)" />
+            <Setter Property="ToolTip" Value="{loc:T 'Подробнее: папки и самые большие файлы (Пробел или Enter)'}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
@@ -64,12 +65,12 @@
              Shift+F10 open it for the row that has keyboard focus. Not shared: every row gets its own menu (the setter
              below uses DynamicResource, so each row looks it up and gets a new instance bound to its own file). -->
         <ContextMenu x:Key="FileMenu" x:Shared="False">
-            <MenuItem Header="Показать в Проводнике" Command="{Binding ShowInExplorerCommand}" />
-            <MenuItem Header="Копировать путь" Command="{Binding CopyPathCommand}" />
+            <MenuItem Header="{loc:T 'Показать в Проводнике'}" Command="{Binding ShowInExplorerCommand}" />
+            <MenuItem Header="{loc:T 'Копировать путь'}" Command="{Binding CopyPathCommand}" />
             <Separator />
-            <MenuItem Header="Не удалять этот файл (добавить в исключения)"
+            <MenuItem Header="{loc:T 'Не удалять этот файл (добавить в исключения)'}"
                       Command="{Binding ExcludeFileCommand}" />
-            <MenuItem Header="Не удалять эту папку (добавить в исключения)"
+            <MenuItem Header="{loc:T 'Не удалять эту папку (добавить в исключения)'}"
                       Command="{Binding ExcludeFolderCommand}" />
         </ContextMenu>
 
@@ -124,7 +125,7 @@
                         <CheckBox VerticalAlignment="Center" IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                   AutomationProperties.Name="{Binding Name}"
                                   Visibility="{Binding CanClean, Converter={StaticResource BoolToVis}}"
-                                  ToolTip="Отметьте, чтобы очистить эту категорию" />
+                                  ToolTip="{loc:T 'Отметьте, чтобы очистить эту категорию'}" />
                         <Border Width="20" Height="20" VerticalAlignment="Center" HorizontalAlignment="Left" Background="Transparent"
                                 Visibility="{Binding NeedsAdmin, Converter={StaticResource BoolToVis}}"
                                 ToolTip="{Binding AdminTip}">
@@ -171,7 +172,7 @@
                                         Visibility="{Binding NotRecommended, Converter={StaticResource BoolToVis}}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource BadgeIcon}" Text="&#xE946;" Foreground="{StaticResource WarningBrush}" />
-                                        <TextBlock Style="{StaticResource BadgeText}" Text="Не рекомендуется"
+                                        <TextBlock Style="{StaticResource BadgeText}" Text="{loc:T 'Не рекомендуется'}"
                                                    Foreground="{StaticResource WarningBrush}" />
                                     </StackPanel>
                                 </Border>
@@ -197,7 +198,7 @@
                                    VerticalAlignment="Center" Style="{StaticResource Muted}" TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding FilesText}" />
                         <ToggleButton Grid.Column="5" Style="{StaticResource ExpandToggle}" HorizontalAlignment="Right"
-                                      AutomationProperties.Name="Подробнее"
+                                      AutomationProperties.Name="{loc:T 'Подробнее'}"
                                       IsChecked="{Binding IsExpanded, Mode=TwoWay}" />
                     </Grid>
 
@@ -218,12 +219,12 @@
                                        Visibility="{Binding DetailsNote, Converter={StaticResource HasValueToVis}}" />
 
                             <StackPanel Visibility="{Binding HasFolders, Converter={StaticResource BoolToVis}}" Margin="0,0,0,10">
-                                <TextBlock Style="{StaticResource SectionCaption}" Text="Где лежат файлы" />
+                                <TextBlock Style="{StaticResource SectionCaption}" Text="{loc:T 'Где лежат файлы'}" />
                                 <ItemsControl ItemsSource="{Binding VisibleFolders}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type local:FolderLinkViewModel}">
                                             <DockPanel Margin="0,2">
-                                                <Button DockPanel.Dock="Right" Style="{StaticResource FocusLink}" Content="Открыть папку"
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource FocusLink}" Content="{loc:T 'Открыть папку'}"
                                                         Command="{Binding OpenCommand}" Margin="12,0,0,0" FontSize="12.5" />
                                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE8B7;" FontSize="12"
                                                            Foreground="{StaticResource MutedBrush}" Margin="0,0,8,0" />
@@ -239,14 +240,14 @@
                                            Visibility="{Binding MoreFoldersText, Converter={StaticResource HasValueToVis}}" />
                             </StackPanel>
 
-                            <Button Style="{StaticResource FocusLink}" Content="Открыть корзину" HorizontalAlignment="Left"
+                            <Button Style="{StaticResource FocusLink}" Content="{loc:T 'Открыть корзину'}" HorizontalAlignment="Left"
                                     Command="{Binding OpenRecycleBinCommand}" Margin="0,0,0,8"
                                     Visibility="{Binding IsRecycleBin, Converter={StaticResource BoolToVis}}" />
 
                             <StackPanel Visibility="{Binding HasLargestFiles, Converter={StaticResource BoolToVis}}">
                                 <DockPanel Margin="0,0,0,2">
                                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"
-                                               Text="Правый щелчок или Shift+F10 — действия с файлом" VerticalAlignment="Bottom" Margin="0,0,0,6" />
+                                               Text="{loc:T 'Правый щелчок или Shift+F10 — действия с файлом'}" VerticalAlignment="Bottom" Margin="0,0,0,6" />
                                     <TextBlock Style="{StaticResource SectionCaption}" Text="{Binding LargestCaption}" />
                                 </DockPanel>
                                 <ListBox ItemsSource="{Binding LargestFiles}" MaxHeight="290" ItemContainerStyle="{StaticResource FileItem}" Margin="-8,0,-4,0"
@@ -302,7 +303,7 @@
                     </Border>
 
                     <StackPanel Grid.Column="1" Margin="18,0,16,0" VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource Muted}" Text="Можно освободить" FontSize="13" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{loc:T 'Можно освободить'}" FontSize="13" />
                         <TextBlock Style="{StaticResource BigNumber}" Text="{Binding TotalText}" Margin="0,0,0,2" />
                         <TextBlock Style="{StaticResource Muted}" Text="{Binding SummaryText}" />
                         <TextBlock Style="{StaticResource Muted}" Text="{Binding ScannedAtText}" FontSize="11.5" Margin="0,2,0,0"
@@ -317,7 +318,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="14" Margin="0,0,8,0"
                                            Foreground="{StaticResource AccentTextBrush}" />
-                                <TextBlock Text="Анализ" />
+                                <TextBlock Text="{loc:T 'Анализ'}" />
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding AnalyzeCommand}" Padding="16,9"
@@ -325,7 +326,7 @@
                                 ToolTipService.ShowOnDisabled="True" ToolTip="{Binding AnalyzeTip}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="14" Margin="0,0,8,0" />
-                                <TextBlock Text="Анализ" />
+                                <TextBlock Text="{loc:T 'Анализ'}" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource AccentButton}" Command="{Binding CleanCommand}" Padding="16,9" Margin="10,0,0,0"
@@ -334,7 +335,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" Margin="0,0,8,0"
                                            Foreground="{StaticResource AccentTextBrush}" />
-                                <TextBlock Text="Очистить выбранное" />
+                                <TextBlock Text="{loc:T 'Очистить выбранное'}" />
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding CleanCommand}" Padding="16,9" Margin="10,0,0,0"
@@ -342,7 +343,7 @@
                                 ToolTipService.ShowOnDisabled="True" ToolTip="{Binding CleanTip}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" Margin="0,0,8,0" />
-                                <TextBlock Text="Очистить выбранное" />
+                                <TextBlock Text="{loc:T 'Очистить выбранное'}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -360,7 +361,7 @@
                                        Margin="2,0,12,0" />
                             <TextBlock Grid.Column="1" Text="{Binding AdminHintText}" TextWrapping="Wrap" FontSize="12.5"
                                        VerticalAlignment="Center" />
-                            <Button Grid.Column="2" Content="Перезапустить как администратор" Margin="12,0,0,0" Padding="12,6"
+                            <Button Grid.Column="2" Content="{loc:T 'Перезапустить как администратор'}" Margin="12,0,0,0" Padding="12,6"
                                     FontSize="12.5" Command="{Binding RestartAsAdminCommand}" VerticalAlignment="Center"
                                     ToolTipService.ShowOnDisabled="True" ToolTip="{Binding RestartAsAdminTip}" />
                         </Grid>
@@ -405,8 +406,8 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
-                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" VerticalAlignment="Top" ToolTip="Скрыть"
-                            AutomationProperties.Name="Скрыть результат"
+                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" VerticalAlignment="Top" ToolTip="{loc:T 'Скрыть'}"
+                            AutomationProperties.Name="{loc:T 'Скрыть результат'}"
                             Command="{Binding DataContext.DismissResultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="12" Foreground="{StaticResource MutedBrush}" />
                     </Button>
@@ -421,7 +422,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE73A;" FontSize="13" Margin="0,0,7,0"
                                        Foreground="{StaticResource AccentBrush}" />
-                            <TextBlock Text="Выбрать рекомендуемое" />
+                            <TextBlock Text="{loc:T 'Выбрать рекомендуемое'}" />
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource GhostButton}" Command="{Binding UnselectAllCommand}" Margin="4,0,0,0"
@@ -429,14 +430,14 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE739;" FontSize="13" Margin="0,0,7,0"
                                        Foreground="{StaticResource MutedBrush}" />
-                            <TextBlock Text="Снять все" />
+                            <TextBlock Text="{loc:T 'Снять все'}" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
                 <TextBlock Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" TextAlignment="Right"
                            VerticalAlignment="Center" Margin="12,0,4,0"
-                           Text="Документы, пароли и история браузеров не затрагиваются"
-                           ToolTip="Удаляются только временные файлы и кэш — документы, пароли, история и cookie браузеров не затрагиваются. Файлы, занятые программами, и свежие временные файлы пропускаются." />
+                           Text="{loc:T 'Документы, пароли и история браузеров не затрагиваются'}"
+                           ToolTip="{loc:T 'Удаляются только временные файлы и кэш — документы, пароли, история и cookie браузеров не затрагиваются. Файлы, занятые программами, и свежие временные файлы пропускаются.'}" />
             </DockPanel>
 
             <!-- ===== Loading placeholder ===== -->
@@ -444,7 +445,7 @@
                     Visibility="{Binding IsCatalogLoaded, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
-                    <TextBlock Style="{StaticResource Muted}" Text="Собираем список папок с временными файлами и кэшем…" />
+                    <TextBlock Style="{StaticResource Muted}" Text="{loc:T 'Собираем список папок с временными файлами и кэшем…'}" />
                 </StackPanel>
             </Border>
 
@@ -491,9 +492,9 @@
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE90F;" FontSize="18" VerticalAlignment="Top"
                                    Foreground="{StaticResource AccentBrush}" Margin="2,1,14,0" />
                         <StackPanel Grid.Column="1">
-                            <TextBlock Style="{StaticResource H3}" FontSize="15" Text="Глубокая очистка" />
+                            <TextBlock Style="{StaticResource H3}" FontSize="15" Text="{loc:T 'Глубокая очистка'}" />
                             <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
-                                       Text="Встроенные инструменты Windows: работают дольше обычной очистки, но иногда освобождают несколько гигабайт." />
+                                       Text="{loc:T 'Встроенные инструменты Windows: работают дольше обычной очистки, но иногда освобождают несколько гигабайт.'}" />
                         </StackPanel>
                     </Grid>
                     <Grid>
@@ -510,22 +511,22 @@
                                             ToolTipService.ShowOnDisabled="True" ToolTip="{Binding RunDismTip}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE768;" FontSize="12" Margin="0,0,8,0" />
-                                            <TextBlock Text="Запустить очистку" />
+                                            <TextBlock Text="{loc:T 'Запустить очистку'}" />
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource H3}" Text="Очистка компонентов Windows (DISM)" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Очистка компонентов Windows (DISM)'}" TextWrapping="Wrap" />
                                     <Border Style="{StaticResource Badge}" Background="{StaticResource InfoSoftBrush}" Margin="0,6,0,0"
                                             Visibility="{Binding IsElevated, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource BadgeIcon}" Text="&#xE72E;" Foreground="{StaticResource InfoBrush}" />
-                                            <TextBlock Style="{StaticResource BadgeText}" Text="Нужны права администратора"
+                                            <TextBlock Style="{StaticResource BadgeText}" Text="{loc:T 'Нужны права администратора'}"
                                                        Foreground="{StaticResource InfoBrush}" />
                                         </StackPanel>
                                     </Border>
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0"
-                                               Text="Удаляет старые версии системных файлов, которые остались после обновлений Windows. Это безопасно, но занимает 5–30 минут, а уже установленные обновления после этого нельзя будет откатить." />
+                                               Text="{loc:T 'Удаляет старые версии системных файлов, которые остались после обновлений Windows. Это безопасно, но занимает 5–30 минут, а уже установленные обновления после этого нельзя будет откатить.'}" />
                                     <TextBlock Text="{Binding DismStatus}" TextWrapping="Wrap" FontSize="12.5" Margin="0,8,0,0"
                                                Foreground="{StaticResource AccentBrush}"
                                                Visibility="{Binding DismStatus, Converter={StaticResource HasValueToVis}}" />
@@ -541,25 +542,25 @@
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                                 <Setter Property="ToolTip"
-                                                        Value="Откроется окно «Очистка диска» Windows — в нём вы сами выберете, что удалить" />
+                                                        Value="{loc:T 'Откроется окно «Очистка диска» Windows — в нём вы сами выберете, что удалить'}" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding LaunchDiskCleanupCommand.IsRunning}" Value="True">
                                                         <Setter Property="ToolTip"
-                                                                Value="Мастер очистки диска запускается — его окно появится через несколько секунд" />
+                                                                Value="{loc:T 'Мастер очистки диска запускается — его окно появится через несколько секунд'}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </Button.Style>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="12" Margin="0,0,8,0" />
-                                            <TextBlock Text="Открыть" />
+                                            <TextBlock Text="{loc:T 'Открыть'}" />
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource H3}" Text="Мастер очистки диска Windows" TextWrapping="Wrap" />
+                                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Мастер очистки диска Windows'}" TextWrapping="Wrap" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0"
-                                               Text="Открывает встроенную утилиту «Очистка диска». Кнопка «Очистить системные файлы» в ней удаляет, например, остатки предыдущей версии Windows после большого обновления." />
+                                               Text="{loc:T 'Открывает встроенную утилиту «Очистка диска». Кнопка «Очистить системные файлы» в ней удаляет, например, остатки предыдущей версии Windows после большого обновления.'}" />
                                 </StackPanel>
                             </DockPanel>
                         </Border>

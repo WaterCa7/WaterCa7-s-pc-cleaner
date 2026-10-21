@@ -41,7 +41,7 @@ public static class Wmi
         }
         catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException or TimeoutException)
         {
-            Log.Warn($"WMI ({scope}) «{query}»: {ex.Message.Trim()}");
+            Log.Warn($"WMI ({scope}) «{query}»: {ErrorText.For(ex)}", ex);
         }
         return rows;
     }

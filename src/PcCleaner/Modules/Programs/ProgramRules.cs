@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Programs;
 
@@ -41,8 +42,10 @@ public static class ProgramRules
         @"^Windows App Runtime|^Microsoft Windows App Runtime|^Windows Desktop Runtime",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // l10n:data-begin — the Russian name of a driver package in the Uninstall list, matched and never shown
     private static readonly Regex DriverName = new(
         @"^(Пакет драйверов Windows|Windows Driver Package)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // l10n:data-end
 
     private static readonly string[] InstallDateFormats =
     {
@@ -410,31 +413,27 @@ public static class ProgramRules
     {
         if (string.IsNullOrWhiteSpace(displayName) || !RuntimeName.IsMatch(displayName))
             return false;
+        // l10n:data-begin — the Russian spelling of the publisher's name, matched and never shown
         return string.IsNullOrWhiteSpace(publisher) ||
                publisher.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) ||
                publisher.Contains("Майкрософт", StringComparison.OrdinalIgnoreCase);
+        // l10n:data-end
     }
 
     /// <summary>
     /// Plain-language note when a program lives where normal programs do not (Temp, Downloads, Recycle Bin, Public).
     /// Folders directly in AppData are normal for per-user apps and are not reported. The classification is Core's
-    /// (<see cref="Suspicion.DescribeRiskyLocation"/> for an install folder); only the longer explanation is ours.
+    /// (<see cref="Suspicion.ClassifyLocation"/> for an install folder, a code that is the same in every language); only the
+    /// longer explanation is ours.
     /// </summary>
-    public static string? DescribeInstallLocationRisk(string? installLocation)
+    public static string? DescribeInstallLocationRisk(string? installLocation) => InstallLocationKind(installLocation) switch
     {
-        var reason = InstallLocationReason(installLocation);
-        if (reason is null)
-            return null;
-        if (reason.Contains("Temp", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена во временную папку (Temp) — обычные программы так не делают.";
-        if (reason.Contains("Загрузки", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files.";
-        if (reason.Contains("корзин", StringComparison.OrdinalIgnoreCase))
-            return "Папка программы находится в корзине.";
-        if (reason.Contains("Public", StringComparison.OrdinalIgnoreCase))
-            return "Программа установлена в общую папку пользователей (Public) — это необычно.";
-        return reason;
-    }
+        RiskyLocation.Temp => T._("Программа установлена во временную папку (Temp) — обычные программы так не делают."),
+        RiskyLocation.Downloads => T._("Программа установлена прямо в папку «Загрузки» — обычно программы ставятся в Program Files."),
+        RiskyLocation.RecycleBin => T._("Папка программы находится в корзине."),
+        RiskyLocation.Public => T._("Программа установлена в общую папку пользователей (Public) — это необычно."),
+        _ => null,
+    };
 
     /// <summary>
     /// PUP heuristics for an installed program — Core's <see cref="Suspicion.AnalyzeProgram"/> (known PUPs, missing
@@ -444,19 +443,19 @@ public static class ProgramRules
     public static SuspicionResult AnalyzeProgram(string displayName, string? publisher, string? installLocation)
         => Suspicion.AnalyzeProgram(displayName, publisher, AnalyzableFolder(installLocation));
 
-    /// <summary>Core's reason for an unusual install folder ("Установлена во временную папку (Temp)"), or null.</summary>
-    internal static string? InstallLocationReason(string? installLocation)
+    /// <summary>Core's kind of unusual install folder (temporary folder, Downloads, Recycle Bin, Public), or none.</summary>
+    internal static RiskyLocation InstallLocationKind(string? installLocation)
     {
         var folder = AnalyzableFolder(installLocation);
         if (folder is null)
-            return null;
+            return RiskyLocation.None;
         try
         {
-            return Suspicion.DescribeRiskyLocation(folder, isInstallFolder: true);
+            return Suspicion.ClassifyLocation(folder, isInstallFolder: true);
         }
         catch (ArgumentException)
         {
-            return null;
+            return RiskyLocation.None;
         }
     }
 

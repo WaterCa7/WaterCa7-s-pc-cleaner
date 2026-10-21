@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -21,17 +22,10 @@ internal static class CleanerCatalog
     internal static readonly string[] ChromiumSharedCacheFolders = { "ShaderCache", "GrShaderCache", "GraphiteDawnCache" };
 
     private const string BrowserDescription = "Кэш страниц, скриптов и графики — пароли, история, cookie и закладки сохранятся.";
-    private const string BrowserHint =
-        "Кэш — сохранённые копии картинок, скриптов и других файлов сайтов, чтобы страницы открывались быстрее. " +
-        "После очистки браузер скачает нужное заново.";
-    private const string ShaderHint =
-        "Шейдеры — небольшие программы для видеокарты, которые рисуют картинку в играх. Кэш хранит их уже готовыми, " +
-        "чтобы игры загружались быстрее.";
-    private const string ShaderWarning =
-        "После очистки игры заново соберут шейдеры, поэтому первые запуски могут немного подтормаживать. " +
-        "Полезно при графических сбоях или нехватке места.";
-    private const string DeveloperWarning =
-        "Пакеты придётся скачивать заново: первая сборка проектов займёт больше времени и трафика.";
+    private const string BrowserHint = "Кэш — сохранённые копии картинок, скриптов и других файлов сайтов, чтобы страницы открывались быстрее. После очистки браузер скачает нужное заново.";
+    private const string ShaderHint = "Шейдеры — небольшие программы для видеокарты, которые рисуют картинку в играх. Кэш хранит их уже готовыми, чтобы игры загружались быстрее.";
+    private const string ShaderWarning = "После очистки игры заново соберут шейдеры, поэтому первые запуски могут немного подтормаживать. Полезно при графических сбоях или нехватке места.";
+    private const string DeveloperWarning = "Пакеты придётся скачивать заново: первая сборка проектов займёт больше времени и трафика.";
 
     public static List<CleanerCategory> Build(CleanerEnvironment env, int minAgeHours)
     {
@@ -54,16 +48,17 @@ internal static class CleanerCatalog
     {
         var g = CleanerCategory.GroupWindows;
         var w = env.WindowsDir;
-        var ageNote = minAgeHours > 0 ? $"моложе {Format.Count(minAgeHours, "часа", "часов", "часов")}" : null;
-        var ageText = ageNote is null ? "" : $"; файлы {ageNote} не трогаем";
+        var ageNote = minAgeHours > 0 ? T.F("моложе {0}", Format.Count(minAgeHours, "часа", "часов", "часов")) : null;
 
         yield return new CleanerCategory
         {
             Id = "win.usertemp",
             Group = g,
-            Name = "Временные файлы пользователя",
-            Hint = "Временная папка (%TEMP%) — место, куда программы складывают файлы «на время». Многие забывают их удалить.",
-            Description = "Файлы, которые программы и установщики оставили во временной папке" + ageText + ".",
+            Name = T._("Временные файлы пользователя"),
+            Hint = T._("Временная папка (%TEMP%) — место, куда программы складывают файлы «на время». Многие забывают их удалить."),
+            Description = ageNote is null
+                ? T._("Файлы, которые программы и установщики оставили во временной папке.")
+                : T.F("Файлы, которые программы и установщики оставили во временной папке; файлы {0} не трогаем.", ageNote),
             Glyph = "",
             Roots = new[] { CleanRoot.Folder(env.Temp) },
             Age = AgeRule.UserSetting,
@@ -73,8 +68,10 @@ internal static class CleanerCatalog
         {
             Id = "win.systemtemp",
             Group = g,
-            Name = "Временные файлы Windows",
-            Description = "Временные файлы системных служб и установщиков из папки Windows\\Temp" + ageText + ".",
+            Name = T._("Временные файлы Windows"),
+            Description = ageNote is null
+                ? T._("Временные файлы системных служб и установщиков из папки Windows\\Temp.")
+                : T.F("Временные файлы системных служб и установщиков из папки Windows\\Temp; файлы {0} не трогаем.", ageNote),
             Glyph = "",
             Roots = new[] { CleanRoot.Folder(Path.Combine(w, "Temp"), requiresAdmin: true) },
             Age = AgeRule.UserSetting,
@@ -84,9 +81,9 @@ internal static class CleanerCatalog
         {
             Id = "win.thumbcache",
             Group = g,
-            Name = "Кэш эскизов",
-            Hint = "Кэш эскизов — уменьшенные копии картинок и значков, чтобы Проводник показывал их быстрее. Первое открытие папок с фото после очистки будет чуть медленнее.",
-            Description = "Миниатюры картинок и значков в Проводнике — Windows создаст их заново, когда понадобятся.",
+            Name = T._("Кэш эскизов"),
+            Hint = T._("Кэш эскизов — уменьшенные копии картинок и значков, чтобы Проводник показывал их быстрее. Первое открытие папок с фото после очистки будет чуть медленнее."),
+            Description = T._("Миниатюры картинок и значков в Проводнике — Windows создаст их заново, когда понадобятся."),
             Glyph = "",
             Roots = new[]
             {
@@ -100,8 +97,8 @@ internal static class CleanerCatalog
         {
             Id = "win.wer",
             Group = g,
-            Name = "Отчёты об ошибках",
-            Description = "Отчёты о сбоях программ, которые Windows собирает для Microsoft; на работу компьютера они не влияют.",
+            Name = T._("Отчёты об ошибках"),
+            Description = T._("Отчёты о сбоях программ, которые Windows собирает для Microsoft; на работу компьютера они не влияют."),
             Glyph = "",
             Roots = new[]
             {
@@ -114,9 +111,9 @@ internal static class CleanerCatalog
         {
             Id = "win.dumps",
             Group = g,
-            Name = "Дампы памяти",
-            Hint = "Дамп памяти — копия содержимого оперативной памяти в момент сбоя. Нужен разработчикам и мастерам для поиска причины; для обычной работы не нужен.",
-            Description = "Снимки памяти, которые сохраняются при вылетах программ и «синих экранах»; нужны только для диагностики.",
+            Name = T._("Дампы памяти"),
+            Hint = T._("Дамп памяти — копия содержимого оперативной памяти в момент сбоя. Нужен разработчикам и мастерам для поиска причины; для обычной работы не нужен."),
+            Description = T._("Снимки памяти, которые сохраняются при вылетах программ и «синих экранах»; нужны только для диагностики."),
             Glyph = "",
             Roots = new[]
             {
@@ -130,9 +127,9 @@ internal static class CleanerCatalog
         {
             Id = "win.update",
             Group = g,
-            Name = "Кэш обновлений Windows",
-            Hint = @"Папка Windows\SoftwareDistribution\Download. Свежие файлы (возможно, ещё не установленные обновления) не трогаем.",
-            Description = "Уже скачанные файлы обновлений; если какой-то из них понадобится, Windows загрузит его снова.",
+            Name = T._("Кэш обновлений Windows"),
+            Hint = T._(@"Папка Windows\SoftwareDistribution\Download. Свежие файлы (возможно, ещё не установленные обновления) не трогаем."),
+            Description = T._("Уже скачанные файлы обновлений; если какой-то из них понадобится, Windows загрузит его снова."),
             Glyph = "",
             Roots = new[] { CleanRoot.Folder(Path.Combine(w, @"SoftwareDistribution\Download"), requiresAdmin: true) },
             Age = AgeRule.UserSetting,
@@ -142,9 +139,9 @@ internal static class CleanerCatalog
         {
             Id = "win.deliveryopt",
             Group = g,
-            Name = "Кэш оптимизации доставки",
-            Hint = "Оптимизация доставки — функция Windows, которая скачивает обновления частями, в том числе с других компьютеров, и сама раздаёт их. Кэш удаляется её собственной командой.",
-            Description = "Копии обновлений, которые Windows хранит, чтобы раздавать их другим компьютерам.",
+            Name = T._("Кэш оптимизации доставки"),
+            Hint = T._("Оптимизация доставки — функция Windows, которая скачивает обновления частями, в том числе с других компьютеров, и сама раздаёт их. Кэш удаляется её собственной командой."),
+            Description = T._("Копии обновлений, которые Windows хранит, чтобы раздавать их другим компьютерам."),
             Glyph = "",
             Kind = CategoryKind.DeliveryOptimization,
             OpenFolder = env.DeliveryOptimizationCache,
@@ -153,28 +150,28 @@ internal static class CleanerCatalog
         {
             Id = "win.logs",
             Group = g,
-            Name = "Журналы Windows",
-            Description = "Старые журналы установки и работы системы (старше 30 дней) из папки Windows\\Logs.",
+            Name = T._("Журналы Windows"),
+            Description = T._("Старые журналы установки и работы системы (старше 30 дней) из папки Windows\\Logs."),
             Glyph = "",
             Roots = new[] { CleanRoot.Files(Path.Combine(w, "Logs"), recursive: true, requiresAdmin: true, "*.log", "*.etl") },
             Age = AgeRule.Fixed,
             FixedMinAge = TimeSpan.FromDays(30),
-            AgeNote = "моложе 30 дней",
+            AgeNote = T._("моложе 30 дней"),
             RemoveEmptyDirectories = false,
             DefaultChecked = false,
-            Warning = "Журналы иногда нужны, чтобы найти причину неполадок. Удаляйте их, если всё работает нормально и не хватает места.",
+            Warning = T._("Журналы иногда нужны, чтобы найти причину неполадок. Удаляйте их, если всё работает нормально и не хватает места."),
         };
         yield return new CleanerCategory
         {
             Id = RecycleBinId,
             Group = g,
-            Name = "Корзина",
-            Hint = "Размер и число объектов во всех корзинах на всех дисках.",
-            Description = "Файлы, которые вы удалили в корзину; после очистки восстановить их будет нельзя.",
+            Name = T._("Корзина"),
+            Hint = T._("Размер и число объектов во всех корзинах на всех дисках."),
+            Description = T._("Файлы, которые вы удалили в корзину; после очистки восстановить их будет нельзя."),
             Glyph = "",
             Kind = CategoryKind.RecycleBin,
             DefaultChecked = false,
-            Warning = "Это ваши удалённые файлы. Очищайте корзину, только если уверены, что в ней нет ничего нужного.",
+            Warning = T._("Это ваши удалённые файлы. Очищайте корзину, только если уверены, что в ней нет ничего нужного."),
         };
     }
 
@@ -186,7 +183,7 @@ internal static class CleanerCatalog
                 new[] { Path.Combine(env.LocalAppData, @"Google\Chrome\User Data") }, false, new[] { "chrome" }),
             ("browser.edge", BrowserProgram.Edge, "Microsoft Edge",
                 new[] { Path.Combine(env.LocalAppData, @"Microsoft\Edge\User Data") }, false, new[] { "msedge" }),
-            ("browser.yandex", BrowserProgram.Yandex, "Яндекс Браузер",
+            ("browser.yandex", BrowserProgram.Yandex, T._("Яндекс Браузер"),
                 new[] { Path.Combine(env.LocalAppData, @"Yandex\YandexBrowser\User Data") }, false, new[] { "browser" }),
             ("browser.opera", BrowserProgram.Opera, "Opera", new[]
             {
@@ -219,8 +216,8 @@ internal static class CleanerCatalog
                 Id = b.Id,
                 Group = CleanerCategory.GroupBrowsers,
                 Name = b.Name,
-                Description = BrowserDescription,
-                Hint = BrowserHint,
+                Description = T._(BrowserDescription),
+                Hint = T._(BrowserHint),
                 Glyph = "",
                 Roots = roots,
                 ProcessNames = b.Processes,
@@ -243,8 +240,8 @@ internal static class CleanerCatalog
                 Id = "browser.firefox",
                 Group = CleanerCategory.GroupBrowsers,
                 Name = "Mozilla Firefox",
-                Description = BrowserDescription,
-                Hint = BrowserHint,
+                Description = T._(BrowserDescription),
+                Hint = T._(BrowserHint),
                 Glyph = "",
                 Roots = roots,
                 ProcessNames = new[] { "firefox" },
@@ -265,9 +262,9 @@ internal static class CleanerCatalog
             {
                 Id = "app.d3dscache",
                 Group = g,
-                Name = "Кэш шейдеров DirectX",
-                Hint = ShaderHint,
-                Description = "Скомпилированные шейдеры игр и программ; Windows пересоздаст их при необходимости.",
+                Name = T._("Кэш шейдеров DirectX"),
+                Hint = T._(ShaderHint),
+                Description = T._("Скомпилированные шейдеры игр и программ; Windows пересоздаст их при необходимости."),
                 Glyph = "",
                 Roots = Existing(CleanRoot.Folder(Path.Combine(local, "D3DSCache"))),
             },
@@ -275,24 +272,24 @@ internal static class CleanerCatalog
             {
                 Id = "app.nvidia",
                 Group = g,
-                Name = "Кэш шейдеров NVIDIA",
-                Hint = ShaderHint,
-                Description = "Шейдеры, которые драйвер NVIDIA сохраняет, чтобы игры загружались быстрее.",
+                Name = T._("Кэш шейдеров NVIDIA"),
+                Hint = T._(ShaderHint),
+                Description = T._("Шейдеры, которые драйвер NVIDIA сохраняет, чтобы игры загружались быстрее."),
                 Glyph = "",
                 Roots = Existing(
                     CleanRoot.Folder(Path.Combine(local, @"NVIDIA\DXCache")),
                     CleanRoot.Folder(Path.Combine(local, @"NVIDIA\GLCache")),
                     CleanRoot.Folder(Path.Combine(local, @"NVIDIA Corporation\NV_Cache"))),
                 DefaultChecked = false,
-                Warning = ShaderWarning,
+                Warning = T._(ShaderWarning),
             },
             new()
             {
                 Id = "app.amd",
                 Group = g,
-                Name = "Кэш шейдеров AMD",
-                Hint = ShaderHint,
-                Description = "Шейдеры, которые драйвер AMD сохраняет, чтобы игры загружались быстрее.",
+                Name = T._("Кэш шейдеров AMD"),
+                Hint = T._(ShaderHint),
+                Description = T._("Шейдеры, которые драйвер AMD сохраняет, чтобы игры загружались быстрее."),
                 Glyph = "",
                 Roots = Existing(
                     CleanRoot.Folder(Path.Combine(local, @"AMD\DxCache")),
@@ -300,14 +297,14 @@ internal static class CleanerCatalog
                     CleanRoot.Folder(Path.Combine(local, @"AMD\GLCache")),
                     CleanRoot.Folder(Path.Combine(local, @"AMD\VkCache"))),
                 DefaultChecked = false,
-                Warning = ShaderWarning,
+                Warning = T._(ShaderWarning),
             },
             new()
             {
                 Id = "app.discord",
                 Group = g,
                 Name = "Discord",
-                Description = "Кэш картинок, видео и интерфейса — переписка и вход в аккаунт сохранятся.",
+                Description = T._("Кэш картинок, видео и интерфейса — переписка и вход в аккаунт сохранятся."),
                 Glyph = "",
                 Roots = ChromiumCacheRoots(new[]
                 {
@@ -319,8 +316,8 @@ internal static class CleanerCatalog
             {
                 Id = "app.steam",
                 Group = g,
-                Name = "Steam — веб-кэш",
-                Description = "Кэш магазина и встроенного браузера Steam — игры и вход в аккаунт не затрагиваются.",
+                Name = T._("Steam — веб-кэш"),
+                Description = T._("Кэш магазина и встроенного браузера Steam — игры и вход в аккаунт не затрагиваются."),
                 Glyph = "",
                 Roots = ChromiumCacheRoots(new[] { Path.Combine(local, @"Steam\htmlcache") }.Where(DirExists),
                     userDataIsProfile: true),
@@ -331,7 +328,7 @@ internal static class CleanerCatalog
                 Id = "app.teams",
                 Group = g,
                 Name = "Microsoft Teams",
-                Description = "Кэш нового Teams — чаты, файлы и вход в аккаунт сохранятся.",
+                Description = T._("Кэш нового Teams — чаты, файлы и вход в аккаунт сохранятся."),
                 Glyph = "",
                 Roots = ChromiumCacheRoots(new[]
                 {
@@ -344,7 +341,7 @@ internal static class CleanerCatalog
                 Id = "app.spotify",
                 Group = g,
                 Name = "Spotify",
-                Description = "Временно сохранённая музыка и обложки — Spotify загрузит их снова при прослушивании.",
+                Description = T._("Временно сохранённая музыка и обложки — Spotify загрузит их снова при прослушивании."),
                 Glyph = "",
                 Roots = Existing(CleanRoot.Folder(Path.Combine(local, @"Spotify\Data"))),
                 ProcessNames = new[] { "Spotify" },
@@ -353,8 +350,8 @@ internal static class CleanerCatalog
             {
                 Id = "app.epic",
                 Group = g,
-                Name = "Epic Games Launcher — веб-кэш",
-                Description = "Кэш магазина и интерфейса лаунчера — игры и вход в аккаунт не затрагиваются.",
+                Name = T._("Epic Games Launcher — веб-кэш"),
+                Description = T._("Кэш магазина и интерфейса лаунчера — игры и вход в аккаунт не затрагиваются."),
                 Glyph = "",
                 Roots = SafeSubdirectories(Path.Combine(local, @"EpicGamesLauncher\Saved"))
                     .Where(d => Path.GetFileName(d).StartsWith("webcache", StringComparison.OrdinalIgnoreCase))
@@ -366,36 +363,36 @@ internal static class CleanerCatalog
             {
                 Id = "dev.npm",
                 Group = g,
-                Name = "Кэш npm (для разработчиков)",
-                Description = "Скачанные пакеты Node.js — при следующей установке они загрузятся снова.",
+                Name = T._("Кэш npm (для разработчиков)"),
+                Description = T._("Скачанные пакеты Node.js — при следующей установке они загрузятся снова."),
                 Glyph = "",
                 Roots = Existing(
                     CleanRoot.Folder(Path.Combine(local, "npm-cache")),
                     CleanRoot.Folder(Path.Combine(roaming, "npm-cache"))),
                 DefaultChecked = false,
-                Warning = DeveloperWarning,
+                Warning = T._(DeveloperWarning),
             },
             new()
             {
                 Id = "dev.pip",
                 Group = g,
-                Name = "Кэш pip (для разработчиков)",
-                Description = "Скачанные пакеты Python — при следующей установке они загрузятся снова.",
+                Name = T._("Кэш pip (для разработчиков)"),
+                Description = T._("Скачанные пакеты Python — при следующей установке они загрузятся снова."),
                 Glyph = "",
                 Roots = Existing(CleanRoot.Folder(Path.Combine(local, @"pip\Cache"))),
                 DefaultChecked = false,
-                Warning = DeveloperWarning,
+                Warning = T._(DeveloperWarning),
             },
             new()
             {
                 Id = "dev.nuget",
                 Group = g,
-                Name = "Кэш NuGet (для разработчиков)",
-                Description = "HTTP-кэш пакетов .NET — уже установленные в проекты пакеты не затрагиваются.",
+                Name = T._("Кэш NuGet (для разработчиков)"),
+                Description = T._("HTTP-кэш пакетов .NET — уже установленные в проекты пакеты не затрагиваются."),
                 Glyph = "",
                 Roots = Existing(CleanRoot.Folder(Path.Combine(local, @"NuGet\v3-cache"))),
                 DefaultChecked = false,
-                Warning = DeveloperWarning,
+                Warning = T._(DeveloperWarning),
             },
         };
         return candidates.Where(c => c.Roots.Count > 0);

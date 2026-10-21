@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -8,7 +9,7 @@ namespace PcCleaner.Modules.Dashboard;
 public sealed class ModuleScanRow : ObservableObject
 {
     private ModuleScanState _state = ModuleScanState.Waiting;
-    private string _statusText = "ждёт очереди";
+    private string _statusText = T._("ждёт очереди");
     private string? _error;
     private int _issueCount;
 
@@ -35,7 +36,7 @@ public sealed class ModuleScanRow : ObservableObject
     /// <summary>Status as a standalone line under the module name: "Готово: 1 проблема".</summary>
     public string DisplayStatus => string.IsNullOrEmpty(StatusText)
         ? ""
-        : char.ToUpper(StatusText[0], Format.Ru) + StatusText[1..];
+        : char.ToUpper(StatusText[0], T.Culture) + StatusText[1..];
 
     public int IssueCount
     {
@@ -52,12 +53,13 @@ public sealed class ModuleScanRow : ObservableObject
 
     public string ToolTipText => Error is null
         ? $"{ModuleName}: {StatusText}"
-        : $"{ModuleName}: {StatusText}.\n{Error}\n\nОстальные разделы проверены как обычно. Откройте раздел «{ModuleName}», чтобы посмотреть подробности.";
+        : T.F("{0}: {1}.\n{2}\n\nОстальные разделы проверены как обычно. Откройте раздел «{0}», чтобы посмотреть подробности.",
+            ModuleName, StatusText, Error);
 
     public void SetRunning()
     {
         State = ModuleScanState.Running;
-        StatusText = "проверяется…";
+        StatusText = T._("проверяется…");
         OnPropertyChanged(nameof(ToolTipText));
     }
 
@@ -69,12 +71,12 @@ public sealed class ModuleScanRow : ObservableObject
         var problems = result.Issues.Count(HealthScoring.IsProblem);
         StatusText = result.State switch
         {
-            ModuleScanState.Done => "готово: " + HealthScoring.FindingsText(problems, result.Issues.Count - problems),
-            ModuleScanState.Failed => "ошибка проверки",
-            ModuleScanState.TimedOut => "превышено время ожидания",
-            ModuleScanState.Cancelled => "отменено",
-            ModuleScanState.Running => "проверяется…",
-            _ => "ждёт очереди",
+            ModuleScanState.Done => T.F("готово: {0}", HealthScoring.FindingsText(problems, result.Issues.Count - problems)),
+            ModuleScanState.Failed => T._("ошибка проверки"),
+            ModuleScanState.TimedOut => T._("превышено время ожидания"),
+            ModuleScanState.Cancelled => T._("отменено"),
+            ModuleScanState.Running => T._("проверяется…"),
+            _ => T._("ждёт очереди"),
         };
         OnPropertyChanged(nameof(ToolTipText));
     }
@@ -86,22 +88,20 @@ public sealed class IssueItem : ObservableObject
     private bool _isExpanded;
     private bool _isFixing;
     private bool _fixFailed;
+    private bool _isSimple;
 
     public IssueItem(HealthIssue issue)
     {
         Issue = issue;
         ToggleExpandCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+        DetailsCommand = new RelayCommand(ShowMore);
     }
 
     public HealthIssue Issue { get; }
 
     public IssueSeverity Severity => Issue.Severity;
 
-    public string SeverityText => HealthScoring.GroupTitle(Issue.Severity) switch
-    {
-        "Советы" => "Совет",
-        var s => s,
-    };
+    public string SeverityText => HealthScoring.SeverityLabel(Issue.Severity);
 
     public bool HasDetails => !string.IsNullOrWhiteSpace(Issue.Details);
 
@@ -110,12 +110,69 @@ public sealed class IssueItem : ObservableObject
         get => _isExpanded;
         set
         {
-            if (Set(ref _isExpanded, value))
-                OnPropertyChanged(nameof(ExpandText));
+            if (!Set(ref _isExpanded, value))
+                return;
+            OnPropertyChanged(nameof(ExpandText));
+            OnPropertyChanged(nameof(ShowDetails));
+            OnPropertyChanged(nameof(ShowGain));
+            OnPropertyChanged(nameof(DetailsText));
         }
     }
 
-    public string ExpandText => IsExpanded ? "Свернуть" : "Показать полностью";
+    // ----- the simple mode: a short row (title, fix button, «Подробнее»); the rest opens in place -----
+
+    /// <summary>The Dashboard is in the simple mode (set by it, also when the mode is switched under existing rows).</summary>
+    public bool IsSimple => _isSimple;
+
+    internal void SetMode(UiMode mode)
+    {
+        var simple = mode == UiMode.Simple;
+        if (simple == _isSimple)
+            return;
+        _isSimple = simple;
+        IsExpanded = false; // a row opened in the simple mode is not left open for the next time (it has its own notifications)
+        OnPropertyChanged(nameof(IsSimple));
+        OnPropertyChanged(nameof(ShowBadges));
+        OnPropertyChanged(nameof(ShowDetails));
+        OnPropertyChanged(nameof(ShowGain));
+        OnPropertyChanged(nameof(OpensPageForDetails));
+        OnPropertyChanged(nameof(ShowDetailsButton));
+        OnPropertyChanged(nameof(DetailsText));
+        OnPropertyChanged(nameof(DetailsToolTip));
+    }
+
+    /// <summary>The badges above the title: severity, module, «Безопасно исправить». The simple mode keeps the severity bar and the group header.</summary>
+    public bool ShowBadges => !_isSimple;
+
+    /// <summary>The description: always in the expert mode, in the simple one only after «Подробнее».</summary>
+    public bool ShowDetails => HasDetails && (!_isSimple || IsExpanded);
+
+    /// <summary>What the fix gives: shown together with the description.</summary>
+    public bool ShowGain => HasGain && (!_isSimple || IsExpanded);
+
+    /// <summary>
+    /// «Подробнее» opens the page that found the problem: in the expert mode any page, in the simple mode only a page it has
+    /// (Очистка, Программы, Настройки). For a page it hides, «Подробнее» shows the description here instead of asking to
+    /// switch the mode.
+    /// </summary>
+    public bool OpensPageForDetails => HasTargetPage && (!_isSimple || UiModes.IsVisible(UiMode.Simple, Issue.TargetPageKey!));
+
+    public bool ShowDetailsButton => OpensPageForDetails || (_isSimple && (HasDetails || HasGain));
+
+    public string DetailsText => !OpensPageForDetails && IsExpanded ? T._("Свернуть") : T._("Подробнее");
+
+    /// <summary>The tip of the page button; no tip when the button only shows the description.</summary>
+    public string? DetailsToolTip => OpensPageForDetails ? T._("Открыть раздел, который нашёл проблему") : null;
+
+    private void ShowMore()
+    {
+        if (OpensPageForDetails)
+            OpenPageCommand?.Execute(null);
+        else
+            IsExpanded = !IsExpanded;
+    }
+
+    public string ExpandText => IsExpanded ? T._("Свернуть") : T._("Показать полностью");
 
     public bool HasGain => !string.IsNullOrWhiteSpace(GainText);
 
@@ -156,8 +213,14 @@ public sealed class IssueItem : ObservableObject
     internal void RaiseNeedsAdmin() => OnPropertyChanged(nameof(NeedsAdmin));
 
     public string AutoFixHint => Issue.RunsInFixAll
-        ? "Входит в «Исправить всё»"
-        : "Не входит в «Исправить всё»: это действие запускается только отдельно";
+        ? T._("Входит в «Исправить всё»")
+        : T._("Не входит в «Исправить всё»: это действие запускается только отдельно");
+
+    /// <summary>
+    /// Text of the fix button: a module's own label as it is (the module translates it), the common default
+    /// «Исправить» in the language of the UI.
+    /// </summary>
+    public string FixLabelText => Issue.FixLabel == HealthIssue.DefaultFixLabel ? T._("Исправить") : Issue.FixLabel;
 
     /// <summary>The issue has a Windows settings page or a web page that helps with it.</summary>
     public bool HasSettings => !string.IsNullOrWhiteSpace(Issue.SettingsUri);
@@ -165,10 +228,13 @@ public sealed class IssueItem : ObservableObject
     /// <summary>Web pages are "Открыть страницу", Windows settings (ms-settings: and the like) are "Открыть настройки".</summary>
     public string SettingsLabel => Uri.TryCreate(Issue.SettingsUri, UriKind.Absolute, out var uri)
                                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-        ? "Открыть страницу"
-        : "Открыть настройки";
+        ? T._("Открыть страницу")
+        : T._("Открыть настройки");
 
     public ICommand ToggleExpandCommand { get; }
+
+    /// <summary>«Подробнее»: opens the page, or (simple mode, a page the mode hides) shows the description in the row.</summary>
+    public ICommand DetailsCommand { get; }
 
     public ICommand? FixCommand { get; internal set; }
 
@@ -215,15 +281,15 @@ public sealed class IssueGroup : ObservableObject
 
     public bool HasHidden => HiddenCount > 0;
 
-    public string ShowAllText => $"Показать ещё {HiddenCount}";
+    public string ShowAllText => T.F("Показать ещё {0}", HiddenCount);
 
     public ICommand ShowAllCommand { get; }
 
     public int RemainingCount => _all.Count(i => !i.Issue.IsFixed);
 
     public string CountText => RemainingCount == _all.Count
-        ? _all.Count.ToString(Format.Ru)
-        : $"{RemainingCount} из {_all.Count}";
+        ? _all.Count.ToString(T.Culture)
+        : T.F("{0} из {1}", RemainingCount, _all.Count);
 
     public void ShowAll()
     {
@@ -247,7 +313,7 @@ public sealed record SeverityChip(IssueSeverity Severity, string Title, int Coun
 /// <summary>Quick link tile to another page.</summary>
 public sealed record QuickLink(string Key, string Title, string Description, string Glyph)
 {
-    public string ToolTip => $"Открыть раздел «{Title}»";
+    public string ToolTip => T.F("Открыть раздел «{0}»", Title);
 }
 
 /// <summary>Result of a smart scan (returned for tests and logging).</summary>

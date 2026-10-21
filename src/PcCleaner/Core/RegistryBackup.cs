@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -40,7 +41,7 @@ public static class RegistryBackup
         {
             if (existing is null)
             {
-                Log.Warn($"Резервная копия не создана: раздел реестра не найден или нет доступа — {fullKeyPath}");
+                Log.Warn(T.F("Резервная копия не создана: раздел реестра не найден или нет доступа — {0}", fullKeyPath));
                 return null;
             }
         }
@@ -52,7 +53,7 @@ public static class RegistryBackup
                 break;
             if (result.TimedOut || attempt == ExportAttempts)
             {
-                Log.Warn($"Не удалось сохранить резервную копию {fullKeyPath}: {result.StdErr.Trim()}");
+                Log.Warn(T.F("Не удалось сохранить резервную копию {0}: {1}", fullKeyPath, result.StdErr.Trim()));
                 return null;
             }
             await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), ct);
@@ -69,7 +70,7 @@ public static class RegistryBackup
                 // description is optional
             }
         }
-        Log.Info($"Резервная копия реестра: {Path.GetFileName(file)}");
+        Log.Info(T.F("Резервная копия реестра: {0}", Path.GetFileName(file)));
         return file;
     }
 
@@ -85,10 +86,10 @@ public static class RegistryBackup
         var result = await ProcessRunner.RunAsync("reg.exe", $"import \"{regFile}\"", TimeSpan.FromSeconds(60), ct);
         if (result.Success)
         {
-            Log.Action($"Восстановлено из резервной копии: {Path.GetFileName(regFile)}");
+            Log.Action(T.F("Восстановлено из резервной копии: {0}", Path.GetFileName(regFile)));
             return true;
         }
-        Log.Warn($"Не удалось восстановить {Path.GetFileName(regFile)}: {result.StdErr.Trim()}");
+        Log.Warn(T.F("Не удалось восстановить {0}: {1}", Path.GetFileName(regFile), result.StdErr.Trim()));
         return false;
     }
 
@@ -113,23 +114,23 @@ public static class RegistryBackup
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Log.Warn($"Не удалось восстановить {Path.GetFileName(regFile)}: не удалось прочитать файл — {ErrorText.For(ex)}");
+                Log.Warn(T.F("Не удалось восстановить {0}: не удалось прочитать файл — {1}", Path.GetFileName(regFile), ErrorText.For(ex)));
                 return false;
             }
 
             if (!verify(snapshot))
             {
-                Log.Warn($"Восстановление из {Path.GetFileName(regFile)} отменено: файл не прошёл повторную проверку");
+                Log.Warn(T.F("Восстановление из {0} отменено: файл не прошёл повторную проверку", Path.GetFileName(regFile)));
                 return false;
             }
 
             var result = await ProcessRunner.RunAsync("reg.exe", $"import \"{snapshot}\"", TimeSpan.FromSeconds(60), ct);
             if (result.Success)
             {
-                Log.Action($"Восстановлено из резервной копии: {Path.GetFileName(regFile)}");
+                Log.Action(T.F("Восстановлено из резервной копии: {0}", Path.GetFileName(regFile)));
                 return true;
             }
-            Log.Warn($"Не удалось восстановить {Path.GetFileName(regFile)}: {result.StdErr.Trim()}");
+            Log.Warn(T.F("Не удалось восстановить {0}: {1}", Path.GetFileName(regFile), result.StdErr.Trim()));
             return false;
         }
         finally
@@ -169,7 +170,7 @@ public static class RegistryBackup
         }
         catch (Exception ex)
         {
-            Log.Warn($"Нет доступа к {fullKeyPath}: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Нет доступа к {0}: {1}", fullKeyPath, ErrorText.For(ex)));
             return null;
         }
     }

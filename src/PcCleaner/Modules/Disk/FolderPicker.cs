@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Disk;
@@ -26,7 +27,7 @@ internal static class FolderPicker
             dialog.GetOptions(out var options);
             dialog.SetOptions(options | FosPickFolders | FosForceFileSystem | FosPathMustExist | FosNoChangeDir);
             dialog.SetTitle(title);
-            dialog.SetOkButtonLabel("Выбрать папку");
+            dialog.SetOkButtonLabel(T._("Выбрать папку"));
 
             if (!string.IsNullOrWhiteSpace(initialFolder) && Directory.Exists(initialFolder) &&
                 SHCreateItemFromParsingName(initialFolder, IntPtr.Zero, typeof(IShellItem).GUID, out var folderItem) == 0)
@@ -46,7 +47,7 @@ internal static class FolderPicker
                 return null;
             if (hr != 0)
             {
-                Log.Warn($"Окно выбора папки вернуло код 0x{hr:X8}");
+                Log.Warn(T.F("Окно выбора папки вернуло код 0x{0:X8}", hr));
                 return null;
             }
 
@@ -70,7 +71,7 @@ internal static class FolderPicker
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException)
         {
-            Log.Warn($"Не удалось открыть окно выбора папки: {ex.Message}");
+            Log.Warn(T.F("Не удалось открыть окно выбора папки: {0}", ErrorText.For(ex)), ex);
             return null;
         }
         finally

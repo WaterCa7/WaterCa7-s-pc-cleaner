@@ -1,5 +1,6 @@
 using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Disk;
 
@@ -112,7 +113,7 @@ public sealed class DiskService : IHealthContributor
         _env = environment;
     }
 
-    public string ModuleName => "Диски";
+    public string ModuleName => T._("Диски");
 
     internal DiskEnvironment Env => _env;
 
@@ -126,7 +127,7 @@ public sealed class DiskService : IHealthContributor
     {
         if (_env.IsToolRunning(processName))
         {
-            Log.Info($"{Path.GetFileName(exe)} уже открыт — второе окно не запускается");
+            Log.Info(T.F("{0} уже открыт — второе окно не запускается", Path.GetFileName(exe)));
             return ToolLaunchResult.AlreadyOpen;
         }
         return _env.LaunchTool(exe, arguments);
@@ -180,7 +181,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось получить список дисков: {ex.Message}");
+            Log.Warn(T.F("Не удалось получить список дисков: {0}", ErrorText.For(ex)), ex);
             return list;
         }
 
@@ -204,7 +205,7 @@ public sealed class DiskService : IHealthContributor
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
-                Log.Warn($"Диск {d.Name} недоступен: {ex.Message}");
+                Log.Warn(T.F("Диск {0} недоступен: {1}", d.Name, ErrorText.For(ex)), ex);
             }
         }
         return list.OrderByDescending(d => d.IsSystemDrive).ThenBy(d => d.Letter).ToList();
@@ -237,7 +238,7 @@ public sealed class DiskService : IHealthContributor
             {
                 DeviceId = id,
                 Number = number,
-                Model = FirstNonEmpty(row.Str("FriendlyName"), row.Str("Model"), "Накопитель " + id),
+                Model = FirstNonEmpty(row.Str("FriendlyName"), row.Str("Model"), T.F("Накопитель {0}", id)),
                 Kind = StorageLabels.InferKind(media, bus, spindle),
                 MediaType = media,
                 BusType = bus,
@@ -263,7 +264,7 @@ public sealed class DiskService : IHealthContributor
             {
                 DeviceId = "disk-" + number,
                 Number = (int)number.Value,
-                Model = FirstNonEmpty(row.Str("FriendlyName"), row.Str("Model"), $"Диск {number}"),
+                Model = FirstNonEmpty(row.Str("FriendlyName"), row.Str("Model"), T.F("Диск {0}", number)),
                 Kind = StorageLabels.InferKind(null, bus, null),
                 BusType = bus,
                 Health = StorageLabels.ToHealth(row.Long("HealthStatus")),
@@ -321,7 +322,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn($"Не удалось узнать состояние TRIM: {ex.Message}");
+            Log.Warn(T.F("Не удалось узнать состояние TRIM: {0}", ErrorText.For(ex)), ex);
             return TrimState.Unknown;
         }
     }
@@ -339,7 +340,7 @@ public sealed class DiskService : IHealthContributor
         {
             var result = await ProcessRunner.PowerShellAsync(script, TimeSpan.FromSeconds(40), ct).ConfigureAwait(false);
             if (!result.Success)
-                Log.Warn($"Счётчики надёжности дисков недоступны: {result.StdErr.Trim()}");
+                Log.Warn(T.F("Счётчики надёжности дисков недоступны: {0}", result.StdErr.Trim()));
             return ToolOutputParsers.ParseReliabilityJson(result.StdOut);
         }
         catch (OperationCanceledException)
@@ -348,7 +349,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn($"Счётчики надёжности дисков недоступны: {ex.Message}");
+            Log.Warn(T.F("Счётчики надёжности дисков недоступны: {0}", ErrorText.For(ex)), ex);
             return new Dictionary<string, ReliabilityInfo>();
         }
     }
@@ -359,9 +360,9 @@ public sealed class DiskService : IHealthContributor
     public async Task<SpaceSuggestions> GetSuggestionsAsync(CancellationToken ct)
     {
         // Independent read-only checks run in parallel.
-        var downloadsTask = Task.Run(() => Safe(() => FindOldDownloads(ct), new List<FileGroup>(), "старые загрузки"), ct);
-        var videosTask = Task.Run(() => Safe(() => FindBigVideos(ct), new List<FoundFile>(), "большие видео"), ct);
-        var systemFilesTask = Task.Run(() => Safe(FindSystemFiles, new List<SystemFileInfo>(), "системные файлы"), ct);
+        var downloadsTask = Task.Run(() => Safe(() => FindOldDownloads(ct), new List<FileGroup>(), T._("старые загрузки")), ct);
+        var videosTask = Task.Run(() => Safe(() => FindBigVideos(ct), new List<FoundFile>(), T._("большие видео")), ct);
+        var systemFilesTask = Task.Run(() => Safe(FindSystemFiles, new List<SystemFileInfo>(), T._("системные файлы")), ct);
         var shadowTask = GetShadowStorageAsync(ct);
         var binTask = Task.Run(SystemTools.QueryRecycleBin, ct);
 
@@ -491,7 +492,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось прочитать корень диска {root}: {ex.Message}");
+            Log.Warn(T.F("Не удалось прочитать корень диска {0}: {1}", root, ErrorText.For(ex)), ex);
         }
         return result.OrderBy(f => Array.IndexOf(RootSystemFiles, f.Name)).ToList();
     }
@@ -525,12 +526,12 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            Log.Warn($"Не удалось узнать размер точек восстановления: {ex.Message}");
+            Log.Warn(T.F("Не удалось узнать размер точек восстановления: {0}", ErrorText.For(ex)), ex);
             return (new List<ShadowStorageInfo>(), false);
         }
     }
 
-    private static T Safe<T>(Func<T> work, T fallback, string what)
+    private static TResult Safe<TResult>(Func<TResult> work, TResult fallback, string what)
     {
         try
         {
@@ -542,7 +543,7 @@ public sealed class DiskService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            Log.Warn($"Диски: не удалось проверить {what}: {ex.Message}");
+            Log.Warn(T.F("Диски: не удалось проверить {0}: {1}", what, ErrorText.For(ex)), ex);
             return fallback;
         }
     }
@@ -567,12 +568,10 @@ public sealed class DiskService : IHealthContributor
                 issues.Add(new HealthIssue
                 {
                     Module = ModuleName,
-                    Title = "TRIM для SSD выключен",
-                    Details = "TRIM сообщает SSD, какие блоки освободились после удаления файлов. Без него накопитель со временем " +
-                              "записывает всё медленнее и быстрее изнашивается. Исправление включит TRIM командой " +
-                              "«fsutil behavior set DisableDeleteNotify 0» (нужны права администратора).",
+                    Title = T._("TRIM для SSD выключен"),
+                    Details = T._("TRIM сообщает SSD, какие блоки освободились после удаления файлов. Без него накопитель со временем записывает всё медленнее и быстрее изнашивается. Исправление включит TRIM командой «fsutil behavior set DisableDeleteNotify 0» (нужны права администратора)."),
                     Severity = IssueSeverity.Medium,
-                    Gain = "SSD сохранит скорость записи",
+                    Gain = T._("SSD сохранит скорость записи"),
                     FixAsync = EnableTrimAsync,
                     AutoFixSafe = false,
                     TargetPageKey = PageKey,
@@ -580,7 +579,7 @@ public sealed class DiskService : IHealthContributor
             }
         }
 
-        var groups = await Task.Run(() => Safe(() => FindOldDownloads(ct), new List<FileGroup>(), "старые загрузки"), ct)
+        var groups = await Task.Run(() => Safe(() => FindOldDownloads(ct), new List<FileGroup>(), T._("старые загрузки")), ct)
             .ConfigureAwait(false);
         var downloadsIssue = OldDownloadsIssue(groups);
         if (downloadsIssue is not null)
@@ -598,19 +597,17 @@ public sealed class DiskService : IHealthContributor
 
     internal HealthIssue WindowsOldIssue(long bytes, bool complete)
     {
-        var sizeText = bytes > 0 ? (complete ? Format.Bytes(bytes) : "не меньше " + Format.Bytes(bytes)) : null;
+        var sizeText = bytes > 0 ? (complete ? Format.Bytes(bytes) : T.F("не меньше {0}", Format.Bytes(bytes))) : null;
         return new HealthIssue
         {
             Module = ModuleName,
-            Title = "Осталась папка Windows.old" + (sizeText is null ? "" : $" ({sizeText})"),
-            Details = "Это копия прежней версии Windows, которая остаётся после крупного обновления. Если всё работает " +
-                      "нормально, её можно удалить через «Очистку диска»: «Очистить системные файлы» → «Предыдущие установки Windows». " +
-                      "После удаления откатиться на прежнюю версию будет нельзя.",
+            Title = sizeText is null ? T._("Осталась папка Windows.old") : T.F("Осталась папка Windows.old ({0})", sizeText),
+            Details = T._("Это копия прежней версии Windows, которая остаётся после крупного обновления. Если всё работает нормально, её можно удалить через «Очистку диска»: «Очистить системные файлы» → «Предыдущие установки Windows». После удаления откатиться на прежнюю версию будет нельзя."),
             Severity = IssueSeverity.Low,
-            Gain = sizeText is null ? null : $"Освободит {sizeText}",
+            Gain = sizeText is null ? null : T.F("Освободит {0}", sizeText),
             ReclaimableBytes = bytes,
             TargetPageKey = PageKey,
-            FixLabel = "Открыть очистку диска",
+            FixLabel = T._("Открыть очистку диска"),
             // Opens a window the user has to work in: «Исправить всё» does not start it, and the button alone fixes nothing.
             InFixAll = false,
             OnlyOpensTool = true,
@@ -621,12 +618,11 @@ public sealed class DiskService : IHealthContributor
     /// <summary>The Windows.old fix: the wizard deletes the folder itself, after the user ticks «Предыдущие установки Windows».</summary>
     private string OpenDiskCleanupForWindowsOld()
     {
-        const string steps = "нажмите «Очистить системные файлы» и отметьте «Предыдущие установки Windows».";
         return OpenDiskCleanup() switch
         {
-            ToolLaunchResult.Started => "Открыта «Очистка диска»: " + steps,
-            ToolLaunchResult.AlreadyOpen => "«Очистка диска» уже открыта — переключитесь на неё через панель задач: " + steps,
-            _ => "Не удалось открыть «Очистку диска».",
+            ToolLaunchResult.Started => T._("Открыта «Очистка диска»: нажмите «Очистить системные файлы» и отметьте «Предыдущие установки Windows»."),
+            ToolLaunchResult.AlreadyOpen => T._("«Очистка диска» уже открыта — переключитесь на неё через панель задач: нажмите «Очистить системные файлы» и отметьте «Предыдущие установки Windows»."),
+            _ => T._("Не удалось открыть «Очистку диска»."),
         };
     }
 
@@ -643,16 +639,15 @@ public sealed class DiskService : IHealthContributor
             var severity = freePercent < 10 ? IssueSeverity.High : IssueSeverity.Medium;
             var need = (long)(d.TotalBytes * 0.15) - d.FreeBytes;
             var where = d.IsSystemDrive
-                ? "Это системный диск: когда на нём мало места, Windows работает медленнее, не может установить обновления и создать файл подкачки."
-                : "Когда на диске мало места, программы и игры не смогут сохранять данные и обновляться.";
+                ? T._("Это системный диск: когда на нём мало места, Windows работает медленнее, не может установить обновления и создать файл подкачки.")
+                : T._("Когда на диске мало места, программы и игры не смогут сохранять данные и обновляться.");
             yield return new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Мало места на диске {d.Letter}:",
-                Details = $"Свободно {Format.Bytes(d.FreeBytes)} из {Format.Bytes(d.TotalBytes)} ({Format.Percent(freePercent)}). {where} " +
-                          "Откройте раздел «Диски» → «Что занимает место», чтобы найти, что можно удалить.",
+                Title = T.F("Мало места на диске {0}:", d.Letter),
+                Details = T.F("Свободно {0} из {1} ({2}). {3} Откройте раздел «Диски» → «Что занимает место», чтобы найти, что можно удалить.", Format.Bytes(d.FreeBytes), Format.Bytes(d.TotalBytes), Format.Percent(freePercent), where),
                 Severity = severity,
-                Gain = need > 0 ? $"Освободите ≈ {Format.Bytes(need)}, чтобы было 15% свободно" : null,
+                Gain = need > 0 ? T.F("Освободите ≈ {0}, чтобы было 15% свободно", Format.Bytes(need)) : null,
                 TargetPageKey = PageKey,
             };
         }
@@ -664,13 +659,12 @@ public sealed class DiskService : IHealthContributor
         {
             if (disk.Health is not (DiskHealth.Warning or DiskHealth.Unhealthy))
                 continue;
-            var volumes = disk.Letters.Count > 0 ? $" (тома: {string.Join(", ", disk.Letters.Select(l => l + ":"))})" : "";
+            var volumes = disk.Letters.Count > 0 ? " " + T.F("(тома: {0})", string.Join(", ", disk.Letters.Select(l => l + ":"))) : "";
             yield return new HealthIssue
             {
                 Module = ModuleName,
-                Title = "Диск может скоро выйти из строя — сделайте резервную копию",
-                Details = $"Накопитель «{disk.Model}»{volumes} сообщает о состоянии «{StorageLabels.HealthLabel(disk.Health)}». " +
-                          "Срочно скопируйте важные файлы (документы, фото) на другой диск или в облако и подумайте о замене накопителя.",
+                Title = T._("Диск может скоро выйти из строя — сделайте резервную копию"),
+                Details = T.F("Накопитель «{0}»{1} сообщает о состоянии «{2}». Срочно скопируйте важные файлы (документы, фото) на другой диск или в облако и подумайте о замене накопителя.", disk.Model, volumes, StorageLabels.HealthLabel(disk.Health)),
                 Severity = IssueSeverity.Critical,
                 TargetPageKey = PageKey,
             };
@@ -684,23 +678,21 @@ public sealed class DiskService : IHealthContributor
             return null;
         var parts = groups.Select(g => g.Kind switch
         {
-            DownloadKind.Installers => $"установщики — {Format.Bytes(g.TotalBytes)}",
-            DownloadKind.Archives => $"архивы — {Format.Bytes(g.TotalBytes)}",
-            _ => $"образы дисков — {Format.Bytes(g.TotalBytes)}",
+            DownloadKind.Installers => T.F("установщики — {0}", Format.Bytes(g.TotalBytes)),
+            DownloadKind.Archives => T.F("архивы — {0}", Format.Bytes(g.TotalBytes)),
+            _ => T.F("образы дисков — {0}", Format.Bytes(g.TotalBytes)),
         });
         var scanned = groups.SelectMany(g => g.Files).ToList();
         return new HealthIssue
         {
             Module = ModuleName,
-            Title = $"Старые установщики и архивы в «Загрузках»: {Format.Bytes(total)}",
-            Details = $"{Format.Count(scanned.Count, "файл", "файла", "файлов")} старше {DownloadsAdvisor.DefaultAgeDays} дней " +
-                      $"({string.Join(", ", parts)}). Кнопка переместит их все в Корзину — оттуда файлы можно вернуть, пока " +
-                      "она не очищена. Чтобы оставить что-то, сначала просмотрите список в разделе «Диски» → «Советы по месту».",
+            Title = T.F("Старые установщики и архивы в «Загрузках»: {0}", Format.Bytes(total)),
+            Details = T.F("{0} старше {1} дней ({2}). Кнопка переместит их все в Корзину — оттуда файлы можно вернуть, пока она не очищена. Чтобы оставить что-то, сначала просмотрите список в разделе «Диски» → «Советы по месту».", Format.Count(scanned.Count, "файл", "файла", "файлов"), DownloadsAdvisor.DefaultAgeDays, string.Join(", ", parts)),
             Severity = IssueSeverity.Low,
-            Gain = $"Освободит до {Format.Bytes(total)}",
+            Gain = T.F("Освободит до {0}", Format.Bytes(total)),
             ReclaimableBytes = total,
             TargetPageKey = PageKey,
-            FixLabel = "В Корзину",
+            FixLabel = T._("В Корзину"),
             FixKind = FixKind.MovesToRecycleBin,
             FixAsync = token => RecycleOldDownloadsAsync(scanned, token),
         };
@@ -761,26 +753,24 @@ public sealed class DiskService : IHealthContributor
         // that is a failure: the problem the user confirmed may still be there.
         if (unchanged.Count == 0)
             return changed > 0
-                ? "Файлы изменились после проверки — ничего не изменено. Откройте «Диски» → «Советы по месту» и посмотрите список заново."
-                : "Файлы уже удалены — делать ничего не нужно.";
+                ? T._("Файлы изменились после проверки — ничего не изменено. Откройте «Диски» → «Советы по месту» и посмотрите список заново.")
+                : T._("Файлы уже удалены — делать ничего не нужно.");
 
         // Like the Disk page: the shell moves files to the Recycle Bin on an STA thread.
         var result = await SystemTools.RunSta(() => RecycleFiles(unchanged)).ConfigureAwait(false);
         foreach (var (path, reason) in result.Skipped)
-            Log.Warn($"Диски: не перемещено в корзину {path} — {reason}");
+            Log.Warn(T.F("Диски: не перемещено в корзину {0} — {1}", path, reason));
         // Fixed wording, not the per-file reason: "нет прав на удаление этого файла" would make the Dashboard offer a restart
         // as administrator (HealthScoring.LooksLikeAdminRequired) for a file that is locked or protected for everybody.
         if (result.Recycled.Count == 0)
-            return "Не удалось переместить файлы в Корзину: файлы заняты или защищены. Подробности — в журнале.";
+            return T._("Не удалось переместить файлы в Корзину: файлы заняты или защищены. Подробности — в журнале.");
 
         var n = result.Recycled.Count;
-        Log.Action($"Диски: в корзину перемещено {Format.Count(n, "файл", "файла", "файлов")} ({Format.Bytes(result.RecycledBytes)})");
-        var text = $"В Корзину {Format.Plural(n, "перемещён", "перемещено", "перемещено")} {Format.Count(n, "файл", "файла", "файлов")} " +
-                   $"({Format.Bytes(result.RecycledBytes)}) — {Format.Plural(n, "его", "их", "их")} можно восстановить.";
+        Log.Action(T.F("Диски: в корзину перемещено {0} ({1})", Format.Count(n, "файл", "файла", "файлов"), Format.Bytes(result.RecycledBytes)));
+        var text = T.F("В Корзину {0} {1} ({2}) — {3} можно восстановить.", Format.Plural(n, "перемещён", "перемещено", "перемещено"), Format.Count(n, "файл", "файла", "файлов"), Format.Bytes(result.RecycledBytes), Format.Plural(n, "его", "их", "их"));
         var left = changed + gone + result.Skipped.Count;
         if (left > 0)
-            text += $" Не тронуто: {Format.Count(left, "файл", "файла", "файлов")} " +
-                    "(уже удалены, изменились после проверки или заняты другой программой).";
+            text += " " + T.F("Не тронуто: {0} (уже удалены, изменились после проверки или заняты другой программой).", Format.Count(left, "файл", "файла", "файлов"));
         return text;
     }
 
@@ -790,40 +780,41 @@ public sealed class DiskService : IHealthContributor
     public async Task<string> EnableTrimAsync(CancellationToken ct)
     {
         if (!Admin.IsElevated)
-            return "Нужны права администратора: перезапустите программу от имени администратора и повторите. Ничего не изменено.";
+            return T._("Нужны права администратора: перезапустите программу от имени администратора и повторите. Ничего не изменено.");
         var result = await ProcessRunner.RunAsync(SystemTools.Exe("fsutil.exe"), "behavior set DisableDeleteNotify 0",
             TimeSpan.FromSeconds(20), ct).ConfigureAwait(false);
         var state = await GetTrimStateAsync(ct).ConfigureAwait(false);
         if (result.Success && state != TrimState.Disabled)
         {
-            Log.Action("Включён TRIM для NTFS (fsutil behavior set DisableDeleteNotify 0)");
-            return "TRIM включён. Windows снова будет сообщать SSD об освободившихся блоках.";
+            Log.Action(T._("Включён TRIM для NTFS (fsutil behavior set DisableDeleteNotify 0)"));
+            return T._("TRIM включён. Windows снова будет сообщать SSD об освободившихся блоках.");
         }
-        var reason = FirstLine(result.StdErr) ?? FirstLine(result.StdOut) ?? $"код {result.ExitCode}";
-        Log.Warn($"Не удалось включить TRIM: {reason}");
-        return $"Не удалось включить TRIM: {reason}";
+        var reason = FirstLine(result.StdErr) ?? FirstLine(result.StdOut) ?? T.F("код {0}", result.ExitCode);
+        Log.Warn(T.F("Не удалось включить TRIM: {0}", reason));
+        return T.F("Не удалось включить TRIM: {0}", reason);
     }
 
     /// <summary>powercfg /h off. Needs admin; without it nothing is changed.</summary>
     public async Task<string> DisableHibernationAsync(CancellationToken ct)
     {
         if (!Admin.IsElevated)
-            return "Нужны права администратора: перезапустите программу от имени администратора и повторите. Ничего не изменено.";
+            return T._("Нужны права администратора: перезапустите программу от имени администратора и повторите. Ничего не изменено.");
         var before = FindSystemFilesIn(_env.SystemDriveRoot).FirstOrDefault(f => f.Name == "hiberfil.sys")?.Size ?? 0;
         var result = await ProcessRunner.RunAsync(SystemTools.Exe("powercfg.exe"), "/h off", TimeSpan.FromSeconds(60), ct)
             .ConfigureAwait(false);
         var after = FindSystemFilesIn(_env.SystemDriveRoot).FirstOrDefault(f => f.Name == "hiberfil.sys");
         if (result.Success)
         {
-            Log.Action($"Отключена гибернация (powercfg /h off), файл hiberfil.sys {(after is null ? "удалён" : "ещё существует")}, " +
-                       $"было {Format.Bytes(before)}. Вернуть: powercfg /h on");
+            Log.Action(after is null
+                ? T.F("Отключена гибернация (powercfg /h off), файл hiberfil.sys удалён, было {0}. Вернуть: powercfg /h on", Format.Bytes(before))
+                : T.F("Отключена гибернация (powercfg /h off), файл hiberfil.sys ещё существует, было {0}. Вернуть: powercfg /h on", Format.Bytes(before)));
             return after is null
-                ? $"Гибернация отключена, освобождено {Format.Bytes(before)}.\n\nЧтобы вернуть её, выполните от имени администратора: powercfg /h on"
-                : "Гибернация отключена. Файл hiberfil.sys исчезнет после перезагрузки компьютера.\n\nЧтобы вернуть её: powercfg /h on";
+                ? T.F("Гибернация отключена, освобождено {0}.\n\nЧтобы вернуть её, выполните от имени администратора: powercfg /h on", Format.Bytes(before))
+                : T._("Гибернация отключена. Файл hiberfil.sys исчезнет после перезагрузки компьютера.\n\nЧтобы вернуть её: powercfg /h on");
         }
-        var reason = FirstLine(result.StdErr) ?? FirstLine(result.StdOut) ?? $"код {result.ExitCode}";
-        Log.Warn($"Не удалось отключить гибернацию: {reason}");
-        return $"Не удалось отключить гибернацию: {reason}";
+        var reason = FirstLine(result.StdErr) ?? FirstLine(result.StdOut) ?? T.F("код {0}", result.ExitCode);
+        Log.Warn(T.F("Не удалось отключить гибернацию: {0}", reason));
+        return T.F("Не удалось отключить гибернацию: {0}", reason);
     }
 
     /// <summary>
@@ -832,26 +823,26 @@ public sealed class DiskService : IHealthContributor
     public async Task<OptimizeOutcome> OptimizeDriveAsync(char letter, Action<string> onLine, CancellationToken ct)
     {
         if (!Admin.IsElevated)
-            return new OptimizeOutcome(false, true, "Нужны права администратора. Ничего не изменено.", "");
+            return new OptimizeOutcome(false, true, T._("Нужны права администратора. Ничего не изменено."), "");
         if (!char.IsAsciiLetter(letter))
             throw new ArgumentOutOfRangeException(nameof(letter));
 
-        Log.Action($"Запущена оптимизация диска {letter}: (defrag {letter}: /O)");
+        Log.Action(T.F("Запущена оптимизация диска {0}: (defrag {1}: /O)", letter, letter));
         var result = await SystemTools.RunStreamingAsync(SystemTools.Exe("defrag.exe"), $"{letter}: /O /U /V", onLine,
             TimeSpan.FromHours(8), ct).ConfigureAwait(false);
         var summary = SummarizeDefragOutput(result.StdOut);
         if (result.TimedOut)
         {
-            Log.Warn($"Оптимизация диска {letter}: прервана по таймауту");
-            return new OptimizeOutcome(false, false, "Оптимизация заняла слишком много времени и была остановлена.", summary);
+            Log.Warn(T.F("Оптимизация диска {0}: прервана по таймауту", letter));
+            return new OptimizeOutcome(false, false, T._("Оптимизация заняла слишком много времени и была остановлена."), summary);
         }
         if (result.ExitCode == 0)
         {
-            Log.Action($"Оптимизация диска {letter}: завершена успешно");
-            return new OptimizeOutcome(true, false, $"Оптимизация диска {letter}: завершена.", summary);
+            Log.Action(T.F("Оптимизация диска {0}: завершена успешно", letter));
+            return new OptimizeOutcome(true, false, T.F("Оптимизация диска {0}: завершена.", letter), summary);
         }
-        Log.Warn($"Оптимизация диска {letter}: завершилась с кодом {result.ExitCode}");
-        return new OptimizeOutcome(false, false, $"Оптимизация диска {letter}: завершилась с ошибкой (код {result.ExitCode}).",
+        Log.Warn(T.F("Оптимизация диска {0}: завершилась с кодом {1}", letter, result.ExitCode));
+        return new OptimizeOutcome(false, false, T.F("Оптимизация диска {0}: завершилась с ошибкой (код {1}).", letter, result.ExitCode),
             string.IsNullOrWhiteSpace(summary) ? result.StdErr.Trim() : summary);
     }
 
@@ -863,11 +854,13 @@ public sealed class DiskService : IHealthContributor
             .Where(l => l.Trim().Length > 0)
             .ToList();
         // drop the copyright banner ("Microsoft Drive Optimizer" / "Оптимизация дисков (Майкрософт)")
+        // l10n:data-begin — Russian words of the output of Windows tools, matched and never shown
         lines = lines.SkipWhile(l => l.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) ||
                                      l.Contains("Майкрософт", StringComparison.OrdinalIgnoreCase) ||
                                      l.Contains("Copyright", StringComparison.OrdinalIgnoreCase) ||
                                      l.StartsWith("(C)", StringComparison.OrdinalIgnoreCase))
             .ToList();
+        // l10n:data-end
         var kept = new List<string>();
         for (var i = 0; i < lines.Count; i++)
         {
@@ -927,7 +920,7 @@ public sealed class DiskService : IHealthContributor
     public string? RiskNote(string path)
     {
         if (_env.ProgramDataDirs.Any(dir => IsUnder(path, dir)))
-            return "Файл в папке данных программ (AppData) — его может использовать какая-то программа.";
+            return T._("Файл в папке данных программ (AppData) — его может использовать какая-то программа.");
         return null;
     }
 
@@ -942,12 +935,12 @@ public sealed class DiskService : IHealthContributor
         {
             if (IsProtectedPath(path))
             {
-                result.Skipped.Add((path, "системный файл — удалять нельзя"));
+                result.Skipped.Add((path, T._("системный файл — удалять нельзя")));
                 continue;
             }
             if (!File.Exists(path))
             {
-                result.Skipped.Add((path, "файл уже удалён или перемещён"));
+                result.Skipped.Add((path, T._("файл уже удалён или перемещён")));
                 continue;
             }
             RecycleOutcome outcome;
@@ -957,7 +950,7 @@ public sealed class DiskService : IHealthContributor
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
             {
-                Log.Warn($"Не удалось переместить в корзину {path}: {ex.Message}");
+                Log.Warn(T.F("Не удалось переместить в корзину {0}: {1}", path, ErrorText.For(ex)), ex);
                 outcome = ex is UnauthorizedAccessException
                     ? new RecycleOutcome(RecycleFailure.AccessDenied)
                     : new RecycleOutcome(RecycleFailure.Failed, ex.HResult);

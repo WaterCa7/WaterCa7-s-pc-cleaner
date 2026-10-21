@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -54,7 +55,7 @@ internal sealed class SystemToolLauncher
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Log.Warn($"Не удалось запустить {Path.GetFileName(path)}: {ex.Message}");
+            Log.Warn(T.F("Не удалось запустить {0}: {1}", Path.GetFileName(path), ErrorText.For(ex)), ex);
             return ToolLaunchResult.Failed;
         }
     }

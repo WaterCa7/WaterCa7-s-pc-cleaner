@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -72,7 +73,7 @@ internal static class RegFileParser
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось прочитать резервную копию {Path.GetFileName(path)}: {ex.Message}");
+            Log.Warn(T.F("Не удалось прочитать резервную копию {0}: {1}", Path.GetFileName(path), ErrorText.For(ex)), ex);
             return null;
         }
     }
@@ -81,7 +82,7 @@ internal static class RegFileParser
     public static RegFileInfo Parse(byte[] bytes)
     {
         if (bytes.Length < 2 || bytes[0] != 0xFF || bytes[1] != 0xFE || bytes.Length % 2 != 0)
-            return Fail(null, "файл не в кодировке UTF-16, в которой Windows сохраняет копии реестра");
+            return Fail(null, T._("файл не в кодировке UTF-16, в которой Windows сохраняет копии реестра"));
         string text;
         try
         {
@@ -90,7 +91,7 @@ internal static class RegFileParser
         }
         catch (DecoderFallbackException)
         {
-            return Fail(null, "в файле есть недопустимые символы");
+            return Fail(null, T._("в файле есть недопустимые символы"));
         }
         return ParseText(text);
     }
@@ -101,13 +102,13 @@ internal static class RegFileParser
     {
         text = text.TrimEnd('\0');
         if (text.Contains('\0'))
-            return Fail(null, "в файле есть нулевые символы");
+            return Fail(null, T._("в файле есть нулевые символы"));
 
         var lines = text.Split("\r\n");
         if (lines.Any(l => l.Contains('\r') || l.Contains('\n')))
-            return Fail(null, "в файле есть переводы строк, которых не бывает в копиях reg.exe");
+            return Fail(null, T._("в файле есть переводы строк, которых не бывает в копиях reg.exe"));
         if (lines.Length == 0 || lines[0].TrimEnd(' ', '\t') != Header)
-            return Fail(null, $"нет заголовка «{Header}»");
+            return Fail(null, T.F("нет заголовка «{0}»", Header));
 
         string? root = null;
         var singleRoot = true;
@@ -123,7 +124,7 @@ internal static class RegFileParser
         (string Key, string Name, int Type, StringBuilder Hex)? pending = null;
 
         RegFileInfo Broken(int index, string what) =>
-            Fail(root, $"строка {Format.Number(index + 1)}: {what}", singleRoot, deletesKeys);
+            Fail(root, T.F("строка {0}: {1}", Format.Number(index + 1), what), singleRoot, deletesKeys);
 
         for (var i = 1; i < lines.Length; i++)
         {
@@ -133,7 +134,7 @@ internal static class RegFileParser
             {
                 // Continuation of hex data: indented bytes, possibly ending with "\" again.
                 if (line.Length == 0 || (line[0] != ' ' && line[0] != '\t'))
-                    return Broken(i, "оборвано продолжение двоичных данных");
+                    return Broken(i, T._("оборвано продолжение двоичных данных"));
                 var body = line.Trim(' ', '\t');
                 var more = body.EndsWith('\\');
                 p.Hex.Append(more ? body[..^1] : body);
@@ -141,7 +142,7 @@ internal static class RegFileParser
                     continue;
                 pending = null;
                 if (!TryHexValue(p.Key, p.Name, p.Type, p.Hex.ToString(), out var value))
-                    return Broken(i, "неверные двоичные данные");
+                    return Broken(i, T._("неверные двоичные данные"));
                 Put(value);
                 continue;
             }
@@ -153,7 +154,7 @@ internal static class RegFileParser
             if (t[0] == '[')
             {
                 if (t.Length < 3 || t[^1] != ']')
-                    return Broken(i, "неверный заголовок раздела");
+                    return Broken(i, T._("неверный заголовок раздела"));
                 var key = t[1..^1];
                 var deleting = key.StartsWith('-');
                 if (deleting)
@@ -162,7 +163,7 @@ internal static class RegFileParser
                     key = key[1..];
                 }
                 if (!IsValidKey(key))
-                    return Broken(i, "неверный путь раздела");
+                    return Broken(i, T._("неверный путь раздела"));
                 var shortKey = BackupCatalog.ShortHive(key);
                 if (keySet.Add(shortKey))
                     keys.Add(shortKey);
@@ -176,9 +177,9 @@ internal static class RegFileParser
             }
 
             if (t[0] is not ('"' or '@'))
-                return Broken(i, "строка не распознана");
+                return Broken(i, T._("строка не распознана"));
             if (currentKey is null)
-                return Broken(i, "значение вне раздела");
+                return Broken(i, T._("значение вне раздела"));
 
             var pos = 0;
             string name;
@@ -189,10 +190,10 @@ internal static class RegFileParser
             }
             else if (!TryQuoted(t, ref pos, out name))
             {
-                return Broken(i, "незакрытые кавычки в имени значения");
+                return Broken(i, T._("незакрытые кавычки в имени значения"));
             }
             if (pos >= t.Length || t[pos] != '=')
-                return Broken(i, "нет знака «=»");
+                return Broken(i, T._("нет знака «=»"));
             var data = t[(pos + 1)..];
 
             if (data == "-")
@@ -204,7 +205,7 @@ internal static class RegFileParser
             {
                 var dpos = 0;
                 if (!TryQuoted(data, ref dpos, out var str) || dpos != data.Length)
-                    return Broken(i, "незакрытые кавычки или лишний текст после строки");
+                    return Broken(i, T._("незакрытые кавычки или лишний текст после строки"));
                 Put(new RegFileValue(currentKey, name, 1, str));
                 continue;
             }
@@ -212,7 +213,7 @@ internal static class RegFileParser
             {
                 var digits = data[6..];
                 if (digits.Length != 8 || !uint.TryParse(digits, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var dword))
-                    return Broken(i, "неверное число dword");
+                    return Broken(i, T._("неверное число dword"));
                 Put(new RegFileValue(currentKey, name, 4, dword));
                 continue;
             }
@@ -224,15 +225,15 @@ internal static class RegFileParser
                     continue;
                 }
                 if (!TryHexValue(currentKey, name, type, hex, out var value))
-                    return Broken(i, "неверные двоичные данные");
+                    return Broken(i, T._("неверные двоичные данные"));
                 Put(value);
                 continue;
             }
-            return Broken(i, "неизвестный формат значения");
+            return Broken(i, T._("неизвестный формат значения"));
         }
 
         if (pending is not null)
-            return Fail(root, "файл обрывается посреди двоичных данных", singleRoot, deletesKeys);
+            return Fail(root, T._("файл обрывается посреди двоичных данных"), singleRoot, deletesKeys);
 
         return new RegFileInfo(root, root is not null && singleRoot, deletesKeys)
         {
@@ -253,7 +254,7 @@ internal static class RegFileParser
     private static RegFileInfo Fail(string? root, string problem, bool singleRoot = false, bool deletesKeys = false)
         => new(root, root is not null && singleRoot, deletesKeys)
         {
-            Problem = $"Файл копии не похож на экспорт реестра Windows ({problem}).",
+            Problem = T.F("Файл копии не похож на экспорт реестра Windows ({0}).", problem),
         };
 
     /// <summary>"HKEY_xxx" or "HKEY_xxx\a\b" with non-empty segments.</summary>

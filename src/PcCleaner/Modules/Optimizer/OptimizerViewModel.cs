@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Optimizer;
 
@@ -60,9 +61,9 @@ public sealed class OptimizerViewModel : PageViewModel
         RestartAsAdminCommand = new RelayCommand(() => Admin.RestartElevated(), () => !Admin.IsElevated && !IsBusy);
     }
 
-    public override string Title => "Ускорение";
+    public override string Title => T._("Ускорение");
 
-    public override string Subtitle => "Ваше железо и честные советы, как сделать компьютер быстрее";
+    public override string Subtitle => T._("Ваше железо и честные советы, как сделать компьютер быстрее");
 
     public override string IconGlyph => "\uE945";
 
@@ -147,11 +148,11 @@ public sealed class OptimizerViewModel : PageViewModel
 
     public bool HasSafeFixes => SafeCount > 0;
 
-    public string ApplyAllText => SafeCount > 0 ? $"Применить все рекомендуемые ({SafeCount})" : "Применить все рекомендуемые";
+    public string ApplyAllText => SafeCount > 0 ? T.F("Применить все рекомендуемые ({0})", SafeCount) : T._("Применить все рекомендуемые");
 
     public string ApplyAllToolTip => SafeCount > 0
-        ? "Применит безопасные настройки, которые можно вернуть одной кнопкой. Перед этим покажет полный список."
-        : "Сейчас нет настроек, которые можно безопасно применить автоматически.";
+        ? T._("Применит безопасные настройки, которые можно вернуть одной кнопкой. Перед этим покажет полный список.")
+        : T._("Сейчас нет настроек, которые можно безопасно применить автоматически.");
 
     public bool HasData
     {
@@ -280,26 +281,26 @@ public sealed class OptimizerViewModel : PageViewModel
         var completed = false;
         var token = CancellationToken.None;
         await RunBusyAsync(
-            refreshHardware ? "Обновляем сведения о компьютере…" : "Собираем сведения о компьютере…",
+            refreshHardware ? T._("Обновляем сведения о компьютере…") : T._("Собираем сведения о компьютере…"),
             async ct =>
             {
                 token = ct;
                 var sw = Stopwatch.StartNew();
-                ReportProgress(-1, "Определяем процессор, память, видеокарту и мониторы…");
+                ReportProgress(-1, T._("Определяем процессор, память, видеокарту и мониторы…"));
                 var hardwareTask = _service.GetHardwareAsync(refreshHardware, ct);
                 var settingsTask = _service.GetSettingsAsync(ct);
                 var hardware = await hardwareTask;
-                ReportProgress(-1, "Проверяем настройки Windows…");
+                ReportProgress(-1, T._("Проверяем настройки Windows…"));
                 var settings = await settingsTask;
                 Show(hardware, settings);
                 completed = true;
-                Log.Info($"Ускорение: анализ за {sw.Elapsed.TotalSeconds:0.0} с, рекомендаций: {RecommendationCount}");
+                Log.Info(T.F("Ускорение: анализ за {0:0.0} с, рекомендаций: {1}", sw.Elapsed.TotalSeconds, RecommendationCount));
             });
         if (!completed && !HasData)
         {
             LoadError = token.IsCancellationRequested
-                ? "Сбор сведений остановлен. Нажмите «Повторить», чтобы начать заново."
-                : "Не удалось собрать сведения о компьютере — подробности в журнале. Попробуйте ещё раз.";
+                ? T._("Сбор сведений остановлен. Нажмите «Повторить», чтобы начать заново.")
+                : T._("Не удалось собрать сведения о компьютере — подробности в журнале. Попробуйте ещё раз.");
         }
     }
 
@@ -315,7 +316,7 @@ public sealed class OptimizerViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Ускорение: не удалось обновить настройки: {ex.Message}");
+            Log.Warn(T.F("Ускорение: не удалось обновить настройки: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -348,13 +349,13 @@ public sealed class OptimizerViewModel : PageViewModel
             if (list.Count > 0)
                 groups.Add(new RecommendationGroup(title, description, tone, list));
         }
-        AddGroup("Высокий эффект", "Начните с этого — разница будет заметна сразу.", Tone.Danger,
+        AddGroup(T._("Высокий эффект"), T._("Начните с этого — разница будет заметна сразу."), Tone.Danger,
             r => r.Kind != RecommendationKind.Info && r.Impact == RecommendationImpact.High);
-        AddGroup("Средний эффект", "Ощутимое улучшение за пару минут.", Tone.Warning,
+        AddGroup(T._("Средний эффект"), T._("Ощутимое улучшение за пару минут."), Tone.Warning,
             r => r.Kind != RecommendationKind.Info && r.Impact == RecommendationImpact.Medium);
-        AddGroup("Низкий эффект", "Мелочи, которые всё равно стоит поправить.", Tone.Info,
+        AddGroup(T._("Низкий эффект"), T._("Мелочи, которые всё равно стоит поправить."), Tone.Info,
             r => r.Kind != RecommendationKind.Info && r.Impact == RecommendationImpact.Low);
-        AddGroup("Для сведения", "Менять ничего не обязательно — просто полезно знать.", Tone.Neutral,
+        AddGroup(T._("Для сведения"), T._("Менять ничего не обязательно — просто полезно знать."), Tone.Neutral,
             r => r.Kind == RecommendationKind.Info);
 
         Groups = groups;
@@ -366,8 +367,7 @@ public sealed class OptimizerViewModel : PageViewModel
         var autoCount = recs.Count(r => r.Kind == RecommendationKind.AutoFix);
         SafeCount = recs.Count(r => r.Kind == RecommendationKind.AutoFix && r.IsSafe && !r.NeedsAdmin);
         SummaryTitle = BuildSummaryTitle(recs.Count, autoCount, recs.Count(r => r.Kind == RecommendationKind.Info));
-        SummaryText = $"Проверок: {recs.Count + Passed.Count} · в порядке: {Passed.Count} · данные на {DateTime.Now:HH:mm}. " +
-                      "Все изменения обратимы: прежние значения запоминаются, а перед правкой реестра создаётся резервная копия.";
+        SummaryText = T.F("Проверок: {0} · в порядке: {1} · данные на {2:HH:mm}. Все изменения обратимы: прежние значения запоминаются, а перед правкой реестра создаётся резервная копия.", recs.Count + Passed.Count, Passed.Count, DateTime.Now);
         Chips = groups.Select(g => new SummaryChip($"{g.Title}: {g.Count}", g.Tone)).ToList();
         var adminHint = AdminHint(Admin.IsElevated, recs.Any(r => r.NeedsAdmin), hardware, settings);
         AdminHintText = adminHint ?? "";
@@ -379,14 +379,14 @@ public sealed class OptimizerViewModel : PageViewModel
     internal static string BuildSummaryTitle(int total, int auto, int info = 0)
     {
         if (total == 0)
-            return "Всё настроено отлично — рекомендаций нет";
+            return T._("Всё настроено отлично — рекомендаций нет");
         if (info == total)
-            return $"Серьёзных проблем нет — {Format.Count(total, "совет", "совета", "советов")} для сведения";
+            return T.F("Серьёзных проблем нет — {0} для сведения", Format.Count(total, "совет", "совета", "советов"));
         var verb = Format.Plural(total, "Найдена", "Найдено", "Найдено");
         var head = $"{verb} {Format.Count(total, "рекомендация", "рекомендации", "рекомендаций")}";
         return auto > 0
-            ? $"{head}, из них {auto} можно применить автоматически"
-            : $"{head} — подскажем, что сделать вручную";
+            ? T.F("{0}, из них {1} можно применить автоматически", head, auto)
+            : T.F("{0} — подскажем, что сделать вручную", head);
     }
 
     /// <summary>
@@ -399,20 +399,17 @@ public sealed class OptimizerViewModel : PageViewModel
             return null;
         var hidden = new List<string>();
         if (s.TemperatureState == SensorState.NeedsAdmin)
-            hidden.Add("температуру");
+            hidden.Add(T._("температуру"));
         if (hw.IsLaptop && hw.HasBattery && hw.Battery?.CapacityState == SensorState.NeedsAdmin)
-            hidden.Add("износ батареи");
-        var data = string.Join(" и ", hidden);
+            hidden.Add(T._("износ батареи"));
+        var data = hidden.Count == 2 ? T.F("{0} и {1}", hidden[0], hidden[1]) : string.Join("", hidden);
         if (adminFixes && hidden.Count > 0)
-            return "Программа работает без прав администратора. Настройки с пометкой «Нужны права администратора» можно применить " +
-                   $"только после перезапуска от имени администратора. Также без этих прав Windows не показывает {data}.";
+            return T.F("Программа работает без прав администратора. Настройки с пометкой «Нужны права администратора» можно применить только после перезапуска от имени администратора. Также без этих прав Windows не показывает {0}.", data);
         if (adminFixes)
-            return "Программа работает без прав администратора. Анализ выполнен полностью, но настройки с пометкой «Нужны права " +
-                   "администратора» можно применить только после перезапуска от имени администратора.";
+            return T._("Программа работает без прав администратора. Анализ выполнен полностью, но настройки с пометкой «Нужны права администратора» можно применить только после перезапуска от имени администратора.");
         // "Try": on many desktops the board has no readable sensor even for an administrator.
         if (hidden.Count > 0)
-            return $"Программа работает без прав администратора, поэтому Windows не показывает {data}. Остальной анализ выполнен " +
-                   "полностью. После перезапуска от имени администратора программа попробует прочитать и эти данные.";
+            return T.F("Программа работает без прав администратора, поэтому Windows не показывает {0}. Остальной анализ выполнен полностью. После перезапуска от имени администратора программа попробует прочитать и эти данные.", data);
         return null;
     }
 
@@ -421,7 +418,7 @@ public sealed class OptimizerViewModel : PageViewModel
     private static string BuildConfirmation(IReadOnlyList<Recommendation> recs)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(recs.Count == 1 ? "Будет изменена настройка:" : $"Будут изменены настройки ({recs.Count}):");
+        sb.AppendLine(recs.Count == 1 ? T._("Будет изменена настройка:") : T.F("Будут изменены настройки ({0}):", recs.Count));
         foreach (var r in recs)
         {
             sb.AppendLine();
@@ -429,15 +426,14 @@ public sealed class OptimizerViewModel : PageViewModel
             if (!string.IsNullOrWhiteSpace(r.ApplySummary))
                 sb.AppendLine(r.ApplySummary);
             if (!string.IsNullOrWhiteSpace(r.AfterApplyNote))
-                sb.AppendLine("Важно: " + r.AfterApplyNote);
+                sb.AppendLine(T.F("Важно: {0}", r.AfterApplyNote));
         }
         sb.AppendLine();
-        sb.AppendLine("Как вернуть: прежние значения будут сохранены — кнопка «Вернуть» на этой странице восстановит их в точности. " +
-                      "Перед изменением реестра программа сохраняет резервную копию раздела.");
+        sb.AppendLine(T._("Как вернуть: прежние значения будут сохранены — кнопка «Вернуть» на этой странице восстановит их в точности. Перед изменением реестра программа сохраняет резервную копию раздела."));
         if (recs.Any(r => r.NeedsAdmin) || recs.Count > 1)
-            sb.AppendLine("Также будет создана точка восстановления Windows (если она включена в настройках и есть права администратора).");
+            sb.AppendLine(T._("Также будет создана точка восстановления Windows (если она включена в настройках и есть права администратора)."));
         sb.AppendLine();
-        sb.Append("Продолжить?");
+        sb.Append(T._("Продолжить?"));
         return sb.ToString();
     }
 
@@ -447,12 +443,12 @@ public sealed class OptimizerViewModel : PageViewModel
             return;
         if (rec.NeedsAdmin && !Admin.RequireElevation(rec.Title))
             return;
-        if (!Dialogs.Confirm("Применить рекомендацию", BuildConfirmation(new[] { rec })))
+        if (!Dialogs.Confirm(T._("Применить рекомендацию"), BuildConfirmation(new[] { rec })))
             return;
 
         TweakResult? result = null;
         var reloaded = false;
-        await RunBusyAsync($"Применяем: {rec.Title}…", async ct =>
+        await RunBusyAsync(T.F("Применяем: {0}…", rec.Title), async ct =>
         {
             result = await _service.ApplyAsync(rec, createRestorePoint: true, ct);
             await ReloadSettingsAsync(ct);
@@ -468,11 +464,11 @@ public sealed class OptimizerViewModel : PageViewModel
         {
             if (!string.IsNullOrWhiteSpace(rec.AfterApplyNote))
                 text += " " + rec.AfterApplyNote;
-            text += " Вернуть прежнее значение можно кнопкой «Вернуть» в списке «Уже в порядке».";
+            text += " " + T._("Вернуть прежнее значение можно кнопкой «Вернуть» в списке «Уже в порядке».");
         }
         ShowBanner(text, result.Success ? Tone.Good : Tone.Warning);
         if (result.Success && result.Changed && rec.NeedsRestart)
-            Dialogs.Info("Нужна перезагрузка", text);
+            Dialogs.Info(T._("Нужна перезагрузка"), text);
     }
 
     private async Task ApplyAllAsync()
@@ -482,22 +478,22 @@ public sealed class OptimizerViewModel : PageViewModel
         var items = _all.Where(r => r.Kind == RecommendationKind.AutoFix && r.IsSafe && !r.NeedsAdmin).ToList();
         if (items.Count == 0)
             return;
-        if (!Dialogs.Confirm("Применить все рекомендуемые", BuildConfirmation(items)))
+        if (!Dialogs.Confirm(T._("Применить все рекомендуемые"), BuildConfirmation(items)))
             return;
 
         var results = new List<(Recommendation Rec, TweakResult Result)>();
         var reloaded = false;
         RestorePointResult? restorePoint = null;
-        await RunBusyAsync("Применяем рекомендуемые настройки…", async ct =>
+        await RunBusyAsync(T._("Применяем рекомендуемые настройки…"), async ct =>
         {
-            ReportProgress(-1, "Создаём точку восстановления…");
-            restorePoint = await RestorePoint.CreateAsync("Ускорение: рекомендуемые настройки", ct);
+            ReportProgress(-1, T._("Создаём точку восстановления…"));
+            restorePoint = await RestorePoint.CreateAsync(T._("Ускорение: рекомендуемые настройки"), ct);
             for (var i = 0; i < items.Count; i++)
             {
-                ReportProgress(100.0 * i / items.Count, $"Применяем: {items[i].Title}");
+                ReportProgress(100.0 * i / items.Count, T.F("Применяем: {0}", items[i].Title));
                 results.Add((items[i], await _service.ApplyAsync(items[i], createRestorePoint: false, ct)));
             }
-            ReportProgress(100, "Обновляем сведения…");
+            ReportProgress(100, T._("Обновляем сведения…"));
             await ReloadSettingsAsync(ct);
             reloaded = true;
         });
@@ -507,24 +503,22 @@ public sealed class OptimizerViewModel : PageViewModel
             return;
 
         var ok = results.Count(r => r.Result.Success);
-        var sb = new StringBuilder($"Применено {ok} из {items.Count}.");
+        var sb = new StringBuilder(T.F("Применено {0} из {1}.", ok, items.Count));
         foreach (var (rec, result) in results)
         {
-            sb.Append("\n• ").Append(result.Success ? "" : "Не удалось: ").Append(result.Message);
+            sb.Append("\n").Append(result.Success ? "• " + result.Message : T.F("• Не удалось: {0}", result.Message));
             if (result.Success && result.Changed && !string.IsNullOrWhiteSpace(rec.AfterApplyNote))
                 sb.Append(' ').Append(rec.AfterApplyNote);
         }
         if (results.Count < items.Count)
-            sb.Append("\nПрименение остановлено, не изменены: ")
-              .Append(string.Join(", ", items.Skip(results.Count).Select(r => $"«{r.Title}»")))
-              .Append('.');
+            sb.Append("\n").Append(T.F("Применение остановлено, не изменены: {0}.", string.Join(", ", items.Skip(results.Count).Select(r => T.Quote(r.Title)))));
         if (ok > 0)
-            sb.Append("\nВсё можно вернуть кнопками «Вернуть» в списке «Уже в порядке».");
+            sb.Append("\n").Append(T._("Всё можно вернуть кнопками «Вернуть» в списке «Уже в порядке»."));
         if (RestorePointText(restorePoint) is { } restoreText)
             sb.Append('\n').Append(restoreText);
         var summary = sb.ToString();
         ShowBanner(summary, ok == items.Count ? Tone.Good : Tone.Warning);
-        Dialogs.Info("Готово", summary);
+        Dialogs.Info(T._("Готово"), summary);
     }
 
     private async Task RevertAsync(Recommendation? rec)
@@ -532,19 +526,19 @@ public sealed class OptimizerViewModel : PageViewModel
         if (rec?.FixId is not { } fixId || IsBusy || !_service.CanRevert(fixId))
             return;
         var title = OptimizerService.TweakTitle(fixId);
-        if (RegistryTweaks.Get(fixId)?.NeedsAdmin == true && !Admin.RequireElevation($"Вернуть: {title}"))
+        if (RegistryTweaks.Get(fixId)?.NeedsAdmin == true && !Admin.RequireElevation(T.F("Вернуть: {0}", title)))
             return;
         var lines = _service.DescribeRevert(fixId);
-        var message = $"Вернуть прежнее значение настройки «{title}» — как было до изменения программой?\n\n" +
+        var message = T.F("Вернуть прежнее значение настройки «{0}» — как было до изменения программой?", title) + "\n\n" +
                       (lines.Count > 0 ? string.Join("\n", lines) + "\n\n" : "") +
-                      (fixId == TweakIds.PowerPlan ? "" : "Перед изменением реестра будет сохранена резервная копия раздела.\n\n") +
-                      "Продолжить?";
-        if (!Dialogs.Confirm("Вернуть настройку", message))
+                      (fixId == TweakIds.PowerPlan ? "" : T._("Перед изменением реестра будет сохранена резервная копия раздела.") + "\n\n") +
+                      T._("Продолжить?");
+        if (!Dialogs.Confirm(T._("Вернуть настройку"), message))
             return;
 
         TweakResult? result = null;
         var reloaded = false;
-        await RunBusyAsync($"Возвращаем: {title}…", async ct =>
+        await RunBusyAsync(T.F("Возвращаем: {0}…", title), async ct =>
         {
             result = await _service.RevertAsync(fixId, ct);
             await ReloadSettingsAsync(ct);
@@ -556,22 +550,22 @@ public sealed class OptimizerViewModel : PageViewModel
             return;
         var text = result.Message;
         if (result.Success && fixId == TweakIds.Hags)
-            text += " Изменение вступит в силу после перезагрузки.";
+            text += " " + T._("Изменение вступит в силу после перезагрузки.");
         else if (result.Success && fixId == TweakIds.VisualEffects)
-            text += " Полностью изменения применятся после выхода из системы и повторного входа.";
+            text += " " + T._("Полностью изменения применятся после выхода из системы и повторного входа.");
         ShowBanner(text, result.Success ? Tone.Good : Tone.Warning);
     }
 
     /// <summary>One line about the restore point for the result summary (null when it was switched off in the settings).</summary>
     internal static string? RestorePointText(RestorePointResult? result) => result switch
     {
-        RestorePointResult.Created => "Перед изменениями создана точка восстановления Windows.",
+        RestorePointResult.Created => T._("Перед изменениями создана точка восстановления Windows."),
         RestorePointResult.RecentPointExists =>
-            "Новая точка восстановления не понадобилась: Windows создала её меньше суток назад, она и защищает систему.",
+            T._("Новая точка восстановления не понадобилась: Windows создала её меньше суток назад, она и защищает систему."),
         RestorePointResult.NotElevated =>
-            "Точка восстановления не создана — для этого нужны права администратора. Изменения всё равно можно вернуть кнопкой «Вернуть».",
+            T._("Точка восстановления не создана — для этого нужны права администратора. Изменения всё равно можно вернуть кнопкой «Вернуть»."),
         RestorePointResult.Failed =>
-            "Точку восстановления создать не удалось (возможно, выключена защита системы). Изменения можно вернуть кнопкой «Вернуть».",
+            T._("Точку восстановления создать не удалось (возможно, выключена защита системы). Изменения можно вернуть кнопкой «Вернуть»."),
         _ => null,
     };
 
@@ -590,7 +584,7 @@ public sealed class OptimizerViewModel : PageViewModel
             _ = CreateBatteryReportAsync();
             return;
         }
-        Log.Info($"Ускорение: открыто «{rec.SettingsLabel ?? uri}» ({uri})");
+        Log.Info(T.F("Ускорение: открыто «{0}» ({1})", rec.SettingsLabel ?? uri, uri));
         ProcessRunner.ShellOpen(ResolveSystemTool(uri));
     }
 
@@ -609,14 +603,13 @@ public sealed class OptimizerViewModel : PageViewModel
         if (IsBusy)
             return;
         BatteryReportResult? result = null;
-        await RunBusyAsync("Создаём отчёт о батарее…", async ct => result = await _service.CreateBatteryReportAsync(ct));
+        await RunBusyAsync(T._("Создаём отчёт о батарее…"), async ct => result = await _service.CreateBatteryReportAsync(ct));
         if (result is null)
             return;
         if (result.Success && result.Path is { } path)
         {
             ProcessRunner.ShellOpen(path);
-            ShowBanner($"Отчёт о батарее сохранён в папке «Документы» ({path}) и открыт в браузере. " +
-                       "В нём видно, как менялась ёмкость батареи и сколько ноутбук работает без зарядки.", Tone.Good);
+            ShowBanner(T.F("Отчёт о батарее сохранён в папке «Документы» ({0}) и открыт в браузере. В нём видно, как менялась ёмкость батареи и сколько ноутбук работает без зарядки.", path), Tone.Good);
         }
         else
         {
@@ -650,13 +643,13 @@ public sealed class OptimizerViewModel : PageViewModel
             return;
         var sb = new StringBuilder(rec.Title);
         if (rec.HasCurrentValue)
-            sb.Append("\nСейчас: ").Append(rec.CurrentValue);
+            sb.Append('\n').Append(T.F("Сейчас: {0}", rec.CurrentValue));
         if (!string.IsNullOrWhiteSpace(rec.Explanation))
             sb.Append('\n').Append(rec.Explanation);
         foreach (var step in rec.StepItems)
             sb.Append('\n').Append(step.Number).Append(". ").Append(step.Text);
         if (ClipboardText.TrySet(sb.ToString()))
-            ShowBanner("Текст рекомендации скопирован в буфер обмена.", Tone.Good);
+            ShowBanner(T._("Текст рекомендации скопирован в буфер обмена."), Tone.Good);
     }
 
     private void CopyReport()
@@ -664,6 +657,6 @@ public sealed class OptimizerViewModel : PageViewModel
         if (!HasData)
             return;
         if (ClipboardText.TrySet(HardwareCardBuilder.BuildReport(_cards, _all)))
-            ShowBanner("Сведения о компьютере скопированы — их можно вставить в сообщение на форуме или в поддержку.", Tone.Good);
+            ShowBanner(T._("Сведения о компьютере скопированы — их можно вставить в сообщение на форуме или в поддержку."), Tone.Good);
     }
 }

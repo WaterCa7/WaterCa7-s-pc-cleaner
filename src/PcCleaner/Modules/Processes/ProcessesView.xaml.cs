@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Processes;
@@ -77,7 +78,7 @@ public partial class ProcessesView : UserControl
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: состояние окна: {ex.Message}");
+            Log.Warn(T.F("Процессы: состояние окна: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -97,7 +98,7 @@ public partial class ProcessesView : UserControl
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: прокрутка к строке: {ex.Message}");
+            Log.Warn(T.F("Процессы: прокрутка к строке: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -113,7 +114,7 @@ public partial class ProcessesView : UserControl
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: сортировка: {ex.Message}");
+            Log.Warn(T.F("Процессы: сортировка: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -263,8 +264,8 @@ public partial class ProcessesView : UserControl
         if (!e.WidthChanged)
             return;
         var compact = e.NewSize.Width < ShortFiltersBelowWidth;
-        GroupCheck.Content = compact ? "Группировать" : "Группировать по программам";
-        HideMicrosoftCheck.Content = compact ? "Скрыть системные" : "Скрыть системные процессы Microsoft";
+        GroupCheck.Content = compact ? T._("Группировать") : T._("Группировать по программам");
+        HideMicrosoftCheck.Content = compact ? T._("Скрыть системные") : T._("Скрыть системные процессы Microsoft");
         SearchPanel.Width = compact ? 196 : 228;
         var gap = new Thickness(0, 8, compact ? 14 : 18, 8);
         GroupCheck.Margin = gap;

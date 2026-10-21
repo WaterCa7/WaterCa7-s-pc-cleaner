@@ -3,6 +3,7 @@ using System.IO;
 using System.Security;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -104,16 +105,21 @@ internal static class HardwareProbe
             .ToList();
         var rawDisplays = displaysTask.Result;
         var displays = rawDisplays
-            .Select((d, i) => new DisplayInfo
+            .Select((d, i) =>
             {
-                DeviceName = d.DeviceName,
-                AdapterName = d.AdapterName,
-                MonitorName = MonitorName(d, monitorNames, rawDisplays.Count, i),
-                Width = d.Width,
-                Height = d.Height,
-                CurrentHz = d.CurrentHz,
-                MaxHzAtCurrentResolution = d.MaxHzAtCurrentResolution,
-                IsPrimary = d.IsPrimary,
+                var (monitorName, isGeneric) = MonitorName(d, monitorNames, rawDisplays.Count, i);
+                return new DisplayInfo
+                {
+                    DeviceName = d.DeviceName,
+                    AdapterName = d.AdapterName,
+                    MonitorName = monitorName,
+                    MonitorNameIsGeneric = isGeneric,
+                    Width = d.Width,
+                    Height = d.Height,
+                    CurrentHz = d.CurrentHz,
+                    MaxHzAtCurrentResolution = d.MaxHzAtCurrentResolution,
+                    IsPrimary = d.IsPrimary,
+                };
             })
             .OrderByDescending(d => d.IsPrimary)
             .ToList();
@@ -192,7 +198,7 @@ internal static class HardwareProbe
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException or OverflowException)
         {
-            Log.Warn($"Ускорение: не удалось прочитать сведения о батарее: {ex.Message}");
+            Log.Warn(T.F("Ускорение: не удалось прочитать сведения о батарее: {0}", ErrorText.For(ex)), ex);
             return new BatteryInfo { CapacityState = SensorState.Unknown };
         }
     }
@@ -263,20 +269,23 @@ internal static class HardwareProbe
         return deviceInterface.Contains(id, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? MonitorName(RawDisplay d, List<(string Instance, string? Name)> names, int displayCount, int index)
+    /// <summary>The name of the monitor and whether the program made it up (Windows gave no usable name).</summary>
+    private static (string? Name, bool IsGeneric) MonitorName(RawDisplay d, List<(string Instance, string? Name)> names, int displayCount, int index)
     {
         var match = names.FirstOrDefault(n => MonitorIdsMatch(n.Instance, d.MonitorDeviceId));
         if (!string.IsNullOrWhiteSpace(match.Name))
-            return match.Name;
+            return (match.Name, false);
         if (displayCount == 1 && names.Count == 1)
-            return names[0].Name;
+            return (names[0].Name, false);
         var desc = d.MonitorDescription;
+        // l10n:data-begin — the Russian word of the description of a generic monitor, matched and never shown
         if (!string.IsNullOrWhiteSpace(desc) &&
             !desc.Contains("PnP", StringComparison.OrdinalIgnoreCase) &&
             !desc.Contains("Generic", StringComparison.OrdinalIgnoreCase) &&
             !desc.Contains("Универсальный", StringComparison.OrdinalIgnoreCase))
-            return desc;
-        return displayCount > 1 ? $"Монитор {index + 1}" : null;
+            return (desc, false);
+        // l10n:data-end
+        return displayCount > 1 ? (T.F("Монитор {0}", index + 1), true) : (null, false);
     }
 
     /// <summary>Real VRAM from the display class registry key (AdapterRAM in WMI is capped at 4 GB).</summary>
@@ -313,7 +322,7 @@ internal static class HardwareProbe
             }
             catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
             {
-                Log.Warn($"Ускорение: нет доступа к сведениям о видеопамяти: {ex.Message}");
+                Log.Warn(T.F("Ускорение: нет доступа к сведениям о видеопамяти: {0}", ErrorText.For(ex)), ex);
             }
         }
         return result;
@@ -594,7 +603,7 @@ internal sealed class SettingsProbe
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Ускорение: не удалось прочитать {(hive == RegistryHive.LocalMachine ? "HKLM" : "HKCU")}\\{subKey}\\{name}: {ex.Message}");
+            Log.Warn(T.F("Ускорение: не удалось прочитать {0}\\{1}\\{2}: {3}", (hive == RegistryHive.LocalMachine ? "HKLM" : "HKCU"), subKey, name, ErrorText.For(ex)), ex);
             return null;
         }
     }

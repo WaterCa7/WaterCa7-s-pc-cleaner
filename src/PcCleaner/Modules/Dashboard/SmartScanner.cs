@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Security;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -65,16 +66,16 @@ public static class SmartScanner
         catch (OperationCanceledException) when (moduleCts.IsCancellationRequested)
         {
             Observe(analysis);
-            Log.Warn($"Главная: модуль «{name}» не уложился в {timeout.TotalSeconds:0} с — проверка пропущена");
+            Log.Warn(T.F("Главная: модуль «{0}» не уложился в {1:0} с — проверка пропущена", name, timeout.TotalSeconds));
             return new ModuleScanResult(name, ModuleScanState.TimedOut, Array.Empty<HealthIssue>(),
-                $"Проверка не уложилась в {timeout.TotalSeconds:0} с", Elapsed());
+                T.F("Проверка не уложилась в {0:0} с", timeout.TotalSeconds), Elapsed());
         }
         catch (Exception ex)
         {
             var kind = ex is UnauthorizedAccessException or SecurityException or Win32Exception or IOException
-                ? "нет доступа или файл занят"
+                ? T._("нет доступа или файл занят")
                 : ex.GetType().Name;
-            Log.Warn($"Главная: ошибка проверки модуля «{name}» ({kind}): {ex.Message}");
+            Log.Warn(T.F("Главная: ошибка проверки модуля «{0}» ({1}): {2}", name, kind, ErrorText.For(ex)), ex);
             return new ModuleScanResult(name, ModuleScanState.Failed, Array.Empty<HealthIssue>(), ErrorText.Sentence(ex), Elapsed());
         }
     }

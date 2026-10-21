@@ -1,10 +1,10 @@
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -97,7 +97,7 @@ public static class HostsFile
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            Log.Warn($"Не удалось прочитать файл hosts: {ex.Message}");
+            Log.Warn(T.F("Не удалось прочитать файл hosts: {0}", ErrorText.For(ex)), ex);
             return new HostsReport { Path = path, Error = ErrorText.Sentence(ex) };
         }
     }
@@ -159,12 +159,12 @@ public static class HostsFile
         foreach (var line in lines)
         {
             if (line.LineIndex < 0 || line.LineIndex >= parts.Count || parts[line.LineIndex].Content != line.RawLine)
-                throw new HostsChangedException(
-                    "Файл hosts изменился после проверки. Нажмите «Проверить снова» и выберите строки ещё раз.");
+                throw ErrorText.Own(new HostsChangedException(
+                    T._("Файл hosts изменился после проверки. Нажмите «Проверить снова» и выберите строки ещё раз.")));
             remove.Add(line.LineIndex);
         }
         if (remove.Count == 0)
-            throw new ArgumentException("Не выбрано ни одной строки.", nameof(lines));
+            throw ErrorText.Own(new ArgumentException(T._("Не выбрано ни одной строки."), nameof(lines)));
 
         Directory.CreateDirectory(backupDir);
         var backup = System.IO.Path.Combine(backupDir, $"hosts_{DateTime.Now:yyyyMMdd-HHmmss-fff}.bak");
@@ -223,15 +223,8 @@ public static class HostsFile
         }
         catch (DecoderFallbackException)
         {
-            Encoding ansi;
-            try
-            {
-                ansi = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
-            }
-            catch
-            {
-                ansi = Encoding.Latin1;
-            }
+            // The system code page, not the UI language's: the English UI on Russian Windows still reads 1251.
+            var ansi = ProcessRunner.AnsiEncoding;
             return (ansi.GetString(bytes), ansi, 0);
         }
     }

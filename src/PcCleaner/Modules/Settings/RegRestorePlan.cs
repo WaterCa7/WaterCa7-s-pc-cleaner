@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -177,27 +178,27 @@ internal sealed class RegRestorePlan
     public string DescribeChanges()
     {
         if (ChangesNothing)
-            return "Все значения в копии совпадают с текущими — восстановление ничего не изменит.";
+            return T._("Все значения в копии совпадают с текущими — восстановление ничего не изменит.");
 
         var sb = new StringBuilder();
         var other = OtherChanges.ToList();
         if (other.Count > 0)
         {
-            sb.Append(LaunchChanges.Any() ? "Другие изменения в реестре:\n" : "Что изменится в реестре:\n");
+            sb.Append(LaunchChanges.Any() ? T._("Другие изменения в реестре:") + "\n" : T._("Что изменится в реестре:") + "\n");
             sb.Append(BulkText.BulletList(other.Select(c => ChangeLine(c, 90)), MaxShownChanges));
         }
         if (NewKeys.Count > 0)
         {
             if (sb.Length > 0)
                 sb.Append('\n');
-            sb.Append("Будут созданы разделы:\n");
+            sb.Append(T._("Будут созданы разделы:") + "\n");
             sb.Append(BulkText.BulletList(NewKeys.Select(k => Visible(Relative(k), 80)), MaxShownKeys));
         }
         if (Unchanged > 0)
         {
             if (sb.Length > 0)
                 sb.Append('\n');
-            sb.Append("Без изменений (уже совпадают с копией): ")
+            sb.Append(T._("Без изменений (уже совпадают с копией):") + " ")
               .Append(Format.Count(Unchanged, "значение", "значения", "значений"))
               .Append('.');
         }
@@ -210,16 +211,15 @@ internal sealed class RegRestorePlan
         var launch = LaunchChanges.ToList();
         if (launch.Count == 0)
             return null;
-        return "Внимание: эти значения запускают программы. Восстанавливайте копию, только если узнаёте их — " +
-               "папку с копиями могут изменить и другие программы, запущенные от вашего имени:\n" +
+        return T._("Внимание: эти значения запускают программы. Восстанавливайте копию, только если узнаёте их — папку с копиями могут изменить и другие программы, запущенные от вашего имени:") + "\n" +
                BulkText.BulletList(launch.Select(c => ChangeLine(c, 200)), MaxShownLaunch);
     }
 
     /// <summary>Every change in one line (written to the log when the confirmation had to shorten the lists).</summary>
     public string DescribeAll()
     {
-        var parts = Changes.Select(c => (c.IsLaunch ? "[запуск] " : "") + ChangeLine(c, 300))
-            .Concat(NewKeys.Select(k => "новый раздел " + Visible(Relative(k), 200)))
+        var parts = Changes.Select(c => (c.IsLaunch ? T._("[запуск]") + " " : "") + ChangeLine(c, 300))
+            .Concat(NewKeys.Select(k => T._("новый раздел") + " " + Visible(Relative(k), 200)))
             .Take(300)
             .ToList();
         return string.Join("; ", parts);
@@ -228,14 +228,14 @@ internal sealed class RegRestorePlan
     private string ChangeLine(RegValueChange change, int max)
     {
         var value = change.Value;
-        var name = value.Name.Length == 0 ? "(по умолчанию)" : Visible(value.Name, 60);
+        var name = value.Name.Length == 0 ? T._("(по умолчанию)") : Visible(value.Name, 60);
         var rel = Relative(value.Key);
         var label = rel.Length == 0 ? name : $"{Visible(rel, 60)}\\{name}";
         var data = FormatData(value.Data, max);
         if (!change.CurrentKnown)
             return $"{label} = {data}";
         if (change.Current is null)
-            return $"{label} = {data} (сейчас нет)";
+            return T.F("{0} = {1} (сейчас нет)", label, data);
         return $"{label}: {FormatData(change.Current.Data, max)} → {data}";
     }
 
@@ -247,15 +247,15 @@ internal sealed class RegRestorePlan
 
     internal static string FormatData(object? data, int max) => data switch
     {
-        null => "(нет)",
-        string { Length: 0 } => "(пустая строка)",
+        null => T._("(нет)"),
+        string { Length: 0 } => T._("(пустая строка)"),
         string s => Visible(s, max),
-        string[] { Length: 0 } => "(пустой список)",
+        string[] { Length: 0 } => T._("(пустой список)"),
         string[] list => Visible(string.Join("; ", list), max),
         uint n => n <= 9 ? n.ToString(CultureInfo.InvariantCulture) : $"{n.ToString(CultureInfo.InvariantCulture)} (0x{n:X})",
         ulong n => n <= 9 ? n.ToString(CultureInfo.InvariantCulture) : $"{n.ToString(CultureInfo.InvariantCulture)} (0x{n:X})",
-        byte[] { Length: 0 } => "(пусто)",
-        byte[] bytes => $"двоичные данные, {Format.Count(bytes.Length, "байт", "байта", "байт")}",
+        byte[] { Length: 0 } => T._("(пусто)"),
+        byte[] bytes => T.F("двоичные данные, {0}", Format.Count(bytes.Length, "байт", "байта", "байт")),
         _ => Visible(data.ToString() ?? "", max),
     };
 
@@ -395,10 +395,10 @@ internal sealed class LockedRegCopy : IDisposable
         {
             // A fresh random folder: nothing else can have prepared a file or a link there.
             if (Directory.Exists(dir) || File.Exists(dir))
-                throw new IOException("временная папка уже существует");
+                throw new IOException(T._("временная папка уже существует"));
             var info = Directory.CreateDirectory(dir);
             if (FileTools.IsReparsePoint(info))
-                throw new IOException("временная папка оказалась ссылкой");
+                throw new IOException(T._("временная папка оказалась ссылкой"));
             using (var writer = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 created = true;
@@ -410,11 +410,11 @@ internal sealed class LockedRegCopy : IDisposable
             // (reg.exe opens it for reading). Then check that nothing changed between writing and locking.
             lockStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (lockStream.Length != bytes.Length)
-                throw new IOException("копия изменилась при записи");
+                throw new IOException(T._("копия изменилась при записи"));
             var check = new byte[bytes.Length];
             lockStream.ReadExactly(check);
             if (!check.AsSpan().SequenceEqual(bytes))
-                throw new IOException("копия изменилась при записи");
+                throw new IOException(T._("копия изменилась при записи"));
             lockStream.Position = 0;
             return new LockedRegCopy(path, dir, lockStream);
         }
@@ -424,7 +424,7 @@ internal sealed class LockedRegCopy : IDisposable
             // Only what this call created is removed (never a file or folder that was there before).
             if (created)
                 Cleanup(path, dir);
-            Log.Warn($"Не удалось подготовить резервную копию {name} к восстановлению: {ex.Message}");
+            Log.Warn(T.F("Не удалось подготовить резервную копию {0} к восстановлению: {1}", name, ErrorText.For(ex)), ex);
             return null;
         }
     }

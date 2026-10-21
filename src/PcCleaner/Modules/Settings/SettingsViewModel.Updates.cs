@@ -1,4 +1,5 @@
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core.Updates;
 
 namespace PcCleaner.Modules.Settings;
@@ -19,15 +20,15 @@ public sealed partial class SettingsViewModel
             if (!Set(ref _autoUpdate, value) || _loadingGeneral)
                 return;
             Settings.AutoUpdate = value;
-            SaveSettings(value ? "Настройки: автоматическое обновление — включено" : "Настройки: автоматическое обновление — выключено");
+            SaveSettings(value ? T._("Настройки: автоматическое обновление — включено") : T._("Настройки: автоматическое обновление — выключено"));
         }
     }
 
-    public string VersionLine => $"Установлена версия {AppInfo.Version}";
+    public string VersionLine => T.F("Установлена версия {0}", AppInfo.Version);
 
     public string LastCheckText => Settings.LastUpdateCheckUtc is { } t
-        ? $"Последняя проверка: {t.ToLocalTime():dd.MM.yyyy HH:mm}"
-        : "Обновления ещё не проверялись";
+        ? T.F("Последняя проверка: {0}", Format.DateTime(t.ToLocalTime()))
+        : T._("Обновления ещё не проверялись");
 
     public AsyncRelayCommand CheckUpdatesCommand => _checkUpdatesCommand ??= new AsyncRelayCommand(async () =>
     {

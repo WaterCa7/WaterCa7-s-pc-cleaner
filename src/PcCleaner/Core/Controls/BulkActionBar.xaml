@@ -1,6 +1,7 @@
 <UserControl x:Class="PcCleaner.Core.Controls.BulkActionBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              x:Name="Root">
 
     <!-- Collapsed while nothing is checked, so the page's Margin around the bar goes away with it. -->
@@ -17,10 +18,10 @@
     <Border Style="{StaticResource Card}" Background="{StaticResource AccentSoftBrush}" Padding="14,8">
         <WrapPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource H3}" VerticalAlignment="Center" Margin="0,0,14,0"
-                       Text="{Binding CheckedCount, ElementName=Root, StringFormat='Отмечено: {0}'}" />
+                       Text="{Binding CheckedText, ElementName=Root}" />
             <ContentPresenter VerticalAlignment="Center" Content="{Binding ActionsContent, ElementName=Root}" />
             <Button Style="{StaticResource GhostButton}" VerticalAlignment="Center" Margin="8,0,0,0"
-                    Content="Снять отметки" Command="{Binding ClearCommand, ElementName=Root}" />
+                    Content="{loc:T 'Снять отметки'}" Command="{Binding ClearCommand, ElementName=Root}" />
         </WrapPanel>
     </Border>
 </UserControl>

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -42,12 +43,12 @@ internal sealed class ShellRecycleBin : IRecycleBin
             var hr = SHEmptyRecycleBinW(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
             if (hr == 0 || hr == E_UNEXPECTED) // E_UNEXPECTED = the bin was already empty
                 return true;
-            error = $"код 0x{hr:X8}";
+            error = T.F("код 0x{0:X8}", hr);
             return false;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or COMException)
         {
-            Log.Warn($"Очистка: SHEmptyRecycleBin недоступна: {ex.Message}");
+            Log.Warn(T.F("Очистка: SHEmptyRecycleBin недоступна: {0}", ErrorText.For(ex)), ex);
             error = ErrorText.For(ex);
             return false;
         }

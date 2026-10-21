@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -45,7 +46,7 @@ public sealed class CleanerService : IHealthContributor
         _settings = settings ?? (() => AppServices.Settings);
     }
 
-    public string ModuleName => "Очистка";
+    public string ModuleName => T._("Очистка");
 
     public bool IsElevated => _isElevated();
 
@@ -84,14 +85,14 @@ public sealed class CleanerService : IHealthContributor
         }
         catch (Exception ex) when (IsExpected(ex))
         {
-            Log.Warn($"Очистка: не удалось оценить «{category.Name}»: {ex.Message}");
-            return new CategoryScanResult { CategoryId = category.Id, Error = "Не удалось прочитать папку" };
+            Log.Warn(T.F("Очистка: не удалось оценить «{0}»: {1}", category.Name, ErrorText.For(ex)), ex);
+            return new CategoryScanResult { CategoryId = category.Id, Error = T._("Не удалось прочитать папку") };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // A bug, but one category must not break the whole analysis.
-            Log.Error($"Очистка: ошибка при оценке «{category.Name}»", ex);
-            return new CategoryScanResult { CategoryId = category.Id, Error = "Не удалось оценить размер" };
+            Log.Error(T.F("Очистка: ошибка при оценке «{0}»", category.Name), ex);
+            return new CategoryScanResult { CategoryId = category.Id, Error = T._("Не удалось оценить размер") };
         }
     }
 
@@ -119,7 +120,7 @@ public sealed class CleanerService : IHealthContributor
     {
         var q = _recycleBin.Query();
         if (q is null)
-            return new CategoryScanResult { CategoryId = category.Id, Error = "Не удалось узнать размер корзины" };
+            return new CategoryScanResult { CategoryId = category.Id, Error = T._("Не удалось узнать размер корзины") };
         return new CategoryScanResult { CategoryId = category.Id, Bytes = q.Value.Bytes, Files = q.Value.Items };
     }
 
@@ -145,7 +146,7 @@ public sealed class CleanerService : IHealthContributor
         }
         else
         {
-            result.Error = IsElevated ? "Не удалось узнать размер" : "Размер виден только администратору";
+            result.Error = IsElevated ? T._("Не удалось узнать размер") : T._("Размер виден только администратору");
         }
         result.AdminBytes = result.Bytes;
         result.AdminFiles = result.Files;
@@ -188,7 +189,7 @@ public sealed class CleanerService : IHealthContributor
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            Log.Warn($"Очистка: не удалось узнать размер кэша оптимизации доставки: {ex.Message}");
+            Log.Warn(T.F("Очистка: не удалось узнать размер кэша оптимизации доставки: {0}", ErrorText.For(ex)), ex);
         }
         return null;
     }
@@ -237,13 +238,13 @@ public sealed class CleanerService : IHealthContributor
         }
         catch (Exception ex) when (IsExpected(ex))
         {
-            Log.Warn($"Очистка «{category.Name}» не удалась: {ex.Message}");
+            Log.Warn(T.F("Очистка «{0}» не удалась: {1}", category.Name, ErrorText.For(ex)), ex);
             result = new CategoryCleanResult { CategoryId = category.Id, Name = category.Name };
             result.Errors.Add(ErrorText.For(ex));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log.Error($"Очистка «{category.Name}»: непредвиденная ошибка", ex);
+            Log.Error(T.F("Очистка «{0}»: непредвиденная ошибка", category.Name), ex);
             result = new CategoryCleanResult { CategoryId = category.Id, Name = category.Name };
             result.Errors.Add(ErrorText.For(ex));
         }
@@ -292,18 +293,17 @@ public sealed class CleanerService : IHealthContributor
             {
                 if (before is null)
                 {
-                    result.Errors.Add("Windows не сообщила, что в ней сейчас лежит, поэтому ничего не удалено");
+                    result.Errors.Add(T._("Windows не сообщила, что в ней сейчас лежит, поэтому ничего не удалено"));
                     return result;
                 }
                 if (before.Value.Items == 0 || !shown.IsExceededBy(before.Value))
                     break;
                 var now = before.Value;
-                Log.Info($"Очистка: в корзине больше, чем было показано в подтверждении ({shown.Text} → {now.Text}), " +
-                         "спрашиваем ещё раз");
-                if (!ConfirmAgain(RecycleBinGrewTitle, RecycleBinGrewText(shown, now)))
+                Log.Info(T.F("Очистка: в корзине больше, чем было показано в подтверждении ({0} → {1}), спрашиваем ещё раз", shown.Text, now.Text));
+                if (!ConfirmAgain(T._(RecycleBinGrewTitle), RecycleBinGrewText(shown, now)))
                 {
                     result.ChangedAfterConfirmation = true;
-                    result.Message = "Не очищена — в неё попали новые файлы";
+                    result.Message = T._("Не очищена — в неё попали новые файлы");
                     return result;
                 }
                 // The user has now seen these numbers; check once more in case the bin kept growing during the question.
@@ -313,7 +313,7 @@ public sealed class CleanerService : IHealthContributor
         }
         if (before is { Items: 0 })
         {
-            result.Message = RecycleBinAlreadyEmpty;
+            result.Message = T._(RecycleBinAlreadyEmpty);
             return result;
         }
         if (_recycleBin.Empty(out var error))
@@ -321,23 +321,18 @@ public sealed class CleanerService : IHealthContributor
             var after = QueryRecycleBin();
             result.FreedBytes = Math.Max(0, (before?.Bytes ?? 0) - (after?.Bytes ?? 0));
             result.DeletedFiles = Math.Max(0, (before?.Items ?? 0) - (after?.Items ?? 0));
-            result.Message = "Корзина очищена";
+            result.Message = T._("Корзина очищена");
         }
         else
         {
-            result.Errors.Add($"Windows не смогла её очистить ({error})");
+            result.Errors.Add(T.F("Windows не смогла её очистить ({0})", error));
         }
         return result;
     }
 
     /// <summary>The second question when the Recycle Bin grew after the user had confirmed emptying it.</summary>
     internal static string RecycleBinGrewText(RecycleBinSnapshot shown, RecycleBinSnapshot now)
-        => "С тех пор как вы подтвердили очистку, в корзину попали новые файлы:\n\n" +
-           $"•  было показано: {shown.Text}\n" +
-           $"•  сейчас в корзине: {now.Text}\n\n" +
-           "Если очистить её сейчас, новые файлы тоже будут удалены, и восстановить их будет нельзя. " +
-           "Если не уверены, нажмите «Нет» и сначала откройте корзину.\n\n" +
-           "Очистить корзину полностью?";
+        => T.F("С тех пор как вы подтвердили очистку, в корзину попали новые файлы:\n\n•  было показано: {0}\n•  сейчас в корзине: {1}\n\nЕсли очистить её сейчас, новые файлы тоже будут удалены, и восстановить их будет нельзя. Если не уверены, нажмите «Нет» и сначала откройте корзину.\n\nОчистить корзину полностью?", shown.Text, now.Text);
 
     private async Task<CategoryCleanResult> CleanDeliveryOptimizationAsync(CleanerCategory category, CancellationToken ct)
     {
@@ -345,7 +340,7 @@ public sealed class CleanerService : IHealthContributor
         if (!IsElevated)
         {
             result.SkippedAdminRoots = 1;
-            result.Message = "Нужны права администратора";
+            result.Message = T._("Нужны права администратора");
             return result;
         }
         var before = await QueryDeliveryOptimization(ct);
@@ -355,41 +350,44 @@ public sealed class CleanerService : IHealthContributor
             var after = await QueryDeliveryOptimization(CancellationToken.None);
             result.FreedBytes = Math.Max(0, (before?.Bytes ?? 0) - (after?.Bytes ?? 0));
             result.DeletedFiles = Math.Max(0, (before?.Files ?? 0) - (after?.Files ?? 0));
-            result.Message = "Кэш оптимизации доставки очищен";
+            result.Message = T._("Кэш оптимизации доставки очищен");
         }
         else
         {
             var text = (r.StdErr + " " + r.StdOut).Trim();
-            result.Errors.Add(string.IsNullOrEmpty(text) ? $"Код завершения {r.ExitCode}" : text);
+            result.Errors.Add(string.IsNullOrEmpty(text) ? T.F("Код завершения {0}", r.ExitCode) : text);
         }
         return result;
     }
 
     private static void LogResult(CleanerCategory category, CategoryCleanResult r, bool elevated)
     {
-        var text = new StringBuilder($"Очистка «{category.Name}»: ");
-        text.Append(r.DeletedFiles > 0 || r.FreedBytes > 0
-            ? $"{CleanerText.Deleted(r.DeletedFiles)}, освобождено {Format.Bytes(r.FreedBytes)}"
-            : "ничего не удалено");
+        var parts = new List<string>
+        {
+            r.DeletedFiles > 0 || r.FreedBytes > 0
+                ? T.F("Очистка «{0}»: {1}, освобождено {2}", category.Name, CleanerText.Deleted(r.DeletedFiles), Format.Bytes(r.FreedBytes))
+                : T.F("Очистка «{0}»: ничего не удалено", category.Name),
+        };
         if (r.DeletedDirectories > 0)
-            text.Append($", удалено пустых папок: {Format.Number(r.DeletedDirectories)}");
+            parts.Add(T.F("удалено пустых папок: {0}", Format.Number(r.DeletedDirectories)));
         if (r.LockedFiles > 0)
-            text.Append($", пропущено занятых: {Format.Number(r.LockedFiles)}");
+            parts.Add(T.F("пропущено занятых: {0}", Format.Number(r.LockedFiles)));
         if (r.DeniedFiles > 0)
-            text.Append($", пропущено без доступа: {Format.Number(r.DeniedFiles)}");
+            parts.Add(T.F("пропущено без доступа: {0}", Format.Number(r.DeniedFiles)));
         if (r.SkippedAdminRoots > 0)
-            text.Append(elevated ? ", системные папки пропущены" : ", системные папки пропущены (нужны права администратора)");
+            parts.Add(elevated ? T._("системные папки пропущены") : T._("системные папки пропущены (нужны права администратора)"));
+        var text = new StringBuilder(string.Join(", ", parts));
         if (r.Cancelled)
-            text.Append(" (прервано)");
+            text.Append(" (").Append(T._("прервано")).Append(')');
         if (r.Message is not null)
-            text.Append($". {r.Message}");
+            text.Append(". ").Append(r.Message);
 
         if (r.DeletedFiles > 0 || r.FreedBytes > 0 || r.DeletedDirectories > 0)
             Log.Action(text.ToString());
         else
             Log.Info(text.ToString());
         foreach (var e in r.Errors.Take(5))
-            Log.Warn($"Очистка «{category.Name}»: {e}");
+            Log.Warn(T.F("Очистка «{0}»: {1}", category.Name, e));
     }
 
     private static bool IsExpected(Exception ex)
@@ -405,13 +403,13 @@ public sealed class CleanerService : IHealthContributor
     public async Task<string> RunComponentCleanupAsync(CancellationToken ct)
     {
         if (!IsElevated)
-            return "Нужны права администратора: перезапустите программу от имени администратора и повторите.";
+            return T._("Нужны права администратора: перезапустите программу от имени администратора и повторите.");
 
         var freeBefore = FreeSpace(_env.SystemDrive);
-        Log.Action("Запущена очистка компонентов Windows: DISM /Online /Cleanup-Image /StartComponentCleanup");
+        Log.Action(T._("Запущена очистка компонентов Windows: DISM /Online /Cleanup-Image /StartComponentCleanup"));
         var dism = Path.Combine(Environment.SystemDirectory, "dism.exe");
         using var registration = ct.Register(() =>
-            Log.Info("Очистку компонентов Windows нельзя безопасно прервать — дождитесь её завершения"));
+            Log.Info(T._("Очистку компонентов Windows нельзя безопасно прервать — дождитесь её завершения")));
         // Not cancelled on purpose: killing DISM in the middle of servicing is worse than waiting.
         var r = await ProcessRunner.RunAsync(dism, "/Online /Cleanup-Image /StartComponentCleanup",
             TimeSpan.FromHours(3), CancellationToken.None);
@@ -420,16 +418,16 @@ public sealed class CleanerService : IHealthContributor
         if (r.Success)
         {
             var msg = freed > 0
-                ? $"Очистка компонентов завершена. Освобождено примерно {Format.Bytes(freed)}."
-                : "Очистка компонентов завершена. Старых компонентов почти не было — место уже было освобождено ранее.";
+                ? T.F("Очистка компонентов завершена. Освобождено примерно {0}.", Format.Bytes(freed))
+                : T._("Очистка компонентов завершена. Старых компонентов почти не было — место уже было освобождено ранее.");
             Log.Action(msg);
             return msg;
         }
         var details = LastMeaningfulLine(r.StdOut + "\n" + r.StdErr);
         var error = r.TimedOut
-            ? "DISM работал слишком долго и был остановлен. Попробуйте позже."
-            : $"DISM завершился с кодом {r.ExitCode}." + (details is null ? "" : $" {details}");
-        Log.Warn($"Очистка компонентов Windows: {error}");
+            ? T._("DISM работал слишком долго и был остановлен. Попробуйте позже.")
+            : T.F("DISM завершился с кодом {0}.", r.ExitCode) + (details is null ? "" : $" {details}");
+        Log.Warn(T.F("Очистка компонентов Windows: {0}", error));
         return error;
     }
 
@@ -441,13 +439,13 @@ public sealed class CleanerService : IHealthContributor
     {
         if (_env.IsDiskCleanupRunning())
         {
-            Log.Info("Мастер очистки диска Windows уже открыт — второе окно не запускается");
+            Log.Info(T._("Мастер очистки диска Windows уже открыт — второе окно не запускается"));
             return DiskCleanupLaunch.AlreadyOpen;
         }
         var drive = _env.SystemDrive.TrimEnd('\\').TrimEnd(':');
         if (!_env.StartDiskCleanup(drive))
             return DiskCleanupLaunch.Failed;
-        Log.Info("Открыт мастер очистки диска Windows");
+        Log.Info(T._("Открыт мастер очистки диска Windows"));
         return DiskCleanupLaunch.Started;
     }
 
@@ -489,7 +487,7 @@ public sealed class CleanerService : IHealthContributor
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            Log.Info("Очистка: быстрый анализ занял слишком много времени, показан частичный результат");
+            Log.Info(T._("Очистка: быстрый анализ занял слишком много времени, показан частичный результат"));
         }
 
         var sized = junk.Where(c => results.ContainsKey(c.Id)).ToList();
@@ -513,13 +511,11 @@ public sealed class CleanerService : IHealthContributor
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Можно освободить {Format.Bytes(total)} мусора",
-                Details = "Временные файлы и кэш, которые можно безопасно удалить " +
-                          $"({Format.Count(cleanable.Count, "категория", "категории", "категорий")}). Больше всего: {top}. " +
-                          "Категории, с которых вы снимете отметку на странице «Очистка», будут пропущены. " +
-                          "Пароли, история браузеров и ваши документы не затрагиваются; занятые файлы будут пропущены.",
+                Title = T.F("Можно освободить {0} мусора", Format.Bytes(total)),
+                Details = T.F("Временные файлы и кэш, которые можно безопасно удалить ({0}). Больше всего: {1}. Категории, с которых вы снимете отметку на странице «Очистка», будут пропущены. Пароли, история браузеров и ваши документы не затрагиваются; занятые файлы будут пропущены.",
+                    Format.Count(cleanable.Count, "категория", "категории", "категорий"), top),
                 Severity = severity.Value,
-                Gain = $"Освободит до {Format.Bytes(total)}",
+                Gain = T.F("Освободит до {0}", Format.Bytes(total)),
                 ReclaimableBytes = total,
                 AutoFixSafe = true,
                 FixKind = FixKind.DeletesJunk,
@@ -533,15 +529,12 @@ public sealed class CleanerService : IHealthContributor
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Ещё {Format.Bytes(systemBytes)} системного мусора",
+                Title = T.F("Ещё {0} системного мусора", Format.Bytes(systemBytes)),
                 Details = elevated
-                    ? "Временные файлы Windows, кэш обновлений и другие системные папки не входят в обычную очистку. " +
-                      "Кнопка удалит их сейчас: Windows создаст нужное заново, занятые файлы будут пропущены, " +
-                      "ваши документы не затрагиваются."
-                    : "Временные файлы Windows, кэш обновлений и другие системные папки можно очистить только " +
-                      "с правами администратора. Перезапустите программу от имени администратора и нажмите кнопку ещё раз.",
+                    ? T._("Временные файлы Windows, кэш обновлений и другие системные папки не входят в обычную очистку. Кнопка удалит их сейчас: Windows создаст нужное заново, занятые файлы будут пропущены, ваши документы не затрагиваются.")
+                    : T._("Временные файлы Windows, кэш обновлений и другие системные папки можно очистить только с правами администратора. Перезапустите программу от имени администратора и нажмите кнопку ещё раз."),
                 Severity = IssueSeverity.Info,
-                Gain = $"Освободит до {Format.Bytes(systemBytes)}",
+                Gain = T.F("Освободит до {0}", Format.Bytes(systemBytes)),
                 FixKind = FixKind.DeletesJunk,
                 TargetPageKey = "Cleaner",
                 FixAsync = token => FixSystemJunkAsync(systemIds, token),
@@ -556,12 +549,11 @@ public sealed class CleanerService : IHealthContributor
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"В корзине {Format.Bytes(bytes)}",
-                Details = $"В корзине {Format.Count(items, "объект", "объекта", "объектов")}. Это файлы, которые вы удалили раньше: " +
-                          "если они не нужны, корзину можно очистить. Восстановить их после этого будет нельзя. " +
-                          "Если к моменту очистки в корзине окажется больше файлов, программа спросит ещё раз.",
+                Title = T.F("В корзине {0}", Format.Bytes(bytes)),
+                Details = T.F("В корзине {0}. Это файлы, которые вы удалили раньше: если они не нужны, корзину можно очистить. Восстановить их после этого будет нельзя. Если к моменту очистки в корзине окажется больше файлов, программа спросит ещё раз.",
+                    Format.Count(items, "объект", "объекта", "объектов")),
                 Severity = IssueSeverity.Info,
-                Gain = $"Освободит {Format.Bytes(bytes)}",
+                Gain = T.F("Освободит {0}", Format.Bytes(bytes)),
                 ReclaimableBytes = bytes,
                 AutoFixSafe = false,
                 // Emptying the bin cannot be undone, so it runs only from its own button on the row.
@@ -574,13 +566,12 @@ public sealed class CleanerService : IHealthContributor
                     // check, the user is asked again with its current size before anything is emptied.
                     var r = await CleanCategoryAsync(category, new RecycleBinSnapshot(bytes, items), token);
                     if (r.Errors.Count > 0)
-                        return $"Не удалось очистить корзину: {r.Errors[0]}.";
+                        return T.F("Не удалось очистить корзину: {0}.", r.Errors[0]);
                     if (r.ChangedAfterConfirmation)
-                        return "Корзина не очищена, ничего не удалено: после проверки в неё попали новые файлы. " +
-                               "Откройте корзину, убедитесь, что они не нужны, и очистите её на странице «Очистка».";
-                    if (r.FreedBytes == 0 && r.DeletedFiles == 0 && r.Message == RecycleBinAlreadyEmpty)
-                        return "Корзина уже пуста.";
-                    return $"Корзина очищена, освобождено {Format.Bytes(r.FreedBytes)}.";
+                        return T._("Корзина не очищена, ничего не удалено: после проверки в неё попали новые файлы. Откройте корзину, убедитесь, что они не нужны, и очистите её на странице «Очистка».");
+                    if (r.FreedBytes == 0 && r.DeletedFiles == 0 && r.Message == T._(RecycleBinAlreadyEmpty))
+                        return T._("Корзина уже пуста.");
+                    return T.F("Корзина очищена, освобождено {0}.", Format.Bytes(r.FreedBytes));
                 },
             });
         }
@@ -610,15 +601,15 @@ public sealed class CleanerService : IHealthContributor
         var skipped = found.Where(c => disabled.Contains(c.Id)).Select(c => c.Name).ToList();
         var categories = found.Where(c => !disabled.Contains(c.Id)).ToList();
         if (skipped.Count > 0)
-            Log.Info($"Очистка: пропущены категории, с которых снята отметка на странице «Очистка»: {string.Join(", ", skipped)}");
+            Log.Info(T.F("Очистка: пропущены категории, с которых снята отметка на странице «Очистка»: {0}", string.Join(", ", skipped)));
         if (categories.Count == 0)
             return skipped.Count > 0
-                ? $"Ничего не удалено: вы сняли отметку с этих категорий на странице «Очистка» — {NamesText(skipped)}."
-                : "Нечего очищать: подходящие файлы уже удалены.";
+                ? T.F("Ничего не удалено: вы сняли отметку с этих категорий на странице «Очистка» — {0}.", NamesText(skipped))
+                : T._("Нечего очищать: подходящие файлы уже удалены.");
         var results = await CleanAsync(categories, null, ct, userFoldersOnly: true);
         var text = Summarize(results);
         if (skipped.Count > 0)
-            text += $" Пропущено по вашему выбору на странице «Очистка»: {NamesText(skipped)}.";
+            text += " " + T.F("Пропущено по вашему выбору на странице «Очистка»: {0}.", NamesText(skipped));
         return text;
     }
 
@@ -631,13 +622,13 @@ public sealed class CleanerService : IHealthContributor
     private async Task<string> FixSystemJunkAsync(IReadOnlySet<string> categoryIds, CancellationToken ct)
     {
         if (!IsElevated)
-            return "Нужны права администратора: системные папки можно очистить только с ними.";
+            return T._("Нужны права администратора: системные папки можно очистить только с ними.");
 
         var disabled = new HashSet<string>(_settings().CleanerDisabledCategories ?? new List<string>(), StringComparer.Ordinal);
         var chosen = (await Task.Run(LoadCategories, ct)).Where(c => categoryIds.Contains(c.Id)).ToList();
         var skipped = chosen.Where(c => disabled.Contains(c.Id)).Select(c => c.Name).ToList();
         if (skipped.Count > 0)
-            Log.Info($"Очистка: пропущены категории, с которых снята отметка на странице «Очистка»: {string.Join(", ", skipped)}");
+            Log.Info(T.F("Очистка: пропущены категории, с которых снята отметка на странице «Очистка»: {0}", string.Join(", ", skipped)));
         var parts = chosen.Where(c => !disabled.Contains(c.Id)).Select(c => c.OnlyAdminFolders()).OfType<CleanerCategory>().ToList();
 
         var sizes = new System.Collections.Concurrent.ConcurrentDictionary<string, CategoryScanResult>();
@@ -645,8 +636,8 @@ public sealed class CleanerService : IHealthContributor
         var categories = parts.Where(c => sizes.TryGetValue(c.Id, out var r) && r.AdminBytes > 0).ToList();
         if (categories.Count == 0)
             return skipped.Count > 0
-                ? $"Ничего не удалено: вы сняли отметку с этих категорий на странице «Очистка» — {NamesText(skipped)}."
-                : "Нечего очищать: системный мусор уже удалён.";
+                ? T.F("Ничего не удалено: вы сняли отметку с этих категорий на странице «Очистка» — {0}.", NamesText(skipped))
+                : T._("Нечего очищать: системный мусор уже удалён.");
 
         var results = await CleanAsync(categories, null, ct);
         var freed = results.Sum(r => r.FreedBytes);
@@ -656,19 +647,23 @@ public sealed class CleanerService : IHealthContributor
         if (freed == 0 && results.Sum(r => r.DeletedFiles) == 0)
         {
             var why = failed.Count > 0 ? failed[0].Errors[0] : CleanerText.Skipped(busy, denied);
-            return $"Не удалось удалить системный мусор: {(why.Length > 0 ? why.TrimEnd('.', ' ') : "Windows не дала удалить файлы")}.";
+            return T.F("Не удалось удалить системный мусор: {0}.", why.Length > 0 ? why.TrimEnd('.', ' ') : T._("Windows не дала удалить файлы"));
         }
 
         var notes = new List<string>();
         if (busy > 0 || denied > 0)
             notes.Add(CleanerText.Skipped(busy, denied));
         if (results.Any(r => r.Cancelled))
-            notes.Add("очистка прервана");
-        var text = $"Удалено {Format.Bytes(freed)} системного мусора" + (notes.Count > 0 ? $" ({string.Join(", ", notes)})." : ".");
+            notes.Add(T._("очистка прервана"));
+        var text = notes.Count > 0
+            ? T.F("Удалено {0} системного мусора ({1}).", Format.Bytes(freed), string.Join(", ", notes))
+            : T.F("Удалено {0} системного мусора.", Format.Bytes(freed));
+        // A side note of a result that stays "fixed" (the Russian rules read «Не удалось» only at the start of a result):
+        // FixResultClassifier.SideNoteKeys keeps its English text from becoming a failure matcher.
         if (failed.Count > 0)
-            text += $" Не удалось очистить: {NamesText(failed.Select(r => r.Name).ToList())}.";
+            text += " " + T.F("Не удалось очистить: {0}.", NamesText(failed.Select(r => r.Name).ToList()));
         if (skipped.Count > 0)
-            text += $" Пропущено по вашему выбору на странице «Очистка»: {NamesText(skipped)}.";
+            text += " " + T.F("Пропущено по вашему выбору на странице «Очистка»: {0}.", NamesText(skipped));
         return text;
     }
 
@@ -676,7 +671,7 @@ public sealed class CleanerService : IHealthContributor
     private static string NamesText(IReadOnlyList<string> names)
         => names.Count <= 3
             ? string.Join(", ", names)
-            : string.Join(", ", names.Take(3)) + $" и ещё {Format.Number(names.Count - 3)}";
+            : T.F("{0} и ещё {1}", string.Join(", ", names.Take(3)), Format.Number(names.Count - 3));
 
     /// <summary>"Освобождено 3,2 ГБ, удалено 12 345 файлов, пропущено 87 занятых."</summary>
     public static string Summarize(IReadOnlyCollection<CategoryCleanResult> results)
@@ -684,7 +679,7 @@ public sealed class CleanerService : IHealthContributor
         var text = CleanerText.ResultLine(results.Sum(r => r.FreedBytes), results.Sum(r => r.DeletedFiles),
             results.Sum(r => r.LockedFiles), results.Sum(r => r.DeniedFiles));
         if (results.Any(r => r.Cancelled))
-            text += " (очистка прервана)";
+            text += " (" + T._("очистка прервана") + ")";
         return text + ".";
     }
 }

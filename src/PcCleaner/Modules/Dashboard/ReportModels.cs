@@ -1,4 +1,5 @@
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -24,17 +25,17 @@ public sealed record ScoreDelta(int Previous, int Current, DateTime? PreviousTim
     /// <summary>"+26", "−12" (typographic minus) or "без изменений".</summary>
     public string ChangeText => Change switch
     {
-        > 0 => "+" + Change.ToString(Format.Ru),
-        < 0 => "−" + (-Change).ToString(Format.Ru),
-        _ => "без изменений",
+        > 0 => "+" + Change.ToString(T.Culture),
+        < 0 => "−" + (-Change).ToString(T.Culture),
+        _ => T._("без изменений"),
     };
 
-    public string Text => $"Было {Previous} → стало {Current} ({ChangeText})";
+    public string Text => T.F("Было {0} → стало {1} ({2})", Previous, Current, ChangeText);
 
     /// <summary>Tooltip / report line explaining what is compared.</summary>
     public string Explanation(DateTime now) => PreviousTime is { } t
-        ? $"Сравнение с прошлой проверкой ({HealthScoring.RelativeTime(t, now)})"
-        : "Сравнение с прошлой проверкой";
+        ? T.F("Сравнение с прошлой проверкой ({0})", HealthScoring.RelativeTime(t, now))
+        : T._("Сравнение с прошлой проверкой");
 
     /// <summary>Null when there is nothing to compare (first scan, or the current score is unknown).</summary>
     public static ScoreDelta? Create(int? previous, int? current, DateTime? previousTime = null)
@@ -72,18 +73,17 @@ public readonly record struct ReclaimableSplit(long AutoBytes, long ManualBytes)
     }
 
     /// <summary>"Можно освободить 2,1 ГБ" or null.</summary>
-    public string? AutoText => AutoBytes > 0 ? "Можно освободить " + Format.Bytes(AutoBytes) : null;
+    public string? AutoText => AutoBytes > 0 ? T.F("Можно освободить {0}", Format.Bytes(AutoBytes)) : null;
 
     // Not "после проверки вручную": everywhere else in the app "проверка" means the scan, while this space is freed
-    // only if the user decides to delete it and does it themselves (Windows.old in «Очистка диска», ...).
-    private const string ManualHint = "если решите удалить сами";
+    // only if the user decides to delete it and does it themselves (Windows.old in «Очистка диска», ...): "если решите удалить сами".
 
     /// <summary>"Ещё до 41 ГБ — если решите удалить сами" (or a standalone wording when nothing is freed automatically).</summary>
     public string? ManualText => ManualBytes <= 0
         ? null
         : AutoBytes > 0
-            ? $"Ещё до {Format.Bytes(ManualBytes)} — {ManualHint}"
-            : $"До {Format.Bytes(ManualBytes)} можно освободить, {ManualHint}";
+            ? T.F("Ещё до {0} — если решите удалить сами", Format.Bytes(ManualBytes))
+            : T.F("До {0} можно освободить, если решите удалить сами", Format.Bytes(ManualBytes));
 
     /// <summary>One line for reports: "Можно освободить 2,1 ГБ (ещё до 41 ГБ — если решите удалить сами)".</summary>
     public string? SummaryText
@@ -91,7 +91,7 @@ public readonly record struct ReclaimableSplit(long AutoBytes, long ManualBytes)
         get
         {
             if (AutoBytes > 0 && ManualBytes > 0)
-                return $"Можно освободить {Format.Bytes(AutoBytes)} (ещё до {Format.Bytes(ManualBytes)} — {ManualHint})";
+                return T.F("Можно освободить {0} (ещё до {1} — если решите удалить сами)", Format.Bytes(AutoBytes), Format.Bytes(ManualBytes));
             return AutoText ?? ManualText;
         }
     }
@@ -135,31 +135,31 @@ public sealed record ReportPcInfo
     /// <summary>Label/value pairs in display order (shared by the HTML and the text report).</summary>
     public IReadOnlyList<(string Label, string Value)> Rows()
     {
-        const string na = "нет данных";
+        var na = T._("нет данных");
         var rows = new List<(string, string)>
         {
-            ("Имя компьютера", Clean(ComputerName) ?? na),
+            (T._("Имя компьютера"), Clean(ComputerName) ?? na),
             ("Windows", Clean(WindowsName) ?? na),
         };
         if (Clean(WindowsVersion) is { } version)
-            rows.Add(("Версия", version));
+            rows.Add((T._("Версия"), version));
 
         var cpu = Clean(CpuName) ?? na;
         if (LogicalProcessors > 0)
             cpu += $" ({Format.Count(LogicalProcessors, "логический процессор", "логических процессора", "логических процессоров")})";
-        rows.Add(("Процессор", cpu));
-        rows.Add(("Оперативная память", RamBytes > 0 ? Format.Bytes(RamBytes) : na));
+        rows.Add((T._("Процессор"), cpu));
+        rows.Add((T._("Оперативная память"), RamBytes > 0 ? Format.Bytes(RamBytes) : na));
 
         var gpus = Gpus.Select(Clean).OfType<string>().ToList();
-        rows.Add((gpus.Count > 1 ? "Видеокарты" : "Видеокарта", gpus.Count == 0 ? na : string.Join("; ", gpus)));
+        rows.Add((gpus.Count > 1 ? T._("Видеокарты") : T._("Видеокарта"), gpus.Count == 0 ? na : string.Join("; ", gpus)));
 
-        var driveLabel = string.IsNullOrWhiteSpace(SystemDrive) ? "Системный диск" : $"Системный диск ({SystemDrive.Trim()})";
+        var driveLabel = string.IsNullOrWhiteSpace(SystemDrive) ? T._("Системный диск") : T.F("Системный диск ({0})", SystemDrive.Trim());
         rows.Add((driveLabel, SystemDriveTotal > 0
-            ? $"свободно {Format.Bytes(Math.Max(0, SystemDriveFree))} из {Format.Bytes(SystemDriveTotal)} " +
-              $"({Format.Percent(Math.Round(100.0 * Math.Clamp(SystemDriveFree, 0, SystemDriveTotal) / SystemDriveTotal, 1))})"
+            ? T.F("свободно {0} из {1} ({2})", Format.Bytes(Math.Max(0, SystemDriveFree)), Format.Bytes(SystemDriveTotal),
+                Format.Percent(Math.Round(100.0 * Math.Clamp(SystemDriveFree, 0, SystemDriveTotal) / SystemDriveTotal, 1)))
             : na));
-        rows.Add(("Без перезагрузки", Uptime is { } u ? Format.Duration(u) : na));
-        rows.Add(("Права программы", IsAdmin ? "администратор — доступны все проверки" : "обычный пользователь — часть проверок ограничена"));
+        rows.Add((T._("Без перезагрузки"), Uptime is { } u ? Format.Duration(u) : na));
+        rows.Add((T._("Права программы"), IsAdmin ? T._("администратор — доступны все проверки") : T._("обычный пользователь — часть проверок ограничена")));
         return rows;
     }
 
@@ -256,7 +256,7 @@ public sealed record DashboardReport
         {
             var all = AllIssues.ToList();
             var problems = all.Count(i => i.Severity > IssueSeverity.Info);
-            return all.Count == 0 ? "Проблем не найдено" : "Найдено: " + HealthScoring.FindingsText(problems, all.Count - problems);
+            return all.Count == 0 ? T._("Проблем не найдено") : T.F("Найдено: {0}", HealthScoring.FindingsText(problems, all.Count - problems));
         }
     }
 

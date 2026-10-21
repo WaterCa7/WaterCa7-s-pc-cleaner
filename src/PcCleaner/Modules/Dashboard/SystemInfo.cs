@@ -4,6 +4,7 @@ using System.Security;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -58,7 +59,7 @@ public static class SystemInfo
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Главная: не удалось прочитать сведения о системе из реестра: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось прочитать сведения о системе из реестра: {0}", ErrorText.For(ex)), ex);
         }
 
         var buildNumber = int.TryParse(build, out var b) ? b : (int?)null;
@@ -84,7 +85,7 @@ public static class SystemInfo
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: не удалось получить сведения о видеокарте: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось получить сведения о видеокарте: {0}", ErrorText.For(ex)), ex);
             return Array.Empty<string>();
         }
     }
@@ -124,17 +125,42 @@ public static class SystemInfo
         return TranslateEdition(name);
     }
 
+    // l10n:data-begin — the Russian names of the Windows editions (the English run shows the registry name as it is)
     private static readonly (string En, string Ru)[] Editions =
     {
         ("Home Single Language", "Домашняя для одного языка"),
         ("Home", "Домашняя"),
+        ("Pro for Workstations", "Pro для рабочих станций"),
         ("Professional", "Pro"),
         ("Enterprise", "Корпоративная"),
         ("Education", "для образовательных учреждений"),
     };
+    // l10n:data-end
+
+    /// <summary>
+    /// The caption Windows gives in its own language ("Майкрософт Windows 11 Домашняя" on a Russian Windows) in English for the English
+    /// UI: "Microsoft Windows 11 Home". Any other caption, and every caption in the Russian UI, stays as Windows gave it.
+    /// </summary>
+    public static string? EnglishWindowsCaption(string? caption)
+    {
+        if (!T.IsEnglish || string.IsNullOrWhiteSpace(caption))
+            return caption;
+        // l10n:data-begin — the Russian words of a Windows caption, matched and never shown
+        var text = Regex.Replace(caption, @"\bМайкрософт\b", "Microsoft");
+        // l10n:data-end
+        foreach (var (en, ru) in Editions)
+        {
+            if (ru.All(c => c < 0x80))
+                continue; // "Pro" is "Pro" in both
+            text = Regex.Replace(text, $@"(?<!\w){Regex.Escape(ru)}(?!\w)", en, RegexOptions.IgnoreCase);
+        }
+        return text;
+    }
 
     private static string TranslateEdition(string name)
     {
+        if (T.IsEnglish)
+            return name; // ProductName in the registry is English already ("Windows 11 Home")
         foreach (var (en, ru) in Editions)
         {
             var pattern = $@"\b{Regex.Escape(en)}\b";
@@ -144,14 +170,14 @@ public static class SystemInfo
         return name;
     }
 
-    /// <summary>"24H2, сборка 26100.2033".</summary>
+    /// <summary>"24H2, сборка 26100.2033"; English "24H2, build 26100.2033".</summary>
     public static string WindowsVersionText(string? displayVersion, int? build, int? ubr)
     {
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(displayVersion))
             parts.Add(displayVersion.Trim());
         if (build is not null)
-            parts.Add(ubr is > 0 ? $"сборка {build}.{ubr}" : $"сборка {build}");
+            parts.Add(ubr is > 0 ? T.F("сборка {0}.{1}", build, ubr) : T.F("сборка {0}", build));
         return parts.Count == 0 ? Environment.OSVersion.Version.ToString() : string.Join(", ", parts);
     }
 
@@ -159,7 +185,7 @@ public static class SystemInfo
     public static string CleanCpuName(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
-            return "Неизвестный процессор";
+            return T._("Неизвестный процессор");
         var s = Regex.Replace(raw.Replace('\0', ' '), @"\s+", " ").Trim();
         s = Regex.Replace(s, @"\((R|TM)\)", "", RegexOptions.IgnoreCase);
         s = Regex.Replace(s, @"\s+(CPU|Processor)\b", "", RegexOptions.IgnoreCase);
@@ -203,7 +229,7 @@ public static class SystemInfo
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: не удалось измерить загрузку процессора: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось измерить загрузку процессора: {0}", ErrorText.For(ex)), ex);
         }
 
         MemoryStatus? memory = null;
@@ -215,7 +241,7 @@ public static class SystemInfo
         }
         catch (Exception ex)
         {
-            Log.Warn($"Главная: не удалось получить сведения о памяти: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось получить сведения о памяти: {0}", ErrorText.For(ex)), ex);
         }
 
         var (driveName, total, free) = ReadSystemDrive();
@@ -234,7 +260,7 @@ public static class SystemInfo
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            Log.Warn($"Главная: не удалось прочитать сведения о системном диске: {ex.Message}");
+            Log.Warn(T.F("Главная: не удалось прочитать сведения о системном диске: {0}", ErrorText.For(ex)), ex);
         }
         return (null, 0, 0);
     }

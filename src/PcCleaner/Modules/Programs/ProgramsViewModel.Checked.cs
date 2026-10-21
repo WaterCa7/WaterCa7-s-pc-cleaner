@@ -1,5 +1,6 @@
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Programs;
 
@@ -222,22 +223,22 @@ public sealed partial class ProgramsViewModel
         var plan = PlanCheckedPrograms();
         if (plan.Count == 0)
             return;
-        if (!Confirm(plan.Count == 1 ? "Удалить отмеченную программу?" : "Удалить отмеченные программы?",
+        if (!Confirm(plan.Count == 1 ? T._("Удалить отмеченную программу?") : T._("Удалить отмеченные программы?"),
                 BuildUninstallCheckedConfirmation(plan)))
             return;
 
         var run = new UninstallCheckedRun(plan.All);
-        await RunBusyAsync("Удаляем отмеченные программы…", async ct =>
+        await RunBusyAsync(T._("Удаляем отмеченные программы…"), async ct =>
         {
             await UninstallEachAsync(run, ct);
             // Whatever happened, the list shows what is installed now: removed programs leave it, and with it the checks.
-            ReportProgress(-1, "Обновляем список программ…");
+            ReportProgress(-1, T._("Обновляем список программ…"));
             await RescanProgramsAsync();
         });
         // An uninstaller that may still be running leaves the checks, so the button can't start a second one beside it.
         if (run.Interrupted is { } interrupted)
             CheckedPrograms.Set(interrupted.CheckKey, false);
-        (run.Error is null ? ShowInfo : ShowError)("Удаление отмеченных программ", UninstallCheckedSummary(run));
+        (run.Error is null ? ShowInfo : ShowError)(T._("Удаление отмеченных программ"), UninstallCheckedSummary(run));
     }
 
     /// <summary>
@@ -259,7 +260,7 @@ public sealed partial class ProgramsViewModel
                 var scanned = targets[i];
                 var (number, percent) = (i + 1, 100.0 * i / targets.Count);
                 run.Current = scanned;
-                ReportProgress(percent, $"Удаляем ({number} из {targets.Count}): {scanned.DisplayName}");
+                ReportProgress(percent, T.F("Удаляем ({0} из {1}): {2}", number, targets.Count, scanned.DisplayName));
                 // An earlier uninstaller may have taken it along, it may have become a broken entry, or an update may have changed
                 // its uninstall command.
                 var current = (await _service.ScanProgramsAsync(ct)).Programs.FirstOrDefault(p => p.CheckKey == scanned.CheckKey);
@@ -275,8 +276,8 @@ public sealed partial class ProgramsViewModel
                 {
                     if (!restorePointMade)
                     {
-                        ReportProgress(-1, "Создаём точку восстановления…");
-                        await _service.CreateRestorePointAsync($"Удаление отмеченных программ ({targets.Count})", ct);
+                        ReportProgress(-1, T._("Создаём точку восстановления…"));
+                        await _service.CreateRestorePointAsync(T.F("Удаление отмеченных программ ({0})", targets.Count), ct);
                         restorePointMade = true;
                     }
                     var quiet = ProgramsService.ShouldUninstallQuietly(current);
@@ -293,14 +294,14 @@ public sealed partial class ProgramsViewModel
         catch (OperationCanceledException)
         {
             Log.Info(run.Interrupted is { } p
-                ? $"Удаление отмеченных программ остановлено пользователем: ожидание деинсталлятора «{p.DisplayName}» прервано"
-                : "Удаление отмеченных программ остановлено пользователем");
+                ? T.F("Удаление отмеченных программ остановлено пользователем: ожидание деинсталлятора «{0}» прервано", p.DisplayName)
+                : T._("Удаление отмеченных программ остановлено пользователем"));
         }
         catch (Exception ex)
         {
             run.Error = ex;
             run.ErrorOn = run.Current;
-            Log.Error("Удаление отмеченных программ", ex);
+            Log.Error(T._("Удаление отмеченных программ"), ex);
         }
     }
 
@@ -310,40 +311,44 @@ public sealed partial class ProgramsViewModel
     /// </summary>
     internal static string UninstallProgressText(int number, int total, string name, bool quiet, string? exe = null)
     {
-        var process = exe is null ? "" : $" ({exe})";
-        return $"Удаляем ({number} из {total}): {name}\n" + (quiet
-            ? $"Ждём завершения тихого удаления{process}. «Отмена» остановит только ожидание, а не само удаление."
-            : $"Ждём завершения деинсталлятора{process}. Если его окно уже закрыто, нажмите «Отмена».");
+        var waiting = quiet
+            ? exe is null
+                ? T._("Ждём завершения тихого удаления. «Отмена» остановит только ожидание, а не само удаление.")
+                : T.F("Ждём завершения тихого удаления ({0}). «Отмена» остановит только ожидание, а не само удаление.", exe)
+            : exe is null
+                ? T._("Ждём завершения деинсталлятора. Если его окно уже закрыто, нажмите «Отмена».")
+                : T.F("Ждём завершения деинсталлятора ({0}). Если его окно уже закрыто, нажмите «Отмена».", exe);
+        return T.F("Удаляем ({0} из {1}): {2}", number, total, name) + "\n" + waiting;
     }
 
     /// <summary>Why a checked program is left alone at its turn (it can't be checked any more), as a short phrase.</summary>
     private static string SkipReason(InstalledProgram p)
-        => p.IsRuntime ? "компонент, который нужен другим программам: такие удаляют по одному"
-            : p.IsBroken ? "деинсталлятор не найден"
-            : "у программы не указан деинсталлятор";
+        => p.IsRuntime ? T._("компонент, который нужен другим программам: такие удаляют по одному")
+            : p.IsBroken ? T._("деинсталлятор не найден")
+            : T._("у программы не указан деинсталлятор");
 
     /// <summary>
     /// One line per program: its name and how it will be removed. A program in the list can only be checked when it can be uninstalled,
     /// so the "деинсталлятор не найден" mark is a fallback.
     /// </summary>
     private static string UninstallLine(InstalledProgram p)
-        => !p.CanUninstall ? $"{p.DisplayName} — деинсталлятор не найден"
-            : ProgramsService.ShouldUninstallQuietly(p) ? $"{p.DisplayName} — тихо"
+        => !p.CanUninstall ? T.F("{0} — деинсталлятор не найден", p.DisplayName)
+            : ProgramsService.ShouldUninstallQuietly(p) ? T.F("{0} — тихо", p.DisplayName)
             : p.DisplayName;
 
     /// <summary>The question before "Удалить отмеченные": exactly the programs that will be removed, hidden ones first.</summary>
     internal static string BuildUninstallCheckedConfirmation(CheckedRows<InstalledProgram> plan)
     {
         var sb = new StringBuilder();
-        AppendTargets(sb, $"Удалить {Format.Count(plan.Count, "программу", "программы", "программ")}", plan, UninstallLine);
+        AppendTargets(sb, T.F("Удалить {0}", Format.Count(plan.Count, "программу", "программы", "программ")), plan, UninstallLine);
         sb.AppendLine();
-        sb.AppendLine("Программы, которые умеют удаляться тихо, удалятся без окон; для остальных по очереди откроются их окна удаления.");
-        sb.AppendLine("Программы удаляются по одной. «Отмена» не прерывает уже начатое удаление, но следующие программы удаляться не начнут.");
+        sb.AppendLine(T._("Программы, которые умеют удаляться тихо, удалятся без окон; для остальных по очереди откроются их окна удаления."));
+        sb.AppendLine(T._("Программы удаляются по одной. «Отмена» не прерывает уже начатое удаление, но следующие программы удаляться не начнут."));
         sb.AppendLine();
-        sb.AppendLine("Перед удалением будет создана точка восстановления Windows (если это включено в настройках и есть права администратора).");
-        sb.AppendLine("Отменить удаление нельзя, но программы можно установить заново.");
+        sb.AppendLine(T._("Перед удалением будет создана точка восстановления Windows (если это включено в настройках и есть права администратора)."));
+        sb.AppendLine(T._("Отменить удаление нельзя, но программы можно установить заново."));
         sb.AppendLine();
-        sb.Append("Продолжить?");
+        sb.Append(T._("Продолжить?"));
         return sb.ToString();
     }
 
@@ -388,22 +393,23 @@ public sealed partial class ProgramsViewModel
         if (run.Error is null && run.Interrupted is { } interrupted)
             (StillListed(interrupted) ? mayContinue : removed).Add(interrupted.DisplayName);
 
-        var sections = new List<string> { $"Удалено: {removed.Count} из {run.Targets.Count}." };
+        var sections = new List<string> { T.CtxF("uninstall", "Удалено: {0} из {1}.", removed.Count, run.Targets.Count) };
         if (run.Error is { } error)
             sections.Add(run.ErrorOn is { } on
-                ? $"Остановлено из-за ошибки на «{on.DisplayName}»: {ErrorText.For(error)}."
-                : $"Остановлено из-за ошибки: {ErrorText.For(error)}.");
-        AddSection(sections, $"Удалены ({removed.Count}):", removed, fold: true);
-        AddSection(sections, $"Пропущены ({run.Skipped.Count}):", run.Skipped.Select(s => $"{s.Program.DisplayName} — {s.Reason}").ToList());
-        AddSection(sections, $"Остались установленными ({stillInstalled.Count}) — деинсталлятор завершил работу, но программа всё ещё в " +
-                             "списке (возможно, удаление отменили в его окне):", stillInstalled);
-        AddSection(sections, $"Вы отклонили запрос контроля учётных записей ({uacDeclined.Count}):", uacDeclined);
-        AddSection(sections, $"Не удалось запустить удаление ({notStarted.Count}):", notStarted);
-        AddSection(sections, "Ожидание остановлено — удаление могло продолжиться:", mayContinue);
+                ? T.F("Остановлено из-за ошибки на «{0}»: {1}.", on.DisplayName, ErrorText.For(error))
+                : T.F("Остановлено из-за ошибки: {0}.", ErrorText.For(error)));
+        AddSection(sections, T.F("Удалены ({0}):", removed.Count), removed, fold: true);
+        AddSection(sections, T.F("Пропущены ({0}):", run.Skipped.Count), run.Skipped.Select(s => $"{s.Program.DisplayName} — {s.Reason}").ToList());
+        AddSection(sections, T.F("Остались установленными ({0}) — деинсталлятор завершил работу, но программа всё ещё в списке (возможно, удаление отменили в его окне):", stillInstalled.Count), stillInstalled);
+        AddSection(sections, T.F("Вы отклонили запрос контроля учётных записей ({0}):", uacDeclined.Count), uacDeclined);
+        AddSection(sections, T.F("Не удалось запустить удаление ({0}):", notStarted.Count), notStarted);
+        AddSection(sections, T._("Ожидание остановлено — удаление могло продолжиться:"), mayContinue);
         if (mayContinue.Count > 0)
-            sections.Add("Если окно удаления ещё открыто, дождитесь его завершения и нажмите «Обновить».");
+            sections.Add(T._("Если окно удаления ещё открыто, дождитесь его завершения и нажмите «Обновить»."));
         var notBegun = run.NotStarted.Select(p => p.DisplayName).ToList();
-        AddSection(sections, $"Не начаты из-за {(run.Error is null ? "отмены" : "ошибки")} ({notBegun.Count}):", notBegun);
+        AddSection(sections, run.Error is null
+            ? T.F("Не начаты из-за отмены ({0}):", notBegun.Count)
+            : T.F("Не начаты из-за ошибки ({0}):", notBegun.Count), notBegun);
         return string.Join("\n\n", sections);
     }
 
@@ -451,18 +457,18 @@ public sealed partial class ProgramsViewModel
         var plan = PlanCheckedStoreApps();
         if (plan.Count == 0)
             return;
-        if (!Confirm(plan.Count == 1 ? "Удалить отмеченное приложение?" : "Удалить отмеченные приложения?",
+        if (!Confirm(plan.Count == 1 ? T._("Удалить отмеченное приложение?") : T._("Удалить отмеченные приложения?"),
                 BuildRemoveCheckedAppsConfirmation(plan)))
             return;
 
         var run = new RemoveCheckedAppsRun(plan.All);
-        await RunBusyAsync("Удаляем отмеченные приложения…", async ct =>
+        await RunBusyAsync(T._("Удаляем отмеченные приложения…"), async ct =>
         {
             await RemoveEachAsync(run, ct);
-            ReportProgress(-1, "Обновляем список приложений…");
+            ReportProgress(-1, T._("Обновляем список приложений…"));
             await RescanStoreAppsAsync();
         });
-        (run.Error is null ? ShowInfo : ShowError)("Удаление отмеченных приложений", RemoveCheckedAppsSummary(run));
+        (run.Error is null ? ShowInfo : ShowError)(T._("Удаление отмеченных приложений"), RemoveCheckedAppsSummary(run));
     }
 
     /// <summary>
@@ -474,14 +480,14 @@ public sealed partial class ProgramsViewModel
         var targets = run.Targets;
         try
         {
-            ReportProgress(-1, "Создаём точку восстановления…");
-            await _service.CreateRestorePointAsync($"Удаление приложений Microsoft Store ({targets.Count})", ct);
+            ReportProgress(-1, T._("Создаём точку восстановления…"));
+            await _service.CreateRestorePointAsync(T.F("Удаление приложений Microsoft Store ({0})", targets.Count), ct);
             for (var i = 0; i < targets.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
                 var app = targets[i];
                 run.Current = app;
-                ReportProgress(100.0 * i / targets.Count, $"Удаляем «{app.DisplayName}» ({i + 1} из {targets.Count})…");
+                ReportProgress(100.0 * i / targets.Count, T.F("Удаляем «{0}» ({1} из {2})…", app.DisplayName, i + 1, targets.Count));
                 var (success, message) = await _service.RemoveStoreAppAsync(app, ct);
                 if (success)
                     run.Removed.Add(app);
@@ -492,13 +498,13 @@ public sealed partial class ProgramsViewModel
         }
         catch (OperationCanceledException)
         {
-            Log.Info("Удаление отмеченных приложений Microsoft Store остановлено пользователем");
+            Log.Info(T._("Удаление отмеченных приложений Microsoft Store остановлено пользователем"));
         }
         catch (Exception ex)
         {
             run.Error = ex;
             run.ErrorOn = run.Current;
-            Log.Error("Удаление отмеченных приложений Microsoft Store", ex);
+            Log.Error(T._("Удаление отмеченных приложений Microsoft Store"), ex);
         }
     }
 
@@ -507,18 +513,16 @@ public sealed partial class ProgramsViewModel
     {
         var all = plan.All;
         var sb = new StringBuilder();
-        AppendTargets(sb, $"Удалить {Format.Count(plan.Count, "приложение", "приложения", "приложений")}", plan, a => a.DisplayName);
+        AppendTargets(sb, T.F("Удалить {0}", Format.Count(plan.Count, "приложение", "приложения", "приложений")), plan, a => a.DisplayName);
         sb.AppendLine();
-        sb.Append("Приложения удаляются только для вашей учётной записи. ");
         sb.AppendLine(all.Count == 1
-            ? all[0].UndoText
+            ? T.F("Приложения удаляются только для вашей учётной записи. {0}", all[0].UndoText)
             : all.All(a => a.IsFromStore)
-                ? "Любое из них можно вернуть, установив заново из Microsoft Store."
-                : "Приложения из Microsoft Store можно вернуть, установив заново оттуда же; остальные — только переустановив программу, " +
-                  "которая их поставила.");
-        sb.AppendLine("Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора).");
+                ? T._("Приложения удаляются только для вашей учётной записи. Любое из них можно вернуть, установив заново из Microsoft Store.")
+                : T._("Приложения удаляются только для вашей учётной записи. Приложения из Microsoft Store можно вернуть, установив заново оттуда же; остальные — только переустановив программу, которая их поставила."));
+        sb.AppendLine(T._("Перед удалением будет создана точка восстановления (если это включено в настройках и есть права администратора)."));
         sb.AppendLine();
-        sb.Append("Продолжить?");
+        sb.Append(T._("Продолжить?"));
         return sb.ToString();
     }
 
@@ -534,16 +538,18 @@ public sealed partial class ProgramsViewModel
 
         var sections = new List<string>
         {
-            $"Удалено {Format.Count(removed, "приложение", "приложения", "приложений")} из {run.Targets.Count}.",
+            T.F("Удалено {0} из {1}.", Format.Count(removed, "приложение", "приложения", "приложений"), run.Targets.Count),
         };
         if (run.Error is { } error)
             sections.Add(run.ErrorOn is { } on
-                ? $"Остановлено из-за ошибки на «{on.DisplayName}»: {ErrorText.For(error)}."
-                : $"Остановлено из-за ошибки: {ErrorText.For(error)}.");
-        AddSection(sections, $"Не удалось удалить ({run.Failed.Count}):", run.Failed.Select(f => $"{f.App.DisplayName} — {f.Error}").ToList());
-        AddSection(sections, $"Не удалены из-за {(run.Error is null ? "отмены" : "ошибки")} ({stopped.Count}):", stopped);
+                ? T.F("Остановлено из-за ошибки на «{0}»: {1}.", on.DisplayName, ErrorText.For(error))
+                : T.F("Остановлено из-за ошибки: {0}.", ErrorText.For(error)));
+        AddSection(sections, T.CtxF("uninstall", "Не удалось удалить ({0}):", run.Failed.Count), run.Failed.Select(f => $"{f.App.DisplayName} — {f.Error}").ToList());
+        AddSection(sections, run.Error is null
+            ? T.F("Не удалены из-за отмены ({0}):", stopped.Count)
+            : T.F("Не удалены из-за ошибки ({0}):", stopped.Count), stopped);
         if (removed > 0)
-            sections.Add("Приложения из Microsoft Store можно вернуть через Microsoft Store.");
+            sections.Add(T._("Приложения из Microsoft Store можно вернуть через Microsoft Store."));
         return string.Join("\n\n", sections);
     }
 }

@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Optimizer"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:OptimizerViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700">
@@ -43,8 +44,8 @@
                 </Border.ToolTip>
                 <Border.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="Скопировать" Command="{Binding CopyCommand}" />
-                        <MenuItem Header="Найти в интернете" Command="{Binding SearchCommand}"
+                        <MenuItem Header="{loc:T 'Скопировать'}" Command="{Binding CopyCommand}" />
+                        <MenuItem Header="{loc:T 'Найти в интернете'}" Command="{Binding SearchCommand}"
                                   Visibility="{Binding HasSearch, Converter={StaticResource BoolToVis}}" />
                     </ContextMenu>
                 </Border.ContextMenu>
@@ -98,7 +99,7 @@
             <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="16,14">
                 <Border.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="Скопировать текст рекомендации"
+                        <MenuItem Header="{loc:T 'Скопировать текст рекомендации'}"
                                   Command="{Binding PlacementTarget.Tag.CopyRecommendationCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                   CommandParameter="{Binding}" />
                     </ContextMenu>
@@ -130,19 +131,19 @@
                             </Border>
                             <Border Style="{StaticResource Badge}" Margin="0,0,6,4" Background="{StaticResource AccentSoftBrush}"
                                     Visibility="{Binding IsAutoFix, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Программа может изменить эту настройку сама и запомнит прежнее значение, чтобы его можно было вернуть.">
+                                    ToolTip="{loc:T 'Программа может изменить эту настройку сама и запомнит прежнее значение, чтобы его можно было вернуть.'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE945;" FontSize="11" Foreground="{StaticResource AccentBrush}" />
-                                    <TextBlock Text="В один клик" Style="{StaticResource ToneBadgeText}" Margin="4,0,0,0"
+                                    <TextBlock Text="{loc:T 'В один клик'}" Style="{StaticResource ToneBadgeText}" Margin="4,0,0,0"
                                                Foreground="{StaticResource AccentBrush}" />
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource Badge}" Margin="0,0,6,4" Background="{StaticResource WarningSoftBrush}"
                                     Visibility="{Binding NeedsAdmin, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Эта настройка общая для всех пользователей компьютера, поэтому Windows разрешает менять её только администратору.">
+                                    ToolTip="{loc:T 'Эта настройка общая для всех пользователей компьютера, поэтому Windows разрешает менять её только администратору.'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="11" Foreground="{StaticResource WarningBrush}" />
-                                    <TextBlock Text="Нужны права администратора" Style="{StaticResource ToneBadgeText}" Margin="4,0,0,0"
+                                    <TextBlock Text="{loc:T 'Нужны права администратора'}" Style="{StaticResource ToneBadgeText}" Margin="4,0,0,0"
                                                Foreground="{StaticResource WarningBrush}" />
                                 </StackPanel>
                             </Border>
@@ -150,7 +151,7 @@
                                     Visibility="{Binding NeedsRestart, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE777;" FontSize="11" Foreground="{StaticResource InfoBrush}" />
-                                    <TextBlock Text="Нужна перезагрузка" Style="{StaticResource ToneBadgeText}" Margin="4,0,0,0"
+                                    <TextBlock Text="{loc:T 'Нужна перезагрузка'}" Style="{StaticResource ToneBadgeText}" Margin="4,0,0,0"
                                                Foreground="{StaticResource InfoBrush}" />
                                 </StackPanel>
                             </Border>
@@ -159,7 +160,7 @@
                                    LineHeight="19" />
                         <TextBlock Margin="0,7,0,0" FontSize="12.5" TextWrapping="Wrap"
                                    Visibility="{Binding HasCurrentValue, Converter={StaticResource BoolToVis}}">
-                            <Run Text="Сейчас: " Foreground="{StaticResource MutedBrush}" /><Run Text="{Binding CurrentValue, Mode=OneWay}" FontWeight="SemiBold" />
+                            <Run Text="{loc:T 'Сейчас:'}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " Foreground="{StaticResource MutedBrush}" /><Run Text="{Binding CurrentValue, Mode=OneWay}" FontWeight="SemiBold" />
                         </TextBlock>
 
                         <WrapPanel Margin="0,10,0,0">
@@ -167,20 +168,20 @@
                                     Command="{Binding DataContext.ApplyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     CommandParameter="{Binding}"
                                     Visibility="{Binding ShowApply, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Покажет, что именно изменится, и попросит подтверждение">
+                                    ToolTip="{loc:T 'Покажет, что именно изменится, и попросит подтверждение'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="13" Foreground="{StaticResource AccentTextBrush}" />
-                                    <TextBlock Text="Применить" Margin="7,0,0,0" />
+                                    <TextBlock Text="{loc:T 'Применить'}" Margin="7,0,0,0" />
                                 </StackPanel>
                             </Button>
                             <Button Margin="0,0,8,6" Padding="12,6"
                                     Command="{Binding DataContext.RevertCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     CommandParameter="{Binding}"
                                     Visibility="{Binding CanRevert, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Вернуть значение, которое было до изменения программой">
+                                    ToolTip="{loc:T 'Вернуть значение, которое было до изменения программой'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE7A7;" FontSize="13" />
-                                    <TextBlock Text="Вернуть" Margin="7,0,0,0" />
+                                    <TextBlock Text="{loc:T 'Вернуть'}" Margin="7,0,0,0" />
                                 </StackPanel>
                             </Button>
                             <Button Margin="0,0,8,6" Padding="12,6"
@@ -189,7 +190,7 @@
                                     Visibility="{Binding HasSteps, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock x:Name="Chevron" Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="11" />
-                                    <TextBlock Text="Как сделать" Margin="7,0,0,0" />
+                                    <TextBlock Text="{loc:T 'Как сделать'}" Margin="7,0,0,0" />
                                 </StackPanel>
                             </Button>
                             <Button Margin="0,0,8,6" Padding="12,6"
@@ -264,10 +265,10 @@
                             Command="{Binding DataContext.RevertCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}"
                             Visibility="{Binding CanRevert, Converter={StaticResource BoolToVis}}"
-                            ToolTip="Эту настройку изменила программа. Нажмите, чтобы вернуть прежнее значение.">
+                            ToolTip="{loc:T 'Эту настройку изменила программа. Нажмите, чтобы вернуть прежнее значение.'}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE7A7;" FontSize="12" />
-                            <TextBlock Text="Вернуть" Margin="6,0,0,0" />
+                            <TextBlock Text="{loc:T 'Вернуть'}" Margin="6,0,0,0" />
                         </StackPanel>
                     </Button>
                 </Grid>
@@ -287,9 +288,9 @@
                                    HorizontalAlignment="Center" />
                     </Border>
                     <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource H3}" Text="Изучаем ваш компьютер…" />
+                        <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Изучаем ваш компьютер…'}" />
                         <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0"
-                                   Text="Собираем сведения о процессоре, памяти, видеокарте, мониторах и настройках Windows. Ничего не меняем — только смотрим." />
+                                   Text="{loc:T 'Собираем сведения о процессоре, памяти, видеокарте, мониторах и настройках Windows. Ничего не меняем — только смотрим.'}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -308,14 +309,14 @@
                                    HorizontalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="16,0,16,0" VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource H3}" Text="Сведения о компьютере не собраны" />
+                        <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Сведения о компьютере не собраны'}" />
                         <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0" Text="{Binding LoadError}" />
                     </StackPanel>
                     <Button Grid.Column="2" Style="{StaticResource AccentButton}" Padding="16,8" VerticalAlignment="Center"
                             Command="{Binding RetryCommand}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" Foreground="{StaticResource AccentTextBrush}" />
-                            <TextBlock Text="Повторить" Margin="8,0,0,0" />
+                            <TextBlock Text="{loc:T 'Повторить'}" Margin="8,0,0,0" />
                         </StackPanel>
                     </Button>
                 </Grid>
@@ -366,17 +367,17 @@
                         </Button>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                             <Button Style="{StaticResource GhostButton}" Command="{Binding CopyReportCommand}"
-                                    ToolTip="Скопировать сведения о компьютере и рекомендации — удобно для форума или поддержки">
+                                    ToolTip="{loc:T 'Скопировать сведения о компьютере и рекомендации — удобно для форума или поддержки'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8C8;" FontSize="13" />
-                                    <TextBlock Text="Скопировать" Margin="6,0,0,0" FontSize="12.5" />
+                                    <TextBlock Text="{loc:T 'Скопировать'}" Margin="6,0,0,0" FontSize="12.5" />
                                 </StackPanel>
                             </Button>
                             <Button Style="{StaticResource GhostButton}" Command="{Binding RefreshCommand}" Margin="4,0,0,0"
-                                    ToolTip="Заново собрать сведения о железе и настройках">
+                                    ToolTip="{loc:T 'Заново собрать сведения о железе и настройках'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" />
-                                    <TextBlock Text="Обновить" Margin="6,0,0,0" FontSize="12.5" />
+                                    <TextBlock Text="{loc:T 'Обновить'}" Margin="6,0,0,0" FontSize="12.5" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -399,7 +400,7 @@
                                Foreground="{Binding BannerTone, Converter={StaticResource ToneBrush}}" />
                     <TextBlock Grid.Column="1" Text="{Binding Banner}" TextWrapping="Wrap" Margin="10,0,10,0" FontSize="13" LineHeight="19" />
                     <Button Grid.Column="2" Style="{StaticResource GhostButton}" Padding="6,3" VerticalAlignment="Top"
-                            Command="{Binding DismissBannerCommand}" ToolTip="Скрыть">
+                            Command="{Binding DismissBannerCommand}" ToolTip="{loc:T 'Скрыть'}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="11" />
                     </Button>
                 </Grid>
@@ -417,17 +418,17 @@
                     <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" Foreground="{StaticResource WarningBrush}" />
                     <TextBlock Grid.Column="1" Style="{StaticResource Muted}" Margin="10,0,12,0" VerticalAlignment="Center"
                                Text="{Binding AdminHintText}" />
-                    <Button Grid.Column="2" Content="Перезапустить от имени администратора" Padding="12,5" VerticalAlignment="Center"
+                    <Button Grid.Column="2" Content="{loc:T 'Перезапустить от имени администратора'}" Padding="12,5" VerticalAlignment="Center"
                             Command="{Binding RestartAsAdminCommand}"
-                            ToolTip="Программа перезапустится — Windows покажет окно контроля учётных записей" />
+                            ToolTip="{loc:T 'Программа перезапустится — Windows покажет окно контроля учётных записей'}" />
                 </Grid>
             </Border>
 
             <!-- ===== Hardware ===== -->
             <DockPanel Margin="0,22,0,10" Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
-                <TextBlock Style="{StaticResource H2}" Text="Ваш компьютер" Margin="0" VerticalAlignment="Center" />
+                <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Ваш компьютер'}" Margin="0" VerticalAlignment="Center" />
                 <TextBlock Style="{StaticResource Muted}" Margin="12,3,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
-                           Text="Наведите на карточку, чтобы увидеть подробности; правый клик — скопировать или найти в интернете." />
+                           Text="{loc:T 'Наведите на карточку, чтобы увидеть подробности; правый клик — скопировать или найти в интернете.'}" />
             </DockPanel>
             <ItemsControl x:Name="HardwareGrid" ItemsSource="{Binding HardwareCards}" Margin="0,0,-12,0" Focusable="False"
                           ItemTemplate="{StaticResource HardwareCardTemplate}">
@@ -448,7 +449,7 @@
 
             <!-- ===== Recommendations ===== -->
             <StackPanel Visibility="{Binding HasRecommendations, Converter={StaticResource BoolToVis}}">
-                <TextBlock Style="{StaticResource H2}" Text="Рекомендации" Margin="0,14,0,2" />
+                <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Рекомендации'}" Margin="0,14,0,2" />
                 <ItemsControl ItemsSource="{Binding Groups}" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:RecommendationGroup}">
@@ -491,9 +492,9 @@
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE930;" FontSize="26" Foreground="{StaticResource SuccessBrush}" />
                     <StackPanel Margin="14,0,0,0">
-                        <TextBlock Style="{StaticResource H3}" Text="Компьютер уже настроен на скорость" />
+                        <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Компьютер уже настроен на скорость'}" />
                         <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0"
-                                   Text="Мы не нашли, что можно улучшить в железе и настройках Windows. Загляните в «Автозагрузку» и «Очистку» — там тоже бывает что ускорить." />
+                                   Text="{loc:T 'Мы не нашли, что можно улучшить в железе и настройках Windows. Загляните в «Автозагрузку» и «Очистку» — там тоже бывает что ускорить.'}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -501,9 +502,9 @@
             <!-- ===== Already fine ===== -->
             <StackPanel Visibility="{Binding HasPassed, Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="0,18,0,10">
-                    <TextBlock Style="{StaticResource H2}" Text="Уже в порядке" Margin="0" VerticalAlignment="Center" />
+                    <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Уже в порядке'}" Margin="0" VerticalAlignment="Center" />
                     <TextBlock Style="{StaticResource Muted}" Margin="12,3,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
-                               Text="Эти проверки пройдены — здесь же можно вернуть настройки, изменённые программой." />
+                               Text="{loc:T 'Эти проверки пройдены — здесь же можно вернуть настройки, изменённые программой.'}" />
                 </DockPanel>
                 <ItemsControl x:Name="PassedGrid" ItemsSource="{Binding Passed}" ItemTemplate="{StaticResource PassedTemplate}"
                               Margin="0,0,-10,0" Focusable="False">
@@ -517,7 +518,7 @@
 
             <!-- ===== More to check ===== -->
             <StackPanel Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
-                <TextBlock Style="{StaticResource H2}" Text="Что ещё ускорит компьютер" Margin="0,14,0,10" />
+                <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Что ещё ускорит компьютер'}" Margin="0,14,0,10" />
                 <ItemsControl x:Name="LinksGrid" ItemsSource="{Binding Links}" Margin="0,0,-10,0" Focusable="False">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>

@@ -1,3 +1,5 @@
+using PcCleaner.Core.Localization;
+
 namespace PcCleaner.Core;
 
 /// <summary>
@@ -65,6 +67,12 @@ public abstract class PageViewModel : ObservableObject
     public virtual void OnNavigatedFrom() { }
 
     /// <summary>
+    /// The mode (Простой / Опытный, <see cref="UiModes"/>) was switched: texts and blocks that depend on it update here.
+    /// The shell calls it on every page, hidden ones included.
+    /// </summary>
+    public virtual void OnModeChanged() { }
+
+    /// <summary>
     /// Read-only scan used by screenshot mode and the dashboard smart-scan.
     /// MUST NOT change anything on the system.
     /// </summary>
@@ -85,7 +93,7 @@ public abstract class PageViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            Log.Info($"{Title}: операция отменена");
+            Log.Info(T.F("{0}: операция отменена", Title));
         }
         catch (Exception ex)
         {

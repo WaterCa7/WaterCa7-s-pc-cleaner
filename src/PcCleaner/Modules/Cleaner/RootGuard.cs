@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -78,24 +79,24 @@ internal sealed class RootGuard
         var n = SafePathTools.Normalize(folder);
         if (n is null)
         {
-            reason = "путь не является полным локальным путём";
+            reason = T._("путь не является полным локальным путём");
             return false;
         }
         if (SafePathTools.IsDriveRoot(n))
         {
-            reason = "это корень диска";
+            reason = T._("это корень диска");
             return false;
         }
         foreach (var p in _protectedFolders)
         {
             if (string.Equals(n, p, StringComparison.OrdinalIgnoreCase))
             {
-                reason = "это системная или личная папка";
+                reason = T._("это системная или личная папка");
                 return false;
             }
             if (SafePathTools.IsStrictlyUnder(p, n))
             {
-                reason = $"внутри находится защищённая папка {p}";
+                reason = T.F("внутри находится защищённая папка {0}", p);
                 return false;
             }
         }
@@ -103,13 +104,13 @@ internal sealed class RootGuard
         {
             if (SafePathTools.IsSameOrUnder(n, t) || SafePathTools.IsStrictlyUnder(t, n))
             {
-                reason = $"папка относится к защищённой {t}";
+                reason = T.F("папка относится к защищённой {0}", t);
                 return false;
             }
         }
         if (!IsInsideAllowedBase(n, allowEqual: true))
         {
-            reason = "папка находится вне разрешённых для очистки мест";
+            reason = T._("папка находится вне разрешённых для очистки мест");
             return false;
         }
         reason = "";
@@ -121,25 +122,25 @@ internal sealed class RootGuard
         var n = SafePathTools.Normalize(file);
         if (n is null || SafePathTools.IsDriveRoot(n))
         {
-            reason = "путь не является полным локальным путём";
+            reason = T._("путь не является полным локальным путём");
             return false;
         }
         if (!SingleFileExtensions.Contains(Path.GetExtension(n), StringComparer.OrdinalIgnoreCase))
         {
-            reason = "такой тип файла нельзя удалять напрямую";
+            reason = T._("такой тип файла нельзя удалять напрямую");
             return false;
         }
         foreach (var t in _protectedTrees)
         {
             if (SafePathTools.IsSameOrUnder(n, t))
             {
-                reason = $"файл находится в защищённой папке {t}";
+                reason = T.F("файл находится в защищённой папке {0}", t);
                 return false;
             }
         }
         if (!IsInsideAllowedBase(n, allowEqual: false))
         {
-            reason = "файл находится вне разрешённых для очистки мест";
+            reason = T._("файл находится вне разрешённых для очистки мест");
             return false;
         }
         reason = "";

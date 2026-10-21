@@ -1,4 +1,5 @@
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Optimizer;
 
@@ -39,7 +40,7 @@ public sealed class OptimizerService : IHealthContributor
         _isElevated = isElevated ?? (() => Admin.IsElevated);
     }
 
-    public string ModuleName => "Ускорение";
+    public string ModuleName => T._("Ускорение");
 
     internal RegistryTweakEngine Registry { get; }
 
@@ -120,8 +121,8 @@ public sealed class OptimizerService : IHealthContributor
             items.Add(new Recommendation
             {
                 Id = "Changed:" + fixId,
-                Title = $"Изменено программой: {TweakTitle(fixId)}",
-                CurrentValue = "Можно вернуть прежнее значение",
+                Title = T.F("Изменено программой: {0}", TweakTitle(fixId)),
+                CurrentValue = T._("Можно вернуть прежнее значение"),
                 Kind = RecommendationKind.Good,
                 Category = fixId is TweakIds.GameMode or TweakIds.GameDvr or TweakIds.Hags
                     ? RecommendationCategory.Games
@@ -152,7 +153,7 @@ public sealed class OptimizerService : IHealthContributor
 
     /// <summary>Human-readable title of a tweak (for the "changed by the app" list).</summary>
     public static string TweakTitle(string fixId) => fixId == TweakIds.PowerPlan
-        ? "План электропитания"
+        ? T._("План электропитания")
         : RegistryTweaks.Get(fixId)?.Title ?? fixId;
 
     /// <summary>Lines describing what "Вернуть" will restore.</summary>
@@ -161,7 +162,7 @@ public sealed class OptimizerService : IHealthContributor
         if (fixId == TweakIds.PowerPlan)
         {
             var name = Power.PreviousName ?? Power.PreviousGuid;
-            return name is null ? Array.Empty<string>() : new[] { $"• Будет снова включён план электропитания «{name}»." };
+            return name is null ? Array.Empty<string>() : new[] { T.F("• Будет снова включён план электропитания «{0}».", name) };
         }
         var tweak = RegistryTweaks.Get(fixId);
         return tweak is null ? Array.Empty<string>() : Registry.DescribeRevert(tweak);
@@ -174,28 +175,27 @@ public sealed class OptimizerService : IHealthContributor
     public async Task<TweakResult> ApplyAsync(Recommendation rec, bool createRestorePoint, CancellationToken ct = default)
     {
         if (rec.Kind != RecommendationKind.AutoFix || rec.FixId is null)
-            return new TweakResult(false, "Эту рекомендацию нельзя применить автоматически.");
+            return new TweakResult(false, T._("Эту рекомендацию нельзя применить автоматически."));
 
         if (rec.FixId == TweakIds.PowerPlan)
         {
             if (string.IsNullOrEmpty(rec.FixArgument))
-                return new TweakResult(false, "Не указан план электропитания. Ничего не изменено.");
+                return new TweakResult(false, T._("Не указан план электропитания. Ничего не изменено."));
             var plans = await Power.ListAsync(ct).ConfigureAwait(false);
             var target = plans.FirstOrDefault(p => string.Equals(p.Guid, rec.FixArgument, StringComparison.OrdinalIgnoreCase));
             if (target is null)
-                return new TweakResult(false, "Нужный план электропитания больше не найден в системе. Ничего не изменено.");
+                return new TweakResult(false, T._("Нужный план электропитания больше не найден в системе. Ничего не изменено."));
             return await Power.ApplyAsync(target.Guid, PowerPlans.DisplayName(target), ct).ConfigureAwait(false);
         }
 
         var tweak = RegistryTweaks.Get(rec.FixId);
         if (tweak is null)
-            return new TweakResult(false, "Неизвестная настройка. Ничего не изменено.");
+            return new TweakResult(false, T._("Неизвестная настройка. Ничего не изменено."));
         // Checked even for a sandboxed engine, so tests can verify this guard without a real-registry engine.
         if (tweak.NeedsAdmin && !_isElevated())
-            return new TweakResult(false, $"Для изменения «{tweak.Title}» нужны права администратора. " +
-                                          "Ничего не изменено — перезапустите программу от имени администратора.");
+            return new TweakResult(false, T.F("Для изменения «{0}» нужны права администратора. Ничего не изменено — перезапустите программу от имени администратора.", tweak.Title));
         if (createRestorePoint && tweak.NeedsAdmin && Registry.SandboxSubKey is null)
-            await RestorePoint.TryCreateAsync($"Ускорение: {tweak.Title}", ct).ConfigureAwait(false);
+            await RestorePoint.TryCreateAsync(T.F("Ускорение: {0}", tweak.Title), ct).ConfigureAwait(false);
         return await Registry.ApplyAsync(tweak, ct).ConfigureAwait(false);
     }
 
@@ -206,9 +206,9 @@ public sealed class OptimizerService : IHealthContributor
             return await Power.RevertAsync(ct).ConfigureAwait(false);
         var tweak = RegistryTweaks.Get(fixId);
         if (tweak is null)
-            return new TweakResult(false, "Неизвестная настройка.");
+            return new TweakResult(false, T._("Неизвестная настройка."));
         if (tweak.NeedsAdmin && !_isElevated())
-            return new TweakResult(false, $"Чтобы вернуть «{tweak.Title}», нужны права администратора. Ничего не изменено.");
+            return new TweakResult(false, T.F("Чтобы вернуть «{0}», нужны права администратора. Ничего не изменено.", tweak.Title));
         return await Registry.RevertAsync(tweak, ct).ConfigureAwait(false);
     }
 
@@ -234,10 +234,10 @@ public sealed class OptimizerService : IHealthContributor
     internal static bool IsLowRiskFix(string? fixId) => fixId is TweakIds.GameMode or TweakIds.PowerPlan;
 
     /// <summary>Text of the dashboard button of the two "restart Windows" tips.</summary>
-    internal const string RestartFixLabel = "Перезагрузить";
+    internal static string RestartFixLabel => T._("Перезагрузить");
 
     /// <summary>Shown in the details of the restart tips, i.e. in the dashboard's question before the restart.</summary>
-    internal const string RestartWarning = "Сохраните работу во всех программах: компьютер перезагрузится через несколько секунд.";
+    internal static string RestartWarning => T._("Сохраните работу во всех программах: компьютер перезагрузится через несколько секунд.");
 
     internal IReadOnlyList<HealthIssue> ToHealthIssues(IEnumerable<Recommendation> items)
     {
@@ -285,10 +285,10 @@ public sealed class OptimizerService : IHealthContributor
 
             var details = rec.Explanation;
             if (!string.IsNullOrWhiteSpace(rec.CurrentValue))
-                details += $"\nСейчас: {rec.CurrentValue}.";
+                details += "\n" + T.F("Сейчас: {0}.", rec.CurrentValue);
             // The consequence of the fix must be visible BEFORE it runs (the dashboard's confirmation shows these details).
             if (!string.IsNullOrWhiteSpace(consequence))
-                details += $"\nВажно: {consequence}";
+                details += "\n" + T.F("Важно: {0}", consequence);
 
             issues.Add(new HealthIssue
             {
@@ -313,11 +313,11 @@ public sealed class OptimizerService : IHealthContributor
     /// <summary>What the dashboard row says when a tweak needs administrator rights and the program has none.</summary>
     private static string AdminRequiredText(Recommendation rec)
         => rec.FixId == TweakIds.Hags
-            ? "Нужны права администратора: планирование GPU включается только с ними."
-            : "Нужны права администратора: без них эту настройку не изменить.";
+            ? T._("Нужны права администратора: планирование GPU включается только с ними.")
+            : T._("Нужны права администратора: без них эту настройку не изменить.");
 
     /// <summary>Prefix of a failed fix's text: the dashboard reads a result that starts with it as "не исправлено".</summary>
-    internal const string FailurePrefix = "Не удалось исправить: ";
+    internal static string FailurePrefix => T.F("Не удалось исправить: {0}", "");
 
     /// <summary>
     /// The text the dashboard gets for a fix. HealthIssue.FixAsync has no success flag, so a failed tweak
@@ -329,9 +329,13 @@ public sealed class OptimizerService : IHealthContributor
         var message = string.IsNullOrWhiteSpace(result.Message) ? "" : result.Message.Trim();
         if (!result.Success)
         {
-            if (message.StartsWith("Не удалось", StringComparison.OrdinalIgnoreCase))
+            // The producer says that its message already opens with the failure sentence (OpensWithFailure); a Russian result made
+            // without the flag still counts by its first words (the rule of the Russian dashboard).
+            // l10n:data-begin — the Russian opening of a failure text, matched and never shown
+            if (result.OpensWithFailure || message.StartsWith("Не удалось", StringComparison.OrdinalIgnoreCase))
                 return message;
-            return message.Length == 0 ? FailurePrefix + "причина неизвестна." : FailurePrefix + LowerFirst(message);
+            // l10n:data-end
+            return T.F("Не удалось исправить: {0}", message.Length == 0 ? T._("причина неизвестна.") : LowerFirst(message));
         }
         var note = result.Changed && !string.IsNullOrEmpty(afterApplyNote) ? " " + afterApplyNote : "";
         return message + note;
@@ -339,7 +343,7 @@ public sealed class OptimizerService : IHealthContributor
 
     /// <summary>"Для изменения…" → "для изменения…" (an abbreviation such as "BIOS…" or a quote «…» stays as is).</summary>
     private static string LowerFirst(string text)
-        => text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1])
+        => !T.IsEnglish && text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1])
             ? char.ToLower(text[0], Format.Ru) + text[1..]
             : text;
 }

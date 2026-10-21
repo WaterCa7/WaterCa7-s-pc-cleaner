@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Processes;
 
@@ -83,7 +84,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             Reveal(SelectedItem);
         });
         ResetFiltersCommand = new RelayCommand(ResetFilters);
-        RestartAsAdminCommand = new RelayCommand(() => Admin.RequireElevation("Проверка всех процессов"), () => !Admin.IsElevated);
+        RestartAsAdminCommand = new RelayCommand(() => Admin.RequireElevation(T._("Проверка всех процессов")), () => !Admin.IsElevated);
 
         Checked.Changed += (_, _) => OnChecksChanged();
         KillCheckedCommand = new AsyncRelayCommand(KillCheckedAsync, () => Checked.Count > 0);
@@ -92,9 +93,9 @@ public sealed partial class ProcessesViewModel : PageViewModel
         ToggleAllVisibleCommand = new RelayCommand(ToggleAllVisible, () => Items.Any(i => i.CanCheck));
     }
 
-    public override string Title => "Процессы";
+    public override string Title => T._("Процессы");
 
-    public override string Subtitle => "Что сейчас работает на компьютере, сколько ресурсов занимает и нет ли среди этого подозрительного";
+    public override string Subtitle => T._("Что сейчас работает на компьютере, сколько ресурсов занимает и нет ли среди этого подозрительного");
 
     public override string IconGlyph => "";
 
@@ -193,8 +194,8 @@ public sealed partial class ProcessesViewModel : PageViewModel
     public string PauseGlyph => IsPaused ? "" : "";
 
     public string PauseToolTip => IsPaused
-        ? "Обновление приостановлено. Нажмите, чтобы снова обновлять список каждые 2 секунды."
-        : "Список обновляется каждые 2 секунды. Нажмите, чтобы приостановить (удобно, если строки «прыгают»).";
+        ? T._("Обновление приостановлено. Нажмите, чтобы снова обновлять список каждые 2 секунды.")
+        : T._("Список обновляется каждые 2 секунды. Нажмите, чтобы приостановить (удобно, если строки «прыгают»).");
 
     /// <summary>Sort key for the grid header arrows: Name, Cpu, Memory, Publisher or Status.</summary>
     public string SortKey => _sortColumn.ToString();
@@ -264,8 +265,8 @@ public sealed partial class ProcessesViewModel : PageViewModel
     }
 
     public string ProgramCountText => HasLoaded
-        ? $"в {Format.Number(ProgramCount)} {Format.Plural(ProgramCount, "программе", "программах", "программах")}"
-        : "загрузка…";
+        ? T.F("в {0} {1}", Format.Number(ProgramCount), Format.Plural(ProgramCount, "программе", "программах", "программах"))
+        : T._("загрузка…");
 
     /// <summary>Suspicious processes (the big number on the card, like the "Процессы" card).</summary>
     public int SuspiciousCount
@@ -301,10 +302,10 @@ public sealed partial class ProcessesViewModel : PageViewModel
         get
         {
             if (!HasLoaded)
-                return "загрузка…";
+                return T._("загрузка…");
             if (SuspiciousCount > 0)
-                return $"в {Format.Number(SuspiciousProgramCount)} {Format.Plural(SuspiciousProgramCount, "программе", "программах", "программах")}";
-            return IsCheckingSignatures ? "идёт проверка подписей…" : "ничего подозрительного";
+                return T.F("в {0} {1}", Format.Number(SuspiciousProgramCount), Format.Plural(SuspiciousProgramCount, "программе", "программах", "программах"));
+            return IsCheckingSignatures ? T._("идёт проверка подписей…") : T._("ничего подозрительного");
         }
     }
 
@@ -314,16 +315,15 @@ public sealed partial class ProcessesViewModel : PageViewModel
         get
         {
             if (!HasLoaded)
-                return "Подозрительные процессы ещё проверяются.";
-            const string signs = "Признаки нежелательных программ: нет цифровой подписи, необычное расположение, " +
-                                 "маскировка под системные файлы, скрытый запуск скриптов.";
+                return T._("Подозрительные процессы ещё проверяются.");
+            var signs = T._("Признаки нежелательных программ: нет цифровой подписи, необычное расположение, маскировка под системные файлы, скрытый запуск скриптов.");
             if (SuspiciousCount == 0)
                 return (IsCheckingSignatures
-                    ? "Пока ничего подозрительного, но проверка цифровых подписей ещё идёт."
-                    : "Ни один из запущенных процессов не вызывает подозрений.") + "\n\n" + signs;
-            return $"{Format.Count(SuspiciousCount, "подозрительный процесс", "подозрительных процесса", "подозрительных процессов")} " +
-                   $"в {Format.Number(SuspiciousProgramCount)} {Format.Plural(SuspiciousProgramCount, "программе", "программах", "программах")}. " +
-                   "В списке с группировкой процессы одной программы собраны в одну строку.\n\n" + signs;
+                    ? T._("Пока ничего подозрительного, но проверка цифровых подписей ещё идёт.")
+                    : T._("Ни один из запущенных процессов не вызывает подозрений.")) + "\n\n" + signs;
+            return T.F("{0} в {1} {2}. В списке с группировкой процессы одной программы собраны в одну строку.\n\n{3}",
+                Format.Count(SuspiciousCount, "подозрительный процесс", "подозрительных процесса", "подозрительных процессов"),
+                Format.Number(SuspiciousProgramCount), Format.Plural(SuspiciousProgramCount, "программе", "программах", "программах"), signs);
         }
     }
 
@@ -351,8 +351,8 @@ public sealed partial class ProcessesViewModel : PageViewModel
     public bool ShowAdminHint => !Admin.IsElevated && InaccessibleCount > 0;
 
     public string AdminHintText =>
-        $"Сведения о {Format.Number(InaccessibleCount)} {Format.Plural(InaccessibleCount, "процессе", "процессах", "процессах")} " +
-        "(в основном службах Windows) видны только администратору.";
+        T.F("Сведения о {0} {1} (в основном службах Windows) видны только администратору.",
+            Format.Number(InaccessibleCount), Format.Plural(InaccessibleCount, "процессе", "процессах", "процессах"));
 
     public int VisibleCount
     {
@@ -368,18 +368,18 @@ public sealed partial class ProcessesViewModel : PageViewModel
 
     // "Скрыть системные процессы Microsoft" never hides suspicious ones, so it does not matter here.
     public string EmptyTitle => !HasLoaded
-        ? "Собираю список процессов…"
+        ? T._("Собираю список процессов…")
         : SuspiciousOnly && string.IsNullOrWhiteSpace(SearchText)
-            ? "Подозрительных процессов нет"
-            : "Ничего не найдено";
+            ? T._("Подозрительных процессов нет")
+            : T._("Ничего не найдено");
 
     public string EmptyText => !HasLoaded
-        ? "Это займёт пару секунд."
+        ? T._("Это займёт пару секунд.")
         : SuspiciousOnly && string.IsNullOrWhiteSpace(SearchText)
             ? IsCheckingSignatures
-                ? "Проверка цифровых подписей ещё идёт — список может пополниться."
-                : "Ни один из запущенных процессов не вызывает подозрений. Это хорошо!"
-            : "Попробуйте изменить запрос или отключить фильтры.";
+                ? T._("Проверка цифровых подписей ещё идёт — список может пополниться.")
+                : T._("Ни один из запущенных процессов не вызывает подозрений. Это хорошо!")
+            : T._("Попробуйте изменить запрос или отключить фильтры.");
 
     public bool ShowResetFilters => HasLoaded && IsEmpty;
 
@@ -465,7 +465,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         if (!_loadedOnce)
         {
             _loadedOnce = true;
-            _loadTask = RunBusyAsync("Собираю список процессов…", async ct =>
+            _loadTask = RunBusyAsync(T._("Собираю список процессов…"), async ct =>
             {
                 await RefreshAsync(ct);
                 await WaitForBackgroundAsync(ct, reportProgress: true);
@@ -492,7 +492,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         _loadedOnce = true;
         if (_loadTask is { } load)
             await load;
-        await RunBusyAsync("Обновляю сведения о процессах…", async token =>
+        await RunBusyAsync(T._("Обновляю сведения о процессах…"), async token =>
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, token);
             await RefreshAsync(linked.Token);
@@ -565,7 +565,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             if (_lastRefreshError != ex.Message)
             {
                 _lastRefreshError = ex.Message;
-                Log.Warn($"Процессы: не удалось обновить список: {ex.Message}");
+                Log.Warn(T.F("Процессы: не удалось обновить список: {0}", ErrorText.For(ex)), ex);
             }
         }
     }
@@ -619,8 +619,8 @@ public sealed partial class ProcessesViewModel : PageViewModel
             if (!_loggedFirstLoad)
             {
                 _loggedFirstLoad = true;
-                Log.Info($"Процессы: {Format.Count(ProcessCount, "процесс", "процесса", "процессов")} в " +
-                         $"{Format.Count(ProgramCount, "программе", "программах", "программах")}");
+                Log.Info(T.F("Процессы: {0} в {1}", Format.Count(ProcessCount, "процесс", "процесса", "процессов"),
+                    Format.Count(ProgramCount, "программе", "программах", "программах")));
             }
         }
         finally
@@ -644,9 +644,9 @@ public sealed partial class ProcessesViewModel : PageViewModel
                 var total = _signaturesRequested;
                 var done = Math.Min(_signaturesDone, total);
                 if (total > 0)
-                    ReportProgress(done * 100.0 / total, $"Проверяю цифровые подписи программ: {done} из {total}");
+                    ReportProgress(done * 100.0 / total, T.F("Проверяю цифровые подписи программ: {0} из {1}", done, total));
                 else
-                    ReportProgress(-1, "Загружаю командные строки и службы…");
+                    ReportProgress(-1, T._("Загружаю командные строки и службы…"));
             }
             await Task.WhenAny(Task.WhenAll(tasks), Task.Delay(250, ct));
             ct.ThrowIfCancellationRequested();
@@ -685,7 +685,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: не удалось загрузить командные строки: {ex.Message}");
+            Log.Warn(T.F("Процессы: не удалось загрузить командные строки: {0}", ErrorText.For(ex)), ex);
         }
         finally
         {
@@ -722,7 +722,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: проверка подписи {path}: {ex.Message}");
+            Log.Warn(T.F("Процессы: проверка подписи {0}: {1}", path, ErrorText.For(ex)), ex);
         }
         Interlocked.Increment(ref _signaturesDone);
         OnDetailsChanged();
@@ -753,7 +753,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: не удалось обновить сведения: {ex.Message}");
+            Log.Warn(T.F("Процессы: не удалось обновить сведения: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -793,7 +793,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             row.Evaluate(AnalyzeRow, _trustVersion);
 
             var (verdict, reason) = ProcessGuard.Check(row.Pid, row.ExeName, row.Path, selfPid);
-            row.SetProtection(verdict, reason);
+            row.SetProtection(verdict, reason, isSelf: row.Pid == selfPid);
             row.SetQuarantineBlockReason(QuarantineRules.BlockReason(row.Path, row.Signature, row.Suspicion, verdict, row.IsTrusted,
                 isOwnHelper: row.OwnRole == ProcessOwnRole.Helper));
             row.ParentText = ParentText(row, byPid);
@@ -816,7 +816,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             return "—";
         if (byPid.TryGetValue(row.ParentPid, out var parent) && parent.CreateTime <= row.CreateTime)
             return $"{parent.ExeName} (PID {parent.Pid})";
-        return $"PID {row.ParentPid} — уже завершён";
+        return T.F("PID {0} — уже завершён", row.ParentPid);
     }
 
     private void RebuildGroups()
@@ -859,8 +859,8 @@ public sealed partial class ProcessesViewModel : PageViewModel
             : ProcessGrouping.Combine(g.Instances.Select(r => r.Suspicion));
 
         var worst = ProcessGuard.Worst(g.Instances.Select(r => r.Verdict));
-        var reason = g.Instances.FirstOrDefault(r => r.Verdict == worst)?.ProtectionReason;
-        g.SetProtection(worst, reason);
+        var protecting = g.Instances.FirstOrDefault(r => r.Verdict == worst);
+        g.SetProtection(worst, protecting?.ProtectionReason, protecting?.ProtectionIsSelf ?? false);
         g.SetQuarantineBlockReason(QuarantineRules.BlockReason(g.Path, g.Signature, g.Suspicion, worst, g.IsTrusted,
             isOwnHelper: g.OwnRole == ProcessOwnRole.Helper));
         ApplyDefenderState(g);
@@ -994,7 +994,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         var u = Format.Bytes(used);
         var t = Format.Bytes(total);
         var unit = t[(t.LastIndexOf(' ') + 1)..];
-        return u.EndsWith(" " + unit, StringComparison.Ordinal) ? $"{u[..^(unit.Length + 1)]} из {t}" : $"{u} из {t}";
+        return u.EndsWith(" " + unit, StringComparison.Ordinal) ? T.F("{0} из {1}", u[..^(unit.Length + 1)], t) : T.F("{0} из {1}", u, t);
     }
 
     private void UpdateViewSafe()
@@ -1007,7 +1007,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: не удалось обновить список: {ex.Message}");
+            Log.Warn(T.F("Процессы: не удалось обновить список: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1107,7 +1107,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             return;
         if (!item.CanKill || roots.Any(r => !r.CanKill))
         {
-            Dialogs.Info("Процесс защищён", item.ProtectionText ?? ProcessGuard.CriticalText);
+            Dialogs.Info(T._("Процесс защищён"), item.ProtectionText ?? ProcessGuard.CriticalText);
             return;
         }
 
@@ -1127,7 +1127,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             victims = roots;
         }
 
-        var title = tree ? "Завершить дерево процессов?" : victims.Count > 1 ? "Завершить процессы?" : "Завершить процесс?";
+        var title = tree ? T._("Завершить дерево процессов?") : victims.Count > 1 ? T._("Завершить процессы?") : T._("Завершить процесс?");
         if (!Dialogs.Confirm(title, BuildKillMessage(item, roots, victims, skipped, tree)))
             return;
 
@@ -1135,11 +1135,11 @@ public sealed partial class ProcessesViewModel : PageViewModel
         var report = await Task.Run(() => _service.Kill(targets));
 
         if (report.Done == 0 && report.AccessDenied && !Admin.IsElevated)
-            Admin.RequireElevation($"Завершение процесса {item.ExeName}");
+            Admin.RequireElevation(T.F("Завершение процесса {0}", item.ExeName));
         else if (report.Failed.Count > 0)
-            Dialogs.Error("Не всё получилось", BuildKillReport(item, report));
+            Dialogs.Error(T._("Не всё получилось"), BuildKillReport(item, report));
         else
-            Dialogs.Info("Готово", BuildKillReport(item, report));
+            Dialogs.Info(T._("Готово"), BuildKillReport(item, report));
 
         await SafeRefreshAsync();
     }
@@ -1150,46 +1150,44 @@ public sealed partial class ProcessesViewModel : PageViewModel
         var sb = new StringBuilder();
         var name = item.FriendlyName;
         var exe = item.ExeName;
-        var nameText = string.Equals(name, exe, StringComparison.OrdinalIgnoreCase) ? $"«{exe}»" : $"«{name}» ({exe})";
+        var nameText = string.Equals(name, exe, StringComparison.OrdinalIgnoreCase) ? T.Quote(exe) : $"{T.Quote(name)} ({exe})";
 
         if (tree)
         {
             var rootPids = string.Join(", ", roots.Select(r => r.Pid));
-            sb.Append($"Будут принудительно завершены {nameText} (PID {rootPids}) и все запущенные им процессы — ");
-            sb.AppendLine($"всего {victims.Count}:");
+            sb.AppendLine(T.F("Будут принудительно завершены {0} (PID {1}) и все запущенные им процессы — всего {2}:", nameText, rootPids, victims.Count));
             foreach (var r in victims.Take(12))
                 sb.AppendLine($"  • {r.ExeName} (PID {r.Pid})");
             if (victims.Count > 12)
-                sb.AppendLine($"  • …и ещё {victims.Count - 12}");
+                sb.AppendLine("  • " + T.F("…и ещё {0}", victims.Count - 12));
             if (skipped.Count > 0)
             {
                 sb.AppendLine();
-                sb.AppendLine("Защищённые процессы из этого дерева затронуты не будут: " +
-                              string.Join(", ", skipped.Take(6).Select(r => $"{r.ExeName} (PID {r.Pid})")) +
-                              (skipped.Count > 6 ? " и другие" : "") + ".");
+                sb.AppendLine(T.F("Защищённые процессы из этого дерева затронуты не будут: {0}.",
+                    string.Join(", ", skipped.Take(6).Select(r => $"{r.ExeName} (PID {r.Pid})")) + (skipped.Count > 6 ? " " + T._("и другие") : "")));
             }
         }
         else if (victims.Count == 1)
         {
-            sb.AppendLine($"Будет принудительно завершён процесс {nameText}, PID {victims[0].Pid}.");
+            sb.AppendLine(T.F("Будет принудительно завершён процесс {0}, PID {1}.", nameText, victims[0].Pid));
         }
         else
         {
             var pids = string.Join(", ", victims.Take(15).Select(r => r.Pid)) + (victims.Count > 15 ? ", …" : "");
-            sb.AppendLine($"Будут принудительно завершены все процессы программы {nameText} — {victims.Count} шт. (PID {pids}).");
+            sb.AppendLine(T.F("Будут принудительно завершены все процессы программы {0} — {1} шт. (PID {2}).", nameText, victims.Count, pids));
         }
 
         sb.AppendLine();
-        sb.Append("Несохранённые данные в программе будут потеряны. Если программа отвечает, лучше закройте её обычным способом.");
+        sb.Append(T._("Несохранённые данные в программе будут потеряны. Если программа отвечает, лучше закройте её обычным способом."));
         if (item.HasKillWarning || victims.Any(v => v.HasKillWarning))
         {
             sb.AppendLine();
             sb.AppendLine();
-            sb.Append("Внимание: ").Append(ProcessGuard.ExplorerText);
+            sb.Append(T.F("Внимание: {0}", ProcessGuard.ExplorerText));
         }
         sb.AppendLine();
         sb.AppendLine();
-        sb.Append("Продолжить?");
+        sb.Append(T._("Продолжить?"));
         return sb.ToString();
     }
 
@@ -1200,22 +1198,22 @@ public sealed partial class ProcessesViewModel : PageViewModel
         if (report.Failed.Count == 0)
         {
             if (report.Killed.Count == 0)
-                sb.Append(total > 1 ? "Эти процессы уже завершились сами." : "Процесс уже завершился сам.");
+                sb.Append(total > 1 ? T._("Эти процессы уже завершились сами.") : T._("Процесс уже завершился сам."));
             else if (total == 1)
-                sb.Append($"Процесс «{item.ExeName}» завершён.");
+                sb.Append(T.F("Процесс {0} завершён.", T.Quote(item.ExeName)));
             else
-                sb.Append($"Завершено процессов: {report.Done}.");
+                sb.Append(T.F("Завершено процессов: {0}.", report.Done));
             return sb.ToString();
         }
 
-        sb.AppendLine($"Завершено процессов: {report.Done} из {total}.");
-        sb.AppendLine("Не удалось завершить:");
+        sb.AppendLine(T.F("Завершено процессов: {0} из {1}.", report.Done, total));
+        sb.AppendLine(T._("Не удалось завершить:"));
         foreach (var (target, error) in report.Failed.Take(10))
             sb.AppendLine($"  • {target.Name} (PID {target.Pid}) — {error}");
         if (report.AccessDenied && !Admin.IsElevated)
         {
             sb.AppendLine();
-            sb.Append("Чтобы завершить их, запустите WaterCa7s PC Cleaner от имени администратора (кнопка внизу слева).");
+            sb.Append(T._("Чтобы завершить их, запустите WaterCa7s PC Cleaner от имени администратора (кнопка внизу слева)."));
         }
         return sb.ToString().TrimEnd();
     }
@@ -1226,7 +1224,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
             return;
         if (!item.CanQuarantine)
         {
-            Dialogs.Info("Карантин недоступен", item.QuarantineToolTip);
+            Dialogs.Info(T._("Карантин недоступен"), item.QuarantineToolTip);
             return;
         }
 
@@ -1235,41 +1233,41 @@ public sealed partial class ProcessesViewModel : PageViewModel
             running = _rows.Values.Where(r => string.Equals(r.Path, path, StringComparison.OrdinalIgnoreCase)).ToList();
         if (running.Any(r => !r.CanKill))
         {
-            Dialogs.Info("Карантин недоступен", ProcessGuard.CriticalText);
+            Dialogs.Info(T._("Карантин недоступен"), ProcessGuard.CriticalText);
             return;
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Файл «{item.ExeName}» будет перемещён в карантин:");
+        sb.AppendLine(T.F("Файл {0} будет перемещён в карантин:", T.Quote(item.ExeName)));
         sb.AppendLine(path);
         sb.AppendLine();
         if (running.Count > 0)
-            sb.AppendLine($"Сначала будут завершены его процессы ({running.Count} шт.) — несохранённые данные в программе будут потеряны.");
-        sb.AppendLine("В карантине файл переименовывается и не может запуститься. Вернуть его можно в разделе «Настройки» → «Карантин».");
+            sb.AppendLine(T.F("Сначала будут завершены его процессы ({0} шт.) — несохранённые данные в программе будут потеряны.", running.Count));
+        sb.AppendLine(T._("В карантине файл переименовывается и не может запуститься. Вернуть его можно в разделе «Настройки» → «Карантин»."));
         sb.AppendLine();
-        sb.AppendLine("Почему файл вызывает подозрение:");
+        sb.AppendLine(T._("Почему файл вызывает подозрение:"));
         foreach (var reason in item.Reasons)
             sb.AppendLine($"  • {reason}");
         sb.AppendLine();
-        sb.Append("Поместить в карантин?");
+        sb.Append(T._("Поместить в карантин?"));
         if (IsBusy)
         {
             // RunBusyAsync would silently skip the work while the first scan is still running.
-            Dialogs.Info("Подождите немного", "Сейчас идёт проверка процессов. Повторите действие через несколько секунд.");
+            Dialogs.Info(T._("Подождите немного"), T._("Сейчас идёт проверка процессов. Повторите действие через несколько секунд."));
             return;
         }
-        if (!Dialogs.Confirm("Поместить в карантин?", sb.ToString()))
+        if (!Dialogs.Confirm(T._("Поместить в карантин?"), sb.ToString()))
             return;
         if (IsBusy)
         {
-            Dialogs.Info("Подождите немного", "Сейчас идёт проверка процессов. Ничего не изменено — повторите действие через несколько секунд.");
+            Dialogs.Info(T._("Подождите немного"), T._("Сейчас идёт проверка процессов. Ничего не изменено — повторите действие через несколько секунд."));
             return;
         }
 
         QuarantineOutcome? outcome = null;
-        var reasonText = "Процессы: " + string.Join("; ", item.Reasons);
+        var reasonText = T.F("Процессы: {0}", string.Join("; ", item.Reasons));
         var targets = running.Select(ToTarget).ToList();
-        await RunBusyAsync($"Помещаю «{item.ExeName}» в карантин…", async ct =>
+        await RunBusyAsync(T.F("Помещаю {0} в карантин…", T.Quote(item.ExeName)), async ct =>
         {
             outcome = await _service.QuarantineAsync(path, targets, reasonText, ct);
         });
@@ -1277,16 +1275,15 @@ public sealed partial class ProcessesViewModel : PageViewModel
             return;
 
         if (outcome.Success)
-            Dialogs.Info("Готово",
-                $"«{item.ExeName}» помещён в карантин. Завершено процессов: {outcome.Report.Done}.\n\n" +
-                "Если программа снова появится после перезагрузки, загляните в раздел «Автозагрузка» — " +
-                "там может остаться запись о её запуске.");
+            Dialogs.Info(T._("Готово"),
+                T.F("{0} помещён в карантин. Завершено процессов: {1}.\n\nЕсли программа снова появится после перезагрузки, загляните в раздел «Автозагрузка» — там может остаться запись о её запуске.",
+                    T.Quote(item.ExeName), outcome.Report.Done));
         else if (outcome.NeedsElevation)
-            Admin.RequireElevation($"Помещение «{item.ExeName}» в карантин");
+            Admin.RequireElevation(T.F("Помещение {0} в карантин", T.Quote(item.ExeName)));
         else if (outcome.Cancelled)
-            Dialogs.Info("Карантин отменён", outcome.Message);
+            Dialogs.Info(T._("Карантин отменён"), outcome.Message);
         else
-            Dialogs.Error("Карантин", outcome.Message);
+            Dialogs.Error(T._("Карантин"), outcome.Message);
         await SafeRefreshAsync();
     }
 
@@ -1297,15 +1294,15 @@ public sealed partial class ProcessesViewModel : PageViewModel
         if (!item.CanTrust)
         {
             // Also guards programmatic calls that bypass CanExecute (e.g. a Microsoft-signed script host).
-            Dialogs.Info("Доверие недоступно", item.TrustToolTip);
+            Dialogs.Info(T._("Доверие недоступно"), item.TrustToolTip);
             return;
         }
         if (!item.IsTrusted)
         {
             // Neutral question: trusting changes only the app's own list, nothing on the system.
-            var ok = Dialogs.Ask("Доверять программе?",
-                $"«{item.FriendlyName}» больше не будет помечаться как подозрительная — ни здесь, ни в других разделах.\n\n" +
-                $"{path}\n\nДоверяйте только программам, в которых уверены. Отменить можно здесь же кнопкой «Не доверять».");
+            var ok = Dialogs.Ask(T._("Доверять программе?"),
+                T.F("{0} больше не будет помечаться как подозрительная — ни здесь, ни в других разделах.\n\n{1}\n\nДоверяйте только программам, в которых уверены. Отменить можно здесь же кнопкой «Не доверять».",
+                    T.Quote(item.FriendlyName), path));
             if (!ok)
                 return;
         }
@@ -1330,7 +1327,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось скопировать путь в буфер обмена: {ex.Message}");
+            Log.Warn(T.F("Не удалось скопировать путь в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1339,7 +1336,7 @@ public sealed partial class ProcessesViewModel : PageViewModel
         if (item is null)
             return;
         var publisher = item.Signature?.Publisher ?? item.Company;
-        FileTools.SearchWeb(string.IsNullOrWhiteSpace(publisher) ? $"{item.ExeName} что это за процесс" : $"{item.ExeName} {publisher}");
+        FileTools.SearchWeb(string.IsNullOrWhiteSpace(publisher) ? T.F("{0} что это за процесс", item.ExeName) : $"{item.ExeName} {publisher}");
     }
 
     private static async Task VirusTotalAsync(ProcessItem? item)
@@ -1353,23 +1350,23 @@ public sealed partial class ProcessesViewModel : PageViewModel
         if (item?.Path is not { } path || _defenderRunning.Contains(path))
             return;
         _defenderRunning.Add(path);
-        SetDefenderStatus(path, "Защитник Windows проверяет файл… Это может занять до минуты.");
+        SetDefenderStatus(path, T._("Защитник Windows проверяет файл… Это может занять до минуты."));
         string result;
         try
         {
-            result = await FileTools.ScanWithDefenderAsync(path);
+            result = (await FileTools.ScanWithDefenderAsync(path)).Text;
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: проверка Защитником {path}: {ex.Message}");
-            result = $"Не удалось запустить проверку: {ErrorText.For(ex)}.";
+            Log.Warn(T.F("Процессы: проверка Защитником {0}: {1}", path, ErrorText.For(ex)), ex);
+            result = T.F("Не удалось запустить проверку: {0}.", ErrorText.For(ex));
         }
         finally
         {
             _defenderRunning.Remove(path);
         }
-        Log.Info($"Процессы: проверка Защитником {path}: {result}");
-        SetDefenderStatus(path, $"Защитник Windows, {DateTime.Now:HH:mm}: {result}");
+        Log.Info(T.F("Процессы: проверка Защитником {0}: {1}", path, result));
+        SetDefenderStatus(path, T.F("Защитник Windows, {0:HH:mm}: {1}", DateTime.Now, result));
         RelayCommand.Refresh();
     }
 

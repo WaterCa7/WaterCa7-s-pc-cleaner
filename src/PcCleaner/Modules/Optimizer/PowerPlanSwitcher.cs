@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -41,7 +42,7 @@ public sealed class PowerPlanSwitcher
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            Log.Warn($"Ускорение: не удалось запустить powercfg {args}: {ex.Message}");
+            Log.Warn(T.F("Ускорение: не удалось запустить powercfg {0}: {1}", args, ErrorText.For(ex)), ex);
             return new ProcessResult(-1, "", ErrorText.For(ex), false);
         }
     }
@@ -71,15 +72,15 @@ public sealed class PowerPlanSwitcher
     public async Task<TweakResult> ApplyAsync(string targetGuid, string? targetName, CancellationToken ct = default)
     {
         if (!PowerPlans.IsGuid(targetGuid))
-            return new TweakResult(false, "Некорректный идентификатор плана электропитания. Ничего не изменено.");
+            return new TweakResult(false, T._("Некорректный идентификатор плана электропитания. Ничего не изменено."));
         targetGuid = targetGuid.Trim().ToLowerInvariant();
 
         var current = await GetActiveAsync(ct);
         if (current is null)
-            return new TweakResult(false, "Не удалось узнать текущий план электропитания. Ничего не изменено.");
+            return new TweakResult(false, T._("Не удалось узнать текущий план электропитания. Ничего не изменено."), OpensWithFailure: true);
         var name = string.IsNullOrWhiteSpace(targetName) ? targetGuid : targetName;
         if (current.Guid == targetGuid)
-            return new TweakResult(true, $"План «{name}» уже активен.");
+            return new TweakResult(true, T.F("План «{0}» уже активен.", name));
 
         var storedNow = false;
         if (!HasStoredState)
@@ -95,12 +96,12 @@ public sealed class PowerPlanSwitcher
             if (storedNow)
                 Store(null, null);
             var reason = FirstLine(result.StdErr, result.StdOut);
-            Log.Warn($"Ускорение: не удалось включить план «{name}»: {reason}");
-            return new TweakResult(false, $"Не удалось включить план «{name}»: {reason}");
+            Log.Warn(T.F("Ускорение: не удалось включить план «{0}»: {1}", name, reason));
+            return new TweakResult(false, T.F("Не удалось включить план «{0}»: {1}", name, reason), OpensWithFailure: true);
         }
 
-        Log.Action($"Ускорение: включён план электропитания «{name}» ({targetGuid}), прежний — «{PowerPlans.DisplayName(current)}» ({current.Guid})");
-        return new TweakResult(true, $"Включён план электропитания «{name}».", Changed: true);
+        Log.Action(T.F("Ускорение: включён план электропитания «{0}» ({1}), прежний — «{2}» ({3})", name, targetGuid, PowerPlans.DisplayName(current), current.Guid));
+        return new TweakResult(true, T.F("Включён план электропитания «{0}».", name), Changed: true);
     }
 
     public async Task<TweakResult> RevertAsync(CancellationToken ct = default)
@@ -108,19 +109,19 @@ public sealed class PowerPlanSwitcher
         var guid = PreviousGuid;
         var name = PreviousName ?? guid;
         if (!PowerPlans.IsGuid(guid))
-            return new TweakResult(false, "Прежний план электропитания не сохранён — возвращать нечего.");
+            return new TweakResult(false, T._("Прежний план электропитания не сохранён — возвращать нечего."));
 
         var result = await _powercfg($"/setactive {guid}", ct);
         if (!result.Success)
         {
             var reason = FirstLine(result.StdErr, result.StdOut);
-            Log.Warn($"Ускорение: не удалось вернуть план «{name}»: {reason}");
-            return new TweakResult(false, $"Не удалось вернуть план «{name}» (возможно, он был удалён): {reason}");
+            Log.Warn(T.F("Ускорение: не удалось вернуть план «{0}»: {1}", name, reason));
+            return new TweakResult(false, T.F("Не удалось вернуть план «{0}» (возможно, он был удалён): {1}", name, reason), OpensWithFailure: true);
         }
 
         Store(null, null);
-        Log.Action($"Ускорение: возвращён прежний план электропитания «{name}» ({guid})");
-        return new TweakResult(true, $"Возвращён план электропитания «{name}».", Changed: true);
+        Log.Action(T.F("Ускорение: возвращён прежний план электропитания «{0}» ({1})", name, guid));
+        return new TweakResult(true, T.F("Возвращён план электропитания «{0}».", name), Changed: true);
     }
 
     private void Store(string? guid, string? name)
@@ -152,6 +153,6 @@ public sealed class PowerPlanSwitcher
             if (!string.IsNullOrEmpty(line))
                 return line;
         }
-        return "неизвестная ошибка";
+        return T._("неизвестная ошибка");
     }
 }

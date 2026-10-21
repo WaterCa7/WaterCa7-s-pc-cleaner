@@ -1,5 +1,6 @@
 using System.Globalization;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -9,7 +10,7 @@ namespace PcCleaner.Modules.Security;
 /// </summary>
 public static partial class SecurityRules
 {
-    private const string AdminForExactCheck = "Для точной проверки нужны права администратора.";
+    private static string AdminForExactCheck => T._("Для точной проверки нужны права администратора.");
 
     // ===================== Windows features =====================
 
@@ -83,31 +84,29 @@ public static partial class SecurityRules
         if (rebootPending)
         {
             // Whatever the feature list says right now, the change is made and only the reboot finishes it.
-            return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Info, "SMBv1 отключится после перезагрузки",
-                "Компонент уже отключён, но старый драйвер работает до перезагрузки. Перезагрузите компьютер, когда будет удобно.");
+            return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Info, T._("SMBv1 отключится после перезагрузки"),
+                T._("Компонент уже отключён, но старый драйвер работает до перезагрузки. Перезагрузите компьютер, когда будет удобно."));
         }
         var (client, server, exact) = ResolveSmb1(s);
         if (client is null && server is null)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Unknown, "Не удалось проверить SMBv1",
-                "Нет доступа к списку компонентов Windows и к реестру." + (isAdmin ? "" : " " + AdminForExactCheck));
+            return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Unknown, T._("Не удалось проверить SMBv1"),
+                T._("Нет доступа к списку компонентов Windows и к реестру.") + (isAdmin ? "" : " " + AdminForExactCheck));
         }
-        var hint = exact ? "" : isAdmin ? "\nСостояние определено по реестру." : "\n" + AdminForExactCheck;
+        var hint = exact ? "" : isAdmin ? "\n" + T._("Состояние определено по реестру.") : "\n" + AdminForExactCheck;
         if (server == true)
         {
             return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Danger,
-                client == true ? "Включён устаревший протокол SMBv1" : "Включён сервер SMBv1",
-                "Через уязвимости SMBv1 в 2017 году распространялся вирус-вымогатель WannaCry: он сам заражал компьютеры " +
-                "по сети. Современным программам и устройствам SMBv1 не нужен — его стоит отключить." + hint);
+                client == true ? T._("Включён устаревший протокол SMBv1") : T._("Включён сервер SMBv1"),
+                T._("Через уязвимости SMBv1 в 2017 году распространялся вирус-вымогатель WannaCry: он сам заражал компьютеры по сети. Современным программам и устройствам SMBv1 не нужен — его стоит отключить.") + hint);
         }
         if (client == true)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Warning, "Включён клиент SMBv1",
-                "Компьютер может подключаться к сетевым папкам по устаревшему протоколу, через который распространялся " +
-                "WannaCry. Он нужен разве что очень старым NAS и роутерам с USB-диском — если таких нет, отключите его." + hint);
+            return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Warning, T._("Включён клиент SMBv1"),
+                T._("Компьютер может подключаться к сетевым папкам по устаревшему протоколу, через который распространялся WannaCry. Он нужен разве что очень старым NAS и роутерам с USB-диском — если таких нет, отключите его.") + hint);
         }
-        return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Ok, "SMBv1 выключен",
-            "Устаревший сетевой протокол, через который распространялся WannaCry, отключён — так и должно быть." + hint);
+        return new SecurityCheckResult(SecurityCheckIds.Smb1, SecurityStatus.Ok, T._("SMBv1 выключен"),
+            T._("Устаревший сетевой протокол, через который распространялся WannaCry, отключён — так и должно быть.") + hint);
     }
 
     // ===================== Secure Boot =====================
@@ -117,35 +116,24 @@ public static partial class SecurityRules
         if (!s.Readable)
         {
             return new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Unknown,
-                "Не удалось проверить Secure Boot", "Нет доступа к разделу реестра с состоянием безопасной загрузки.");
+                T._("Не удалось проверить Secure Boot"), T._("Нет доступа к разделу реестра с состоянием безопасной загрузки."));
         }
         return s.Enabled switch
         {
-            1 => new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Ok, "Secure Boot включён",
-                "Безопасная загрузка не даёт буткитам — вирусам, которые стартуют раньше Windows, — встроиться в загрузку."),
-            0 => new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Warning, "Secure Boot выключен",
-                "Включается в BIOS/UEFI: раздел Boot или Security → Secure Boot. Защищает от буткитов, а ещё его требуют " +
-                "Windows 11 и античиты — например, Riot Vanguard (Valorant) и FACEIT."),
+            1 => new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Ok, T._("Secure Boot включён"),
+                T._("Безопасная загрузка не даёт буткитам — вирусам, которые стартуют раньше Windows, — встроиться в загрузку.")),
+            0 => new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Warning, T._("Secure Boot выключен"),
+                T._("Включается в BIOS/UEFI: раздел Boot или Security → Secure Boot. Защищает от буткитов, а ещё его требуют Windows 11 и античиты — например, Riot Vanguard (Valorant) и FACEIT.")),
             _ when s.IsUefi == false => new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Info,
-                "Загрузка в режиме Legacy BIOS",
-                "В этом режиме Secure Boot недоступен. Чтобы его включить, загрузку нужно перевести в режим UEFI " +
-                "(с преобразованием диска в GPT) — это сложная операция, её лучше доверить специалисту."),
-            _ => new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Info, "Secure Boot не поддерживается",
-                "Прошивка компьютера не сообщает о безопасной загрузке. Так бывает на старых компьютерах и в режиме " +
-                "совместимости (CSM / Legacy BIOS)."),
+                T._("Загрузка в режиме Legacy BIOS"),
+                T._("В этом режиме Secure Boot недоступен. Чтобы его включить, загрузку нужно перевести в режим UEFI (с преобразованием диска в GPT) — это сложная операция, её лучше доверить специалисту.")),
+            _ => new SecurityCheckResult(SecurityCheckIds.SecureBoot, SecurityStatus.Info, T._("Secure Boot не поддерживается"),
+                T._("Прошивка компьютера не сообщает о безопасной загрузке. Так бывает на старых компьютерах и в режиме совместимости (CSM / Legacy BIOS).")),
         };
     }
 
     /// <summary>Plain-language steps for the "Как включить" button of the Secure Boot card.</summary>
-    public const string SecureBootHowTo =
-        "Secure Boot включается в настройках BIOS/UEFI:\n\n" +
-        "1. Перезагрузите компьютер и сразу нажимайте Delete или F2 (на ноутбуках бывает F1, F10, F12 или Esc).\n" +
-        "2. Откройте раздел Boot или Security и найдите пункт Secure Boot.\n" +
-        "3. Выберите Enabled. Если пункт недоступен, сначала выключите CSM (Compatibility Support Module) и выберите загрузку в режиме UEFI.\n" +
-        "4. Сохраните настройки (обычно F10) и перезагрузитесь.\n\n" +
-        "Важно: если Windows установлена в режиме Legacy BIOS (диск MBR), после выключения CSM она не загрузится. " +
-        "Тогда верните CSM обратно — диск сначала нужно преобразовать в GPT. Если не уверены, обратитесь к специалисту.\n\n" +
-        "После перезагрузки нажмите «Проверить снова».";
+    public static string SecureBootHowTo => T._("Secure Boot включается в настройках BIOS/UEFI:\n\n1. Перезагрузите компьютер и сразу нажимайте Delete или F2 (на ноутбуках бывает F1, F10, F12 или Esc).\n2. Откройте раздел Boot или Security и найдите пункт Secure Boot.\n3. Выберите Enabled. Если пункт недоступен, сначала выключите CSM (Compatibility Support Module) и выберите загрузку в режиме UEFI.\n4. Сохраните настройки (обычно F10) и перезагрузитесь.\n\nВажно: если Windows установлена в режиме Legacy BIOS (диск MBR), после выключения CSM она не загрузится. Тогда верните CSM обратно — диск сначала нужно преобразовать в GPT. Если не уверены, обратитесь к специалисту.\n\nПосле перезагрузки нажмите «Проверить снова».");
 
     // ===================== TPM =====================
 
@@ -161,8 +149,10 @@ public static partial class SecurityRules
     /// <summary>"True"/"False", "Да"/"Нет", "Истина"/"Ложь", "Yes"/"No"; null for anything else.</summary>
     public static bool? ParseYesNo(string? text) => (text ?? "").Trim().ToLowerInvariant() switch
     {
+        // l10n:data-begin — words of Windows output (any language), matched and never shown
         "true" or "yes" or "да" or "истина" => true,
         "false" or "no" or "нет" or "ложь" => false,
+        // l10n:data-end
         _ => null,
     };
 
@@ -182,6 +172,7 @@ public static partial class SecurityRules
                 continue;
             var key = line[..colon].Trim().ToLowerInvariant();
             var value = line[(colon + 1)..].Trim();
+            // l10n:data-begin — words of tpmtool output (any Windows language), matched and never shown
             if (present is null && key.Contains("tpm") &&
                 (key.Contains("present") || key.Contains("наличие") || key.Contains("присутств")))
             {
@@ -191,6 +182,7 @@ public static partial class SecurityRules
             {
                 version = NormalizeTpmVersion(value);
             }
+            // l10n:data-end
         }
         return new TpmState(present, null, null, version);
     }
@@ -211,45 +203,39 @@ public static partial class SecurityRules
 
     public static SecurityCheckResult EvaluateTpm(TpmState t, bool isAdmin)
     {
-        const string why = "Он нужен для Windows 11, BitLocker и Windows Hello.";
+        var why = T._("Он нужен для Windows 11, BitLocker и Windows Hello.");
         if (t.Present is null)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Unknown, "Не удалось проверить TPM",
+            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Unknown, T._("Не удалось проверить TPM"),
                 isAdmin
-                    ? "Windows не ответила на запрос о модуле TPM. Посмотрите «Безопасность Windows» → «Безопасность устройства»."
-                    : "Для проверки нужны права администратора. Состояние модуля видно и в «Безопасность Windows» → «Безопасность устройства».");
+                    ? T._("Windows не ответила на запрос о модуле TPM. Посмотрите «Безопасность Windows» → «Безопасность устройства».")
+                    : T._("Для проверки нужны права администратора. Состояние модуля видно и в «Безопасность Windows» → «Безопасность устройства»."));
         }
         if (t.Present == false)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Warning, "TPM не найден",
-                "Модуля нет или он выключен в BIOS/UEFI. Обычно его можно включить: на процессорах AMD пункт называется " +
-                "fTPM, на Intel — PTT. " + why);
+            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Warning, T._("TPM не найден"),
+                T._("Модуля нет или он выключен в BIOS/UEFI. Обычно его можно включить: на процессорах AMD пункт называется fTPM, на Intel — PTT.") + " " + why);
         }
         if (t.Enabled == false || t.Activated == false)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Warning, "TPM выключен",
-                "Модуль есть, но отключён. Включите его в BIOS/UEFI (fTPM на AMD, PTT на Intel). " + why);
+            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Warning, T._("TPM выключен"),
+                T._("Модуль есть, но отключён. Включите его в BIOS/UEFI (fTPM на AMD, PTT на Intel).") + " " + why);
         }
         var major = t.Version is not null && double.TryParse(t.Version, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
             ? v
             : (double?)null;
         if (major is < 2)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Info, $"TPM {t.Version} — старая версия",
-                "Модуль работает, но Windows 11 требует TPM 2.0. Иногда версию можно обновить прошивкой с сайта производителя.");
+            return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Info, T.F("TPM {0} — старая версия", t.Version),
+                T._("Модуль работает, но Windows 11 требует TPM 2.0. Иногда версию можно обновить прошивкой с сайта производителя."));
         }
         return new SecurityCheckResult(SecurityCheckIds.Tpm, SecurityStatus.Ok,
-            t.Version is null ? "TPM работает" : $"TPM {t.Version} работает",
-            "Модуль безопасности хранит ключи шифрования и данные Windows Hello. " + why);
+            t.Version is null ? T._("TPM работает") : T.F("TPM {0} работает", t.Version),
+            T._("Модуль безопасности хранит ключи шифрования и данные Windows Hello.") + " " + why);
     }
 
     /// <summary>Plain-language steps for the "Как включить" button of the TPM card.</summary>
-    public const string TpmHowTo =
-        "Модуль TPM включается в настройках BIOS/UEFI (войти — клавишей Delete или F2 сразу после включения компьютера):\n\n" +
-        "• Процессоры AMD — пункт AMD fTPM (Firmware TPM), обычно в разделе Advanced → CPU Configuration или Security.\n" +
-        "• Процессоры Intel — пункт Intel PTT (Platform Trust Technology), обычно в разделе Security или Advanced.\n\n" +
-        "Выберите Enabled, сохраните настройки (обычно F10) и перезагрузитесь. Затем нажмите «Проверить снова».\n\n" +
-        "Если такого пункта нет, на материнской плате может быть разъём для отдельного модуля TPM — это уточняют в инструкции к плате.";
+    public static string TpmHowTo => T._("Модуль TPM включается в настройках BIOS/UEFI (войти — клавишей Delete или F2 сразу после включения компьютера):\n\n• Процессоры AMD — пункт AMD fTPM (Firmware TPM), обычно в разделе Advanced → CPU Configuration или Security.\n• Процессоры Intel — пункт Intel PTT (Platform Trust Technology), обычно в разделе Security или Advanced.\n\nВыберите Enabled, сохраните настройки (обычно F10) и перезагрузитесь. Затем нажмите «Проверить снова».\n\nЕсли такого пункта нет, на материнской плате может быть разъём для отдельного модуля TPM — это уточняют в инструкции к плате.");
 
     // ===================== Drive encryption =====================
 
@@ -333,38 +319,36 @@ public static partial class SecurityRules
         return b.Encryption switch
         {
             DriveEncryption.On or DriveEncryption.Locked => new SecurityCheckResult(SecurityCheckIds.BitLocker, SecurityStatus.Ok,
-                "Системный диск зашифрован",
-                $"Диск {b.Drive} защищён шифрованием: без пароля или ключа восстановления данные не прочитать, даже если " +
-                (laptop ? "ноутбук украдут." : "диск вынут из компьютера.")),
+                T._("Системный диск зашифрован"),
+                laptop
+                    ? T.F("Диск {0} защищён шифрованием: без пароля или ключа восстановления данные не прочитать, даже если ноутбук украдут.", b.Drive)
+                    : T.F("Диск {0} защищён шифрованием: без пароля или ключа восстановления данные не прочитать, даже если диск вынут из компьютера.", b.Drive)),
             DriveEncryption.Encrypting => new SecurityCheckResult(SecurityCheckIds.BitLocker, SecurityStatus.Ok,
-                "Идёт шифрование системного диска",
-                "Пользоваться компьютером можно как обычно — шифрование закончится само."),
+                T._("Идёт шифрование системного диска"),
+                T._("Пользоваться компьютером можно как обычно — шифрование закончится само.")),
             DriveEncryption.Decrypting => new SecurityCheckResult(SecurityCheckIds.BitLocker, SecurityStatus.Info,
-                "Идёт расшифровка системного диска",
-                "Когда она закончится, данные на диске больше не будут защищены шифрованием."),
+                T._("Идёт расшифровка системного диска"),
+                T._("Когда она закончится, данные на диске больше не будут защищены шифрованием.")),
             DriveEncryption.Suspended => new SecurityCheckResult(SecurityCheckIds.BitLocker, notProtected,
-                "Защита BitLocker приостановлена",
-                "Диск зашифрован, но ключ сейчас хранится открыто — так бывает во время обновления BIOS или Windows. " +
-                "Если защита не возобновилась сама после перезагрузки, включите её в параметрах шифрования."),
+                T._("Защита BitLocker приостановлена"),
+                T._("Диск зашифрован, но ключ сейчас хранится открыто — так бывает во время обновления BIOS или Windows. Если защита не возобновилась сама после перезагрузки, включите её в параметрах шифрования.")),
             DriveEncryption.Pending => new SecurityCheckResult(SecurityCheckIds.BitLocker, notProtected,
-                "Шифрование устройства не завершено",
-                "Диск подготовлен к шифрованию, но ключ ещё не защищён. Войдите в Windows с учётной записью Microsoft " +
-                "или включите шифрование в параметрах — тогда ключ восстановления сохранится в вашей учётной записи."),
+                T._("Шифрование устройства не завершено"),
+                T._("Диск подготовлен к шифрованию, но ключ ещё не защищён. Войдите в Windows с учётной записью Microsoft или включите шифрование в параметрах — тогда ключ восстановления сохранится в вашей учётной записи.")),
             DriveEncryption.Off when laptop => new SecurityCheckResult(SecurityCheckIds.BitLocker, SecurityStatus.Warning,
-                "Диск ноутбука не зашифрован",
-                "Если ноутбук потеряют или украдут, файлы можно прочитать, просто подключив диск к другому компьютеру. " +
-                "Шифрование (BitLocker или «Шифрование устройства») это предотвращает."),
+                T._("Диск ноутбука не зашифрован"),
+                T._("Если ноутбук потеряют или украдут, файлы можно прочитать, просто подключив диск к другому компьютеру. Шифрование (BitLocker или «Шифрование устройства») это предотвращает.")),
             DriveEncryption.Off => new SecurityCheckResult(SecurityCheckIds.BitLocker, SecurityStatus.Info,
-                "Системный диск не зашифрован",
-                "Для настольного компьютера это не обязательно. Шифрование защищает данные, если компьютер или диск украдут."),
+                T._("Системный диск не зашифрован"),
+                T._("Для настольного компьютера это не обязательно. Шифрование защищает данные, если компьютер или диск украдут.")),
             DriveEncryption.NotSupported => new SecurityCheckResult(SecurityCheckIds.BitLocker, SecurityStatus.Info,
-                "Шифрование диска недоступно",
+                T._("Шифрование диска недоступно"),
                 b.IsHomeEdition
-                    ? "В домашней редакции Windows нет BitLocker, а «Шифрование устройства» этот компьютер не поддерживает."
-                    : "Windows не сообщает о поддержке шифрования для системного диска."),
+                    ? T._("В домашней редакции Windows нет BitLocker, а «Шифрование устройства» этот компьютер не поддерживает.")
+                    : T._("Windows не сообщает о поддержке шифрования для системного диска.")),
             _ => new SecurityCheckResult(SecurityCheckIds.BitLocker, SecurityStatus.Unknown,
-                "Не удалось проверить шифрование диска",
-                "Windows не ответила на запрос. Состояние шифрования видно в «Параметрах» → «Конфиденциальность и защита»."),
+                T._("Не удалось проверить шифрование диска"),
+                T._("Windows не ответила на запрос. Состояние шифрования видно в «Параметрах» → «Конфиденциальность и защита».")),
         };
     }
 
@@ -374,25 +358,23 @@ public static partial class SecurityRules
     {
         if (d.HvciRunning)
         {
-            return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Ok, "Целостность памяти включена",
-                "Изоляция ядра не даёт вредоносным программам и уязвимым драйверам внедриться в ядро Windows.");
+            return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Ok, T._("Целостность памяти включена"),
+                T._("Изоляция ядра не даёт вредоносным программам и уязвимым драйверам внедриться в ядро Windows."));
         }
         if (!d.Available && d.HvciRegistryEnabled is null)
         {
             return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Unknown,
-                "Не удалось проверить изоляцию ядра",
-                "Windows не ответила на запрос. Состояние видно в «Безопасность Windows» → «Безопасность устройства».");
+                T._("Не удалось проверить изоляцию ядра"),
+                T._("Windows не ответила на запрос. Состояние видно в «Безопасность Windows» → «Безопасность устройства»."));
         }
         if (d.HvciConfigured)
         {
             return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Info,
-                "Целостность памяти включится после перезагрузки",
-                "Защита уже включена в настройках и заработает после перезагрузки компьютера. Если и после перезагрузки " +
-                "она не работает, проверьте, включена ли в BIOS/UEFI виртуализация (Intel VT-x или AMD SVM).");
+                T._("Целостность памяти включится после перезагрузки"),
+                T._("Защита уже включена в настройках и заработает после перезагрузки компьютера. Если и после перезагрузки она не работает, проверьте, включена ли в BIOS/UEFI виртуализация (Intel VT-x или AMD SVM)."));
         }
-        return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Info, "Целостность памяти выключена",
-            "Защищает ядро Windows от вредоносных и уязвимых драйверов. Включается в «Безопасности Windows» → " +
-            "«Безопасность устройства» → «Изоляция ядра». В отдельных играх может немного снизить FPS.");
+        return new SecurityCheckResult(SecurityCheckIds.MemoryIntegrity, SecurityStatus.Info, T._("Целостность памяти выключена"),
+            T._("Защищает ядро Windows от вредоносных и уязвимых драйверов. Включается в «Безопасности Windows» → «Безопасность устройства» → «Изоляция ядра». В отдельных играх может немного снизить FPS."));
     }
 
     // ===================== Several antiviruses / Defender threats =====================
@@ -411,7 +393,7 @@ public static partial class SecurityRules
         var defenderActive = products.Any(p => p.IsMicrosoft && p.Enabled) &&
                              defender is { RealTimeEnabled: true } && !defender.IsPassive;
         if (names.Count > 0 && defenderActive)
-            names.Insert(0, "Защитник Windows");
+            names.Insert(0, T._("Защитник Windows"));
         return names;
     }
 
@@ -432,18 +414,16 @@ public static partial class SecurityRules
         if (after <= 0)
         {
             return SecurityActionResult.Ok(
-                $"Угрозы обезврежены: {before}. Защитник Windows поместил их в карантин или удалил.\n\n" +
-                "Если какой-то файл нужен и вы уверены в нём, восстановите его в «Безопасность Windows» → «Журнал защиты».");
+                T.F("Угрозы обезврежены: {0}. Защитник Windows поместил их в карантин или удалил.\n\nЕсли какой-то файл нужен и вы уверены в нём, восстановите его в «Безопасность Windows» → «Журнал защиты».", before));
         }
         if (removed > 0)
         {
-            return SecurityActionResult.Fail(
-                $"Не удалось обезвредить все угрозы: обезврежено {removed} из {before}. С остальными Защитник Windows не справился " +
-                "сам — откройте «Безопасность Windows» → «Журнал защиты» и выберите действие вручную, а затем запустите полную проверку.");
+            return SecurityActionResult.Failed(
+                T.F("Не удалось обезвредить все угрозы: обезврежено {0} из {1}. С остальными Защитник Windows не справился сам — откройте «Безопасность Windows» → «Журнал защиты» и выберите действие вручную, а затем запустите полную проверку.", removed, before));
         }
-        return SecurityActionResult.Fail(
-            "Не удалось обезвредить угрозы" + (string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim().TrimEnd('.')}") +
-            ". Откройте «Безопасность Windows» → «Журнал защиты» и выберите действие вручную — или запустите полную проверку.");
+        return SecurityActionResult.Failed(string.IsNullOrWhiteSpace(error)
+            ? T._("Не удалось обезвредить угрозы. Откройте «Безопасность Windows» → «Журнал защиты» и выберите действие вручную — или запустите полную проверку.")
+            : T.F("Не удалось обезвредить угрозы: {0}. Откройте «Безопасность Windows» → «Журнал защиты» и выберите действие вручную — или запустите полную проверку.", error.Trim().TrimEnd('.')));
     }
 
     // ===================== Misc =====================
@@ -454,19 +434,18 @@ public static partial class SecurityRules
     /// <summary>Result text of a successful "Отключить SMBv1" (on the page and on the dashboard).</summary>
     public static string Smb1DisabledText(bool restartNeeded, RestorePointResult restorePoint)
         => (restartNeeded
-               ? "SMBv1 отключён. Перезагрузите компьютер, чтобы изменение вступило в силу."
-               : "SMBv1 отключён.") +
+               ? T._("SMBv1 отключён. Перезагрузите компьютер, чтобы изменение вступило в силу.")
+               : T._("SMBv1 отключён.")) +
            "\n\n" + RestorePointText(restorePoint) +
-           "\n\nЕсли перестанет открываться старое сетевое хранилище (NAS), включить SMBv1 обратно можно в «Включение или " +
-           "отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».";
+           "\n\n" + T._("Если перестанет открываться старое сетевое хранилище (NAS), включить SMBv1 обратно можно в «Включение или отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».");
 
     /// <summary>One sentence about the restore point made before a change.</summary>
     public static string RestorePointText(RestorePointResult result) => result switch
     {
-        RestorePointResult.Created => "Перед изменением создана точка восстановления.",
-        RestorePointResult.RecentPointExists => "Свежая точка восстановления уже есть — Windows создала её меньше суток назад.",
-        RestorePointResult.DisabledInSettings => "Точка восстановления не создавалась: это отключено в настройках программы.",
-        RestorePointResult.NotElevated => "Точка восстановления не создана: нужны права администратора.",
-        _ => "Точку восстановления создать не удалось (возможно, защита системы выключена).",
+        RestorePointResult.Created => T._("Перед изменением создана точка восстановления."),
+        RestorePointResult.RecentPointExists => T._("Свежая точка восстановления уже есть — Windows создала её меньше суток назад."),
+        RestorePointResult.DisabledInSettings => T._("Точка восстановления не создавалась: это отключено в настройках программы."),
+        RestorePointResult.NotElevated => T._("Точка восстановления не создана: нужны права администратора."),
+        _ => T._("Точку восстановления создать не удалось (возможно, защита системы выключена)."),
     };
 }

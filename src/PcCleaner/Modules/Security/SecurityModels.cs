@@ -1,4 +1,5 @@
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -29,11 +30,11 @@ public static class SecurityStatusExtensions
 
     public static string ToRussian(this SecurityStatus s) => s switch
     {
-        SecurityStatus.Ok => "В порядке",
-        SecurityStatus.Info => "К сведению",
-        SecurityStatus.Warning => "Внимание",
-        SecurityStatus.Danger => "Опасно",
-        _ => "Нет данных",
+        SecurityStatus.Ok => T._("В порядке"),
+        SecurityStatus.Info => T._("К сведению"),
+        SecurityStatus.Warning => T._("Внимание"),
+        SecurityStatus.Danger => T._("Опасно"),
+        _ => T._("Нет данных"),
     };
 }
 
@@ -77,23 +78,23 @@ public static class SecurityCheckIds
 
     public static string Title(string id) => id switch
     {
-        Antivirus => "Антивирус",
-        Firewall => "Брандмауэр",
-        Uac => "Контроль учётных записей",
-        Hosts => "Файл hosts",
-        Winlogon => "Запуск рабочего стола",
-        Ifeo => "Перехват запуска программ",
-        Proxy => "Прокси-сервер",
-        Dns => "DNS-серверы",
-        Updates => "Обновления Windows",
+        Antivirus => T._("Антивирус"),
+        Firewall => T._("Брандмауэр"),
+        Uac => T._("Контроль учётных записей"),
+        Hosts => T._("Файл hosts"),
+        Winlogon => T._("Запуск рабочего стола"),
+        Ifeo => T._("Перехват запуска программ"),
+        Proxy => T._("Прокси-сервер"),
+        Dns => T._("DNS-серверы"),
+        Updates => T._("Обновления Windows"),
         SmartScreen => "SmartScreen",
-        Rdp => "Удалённый рабочий стол",
-        Extensions => "Расширения браузеров",
-        Smb1 => "Протокол SMBv1",
+        Rdp => T._("Удалённый рабочий стол"),
+        Extensions => T._("Расширения браузеров"),
+        Smb1 => T._("Протокол SMBv1"),
         SecureBoot => "Secure Boot",
-        Tpm => "Модуль TPM",
-        BitLocker => "Шифрование диска",
-        MemoryIntegrity => "Изоляция ядра",
+        Tpm => T._("Модуль TPM"),
+        BitLocker => T._("Шифрование диска"),
+        MemoryIntegrity => T._("Изоляция ядра"),
         _ => id,
     };
 
@@ -122,24 +123,23 @@ public static class SecurityCheckIds
     /// <summary>Plain-language tooltip explaining what the check is about.</summary>
     public static string Explanation(string id) => id switch
     {
-        Antivirus => "Антивирус проверяет файлы и программы в момент запуска и не даёт вирусам закрепиться в системе. " +
-                     "Встроенный антивирус Windows — Защитник Windows (Microsoft Defender).",
-        Firewall => "Брандмауэр (сетевой экран) не пускает в компьютер чужие подключения из сети.",
-        Uac => "UAC — окно «Разрешить этому приложению вносить изменения?». Оно не даёт программам молча получать права администратора.",
-        Hosts => "Файл hosts вручную задаёт адреса сайтов. Вирусы подменяют в нём адреса, чтобы уводить на поддельные страницы.",
-        Winlogon => "Параметры Winlogon (Shell и Userinit) определяют, что запускается при входе в Windows. Вирусы встраиваются сюда, чтобы стартовать вместе с рабочим столом.",
-        Ifeo => "Раздел реестра Image File Execution Options позволяет подменить запуск любой программы. Вирусы так блокируют антивирусы и Диспетчер задач.",
-        Proxy => "Прокси-сервер — посредник между браузером и интернетом. Рекламные программы подменяют его, чтобы встраивать рекламу и следить за сайтами.",
-        Dns => "DNS-сервер превращает адреса сайтов в IP-адреса. Подменённый DNS может уводить на поддельные сайты.",
-        Updates => "Обновления закрывают уязвимости Windows, через которые заражают компьютеры.",
-        SmartScreen => "SmartScreen предупреждает перед запуском скачанных программ с плохой репутацией.",
-        Rdp => "Удалённый рабочий стол (RDP) позволяет управлять компьютером по сети. Злоумышленники подбирают к нему пароли.",
-        Extensions => "Расширения видят все открытые страницы. Рекламные расширения подменяют поиск и показывают лишнюю рекламу.",
-        Smb1 => "SMBv1 — устаревшая версия протокола общего доступа к файлам и принтерам по сети. Через её уязвимости в 2017 году распространялись вирусы WannaCry и NotPetya.",
-        SecureBoot => "Secure Boot (безопасная загрузка) — функция UEFI, которая разрешает запускать только подписанные загрузчики. Она не даёт буткитам стартовать раньше Windows.",
-        Tpm => "TPM — чип или функция процессора (fTPM у AMD, PTT у Intel), которая хранит ключи шифрования. Нужен для Windows 11, BitLocker и Windows Hello.",
-        BitLocker => "BitLocker и «Шифрование устройства» шифруют системный диск: без пароля или ключа восстановления данные не прочитать, даже если вынуть диск.",
-        MemoryIntegrity => "«Целостность памяти» (HVCI) — часть изоляции ядра. С помощью виртуализации она проверяет драйверы и не даёт вредоносному коду внедриться в ядро Windows.",
+        Antivirus => T._("Антивирус проверяет файлы и программы в момент запуска и не даёт вирусам закрепиться в системе. Встроенный антивирус Windows — Защитник Windows (Microsoft Defender)."),
+        Firewall => T._("Брандмауэр (сетевой экран) не пускает в компьютер чужие подключения из сети."),
+        Uac => T._("UAC — окно «Разрешить этому приложению вносить изменения?». Оно не даёт программам молча получать права администратора."),
+        Hosts => T._("Файл hosts вручную задаёт адреса сайтов. Вирусы подменяют в нём адреса, чтобы уводить на поддельные страницы."),
+        Winlogon => T._("Параметры Winlogon (Shell и Userinit) определяют, что запускается при входе в Windows. Вирусы встраиваются сюда, чтобы стартовать вместе с рабочим столом."),
+        Ifeo => T._("Раздел реестра Image File Execution Options позволяет подменить запуск любой программы. Вирусы так блокируют антивирусы и Диспетчер задач."),
+        Proxy => T._("Прокси-сервер — посредник между браузером и интернетом. Рекламные программы подменяют его, чтобы встраивать рекламу и следить за сайтами."),
+        Dns => T._("DNS-сервер превращает адреса сайтов в IP-адреса. Подменённый DNS может уводить на поддельные сайты."),
+        Updates => T._("Обновления закрывают уязвимости Windows, через которые заражают компьютеры."),
+        SmartScreen => T._("SmartScreen предупреждает перед запуском скачанных программ с плохой репутацией."),
+        Rdp => T._("Удалённый рабочий стол (RDP) позволяет управлять компьютером по сети. Злоумышленники подбирают к нему пароли."),
+        Extensions => T._("Расширения видят все открытые страницы. Рекламные расширения подменяют поиск и показывают лишнюю рекламу."),
+        Smb1 => T._("SMBv1 — устаревшая версия протокола общего доступа к файлам и принтерам по сети. Через её уязвимости в 2017 году распространялись вирусы WannaCry и NotPetya."),
+        SecureBoot => T._("Secure Boot (безопасная загрузка) — функция UEFI, которая разрешает запускать только подписанные загрузчики. Она не даёт буткитам стартовать раньше Windows."),
+        Tpm => T._("TPM — чип или функция процессора (fTPM у AMD, PTT у Intel), которая хранит ключи шифрования. Нужен для Windows 11, BitLocker и Windows Hello."),
+        BitLocker => T._("BitLocker и «Шифрование устройства» шифруют системный диск: без пароля или ключа восстановления данные не прочитать, даже если вынуть диск."),
+        MemoryIntegrity => T._("«Целостность памяти» (HVCI) — часть изоляции ядра. С помощью виртуализации она проверяет драйверы и не даёт вредоносному коду внедриться в ядро Windows."),
         _ => "",
     };
 }
@@ -202,27 +202,27 @@ public sealed record FirewallProfileState(string Name, bool? Enabled, bool ByPol
 {
     public string DisplayName => Name.ToLowerInvariant() switch
     {
-        "domain" => "доменная сеть",
-        "private" => "частная сеть",
-        "public" => "общедоступная сеть",
+        "domain" => T._("доменная сеть"),
+        "private" => T._("частная сеть"),
+        "public" => T._("общедоступная сеть"),
         _ => Name,
     };
 
     /// <summary>"частная", "общедоступная", "доменная".</summary>
     public string ShortName => Name.ToLowerInvariant() switch
     {
-        "domain" => "доменная",
-        "private" => "частная",
-        "public" => "общедоступная",
+        "domain" => T._("доменная"),
+        "private" => T._("частная"),
+        "public" => T._("общедоступная"),
         _ => Name,
     };
 
     /// <summary>"частной", "общедоступной", "доменной" (for "выключен для ... сети").</summary>
     public string Genitive => Name.ToLowerInvariant() switch
     {
-        "domain" => "доменной",
-        "private" => "частной",
-        "public" => "общедоступной",
+        "domain" => T._("доменной"),
+        "private" => T._("частной"),
+        "public" => T._("общедоступной"),
         _ => Name,
     };
 }
@@ -244,9 +244,11 @@ public sealed class IfeoEntry
     /// <summary>Full registry path of the image subkey, e.g. "HKLM\SOFTWARE\...\taskmgr.exe".</summary>
     public string KeyPath => Location.FullPath;
 
+    public string KeyPathLabel => T.F("Раздел реестра: {0}", KeyPath);
+
     public SecurityStatus Risk { get; set; }
     public string Reason { get; set; } = "";
-    public string ViewText => IsWow64 ? "32-битные программы" : "64-битные программы";
+    public string ViewText => IsWow64 ? T._("32-битные программы") : T._("64-битные программы");
 }
 
 public sealed record ProxyState(bool Readable, bool Enabled, string? Server, string? AutoConfigUrl);

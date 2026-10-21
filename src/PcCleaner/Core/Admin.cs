@@ -4,13 +4,14 @@ using System.Runtime.InteropServices;
 using System.Security.Claims;
 using System.Security.Principal;
 using System.Windows;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
 public static class Admin
 {
     /// <summary>Title of the questions asked before a restart (also used by Settings/ElevatedRestart).</summary>
-    internal const string RestartTitle = "Перезапуск от имени администратора";
+    internal static string RestartTitle => T._("Перезапуск от имени администратора");
 
     private const string AdministratorsSid = "S-1-5-32-544";
 
@@ -32,7 +33,7 @@ public static class Admin
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось определить тип учётной записи: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Не удалось определить тип учётной записи: {0}", ErrorText.For(ex)));
             return true; // unknown: behave as before (no extra question)
         }
     });
@@ -104,7 +105,7 @@ public static class Admin
     {
         if (IsElevated)
             return true;
-        if (Dialogs.Confirm("Нужны права администратора", ElevationQuestion(actionDescription, IsStandardUser)))
+        if (Dialogs.Confirm(T._("Нужны права администратора"), ElevationQuestion(actionDescription, IsStandardUser)))
             RestartElevated(standardUserNoteShown: true);
         return false;
     }
@@ -129,7 +130,7 @@ public static class Admin
         }
         catch (Win32Exception)
         {
-            Log.Info("Пользователь отменил запуск от имени администратора");
+            Log.Info(T._("Пользователь отменил запуск от имени администратора"));
             return false;
         }
     }
@@ -146,13 +147,13 @@ public static class Admin
         var justConfirmed = Dialogs.TakeRecentYes(RestartTitle, TimeSpan.FromSeconds(2));
         if (busy.Count > 0 && !justConfirmed && !Dialogs.Confirm(RestartTitle, BusyWarning(busy)))
         {
-            Log.Info("Перезапуск от имени администратора отложен: не закончена работа в разделах " +
-                     string.Join(", ", busy.Select(b => $"«{b.Title}»")));
+            Log.Info(T.F("Перезапуск от имени администратора отложен: не закончена работа в разделах {0}",
+                string.Join(", ", busy.Select(b => T.Quote(b.Title)))));
             return false;
         }
         if (askAboutOtherAccount && !Dialogs.Confirm(RestartTitle, StandardUserWarning))
         {
-            Log.Info("Перезапуск от имени администратора отменён: учётная запись без прав администратора");
+            Log.Info(T._("Перезапуск от имени администратора отменён: учётная запись без прав администратора"));
             return false;
         }
         return true;
@@ -162,33 +163,29 @@ public static class Admin
     internal static string BusyWarning(IReadOnlyList<(string Title, string BusyText)> busy)
     {
         var lines = busy.Select(b => string.IsNullOrWhiteSpace(b.BusyText)
-            ? $"• «{b.Title}»"
-            : $"• «{b.Title}»: {b.BusyText.Trim().TrimEnd('…', '.')}");
-        return (busy.Count == 1 ? "Сейчас ещё не закончена работа в разделе:\n" : "Сейчас ещё не закончена работа в разделах:\n") +
+            ? $"• {T.Quote(b.Title)}"
+            : $"• {T.Quote(b.Title)}: {b.BusyText.Trim().TrimEnd('…', '.')}");
+        return (busy.Count == 1 ? T._("Сейчас ещё не закончена работа в разделе:") : T._("Сейчас ещё не закончена работа в разделах:")) + "\n" +
                string.Join("\n", lines) + "\n\n" +
-               "При перезапуске программа закроется и эта работа прервётся: то, что уже сделано, сохранится, " +
-               "остальное придётся запустить заново. Окна, которые открыли другие программы (например, деинсталлятор), " +
-               "продолжат работу.\n\n" +
-               "Перезапустить от имени администратора сейчас? Если нет — дождитесь окончания и нажмите кнопку ещё раз.";
+               T._("При перезапуске программа закроется и эта работа прервётся: то, что уже сделано, сохранится, остальное придётся запустить заново. Окна, которые открыли другие программы (например, деинсталлятор), продолжат работу.") + "\n\n" +
+               T._("Перезапустить от имени администратора сейчас? Если нет — дождитесь окончания и нажмите кнопку ещё раз.");
     }
 
-    internal const string StandardUserNote =
-        "Ваша учётная запись Windows — обычная, без прав администратора. Windows попросит пароль администратора, " +
-        "и программа запустится от его имени: очистка, автозагрузка, браузеры и другие проверки профиля будут относиться " +
-        "к профилю администратора, а не к вашему. Настройки программы, карантин и резервные копии у той учётной записи тоже свои.";
+    internal static string StandardUserNote =>
+        T._("Ваша учётная запись Windows — обычная, без прав администратора. Windows попросит пароль администратора, и программа запустится от его имени: очистка, автозагрузка, браузеры и другие проверки профиля будут относиться к профилю администратора, а не к вашему. Настройки программы, карантин и резервные копии у той учётной записи тоже свои.");
 
-    internal const string StandardUserWarning =
-        StandardUserNote + "\n\nПерезапустить программу от имени администратора?";
+    internal static string StandardUserWarning =>
+        StandardUserNote + "\n\n" + T._("Перезапустить программу от имени администратора?");
 
     /// <summary>"Для действия «…» нужны права администратора…" (pure, unit-tested).</summary>
     internal static string ElevationQuestion(string actionDescription, bool standardUser)
-        => $"Для действия «{actionDescription}» нужны права администратора.\n\n" +
+        => T.F("Для действия «{0}» нужны права администратора.", actionDescription) + "\n\n" +
            (standardUser ? StandardUserNote + "\n\n" : "") +
-           "Перезапустить программу от имени администратора?";
+           T._("Перезапустить программу от имени администратора?");
 
     internal static string OtherAccountText(string processUser, string sessionUser)
-        => $"Программа запущена от имени «{ShortName(processUser)}», а в Windows вошёл «{ShortName(sessionUser)}». " +
-           $"Очистка, автозагрузка, браузеры и другие проверки профиля относятся к «{ShortName(processUser)}», а не к «{ShortName(sessionUser)}».";
+        => T.F("Программа запущена от имени «{0}», а в Windows вошёл «{1}». Очистка, автозагрузка, браузеры и другие проверки профиля относятся к «{0}», а не к «{1}».",
+            ShortName(processUser), ShortName(sessionUser));
 
     private static string ShortName(string account)
     {

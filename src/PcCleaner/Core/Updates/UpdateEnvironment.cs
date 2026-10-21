@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -46,8 +47,23 @@ public sealed class UpdateEnvironment
         CurrentVersion = typeof(AppInfo).Assembly.GetName().Version ?? new Version(1, 0, 0),
     };
 
-    private static bool Start(string exe, IReadOnlyList<string> args)
+    /// <summary>
+    /// Starts the exe the way the updater does (not through the shell: an elevated copy hands its rights on); false when it did not
+    /// start, which is logged as an update problem. The restart of the program starts the same way (<see cref="AppRestart.Start"/>).
+    /// </summary>
+    internal static bool Start(string exe, IReadOnlyList<string> args)
     {
+        if (TryStart(exe, args, out var error))
+            return true;
+        if (error is not null)
+            Log.Warn(T.F("Обновление: не удалось запустить {0}: {1}", exe, ErrorText.For(error)), error);
+        return false;
+    }
+
+    /// <summary>The start itself, without a log line: the caller says what it was starting. <paramref name="error"/> is the reason when it threw.</summary>
+    internal static bool TryStart(string exe, IReadOnlyList<string> args, out Exception? error)
+    {
+        error = null;
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
@@ -57,7 +73,7 @@ public sealed class UpdateEnvironment
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            Log.Warn($"Обновление: не удалось запустить {exe}: {ex.Message}");
+            error = ex;
             return false;
         }
     }

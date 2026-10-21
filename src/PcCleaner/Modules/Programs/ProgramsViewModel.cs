@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Programs;
@@ -109,16 +110,16 @@ public sealed partial class ProgramsViewModel : PageViewModel
 
         Filters = new ObservableCollection<FilterOption<ProgramFilter>>
         {
-            new(ProgramFilter.All, "Все", "Все установленные программы", SetFilter, selected: true),
-            new(ProgramFilter.Unwanted, "Нежелательные", "Программы, похожие на рекламные, «оптимизаторы» и другие потенциально нежелательные", SetFilter),
-            new(ProgramFilter.Recent, "Недавние", $"Установлены или обновлены за последние {ProgramRules.RecentDays} дней", SetFilter),
-            new(ProgramFilter.Large, "Большие", "Занимают больше 1 ГБ", SetFilter),
-            new(ProgramFilter.Broken, "Битые", "Программа уже удалена, а запись в списке осталась", SetFilter),
+            new(ProgramFilter.All, T._("Все"), T._("Все установленные программы"), SetFilter, selected: true),
+            new(ProgramFilter.Unwanted, T._("Нежелательные"), T._("Программы, похожие на рекламные, «оптимизаторы» и другие потенциально нежелательные"), SetFilter),
+            new(ProgramFilter.Recent, T._("Недавние"), T.F("Установлены или обновлены за последние {0} дней", ProgramRules.RecentDays), SetFilter),
+            new(ProgramFilter.Large, T._("Большие"), T._("Занимают больше 1 ГБ"), SetFilter),
+            new(ProgramFilter.Broken, T._("Битые"), T._("Программа уже удалена, а запись в списке осталась"), SetFilter),
         };
         StoreFilters = new ObservableCollection<FilterOption<StoreFilter>>
         {
-            new(StoreFilter.All, "Все", "Все приложения Microsoft Store вашей учётной записи", SetStoreFilter, selected: true),
-            new(StoreFilter.Removable, "Можно удалить", "Предустановленные приложения, которые можно безопасно удалить", SetStoreFilter),
+            new(StoreFilter.All, T._("Все"), T._("Все приложения Microsoft Store вашей учётной записи"), SetStoreFilter, selected: true),
+            new(StoreFilter.Removable, T._("Можно удалить"), T._("Предустановленные приложения, которые можно безопасно удалить"), SetStoreFilter),
         };
 
         RefreshCommand = new AsyncRelayCommand(() => LoadAsync(), () => !IsBusy);
@@ -158,9 +159,9 @@ public sealed partial class ProgramsViewModel : PageViewModel
         ToggleAllVisibleStoreAppsCommand = new RelayCommand(ToggleAllVisibleStoreApps, () => VisibleCheckableStoreApps().Any());
     }
 
-    public override string Title => "Программы";
+    public override string Title => T._("Программы");
 
-    public override string Subtitle => "Установленные программы и приложения Store: что можно удалить, нежелательное ПО и «битые» записи";
+    public override string Subtitle => T._("Установленные программы и приложения Store: что можно удалить, нежелательное ПО и «битые» записи");
 
     public override string IconGlyph => "\uE71D";
 
@@ -198,8 +199,8 @@ public sealed partial class ProgramsViewModel : PageViewModel
 
     /// <summary>Context menu text: runtimes say right away that removing them is not recommended.</summary>
     public string UninstallMenuText => SelectedProgram?.IsRuntime == true
-        ? "Удалить компонент… (не рекомендуется)"
-        : "Удалить программу…";
+        ? T._("Удалить компонент… (не рекомендуется)")
+        : T._("Удалить программу…");
 
     /// <summary>The details panel on the right; the user can fold it into a slim strip to give the list more room.</summary>
     public bool IsDetailsOpen
@@ -280,7 +281,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
 
     public string PupCountText => _loaded ? Format.Number(PupCount) : "—";
 
-    public string PupHint => PupCount == 0 ? "не найдено — отлично" : "стоит проверить";
+    public string PupHint => PupCount == 0 ? T._("не найдено — отлично") : T._("стоит проверить");
 
     public int BrokenCount
     {
@@ -311,11 +312,11 @@ public sealed partial class ProgramsViewModel : PageViewModel
 
     public string BloatCountText => _loaded ? Format.Number(BloatCount) : "—";
 
-    public string BloatHint => BloatCount == 0 ? "лишних не найдено" : "можно удалить";
+    public string BloatHint => BloatCount == 0 ? T._("лишних не найдено") : T._("можно удалить");
 
-    public string StoreTabHeader => _loaded ? $"Приложения Microsoft Store · {Format.Number(_storeApps.Count)}" : "Приложения Microsoft Store";
+    public string StoreTabHeader => _loaded ? T.F("Приложения Microsoft Store · {0}", Format.Number(_storeApps.Count)) : T._("Приложения Microsoft Store");
 
-    public string ProgramsTabHeader => _loaded ? $"Программы · {Format.Number(_programs.Count)}" : "Программы";
+    public string ProgramsTabHeader => _loaded ? T.F("Программы · {0}", Format.Number(_programs.Count)) : T._("Программы");
 
     public string? StoreError
     {
@@ -338,9 +339,9 @@ public sealed partial class ProgramsViewModel : PageViewModel
 
     public string UnreadableEntriesText => _unreadableEntries == 0
         ? ""
-        : $"{Format.Count(_unreadableEntries, "запись", "записи", "записей")} не удалось прочитать — запустите программу от имени администратора, чтобы увидеть всё.";
+        : T.F("{0} не удалось прочитать — запустите программу от имени администратора, чтобы увидеть всё.", Format.Count(_unreadableEntries, "запись", "записи", "записей"));
 
-    public string TrustButtonText => SelectedProgram?.IsTrusted == true ? "Убрать из доверенных" : "Доверять";
+    public string TrustButtonText => SelectedProgram?.IsTrusted == true ? T._("Убрать из доверенных") : T._("Доверять");
 
     public bool IsProgramsEmpty => _programsView.IsEmpty;
 
@@ -349,18 +350,18 @@ public sealed partial class ProgramsViewModel : PageViewModel
         get
         {
             if (!_loaded)
-                return "Загружаем список программ…";
+                return T._("Загружаем список программ…");
             if (_programs.Count == 0)
-                return "Программы не найдены";
+                return T._("Программы не найдены");
             if (!string.IsNullOrWhiteSpace(SearchText))
-                return $"По запросу «{SearchText.Trim()}» ничего не найдено";
+                return T.F("По запросу «{0}» ничего не найдено", SearchText.Trim());
             return _filter switch
             {
-                ProgramFilter.Unwanted => "Нежелательных программ не найдено",
-                ProgramFilter.Recent => "Недавно установленных программ нет",
-                ProgramFilter.Large => "Больших программ не найдено",
-                ProgramFilter.Broken => "Битых записей нет",
-                _ => "Список пуст",
+                ProgramFilter.Unwanted => T._("Нежелательных программ не найдено"),
+                ProgramFilter.Recent => T._("Недавно установленных программ нет"),
+                ProgramFilter.Large => T._("Больших программ не найдено"),
+                ProgramFilter.Broken => T._("Битых записей нет"),
+                _ => T._("Список пуст"),
             };
         }
     }
@@ -370,17 +371,17 @@ public sealed partial class ProgramsViewModel : PageViewModel
         get
         {
             if (!_loaded)
-                return "Это займёт несколько секунд.";
+                return T._("Это займёт несколько секунд.");
             if (_programs.Count == 0)
-                return "Не удалось прочитать список установленных программ из реестра.";
+                return T._("Не удалось прочитать список установленных программ из реестра.");
             if (!string.IsNullOrWhiteSpace(SearchText))
-                return "Проверьте написание или выберите фильтр «Все».";
+                return T._("Проверьте написание или выберите фильтр «Все».");
             return _filter switch
             {
-                ProgramFilter.Unwanted => "Рекламных программ, «оптимизаторов» и браузеров «в нагрузку» не обнаружено. Отлично!",
-                ProgramFilter.Recent => $"За последние {ProgramRules.RecentDays} дней ничего не устанавливалось и не обновлялось.",
-                ProgramFilter.Large => "Ни одна программа не занимает больше 1 ГБ (или размер ещё вычисляется).",
-                ProgramFilter.Broken => "Все записи в списке программ ведут к существующим программам.",
+                ProgramFilter.Unwanted => T._("Рекламных программ, «оптимизаторов» и браузеров «в нагрузку» не обнаружено. Отлично!"),
+                ProgramFilter.Recent => T.F("За последние {0} дней ничего не устанавливалось и не обновлялось.", ProgramRules.RecentDays),
+                ProgramFilter.Large => T._("Ни одна программа не занимает больше 1 ГБ (или размер ещё вычисляется)."),
+                ProgramFilter.Broken => T._("Все записи в списке программ ведут к существующим программам."),
                 _ => "",
             };
         }
@@ -408,17 +409,17 @@ public sealed partial class ProgramsViewModel : PageViewModel
         get
         {
             if (!_loaded)
-                return "Загружаем приложения…";
+                return T._("Загружаем приложения…");
             if (_storeApps.Count == 0)
-                return HasStoreError ? "Список приложений недоступен" : "Приложений Microsoft Store не найдено";
+                return HasStoreError ? T._("Список приложений недоступен") : T._("Приложений Microsoft Store не найдено");
             if (!string.IsNullOrWhiteSpace(StoreSearchText))
-                return $"По запросу «{StoreSearchText.Trim()}» ничего не найдено";
-            return _storeFilter == StoreFilter.Removable ? "Лишних предустановленных приложений нет" : "Список пуст";
+                return T.F("По запросу «{0}» ничего не найдено", StoreSearchText.Trim());
+            return _storeFilter == StoreFilter.Removable ? T._("Лишних предустановленных приложений нет") : T._("Список пуст");
         }
     }
 
     public string StoreEmptyText => _storeFilter == StoreFilter.Removable && _storeApps.Count > 0 && string.IsNullOrWhiteSpace(StoreSearchText)
-        ? "Все известные «лишние» приложения уже удалены. Отлично!"
+        ? T._("Все известные «лишние» приложения уже удалены. Отлично!")
         : "";
 
     // ===================================================================== commands
@@ -514,7 +515,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
 
     // ===================================================================== loading
 
-    private Task LoadAsync() => RunBusyAsync("Поиск установленных программ…", async ct =>
+    private Task LoadAsync() => RunBusyAsync(T._("Поиск установленных программ…"), async ct =>
     {
         var scan = await _service.ScanProgramsAsync(ct);
         // Show the programs right away; the Store query (PowerShell) takes a few more seconds.
@@ -524,7 +525,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
         RaiseAllSummary();
         try
         {
-            ReportProgress(-1, "Получаем список приложений Microsoft Store…");
+            ReportProgress(-1, T._("Получаем список приложений Microsoft Store…"));
             var store = await _service.ScanStoreAppsAsync(ct);
             ApplyStoreApps(store);
             RaiseAllSummary();
@@ -533,8 +534,9 @@ public sealed partial class ProgramsViewModel : PageViewModel
         {
             StartEnrichment();
         }
-        Log.Info($"Программы: найдено {Format.Count(_programs.Count, "программа", "программы", "программ")} и " +
-                 $"{Format.Count(_storeApps.Count, "приложение", "приложения", "приложений")} Microsoft Store");
+        Log.Info(T.F("Программы: найдено {0} и {1} Microsoft Store",
+            Format.Count(_programs.Count, "программа", "программы", "программ"),
+            Format.Count(_storeApps.Count, "приложение", "приложения", "приложений")));
     });
 
     private async Task RescanProgramsAsync()
@@ -622,7 +624,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
         }
         catch (Exception ex)
         {
-            Log.Warn($"Программы: не удалось вычислить размеры или значки: {ex.Message}");
+            Log.Warn(T.F("Программы: не удалось вычислить размеры или значки: {0}", ErrorText.For(ex)), ex);
         }
         if (ReferenceEquals(programs.FirstOrDefault(), _programs.FirstOrDefault()))
             UpdateSummary();
@@ -709,7 +711,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
         total += _programs.Where(p => !p.IsBroken && p.EstimatedSizeBytes == 0 && p.ComputedSizeBytes > 0)
             .GroupBy(p => p.InstallLocation ?? p.RegistryKeyPath, StringComparer.OrdinalIgnoreCase)
             .Sum(g => g.First().ComputedSizeBytes);
-        TotalSizeText = total > 0 ? $"занимают ≈ {Format.Bytes(total)}" : "размер вычисляется…";
+        TotalSizeText = total > 0 ? T.F("занимают ≈ {0}", Format.Bytes(total)) : T._("размер вычисляется…");
 
         foreach (var f in Filters)
         {
@@ -777,51 +779,49 @@ public sealed partial class ProgramsViewModel : PageViewModel
             return;
         if (!p.CanUninstall)
         {
-            Dialogs.Info("Удаление программы", p.IsBroken
-                ? "Деинсталлятор этой программы не найден — скорее всего, она уже удалена. Уберите запись из списка кнопкой «Убрать запись из списка»."
-                : "У программы не указан деинсталлятор. Попробуйте удалить её через «Параметры» → «Приложения».");
+            Dialogs.Info(T._("Удаление программы"), p.IsBroken
+                ? T._("Деинсталлятор этой программы не найден — скорее всего, она уже удалена. Уберите запись из списка кнопкой «Убрать запись из списка».")
+                : T._("У программы не указан деинсталлятор. Попробуйте удалить её через «Параметры» → «Приложения»."));
             return;
         }
 
         if (quiet && p.IsRuntime)
             return; // never offered for runtimes (see InstalledProgram.ShowQuietUninstall)
 
-        if (!Dialogs.Confirm(p.IsRuntime ? "Удаление компонента Microsoft — не рекомендуется" : "Удаление программы",
+        if (!Dialogs.Confirm(p.IsRuntime ? T._("Удаление компонента Microsoft — не рекомендуется") : T._("Удаление программы"),
                 BuildUninstallConfirmation(p, quiet)))
             return;
-        if (quiet && !Dialogs.Confirm("Тихое удаление",
-                $"Тихое удаление пройдёт без вопросов деинсталлятора, и остановить его на полпути не получится.\n\n" +
-                $"Точно удалить «{p.DisplayName}» в тихом режиме?"))
+        if (quiet && !Dialogs.Confirm(T._("Тихое удаление"),
+                T.F("Тихое удаление пройдёт без вопросов деинсталлятора, и остановить его на полпути не получится.\n\nТочно удалить «{0}» в тихом режиме?", p.DisplayName)))
             return;
 
         UninstallOutcome? outcome = null;
         var stoppedWaiting = false;
-        await RunBusyAsync($"Удаление «{p.DisplayName}»…", async ct =>
+        await RunBusyAsync(T.F("Удаление «{0}»…", p.DisplayName), async ct =>
         {
-            ReportProgress(-1, "Создаём точку восстановления…");
-            await RestorePoint.TryCreateAsync($"Удаление {p.DisplayName}", ct);
-            ReportProgress(-1, $"Ждём завершения деинсталлятора «{p.DisplayName}». Если его окно уже закрыто, нажмите «Отмена».");
+            ReportProgress(-1, T._("Создаём точку восстановления…"));
+            await RestorePoint.TryCreateAsync(T.F("Удаление {0}", p.DisplayName), ct);
+            ReportProgress(-1, T.F("Ждём завершения деинсталлятора «{0}». Если его окно уже закрыто, нажмите «Отмена».", p.DisplayName));
             try
             {
                 outcome = await _service.RunUninstallerAsync(p, quiet,
-                    exe => ReportProgress(-1, $"Ждём завершения деинсталлятора ({exe}). Если его окно уже закрыто, нажмите «Отмена»."), ct);
+                    exe => ReportProgress(-1, T.F("Ждём завершения деинсталлятора ({0}). Если его окно уже закрыто, нажмите «Отмена».", exe)), ct);
             }
             catch (OperationCanceledException)
             {
                 stoppedWaiting = true;
-                Log.Info($"Удаление «{p.DisplayName}»: ожидание деинсталлятора прервано пользователем");
+                Log.Info(T.F("Удаление «{0}»: ожидание деинсталлятора прервано пользователем", p.DisplayName));
             }
-            ReportProgress(-1, "Обновляем список программ…");
+            ReportProgress(-1, T._("Обновляем список программ…"));
             await RescanProgramsAsync();
         });
 
         var stillThere = _programs.Any(x => string.Equals(x.RegistryKeyPath, p.RegistryKeyPath, StringComparison.OrdinalIgnoreCase));
         if (stoppedWaiting)
         {
-            Dialogs.Info("Удаление программы", stillThere
-                ? $"Ожидание остановлено. «{p.DisplayName}» пока остаётся в списке — если деинсталлятор ещё работает, " +
-                  "дождитесь его завершения и нажмите «Обновить»."
-                : $"Программа «{p.DisplayName}» удалена.");
+            Dialogs.Info(T._("Удаление программы"), stillThere
+                ? T.F("Ожидание остановлено. «{0}» пока остаётся в списке — если деинсталлятор ещё работает, дождитесь его завершения и нажмите «Обновить».", p.DisplayName)
+                : T.F("Программа «{0}» удалена.", p.DisplayName));
             return;
         }
         if (outcome is null)
@@ -829,15 +829,15 @@ public sealed partial class ProgramsViewModel : PageViewModel
         switch (outcome.Status)
         {
             case UninstallStatus.Removed:
-                Dialogs.Info("Программа удалена", p.SizeBytes > 0
-                    ? $"«{p.DisplayName}» удалена. Освобождено примерно {Format.Bytes(p.SizeBytes)}."
-                    : $"«{p.DisplayName}» удалена.");
+                Dialogs.Info(T._("Программа удалена"), p.SizeBytes > 0
+                    ? T.F("«{0}» удалена. Освобождено примерно {1}.", p.DisplayName, Format.Bytes(p.SizeBytes))
+                    : T.F("«{0}» удалена.", p.DisplayName));
                 break;
             case UninstallStatus.StillInstalled:
-                Dialogs.Info("Удаление программы", stillThere ? outcome.Message : $"Программа «{p.DisplayName}» удалена.");
+                Dialogs.Info(T._("Удаление программы"), stillThere ? outcome.Message : T.F("Программа «{0}» удалена.", p.DisplayName));
                 break;
             default:
-                Dialogs.Info("Удаление программы", outcome.Message);
+                Dialogs.Info(T._("Удаление программы"), outcome.Message);
                 break;
         }
     }
@@ -852,33 +852,30 @@ public sealed partial class ProgramsViewModel : PageViewModel
         var sb = new StringBuilder();
         if (p.IsRuntime)
         {
-            sb.AppendLine($"Внимание! «{p.DisplayName}» — компонент Microsoft, на котором работают другие программы и игры.");
+            sb.AppendLine(T.F("Внимание! «{0}» — компонент Microsoft, на котором работают другие программы и игры.", p.DisplayName));
             sb.AppendLine();
-            sb.AppendLine("После его удаления они могут перестать запускаться — с ошибками вроде «Не найден файл MSVCP140.dll» " +
-                          "или «Для запуска нужна платформа .NET». Несколько версий одного компонента — это нормально: " +
-                          "каждая нужна своим программам.");
+            sb.AppendLine(T._("После его удаления они могут перестать запускаться — с ошибками вроде «Не найден файл MSVCP140.dll» или «Для запуска нужна платформа .NET». Несколько версий одного компонента — это нормально: каждая нужна своим программам."));
             sb.AppendLine();
-            sb.AppendLine("Удаляйте его, только если точно знаете, что он больше не нужен (например, так советует служба поддержки). " +
-                          "Вернуть компонент можно, скачав его установщик с сайта Microsoft.");
+            sb.AppendLine(T._("Удаляйте его, только если точно знаете, что он больше не нужен (например, так советует служба поддержки). Вернуть компонент можно, скачав его установщик с сайта Microsoft."));
             sb.AppendLine();
         }
-        sb.AppendLine(p.IsRuntime ? $"Всё равно удалить «{p.DisplayName}»?" : $"Удалить программу «{p.DisplayName}»?");
+        sb.AppendLine(p.IsRuntime ? T.F("Всё равно удалить «{0}»?", p.DisplayName) : T.F("Удалить программу «{0}»?", p.DisplayName));
         sb.AppendLine();
-        sb.AppendLine($"Издатель: {p.PublisherText}");
+        sb.AppendLine(T.F("Издатель: {0}", p.PublisherText));
         if (!string.IsNullOrWhiteSpace(p.Version))
-            sb.AppendLine($"Версия: {p.Version}");
+            sb.AppendLine(T.F("Версия: {0}", p.Version));
         if (p.SizeBytes > 0)
-            sb.AppendLine($"Размер: {Format.Bytes(p.SizeBytes)}");
+            sb.AppendLine(T.F("Размер: {0}", Format.Bytes(p.SizeBytes)));
         sb.AppendLine();
         sb.AppendLine(quiet
-            ? "Программа будет удалена в тихом режиме — без окон и вопросов. Будет выполнена команда её установщика:"
-            : "Откроется стандартный деинсталлятор программы — дальше следуйте его шагам. Будет запущено:");
+            ? T._("Программа будет удалена в тихом режиме — без окон и вопросов. Будет выполнена команда её установщика:")
+            : T._("Откроется стандартный деинсталлятор программы — дальше следуйте его шагам. Будет запущено:"));
         sb.AppendLine(launch?.DisplayText ?? p.UninstallString ?? "—");
         sb.AppendLine();
-        sb.AppendLine("Перед удалением будет создана точка восстановления Windows (если это включено в настройках и есть права администратора).");
+        sb.AppendLine(T._("Перед удалением будет создана точка восстановления Windows (если это включено в настройках и есть права администратора)."));
         sb.Append(p.IsRuntime
-            ? "Отменить удаление нельзя, но компонент можно установить заново."
-            : "Отменить удаление нельзя, но программу можно установить заново.");
+            ? T._("Отменить удаление нельзя, но компонент можно установить заново.")
+            : T._("Отменить удаление нельзя, но программу можно установить заново."));
         return sb.ToString();
     }
 
@@ -886,17 +883,15 @@ public sealed partial class ProgramsViewModel : PageViewModel
     {
         if (p is null || !p.IsBroken || IsBusy)
             return;
-        if (p.IsMachineWide && !ElevatedRestart.RequireElevation("Удаление записи из списка программ"))
+        if (p.IsMachineWide && !ElevatedRestart.RequireElevation(T._("Удаление записи из списка программ")))
             return;
-        if (!Dialogs.Confirm("Удаление записи из списка",
-                $"Убрать «{p.DisplayName}» из списка установленных программ?\n\n" +
-                "Сама программа, судя по всему, уже удалена: нет ни её деинсталлятора, ни папки. Будет удалена только запись в реестре:\n" +
-                $"{p.RegistryKeyPath}\n\n" +
-                "Перед удалением сохранится резервная копия (.reg-файл) — запись можно вернуть, открыв этот файл."))
+        if (!Dialogs.Confirm(T._("Удаление записи из списка"),
+                T.F("Убрать «{0}» из списка установленных программ?\n\nСама программа, судя по всему, уже удалена: нет ни её деинсталлятора, ни папки. Будет удалена только запись в реестре:\n{1}\n\nПеред удалением сохранится резервная копия (.reg-файл) — запись можно вернуть, открыв этот файл.",
+                    p.DisplayName, p.RegistryKeyPath)))
             return;
 
         EntryDeletionResult? result = null;
-        await RunBusyAsync("Удаляем запись из списка программ…", async ct =>
+        await RunBusyAsync(T._("Удаляем запись из списка программ…"), async ct =>
         {
             result = await _service.DeleteEntryAsync(p, ct);
             await RescanProgramsAsync();
@@ -904,10 +899,9 @@ public sealed partial class ProgramsViewModel : PageViewModel
         if (result is null)
             return;
         if (result.Success)
-            Dialogs.Info("Запись удалена", $"«{p.DisplayName}» больше не показывается в списке программ.\n\n" +
-                                           $"Резервная копия: {result.BackupFile}");
+            Dialogs.Info(T._("Запись удалена"), T.F("«{0}» больше не показывается в списке программ.\n\nРезервная копия: {1}", p.DisplayName, result.BackupFile));
         else
-            Dialogs.Error("Запись не удалена", result.Message);
+            Dialogs.Error(T._("Запись не удалена"), result.Message);
     }
 
     private async Task CleanBrokenAsync()
@@ -926,25 +920,24 @@ public sealed partial class ProgramsViewModel : PageViewModel
             targets = broken.Where(p => !p.IsMachineWide).ToList();
             if (targets.Count == 0)
             {
-                ElevatedRestart.RequireElevation("Очистка битых записей в списке программ");
+                ElevatedRestart.RequireElevation(T._("Очистка битых записей в списке программ"));
                 return;
             }
-            skippedNote = $"\n\nЕщё {Format.Count(machine.Count, "запись", "записи", "записей")} для всех пользователей можно удалить " +
-                          "только с правами администратора — они будут пропущены.";
+            skippedNote = "\n\n" + T.F("Ещё {0} для всех пользователей можно удалить только с правами администратора — они будут пропущены.",
+                Format.Count(machine.Count, "запись", "записи", "записей"));
         }
 
         var names = string.Join("\n", targets.Take(12).Select(t => "• " + t.DisplayName));
         if (targets.Count > 12)
-            names += $"\n• … и ещё {targets.Count - 12}";
-        if (!Dialogs.Confirm("Очистка битых записей",
-                $"Убрать из списка программ {Format.Count(targets.Count, "запись", "записи", "записей")} об уже удалённых программах?\n\n" +
-                $"{names}\n\nУдаляются только строки в реестре; для каждой сначала сохраняется резервная копия (.reg-файл), " +
-                $"поэтому любую запись можно вернуть.{skippedNote}"))
+            names += "\n" + T.F("• … и ещё {0}", targets.Count - 12);
+        if (!Dialogs.Confirm(T._("Очистка битых записей"),
+                T.F("Убрать из списка программ {0} об уже удалённых программах?\n\n{1}\n\nУдаляются только строки в реестре; для каждой сначала сохраняется резервная копия (.reg-файл), поэтому любую запись можно вернуть.{2}",
+                    Format.Count(targets.Count, "запись", "записи", "записей"), names, skippedNote)))
             return;
 
         var deleted = 0;
         IReadOnlyList<string> failures = Array.Empty<string>();
-        await RunBusyAsync("Очищаем битые записи…", async ct =>
+        await RunBusyAsync(T._("Очищаем битые записи…"), async ct =>
         {
             var progress = new Progress<double>(v => ReportProgress(v));
             (deleted, failures) = await _service.DeleteEntriesAsync(targets, progress, ct);
@@ -954,13 +947,13 @@ public sealed partial class ProgramsViewModel : PageViewModel
         if (deleted == 0 && failures.Count == 0)
             return; // cancelled before anything was done
         var text = deleted > 0
-            ? $"Удалено {Format.Count(deleted, "запись", "записи", "записей")}. Резервные копии сохранены в папке:\n{AppPaths.BackupsDir}"
-            : "Ни одна запись не удалена.";
+            ? T.F("Удалено {0}. Резервные копии сохранены в папке:\n{1}", Format.Count(deleted, "запись", "записи", "записей"), AppPaths.BackupsDir)
+            : T._("Ни одна запись не удалена.");
         if (failures.Count > 0)
-            text += "\n\nНе удалось удалить:\n" + string.Join("\n", failures.Take(8));
+            text += "\n\n" + T._("Не удалось удалить:") + "\n" + string.Join("\n", failures.Take(8));
         if (skippedNote.Length > 0)
-            text += $"\n\nПропущено {Format.Count(machine.Count, "запись", "записи", "записей")} — нужны права администратора.";
-        Dialogs.Info("Очистка битых записей", text);
+            text += "\n\n" + T.F("Пропущено {0} — нужны права администратора.", Format.Count(machine.Count, "запись", "записи", "записей"));
+        Dialogs.Info(T._("Очистка битых записей"), text);
     }
 
     private void OpenFolder()
@@ -974,7 +967,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
     {
         var p = SelectedProgram;
         if (p is not null)
-            FileTools.SearchWeb($"{p.DisplayName} нужна ли программа");
+            FileTools.SearchWeb(T.F("{0} нужна ли программа", p.DisplayName));
     }
 
     private void ToggleTrust()
@@ -990,24 +983,22 @@ public sealed partial class ProgramsViewModel : PageViewModel
             .ToList();
         var trusted = ProgramsService.SetTrusted(Settings(), p.DisplayName, files, !p.IsTrusted);
         RefreshTrust();
-        Dialogs.Info("Доверенные программы", BuildTrustMessage(p.DisplayName, files, trusted));
+        Dialogs.Info(T._("Доверенные программы"), BuildTrustMessage(p.DisplayName, files, trusted));
     }
 
     internal static string BuildTrustMessage(string displayName, IReadOnlyList<string> trustFiles, bool trusted)
     {
         if (!trusted)
-            return $"«{displayName}» убрана из доверенных: проверки снова включены.";
+            return T.F("«{0}» убрана из доверенных: проверки снова включены.", displayName);
         // The 32- and 64-bit entries of one program usually have a file of the same name: name it once.
         var fileNames = trustFiles.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var names = string.Join(", ", fileNames);
-        var files = fileNames.Count switch
+        return fileNames.Count switch
         {
-            0 => "",
-            1 => $", а её файл {names} — как подозрительный в разделах «Процессы» и «Автозагрузка»",
-            _ => $", а её файлы {names} — как подозрительные в разделах «Процессы» и «Автозагрузка»",
+            0 => T.F("«{0}» отмечена как доверенная: она больше не будет помечаться как нежелательная. Убрать её из доверенных можно здесь же или в «Настройках».", displayName),
+            1 => T.F("«{0}» отмечена как доверенная: она больше не будет помечаться как нежелательная, а её файл {1} — как подозрительный в разделах «Процессы» и «Автозагрузка». Убрать её из доверенных можно здесь же или в «Настройках».", displayName, names),
+            _ => T.F("«{0}» отмечена как доверенная: она больше не будет помечаться как нежелательная, а её файлы {1} — как подозрительные в разделах «Процессы» и «Автозагрузка». Убрать её из доверенных можно здесь же или в «Настройках».", displayName, names),
         };
-        return $"«{displayName}» отмечена как доверенная: она больше не будет помечаться как нежелательная{files}. " +
-               "Убрать её из доверенных можно здесь же или в «Настройках».";
     }
 
     private async Task CheckVirusTotalAsync()
@@ -1028,7 +1019,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
         {
-            Log.Warn($"Не удалось скопировать в буфер обмена: {ex.Message}");
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -1040,39 +1031,39 @@ public sealed partial class ProgramsViewModel : PageViewModel
             return;
         if (!app.CanRemove)
         {
-            Dialogs.Info("Удаление приложения", app.ProtectReason ?? "Это приложение нужно Windows — удалять его не стоит.");
+            Dialogs.Info(T._("Удаление приложения"), app.ProtectReason ?? T._("Это приложение нужно Windows — удалять его не стоит."));
             return;
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Удалить приложение «{app.DisplayName}»?");
+        sb.AppendLine(T.F("Удалить приложение «{0}»?", app.DisplayName));
         sb.AppendLine();
         if (app.HasDescription)
             sb.AppendLine(app.Description);
-        sb.AppendLine($"Издатель: {app.PublisherDisplay}");
+        sb.AppendLine(T.F("Издатель: {0}", app.PublisherDisplay));
         if (app.SizeBytes > 0)
-            sb.AppendLine($"Размер: {Format.Bytes(app.SizeBytes)}");
+            sb.AppendLine(T.F("Размер: {0}", Format.Bytes(app.SizeBytes)));
         sb.AppendLine();
-        sb.AppendLine("Приложение будет удалено только для вашей учётной записи (Remove-AppxPackage).");
+        sb.AppendLine(T._("Приложение будет удалено только для вашей учётной записи (Remove-AppxPackage)."));
         sb.Append(app.UndoText);
-        if (!Dialogs.Confirm("Удаление приложения Microsoft Store", sb.ToString()))
+        if (!Dialogs.Confirm(T._("Удаление приложения Microsoft Store"), sb.ToString()))
             return;
 
         (bool Success, string Message)? result = null;
-        await RunBusyAsync($"Удаляем «{app.DisplayName}»…", async ct =>
+        await RunBusyAsync(T.F("Удаляем «{0}»…", app.DisplayName), async ct =>
         {
             result = await _service.RemoveStoreAppAsync(app, ct);
-            ReportProgress(-1, "Обновляем список приложений…");
+            ReportProgress(-1, T._("Обновляем список приложений…"));
             await RescanStoreAppsAsync();
         });
         if (result is null)
             return;
         if (result.Value.Success)
-            Dialogs.Info("Приложение удалено", app.IsFromStore
-                ? $"«{app.DisplayName}» удалено. Вернуть его можно через Microsoft Store."
-                : $"«{app.DisplayName}» удалено.");
+            Dialogs.Info(T._("Приложение удалено"), app.IsFromStore
+                ? T.F("«{0}» удалено. Вернуть его можно через Microsoft Store.", app.DisplayName)
+                : T.F("«{0}» удалено.", app.DisplayName));
         else
-            Dialogs.Error("Не удалось удалить приложение", $"«{app.DisplayName}»: {result.Value.Message}");
+            Dialogs.Error(T._("Не удалось удалить приложение"), $"{T.Quote(app.DisplayName)}: {result.Value.Message}");
     }
 
     private async Task RemoveAllBloatAsync()
@@ -1083,21 +1074,21 @@ public sealed partial class ProgramsViewModel : PageViewModel
         if (targets.Count == 0)
             return;
 
-        if (!Dialogs.Confirm("Удаление предустановленных приложений",
-                $"Удалить {Format.Count(targets.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений")}?\n\n" +
-                ProgramsService.PreinstalledAppsText(targets) + "\n\n" +
-                "Если какое-то из них вам нужно — нажмите «Нет» и удаляйте приложения по одному."))
+        if (!Dialogs.Confirm(T._("Удаление предустановленных приложений"),
+                T.F("Удалить {0}?\n\n{1}\n\nЕсли какое-то из них вам нужно — нажмите «Нет» и удаляйте приложения по одному.",
+                    Format.Count(targets.Count, "предустановленное приложение", "предустановленных приложения", "предустановленных приложений"),
+                    ProgramsService.PreinstalledAppsText(targets))))
             return;
 
         var removed = new List<string>();
         var failed = new List<string>();
-        await RunBusyAsync("Удаляем предустановленные приложения…", async ct =>
+        await RunBusyAsync(T._("Удаляем предустановленные приложения…"), async ct =>
         {
-            ReportProgress(-1, "Создаём точку восстановления…");
-            await RestorePoint.TryCreateAsync("Удаление предустановленных приложений", ct);
+            ReportProgress(-1, T._("Создаём точку восстановления…"));
+            await RestorePoint.TryCreateAsync(T._("Удаление предустановленных приложений"), ct);
             for (var i = 0; i < targets.Count && !ct.IsCancellationRequested; i++)
             {
-                ReportProgress(100.0 * i / targets.Count, $"Удаляем «{targets[i].DisplayName}» ({i + 1} из {targets.Count})…");
+                ReportProgress(100.0 * i / targets.Count, T.F("Удаляем «{0}» ({1} из {2})…", targets[i].DisplayName, i + 1, targets.Count));
                 (bool Success, string Message) r;
                 try
                 {
@@ -1109,18 +1100,18 @@ public sealed partial class ProgramsViewModel : PageViewModel
                 }
                 (r.Success ? removed : failed).Add(r.Success ? targets[i].DisplayName : $"{targets[i].DisplayName}: {r.Message}");
             }
-            ReportProgress(-1, "Обновляем список приложений…");
+            ReportProgress(-1, T._("Обновляем список приложений…"));
             await RescanStoreAppsAsync();
         });
 
         if (removed.Count == 0 && failed.Count == 0)
             return;
-        var text = $"Удалено {Format.Count(removed.Count, "приложение", "приложения", "приложений")}.";
+        var text = T.F("Удалено {0}.", Format.Count(removed.Count, "приложение", "приложения", "приложений"));
         if (failed.Count > 0)
-            text += "\n\nНе удалось удалить:\n" + string.Join("\n", failed.Take(8));
+            text += "\n\n" + T._("Не удалось удалить:") + "\n" + string.Join("\n", failed.Take(8));
         if (removed.Count > 0)
-            text += "\n\nПриложения из Microsoft Store можно вернуть через Microsoft Store.";
-        Dialogs.Info("Удаление предустановленных приложений", text);
+            text += "\n\n" + T._("Приложения из Microsoft Store можно вернуть через Microsoft Store.");
+        Dialogs.Info(T._("Удаление предустановленных приложений"), text);
     }
 
     private void OpenStorePage()
@@ -1134,7 +1125,7 @@ public sealed partial class ProgramsViewModel : PageViewModel
     {
         var a = SelectedStoreApp;
         if (a is not null)
-            FileTools.SearchWeb($"{a.DisplayName} {a.Name} можно ли удалить");
+            FileTools.SearchWeb(T.F("{0} {1} можно ли удалить", a.DisplayName, a.Name));
     }
 
     private void OpenStoreFolder()

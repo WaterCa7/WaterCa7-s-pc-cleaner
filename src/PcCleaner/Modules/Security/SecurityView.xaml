@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Security"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:SecurityViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700">
@@ -149,7 +150,7 @@
                     </Grid>
 
                     <StackPanel Grid.Column="1" Margin="20,0,16,0" VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource Muted}" Text="Оценка защиты" />
+                        <TextBlock Style="{StaticResource Muted}" Text="{loc:T 'Оценка защиты'}" />
                         <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                             <TextBlock Style="{StaticResource BigNumber}" Text="{Binding Score}"
                                        Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}" />
@@ -205,17 +206,17 @@
 
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="200">
                         <Button Style="{StaticResource AccentButton}" Command="{Binding RescanCommand}" HorizontalAlignment="Stretch"
-                                ToolTip="Повторить все проверки (только чтение, ничего не меняется)">
+                                ToolTip="{loc:T 'Повторить все проверки (только чтение, ничего не меняется)'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" Foreground="{StaticResource AccentTextBrush}" />
-                                <TextBlock Text="Проверить снова" Margin="8,0,0,0" />
+                                <TextBlock Text="{loc:T 'Проверить снова'}" Margin="8,0,0,0" />
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding OpenWindowsSecurityCommand}" Margin="0,8,0,0" HorizontalAlignment="Stretch"
-                                ToolTip="Открыть встроенное приложение «Безопасность Windows»">
+                                ToolTip="{loc:T 'Открыть встроенное приложение «Безопасность Windows»'}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="13" />
-                                <TextBlock Text="Безопасность Windows" Margin="8,0,0,0" />
+                                <TextBlock Text="{loc:T 'Безопасность Windows'}" Margin="8,0,0,0" />
                             </StackPanel>
                         </Button>
                         <TextBlock Text="{Binding LastScanText}" Style="{StaticResource Muted}" FontSize="11.5" HorizontalAlignment="Center"
@@ -231,7 +232,7 @@
                     Visibility="{Binding Message, Converter={StaticResource HasValueToVis}}">
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding DismissMessageCommand}"
-                            ToolTip="Скрыть" VerticalAlignment="Top" Margin="8,-4,-6,0">
+                            ToolTip="{loc:T 'Скрыть'}" VerticalAlignment="Top" Margin="8,-4,-6,0">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="11" />
                     </Button>
                     <TextBlock Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,1,10,0"
@@ -252,10 +253,10 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" Foreground="{StaticResource InfoBrush}" Margin="0,0,12,0" />
                     <TextBlock Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center"
-                               Text="Без прав администратора все проверки работают, но исправления (брандмауэр, UAC, hosts, перехваты, SMBv1, обезвреживание угроз) и список исключений антивируса недоступны." />
-                    <Button Grid.Column="2" Content="Перезапустить от имени администратора" Command="{Binding RestartAsAdminCommand}" Padding="12,5"
+                               Text="{loc:T 'Без прав администратора все проверки работают, но исправления (брандмауэр, UAC, hosts, перехваты, SMBv1, обезвреживание угроз) и список исключений антивируса недоступны.'}" />
+                    <Button Grid.Column="2" Content="{loc:T 'Перезапустить от имени администратора'}" Command="{Binding RestartAsAdminCommand}" Padding="12,5"
                             FontSize="12" Margin="12,0,0,0" VerticalAlignment="Center"
-                            ToolTip="Перезапустить программу от имени администратора (Windows спросит разрешение)" />
+                            ToolTip="{loc:T 'Перезапустить программу от имени администратора (Windows спросит разрешение)'}" />
                 </Grid>
             </Border>
 
@@ -263,7 +264,7 @@
             <DockPanel Margin="2,18,0,0" Visibility="{Binding HasAttentionChecks, Converter={StaticResource BoolToVis}}">
                 <TextBlock Style="{StaticResource H3}" Text="{Binding AttentionHeader}" />
                 <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Bottom"
-                           TextWrapping="Wrap" Text="Сначала опасное, затем то, что стоит поправить, и советы" />
+                           TextWrapping="Wrap" Text="{loc:T 'Сначала опасное, затем то, что стоит поправить, и советы'}" />
             </DockPanel>
             <ItemsControl ItemsSource="{Binding AttentionChecks}" Margin="0,10,0,0" Focusable="False"
                           ItemTemplate="{StaticResource CheckCard}" ItemContainerStyle="{StaticResource CheckCardContainer}"
@@ -279,7 +280,7 @@
                 <TextBlock Style="{StaticResource H3}" Text="{Binding OkHeader}" />
                 <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Bottom"
                            TextWrapping="Wrap"
-                           Text="Подробности — в подсказке: наведите на карточку или выберите её клавишей Tab" />
+                           Text="{loc:T 'Подробности — в подсказке: наведите на карточку или выберите её клавишей Tab'}" />
             </DockPanel>
             <ItemsControl ItemsSource="{Binding OkChecks}" Margin="0,10,0,0" Focusable="False"
                           ItemTemplate="{StaticResource CheckCard}" ItemContainerStyle="{StaticResource CheckCardContainer}"
@@ -297,9 +298,9 @@
                 <StackPanel HorizontalAlignment="Center" Margin="0,24">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="34" HorizontalAlignment="Center"
                                Foreground="{StaticResource MutedBrush}" />
-                    <TextBlock Style="{StaticResource H3}" Text="Проверка защиты" HorizontalAlignment="Center" Margin="0,12,0,4" />
+                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Проверка защиты'}" HorizontalAlignment="Center" Margin="0,12,0,4" />
                     <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" MaxWidth="460"
-                               Text="Проверим антивирус, брандмауэр, UAC, файл hosts, перехваты запуска, прокси, DNS, обновления, SMBv1, Secure Boot, TPM, шифрование диска, изоляцию ядра и расширения браузеров. Проверка только читает настройки — ничего не меняется." />
+                               Text="{loc:T 'Проверим антивирус, брандмауэр, UAC, файл hosts, перехваты запуска, прокси, DNS, обновления, SMBv1, Secure Boot, TPM, шифрование диска, изоляцию ядра и расширения браузеров. Проверка только читает настройки — ничего не меняется.'}" />
                 </StackPanel>
             </Border>
 
@@ -307,15 +308,15 @@
             <Border x:Name="DetailsCard" Style="{StaticResource Card}" Margin="0,12,0,0"
                     Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource H2}" Text="Подробности" />
+                    <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Подробности'}" />
                     <TabControl SelectedIndex="{Binding SelectedDetailsTab, Mode=TwoWay}">
 
                         <!-- Hosts -->
                         <TabItem Header="{Binding HostsTabHeader}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}">
-                                    <Run Text="Действующие строки файла" />
-                                    <Run Text="{Binding HostsPath, Mode=OneWay}" Foreground="{StaticResource TextBrush}" /><Run Text=". Отметьте лишние строки и нажмите «Удалить выбранные» — перед изменением файл копируется в резервную папку. Опасные строки уже отмечены." />
+                                    <Run Text="{loc:T 'Действующие строки файла'}" />
+                                    <Run Text="{Binding HostsPath, Mode=OneWay}" Foreground="{StaticResource TextBrush}" /><Run Text="{loc:T '. Отметьте лишние строки и нажмите «Удалить выбранные» — перед изменением файл копируется в резервную папку. Опасные строки уже отмечены.'}" />
                                 </TextBlock>
                                 <WrapPanel Margin="0,10,0,10">
                                     <Button Style="{StaticResource DangerButton}" Command="{Binding RemoveHostsLinesCommand}" Margin="0,0,8,0">
@@ -324,8 +325,8 @@
                                             <TextBlock Text="{Binding RemoveHostsText}" Margin="8,0,0,0" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Command="{Binding OpenHostsInNotepadCommand}" Margin="0,0,8,0" Content="Открыть в Блокноте" />
-                                    <Button Command="{Binding OpenHostsFolderCommand}" Content="Показать в папке" />
+                                    <Button Command="{Binding OpenHostsInNotepadCommand}" Margin="0,0,8,0" Content="{loc:T 'Открыть в Блокноте'}" />
+                                    <Button Command="{Binding OpenHostsFolderCommand}" Content="{loc:T 'Показать в папке'}" />
                                 </WrapPanel>
                                 <Grid>
                                     <DataGrid x:Name="HostsGrid" Style="{StaticResource DetailsGrid}" ItemsSource="{Binding HostsEntries}"
@@ -335,33 +336,33 @@
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
-                                                                  ToolTip="Отметить строку для удаления" />
+                                                                  ToolTip="{loc:T 'Отметить строку для удаления'}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTextColumn Header="Строка" Binding="{Binding LineNumber}" Width="62" />
-                                            <DataGridTemplateColumn Header="Адрес" Width="118" SortMemberPath="Address">
+                                            <DataGridTextColumn Header="{loc:T 'Строка'}" Binding="{Binding LineNumber}" Width="62" />
+                                            <DataGridTemplateColumn Header="{loc:T 'Адрес'}" Width="118" SortMemberPath="Address">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Address}" ToolTip="{Binding Address}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Сайты" Width="1.2*" SortMemberPath="HostnamesText">
+                                            <DataGridTemplateColumn Header="{loc:T 'Сайты'}" Width="1.2*" SortMemberPath="HostnamesText">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding HostnamesText}" ToolTip="{Binding RawLine}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Оценка" Width="116" SortMemberPath="Risk">
+                                            <DataGridTemplateColumn Header="{loc:T 'Оценка'}" Width="116" SortMemberPath="Risk">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <ContentControl Content="{Binding Risk}" ContentTemplate="{StaticResource StatusBadge}" Focusable="False" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Пояснение" Width="2*">
+                                            <DataGridTemplateColumn Header="{loc:T 'Пояснение'}" Width="2*">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Reason}" ToolTip="{Binding Reason}" />
@@ -371,10 +372,10 @@
                                         </DataGrid.Columns>
                                         <DataGrid.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Найти сайт в интернете"
+                                                <MenuItem Header="{loc:T 'Найти сайт в интернете'}"
                                                           Command="{Binding PlacementTarget.DataContext.SearchTextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                           CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                <MenuItem Header="Открыть файл hosts в Блокноте"
+                                                <MenuItem Header="{loc:T 'Открыть файл hosts в Блокноте'}"
                                                           Command="{Binding PlacementTarget.DataContext.OpenHostsInNotepadCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                             </ContextMenu>
                                         </DataGrid.ContextMenu>
@@ -382,7 +383,7 @@
                                     <StackPanel Style="{StaticResource EmptyState}"
                                                 Visibility="{Binding HostsEntries.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE73E;" Foreground="{StaticResource SuccessBrush}" Margin="0,0,10,0" />
-                                        <TextBlock Text="Файл hosts чистый — в нём нет действующих записей." Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="{loc:T 'Файл hosts чистый — в нём нет действующих записей.'}" Foreground="{StaticResource MutedBrush}" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -392,32 +393,32 @@
                         <TabItem Header="{Binding ThreatsTabHeader}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Что находил Защитник Windows. Угрозы «В карантине», «Удалена» и «Заблокирована» уже обезврежены — с ними ничего делать не нужно." />
+                                           Text="{loc:T 'Что находил Защитник Windows. Угрозы «В карантине», «Удалена» и «Заблокирована» уже обезврежены — с ними ничего делать не нужно.'}" />
                                 <WrapPanel Margin="0,10,0,10">
                                     <Button Style="{StaticResource DangerButton}" Command="{Binding RemoveThreatsCommand}" Margin="0,0,8,0"
                                             Visibility="{Binding HasActiveThreats, Converter={StaticResource BoolToVis}}"
-                                            ToolTip="Защитник Windows применит к необезвреженным угрозам своё действие — обычно карантин (нужны права администратора)">
+                                            ToolTip="{loc:T 'Защитник Windows применит к необезвреженным угрозам своё действие — обычно карантин (нужны права администратора)'}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
                                             <TextBlock Text="{Binding RemoveThreatsText}" Margin="8,0,0,0" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Command="{Binding OpenProtectionHistoryCommand}" Content="Открыть журнал защиты"
-                                            ToolTip="«Безопасность Windows» → «Журнал защиты»" />
+                                    <Button Command="{Binding OpenProtectionHistoryCommand}" Content="{loc:T 'Открыть журнал защиты'}"
+                                            ToolTip="{loc:T '«Безопасность Windows» → «Журнал защиты»'}" />
                                 </WrapPanel>
                                 <Grid>
                                     <DataGrid Style="{StaticResource DetailsGrid}" ItemsSource="{Binding Threats}"
                                               Visibility="{Binding Threats.Count, Converter={StaticResource HasValueToVis}}">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Обнаружена" Binding="{Binding TimeText}" Width="128" SortMemberPath="Time" />
-                                            <DataGridTemplateColumn Header="Угроза" Width="1.4*" SortMemberPath="Name">
+                                            <DataGridTextColumn Header="{loc:T 'Обнаружена'}" Binding="{Binding TimeText}" Width="128" SortMemberPath="Time" />
+                                            <DataGridTemplateColumn Header="{loc:T 'Угроза'}" Width="1.4*" SortMemberPath="Name">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Name}" ToolTip="{Binding Name}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Уровень" Width="104" SortMemberPath="SeverityId">
+                                            <DataGridTemplateColumn Header="{loc:T 'Уровень'}" Width="104" SortMemberPath="SeverityId">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <Border Style="{StaticResource Badge}" Background="{Binding SeverityRisk, Converter={StaticResource StatusSoft}}">
@@ -427,7 +428,7 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Состояние" Width="150" SortMemberPath="StatusId">
+                                            <DataGridTemplateColumn Header="{loc:T 'Состояние'}" Width="150" SortMemberPath="StatusId">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <Border Style="{StaticResource Badge}" Background="{Binding Risk, Converter={StaticResource StatusSoft}}">
@@ -437,7 +438,7 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Файл или объект" Width="2*">
+                                            <DataGridTemplateColumn Header="{loc:T 'Файл или объект'}" Width="2*">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Resources}" ToolTip="{Binding Resources}" />
@@ -447,10 +448,10 @@
                                         </DataGrid.Columns>
                                         <DataGrid.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Найти угрозу в интернете"
+                                                <MenuItem Header="{loc:T 'Найти угрозу в интернете'}"
                                                           Command="{Binding PlacementTarget.DataContext.SearchThreatCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                           CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                <MenuItem Header="Открыть журнал защиты"
+                                                <MenuItem Header="{loc:T 'Открыть журнал защиты'}"
                                                           Command="{Binding PlacementTarget.DataContext.OpenProtectionHistoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                             </ContextMenu>
                                         </DataGrid.ContextMenu>
@@ -468,32 +469,32 @@
                         <TabItem Header="{Binding ExtensionsTabHeader}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Расширения всех найденных браузеров (встроенные не показываются). Оценка только подсказывает: удалять расширения нужно в самом браузере." />
+                                           Text="{loc:T 'Расширения всех найденных браузеров (встроенные не показываются). Оценка только подсказывает: удалять расширения нужно в самом браузере.'}" />
                                 <WrapPanel Margin="0,10,0,10">
-                                    <CheckBox Content="Только подозрительные" IsChecked="{Binding OnlySuspiciousExtensions}" Margin="0,0,16,0"
+                                    <CheckBox Content="{loc:T 'Только подозрительные'}" IsChecked="{Binding OnlySuspiciousExtensions}" Margin="0,0,16,0"
                                               VerticalAlignment="Center" />
-                                    <Button Command="{Binding HowToRemoveExtensionCommand}" Content="Как удалить расширение" />
+                                    <Button Command="{Binding HowToRemoveExtensionCommand}" Content="{loc:T 'Как удалить расширение'}" />
                                 </WrapPanel>
                                 <Grid>
                                     <DataGrid Style="{StaticResource DetailsGrid}" ItemsSource="{Binding Extensions}"
                                               Visibility="{Binding Extensions.Count, Converter={StaticResource HasValueToVis}}">
                                         <DataGrid.Columns>
-                                            <DataGridTemplateColumn Header="Браузер" Width="1*" SortMemberPath="BrowserText">
+                                            <DataGridTemplateColumn Header="{loc:T 'Браузер'}" Width="1*" SortMemberPath="BrowserText">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding BrowserText}" ToolTip="{Binding BrowserText}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Расширение" Width="1.4*" SortMemberPath="Name">
+                                            <DataGridTemplateColumn Header="{loc:T 'Расширение'}" Width="1.4*" SortMemberPath="Name">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Name}">
                                                             <TextBlock.ToolTip>
                                                                 <StackPanel>
                                                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                                    <TextBlock Text="{Binding Version, StringFormat=Версия: {0}}" />
-                                                                    <TextBlock Text="{Binding SourceText, StringFormat=Источник: {0}}" />
+                                                                    <TextBlock Text="{Binding VersionLabel}" />
+                                                                    <TextBlock Text="{Binding SourceLabel}" />
                                                                     <TextBlock Text="{Binding Id, StringFormat=ID: {0}}" />
                                                                 </StackPanel>
                                                             </TextBlock.ToolTip>
@@ -501,15 +502,15 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTextColumn Header="Состояние" Binding="{Binding StateText}" Width="96" />
-                                            <DataGridTemplateColumn Header="Оценка" Width="116" SortMemberPath="Risk">
+                                            <DataGridTextColumn Header="{loc:T 'Состояние'}" Binding="{Binding StateText}" Width="96" />
+                                            <DataGridTemplateColumn Header="{loc:T 'Оценка'}" Width="116" SortMemberPath="Risk">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <ContentControl Content="{Binding Risk}" ContentTemplate="{StaticResource StatusBadge}" Focusable="False" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Пояснение" Width="2*">
+                                            <DataGridTemplateColumn Header="{loc:T 'Пояснение'}" Width="2*">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Reason}" ToolTip="{Binding Reason}" />
@@ -519,16 +520,16 @@
                                         </DataGrid.Columns>
                                         <DataGrid.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Страница в магазине расширений"
+                                                <MenuItem Header="{loc:T 'Страница в магазине расширений'}"
                                                           Command="{Binding PlacementTarget.DataContext.OpenExtensionStoreCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                           CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                <MenuItem Header="Найти в интернете"
+                                                <MenuItem Header="{loc:T 'Найти в интернете'}"
                                                           Command="{Binding PlacementTarget.DataContext.SearchExtensionCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                           CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                <MenuItem Header="Открыть папку расширения"
+                                                <MenuItem Header="{loc:T 'Открыть папку расширения'}"
                                                           Command="{Binding PlacementTarget.DataContext.OpenExtensionFolderCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                           CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                <MenuItem Header="Как удалить расширение"
+                                                <MenuItem Header="{loc:T 'Как удалить расширение'}"
                                                           Command="{Binding PlacementTarget.DataContext.HowToRemoveExtensionCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                             </ContextMenu>
                                         </DataGrid.ContextMenu>
@@ -546,30 +547,30 @@
                         <TabItem Header="{Binding DnsTabHeader}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="DNS-серверы активных подключений. Адреса роутера и известных сервисов безопасны; незнакомый публичный адрес обычно принадлежит провайдеру." />
+                                           Text="{loc:T 'DNS-серверы активных подключений. Адреса роутера и известных сервисов безопасны; незнакомый публичный адрес обычно принадлежит провайдеру.'}" />
                                 <WrapPanel Margin="0,10,0,10">
-                                    <Button Command="{Binding OpenNetworkSettingsCommand}" Content="Настройки сети" />
+                                    <Button Command="{Binding OpenNetworkSettingsCommand}" Content="{loc:T 'Настройки сети'}" />
                                 </WrapPanel>
                                 <Grid>
                                     <DataGrid Style="{StaticResource DetailsGrid}" ItemsSource="{Binding DnsServers}"
                                               Visibility="{Binding DnsServers.Count, Converter={StaticResource HasValueToVis}}">
                                         <DataGrid.Columns>
-                                            <DataGridTemplateColumn Header="Подключение" Width="1.3*" SortMemberPath="Adapter">
+                                            <DataGridTemplateColumn Header="{loc:T 'Подключение'}" Width="1.3*" SortMemberPath="Adapter">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Adapter}" ToolTip="{Binding Adapter}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTextColumn Header="DNS-сервер" Binding="{Binding Address}" Width="150" />
-                                            <DataGridTemplateColumn Header="Чей это сервер" Width="1.3*" SortMemberPath="Label">
+                                            <DataGridTextColumn Header="{loc:T 'DNS-сервер'}" Binding="{Binding Address}" Width="150" />
+                                            <DataGridTemplateColumn Header="{loc:T 'Чей это сервер'}" Width="1.3*" SortMemberPath="Label">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" Text="{Binding Label}" ToolTip="{Binding Label}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Оценка" Width="116" SortMemberPath="Risk">
+                                            <DataGridTemplateColumn Header="{loc:T 'Оценка'}" Width="116" SortMemberPath="Risk">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <ContentControl Content="{Binding Risk}" ContentTemplate="{StaticResource StatusBadge}" Focusable="False" />
@@ -579,7 +580,7 @@
                                         </DataGrid.Columns>
                                         <DataGrid.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Найти адрес в интернете"
+                                                <MenuItem Header="{loc:T 'Найти адрес в интернете'}"
                                                           Command="{Binding PlacementTarget.DataContext.SearchTextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                           CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                             </ContextMenu>
@@ -588,7 +589,7 @@
                                     <StackPanel Style="{StaticResource EmptyState}"
                                                 Visibility="{Binding DnsServers.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE968;" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
-                                        <TextBlock Text="Нет активных подключений с DNS-серверами." Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="{loc:T 'Нет активных подключений с DNS-серверами.'}" Foreground="{StaticResource MutedBrush}" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -598,32 +599,32 @@
                         <TabItem Header="{Binding IfeoTabHeader}" Visibility="{Binding HasIfeo, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}"
-                                           Text="Программы, запуск которых подменён через раздел реестра Image File Execution Options. Удаление перехвата убирает только значение Debugger — перед этим раздел сохраняется в резервную копию." />
+                                           Text="{loc:T 'Программы, запуск которых подменён через раздел реестра Image File Execution Options. Удаление перехвата убирает только значение Debugger — перед этим раздел сохраняется в резервную копию.'}" />
                                 <DataGrid Style="{StaticResource DetailsGrid}" ItemsSource="{Binding IfeoEntries}" Margin="0,10,0,0">
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Программа" Binding="{Binding ImageName}" Width="1*" />
-                                        <DataGridTemplateColumn Header="Что запускается" Width="1.4*" SortMemberPath="Debugger">
+                                        <DataGridTextColumn Header="{loc:T 'Программа'}" Binding="{Binding ImageName}" Width="1*" />
+                                        <DataGridTemplateColumn Header="{loc:T 'Что запускается'}" Width="1.4*" SortMemberPath="Debugger">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <TextBlock Style="{StaticResource CellText}" Text="{Binding Debugger}">
                                                         <TextBlock.ToolTip>
                                                             <StackPanel>
                                                                 <TextBlock Text="{Binding Debugger}" FontWeight="SemiBold" />
-                                                                <TextBlock Text="{Binding KeyPath, StringFormat=Раздел реестра: {0}}" />
+                                                                <TextBlock Text="{Binding KeyPathLabel}" />
                                                             </StackPanel>
                                                         </TextBlock.ToolTip>
                                                     </TextBlock>
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Header="Оценка" Width="116" SortMemberPath="Risk">
+                                        <DataGridTemplateColumn Header="{loc:T 'Оценка'}" Width="116" SortMemberPath="Risk">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <ContentControl Content="{Binding Risk}" ContentTemplate="{StaticResource StatusBadge}" Focusable="False" />
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Header="Пояснение" Width="2*">
+                                        <DataGridTemplateColumn Header="{loc:T 'Пояснение'}" Width="2*">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <TextBlock Style="{StaticResource CellText}" Text="{Binding Reason}" ToolTip="{Binding Reason}" />
@@ -633,8 +634,8 @@
                                         <DataGridTemplateColumn Width="96" CanUserSort="False">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <Button Style="{StaticResource DangerButton}" Content="Удалить" Padding="10,3" FontSize="12"
-                                                            ToolTip="Удалить перехват (значение Debugger)"
+                                                    <Button Style="{StaticResource DangerButton}" Content="{loc:T 'Удалить'}" Padding="10,3" FontSize="12"
+                                                            ToolTip="{loc:T 'Удалить перехват (значение Debugger)'}"
                                                             Command="{Binding DataContext.RemoveIfeoCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}" />
                                                 </DataTemplate>
@@ -643,10 +644,10 @@
                                     </DataGrid.Columns>
                                     <DataGrid.ContextMenu>
                                         <ContextMenu>
-                                            <MenuItem Header="Удалить перехват"
+                                            <MenuItem Header="{loc:T 'Удалить перехват'}"
                                                       Command="{Binding PlacementTarget.DataContext.RemoveIfeoCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                       CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                            <MenuItem Header="Найти программу-перехватчик в интернете"
+                                            <MenuItem Header="{loc:T 'Найти программу-перехватчик в интернете'}"
                                                       Command="{Binding PlacementTarget.DataContext.SearchTextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                       CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                         </ContextMenu>

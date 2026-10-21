@@ -2,6 +2,7 @@
 using System.Text;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
 namespace PcCleaner.Modules.Cleaner;
@@ -10,18 +11,18 @@ public sealed class CleanerViewModel : PageViewModel
 {
     private const long Mb = 1024L * 1024;
 
-    private static readonly (string Name, string Glyph, string Note, string Empty)[] GroupInfo =
+    /// <summary>The three groups: the key of <see cref="CleanerCategory.Group"/>, the title, the glyph, the note and the empty-state text.</summary>
+    private static (string Key, string Name, string Glyph, string Note, string Empty)[] GroupInfo() => new[]
     {
-        (CleanerCategory.GroupWindows, "",
-            "Временные файлы и кэш системы. Всё это Windows при необходимости создаст заново.",
-            "Системные папки не найдены."),
-        (CleanerCategory.GroupBrowsers, "",
-            "Очищается только кэш. Пароли, история, cookie, открытые вкладки, закладки и расширения не затрагиваются — " +
-            "заново входить на сайты не придётся.",
-            "Поддерживаемые браузеры (Chrome, Edge, Яндекс Браузер, Opera, Brave, Vivaldi, Firefox) не найдены."),
-        (CleanerCategory.GroupApps, "",
-            "Кэш программ и игр. Сами программы, сохранения игр, переписка и настройки не затрагиваются.",
-            "Кэш известных программ и игр не найден."),
+        (CleanerCategory.GroupWindows, "Windows", "",
+            T._("Временные файлы и кэш системы. Всё это Windows при необходимости создаст заново."),
+            T._("Системные папки не найдены.")),
+        (CleanerCategory.GroupBrowsers, T._("Браузеры"), "",
+            T._("Очищается только кэш. Пароли, история, cookie, открытые вкладки, закладки и расширения не затрагиваются — заново входить на сайты не придётся."),
+            T._("Поддерживаемые браузеры (Chrome, Edge, Яндекс Браузер, Opera, Brave, Vivaldi, Firefox) не найдены.")),
+        (CleanerCategory.GroupApps, T._("Приложения и игры"), "",
+            T._("Кэш программ и игр. Сами программы, сохранения игр, переписка и настройки не затрагиваются."),
+            T._("Кэш известных программ и игр не найден.")),
     };
 
     private readonly CleanerService _service;
@@ -55,9 +56,9 @@ public sealed class CleanerViewModel : PageViewModel
         PropertyChanged += OnSelfPropertyChanged;
     }
 
-    public override string Title => "Очистка";
+    public override string Title => T._("Очистка");
 
-    public override string Subtitle => "Временные файлы, кэш браузеров и программ, корзина — освободите место без риска";
+    public override string Subtitle => T._("Временные файлы, кэш браузеров и программ, корзина — освободите место без риска");
 
     public override string IconGlyph => "";
 
@@ -114,17 +115,17 @@ public sealed class CleanerViewModel : PageViewModel
         {
             if (!HasScanned)
                 return IsBusy
-                    ? "Ищем временные файлы, кэш и другой мусор…"
-                    : "Нажмите «Анализ», чтобы узнать, сколько места занимает мусор.";
+                    ? T._("Ищем временные файлы, кэш и другой мусор…")
+                    : T._("Нажмите «Анализ», чтобы узнать, сколько места занимает мусор.");
             if (TotalBytes < Mb)
-                return "Мусора почти нет — здесь всё чисто.";
+                return T._("Мусора почти нет — здесь всё чисто.");
             return SelectedCount > 0
-                ? $"Выбрано {Format.Bytes(SelectedBytes)} {CleanerText.InCategories(SelectedCount)}"
-                : "Ничего не выбрано — отметьте категории в списке ниже.";
+                ? T.F("Выбрано {0} в {1}", Format.Bytes(SelectedBytes), Format.Count(SelectedCount, "категории", "категориях", "категориях"))
+                : T._("Ничего не выбрано — отметьте категории в списке ниже.");
         }
     }
 
-    public string ScannedAtText => _scannedAt is null ? "" : $"Проверено в {_scannedAt.Value:HH:mm}";
+    public string ScannedAtText => _scannedAt is null ? "" : T.F("Проверено в {0:HH:mm}", _scannedAt.Value);
 
     /// <summary>Found in folders that need administrator rights (when not elevated).</summary>
     public long AdminOnlyBytes
@@ -136,9 +137,8 @@ public sealed class CleanerViewModel : PageViewModel
     public bool ShowAdminHint => !IsElevated && _items.Any(i => i.NeedsAdmin || i.PartlyNeedsAdmin);
 
     public string AdminHintText => AdminOnlyBytes > Mb
-        ? $"Ещё {Format.Bytes(AdminOnlyBytes)} лежит в системных папках (временные файлы Windows, кэш обновлений и т. п.) — " +
-          "удалить их можно только с правами администратора."
-        : "Системные папки (временные файлы Windows, кэш обновлений, журналы) можно очистить только с правами администратора.";
+        ? T.F("Ещё {0} лежит в системных папках (временные файлы Windows, кэш обновлений и т. п.) — удалить их можно только с правами администратора.", Format.Bytes(AdminOnlyBytes))
+        : T._("Системные папки (временные файлы Windows, кэш обновлений, журналы) можно очистить только с правами администратора.");
 
     public CleanResultViewModel? LastResult
     {
@@ -156,16 +156,14 @@ public sealed class CleanerViewModel : PageViewModel
         }
     }
 
-    internal const string DismRunning = "Выполняется…";
+    internal static string DismRunning => T._("Выполняется…");
 
     // ===== Button tooltips (also shown on disabled buttons: they say why the button cannot be pressed) =====
 
-    internal const string BusyTip =
-        "Сейчас идёт анализ или очистка — дождитесь окончания или нажмите «Отмена» над страницей";
+    internal static string BusyTip => T._("Сейчас идёт анализ или очистка — дождитесь окончания или нажмите «Отмена» над страницей");
 
     /// <summary>DISM is not cancelled on purpose (see CleanerService.RunComponentCleanupAsync): "Отмена" would not help.</summary>
-    internal const string DismBusyTip =
-        "Идёт очистка компонентов Windows (DISM) — дождитесь её окончания, прерывать её нельзя";
+    internal static string DismBusyTip => T._("Идёт очистка компонентов Windows (DISM) — дождитесь её окончания, прерывать её нельзя");
 
     private string CurrentBusyTip => BusyTipFor(DismStatus);
 
@@ -174,8 +172,8 @@ public sealed class CleanerViewModel : PageViewModel
     public string AnalyzeTip => IsBusy
         ? CurrentBusyTip
         : HasScanned
-            ? "Проверить ещё раз (ничего не удаляется)"
-            : "Найти временные файлы, кэш и другой мусор (ничего не удаляется)";
+            ? T._("Проверить ещё раз (ничего не удаляется)")
+            : T._("Найти временные файлы, кэш и другой мусор (ничего не удаляется)");
 
     public string CleanTip => IsBusy ? CurrentBusyTip : IdleCleanTip(SelectedCount, HasScanned, TotalBytes);
 
@@ -184,33 +182,33 @@ public sealed class CleanerViewModel : PageViewModel
     {
         // Checked first: rows sized by an analysis that was stopped half-way can already be cleaned.
         if (selectedCount > 0)
-            return "Удалить файлы в отмеченных категориях (перед удалением появится подтверждение)";
+            return T._("Удалить файлы в отмеченных категориях (перед удалением появится подтверждение)");
         if (!hasScanned)
-            return "Сначала выполните анализ — кнопка станет доступна, когда будет понятно, что удалять";
+            return T._("Сначала выполните анализ — кнопка станет доступна, когда будет понятно, что удалять");
         return totalBytes < Mb
-            ? "Удалять нечего: мусора почти нет"
-            : "Отметьте в списке ниже хотя бы одну категорию, в которой найдены файлы";
+            ? T._("Удалять нечего: мусора почти нет")
+            : T._("Отметьте в списке ниже хотя бы одну категорию, в которой найдены файлы");
     }
 
     public string SelectRecommendedTip => IsBusy
         ? CurrentBusyTip
         : _items.Count == 0
-            ? "Список категорий ещё не готов — дождитесь анализа"
-            : "Отметить безопасные категории, которые мы рекомендуем очищать";
+            ? T._("Список категорий ещё не готов — дождитесь анализа")
+            : T._("Отметить безопасные категории, которые мы рекомендуем очищать");
 
     public string UnselectAllTip => IsBusy
         ? CurrentBusyTip
         : _items.Count == 0
-            ? "Список категорий ещё не готов — дождитесь анализа"
-            : "Снять отметки со всех категорий";
+            ? T._("Список категорий ещё не готов — дождитесь анализа")
+            : T._("Снять отметки со всех категорий");
 
     public string RestartAsAdminTip => IsBusy
         ? CurrentBusyTip
-        : "Программа перезапустится с правами администратора — тогда можно будет очистить и системные папки";
+        : T._("Программа перезапустится с правами администратора — тогда можно будет очистить и системные папки");
 
     public string RunDismTip => IsBusy
         ? CurrentBusyTip
-        : "Перед запуском появится подтверждение со всеми подробностями";
+        : T._("Перед запуском появится подтверждение со всеми подробностями");
 
     private void RaiseTips()
     {
@@ -276,14 +274,14 @@ public sealed class CleanerViewModel : PageViewModel
 
     private Task StartScan()
     {
-        _scanTask = RunBusyAsync("Ищем ненужные файлы…", async ct =>
+        _scanTask = RunBusyAsync(T._("Ищем ненужные файлы…"), async ct =>
         {
             await LoadCatalogAsync(ct);
             await ScanItemsAsync(_items.ToList(), ct);
             _scannedAt = DateTime.Now;
             HasScanned = true;
             OnPropertyChanged(nameof(ScannedAtText));
-            Log.Info($"Очистка: анализ завершён, можно освободить {Format.Bytes(TotalBytes)}");
+            Log.Info(T.F("Очистка: анализ завершён, можно освободить {0}", Format.Bytes(TotalBytes)));
         });
         return _scanTask;
     }
@@ -317,9 +315,9 @@ public sealed class CleanerViewModel : PageViewModel
 
         _items.Clear();
         _items.AddRange(items);
-        Groups = GroupInfo
+        Groups = GroupInfo()
             .Select(g => new CategoryGroupViewModel(g.Name, g.Glyph, g.Note, g.Empty,
-                _items.Where(i => i.Category.Group == g.Name).ToList()))
+                _items.Where(i => i.Category.Group == g.Key).ToList()))
             .ToList();
         IsCatalogLoaded = true;
         OnPropertyChanged(nameof(ShowAdminHint));
@@ -337,7 +335,7 @@ public sealed class CleanerViewModel : PageViewModel
 
         var byId = items.ToDictionary(i => i.Id);
         var done = 0;
-        ReportProgress(0, $"Анализ: проверено 0 из {items.Count}");
+        ReportProgress(0, T.F("Анализ: проверено 0 из {0}", items.Count));
         try
         {
             await _service.ScanAsync(items.Select(i => i.Category).ToList(), CleanerEngine.DefaultSampleSize,
@@ -350,7 +348,7 @@ public sealed class CleanerViewModel : PageViewModel
                             item.ApplyResult(result);
                         Recalculate();
                     });
-                    ReportProgress(n * 100.0 / items.Count, $"Анализ: {category.Name} — готово ({n} из {items.Count})");
+                    ReportProgress(n * 100.0 / items.Count, T.F("Анализ: {0} — готово ({1} из {2})", category.Name, n, items.Count));
                 }, ct);
         }
         finally
@@ -375,7 +373,7 @@ public sealed class CleanerViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
-            Log.Warn($"Очистка: не удалось проверить запущенные программы: {ex.Message}");
+            Log.Warn(T.F("Очистка: не удалось проверить запущенные программы: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -447,12 +445,12 @@ public sealed class CleanerViewModel : PageViewModel
             settings.CleanerExclusions = new List<string>(exclusions) { path };
             settings.Save();
         }
-        Log.Info($"Добавлено в исключения очистки: {path}");
+        Log.Info(T.F("Добавлено в исключения очистки: {0}", path));
         var affected = _items
             .Where(i => i.LargestFiles.Any(f => f.FullPath.StartsWith(path, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (affected.Count > 0 && !IsBusy)
-            _ = RunBusyAsync("Обновляем список после исключения…", ct => ScanItemsAsync(affected, ct));
+            _ = RunBusyAsync(T._("Обновляем список после исключения…"), ct => ScanItemsAsync(affected, ct));
     }
 
     private void Recalculate()
@@ -496,7 +494,7 @@ public sealed class CleanerViewModel : PageViewModel
         var selected = _items.Where(i => i.IsSelectedForCleaning).ToList();
         if (selected.Count == 0)
         {
-            Dialogs.Info("Очистка", "Отметьте хотя бы одну категорию, в которой найдены файлы.");
+            Dialogs.Info(T._("Очистка"), T._("Отметьте хотя бы одну категорию, в которой найдены файлы."));
             return;
         }
         if (selected.FirstOrDefault(i => i.IsRecycleBin) is { } binItem)
@@ -510,32 +508,31 @@ public sealed class CleanerViewModel : PageViewModel
             if (selected.Count == 0)
             {
                 // A bin whose contents cannot be read is never emptied (and is not "already empty").
-                Dialogs.Info("Очистка", binItem.Result?.Error is not null
-                    ? "Не удалось узнать, что сейчас лежит в корзине, поэтому она не будет очищена, а других отмеченных " +
-                      "категорий с файлами нет. Попробуйте ещё раз чуть позже."
-                    : "Корзина уже пуста, а других отмеченных категорий с файлами нет — удалять нечего.");
+                Dialogs.Info(T._("Очистка"), binItem.Result?.Error is not null
+                    ? T._("Не удалось узнать, что сейчас лежит в корзине, поэтому она не будет очищена, а других отмеченных категорий с файлами нет. Попробуйте ещё раз чуть позже.")
+                    : T._("Корзина уже пуста, а других отмеченных категорий с файлами нет — удалять нечего."));
                 return;
             }
         }
         var shownBin = ShownRecycleBin(selected);
-        if (!Confirm("Очистка", BuildConfirmation(selected)))
+        if (!Confirm(T._("Очистка"), BuildConfirmation(selected)))
         {
-            Log.Info("Очистка отменена пользователем");
+            Log.Info(T._("Очистка отменена пользователем"));
             return;
         }
 
-        await RunBusyAsync("Очистка…", async ct =>
+        await RunBusyAsync(T._("Очистка…"), async ct =>
         {
             var categories = selected.Select(i => i.Category).ToList();
             var results = await _service.CleanAsync(categories,
                 (index, category) => ReportProgress(index * 100.0 / categories.Count,
-                    $"Очистка: {category.Name} ({index + 1} из {categories.Count})"),
+                    T.F("Очистка: {0} ({1} из {2})", category.Name, index + 1, categories.Count)),
                 ct, confirmedRecycleBin: shownBin);
             LastResult = new CleanResultViewModel(results, ct.IsCancellationRequested, _service.IsElevated);
-            Log.Info("Очистка завершена: " + CleanerService.Summarize(results));
+            Log.Info(T.F("Очистка завершена: {0}", CleanerService.Summarize(results)));
 
             // Show what is left in the cleaned categories (quick, so not cancellable).
-            ReportProgress(-1, "Пересчитываем, сколько места осталось занято…");
+            ReportProgress(-1, T._("Пересчитываем, сколько места осталось занято…"));
             var cleanedIds = results.Select(r => r.CategoryId).ToHashSet(StringComparer.Ordinal);
             await ScanItemsAsync(selected.Where(i => cleanedIds.Contains(i.Id)).ToList(), CancellationToken.None);
         });
@@ -560,7 +557,7 @@ public sealed class CleanerViewModel : PageViewModel
     private string BuildConfirmation(IReadOnlyList<CategoryItemViewModel> selected)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Будут удалены ненужные файлы из выбранных категорий:");
+        sb.AppendLine(T._("Будут удалены ненужные файлы из выбранных категорий:"));
         sb.AppendLine();
         foreach (var item in selected.Take(14))
         {
@@ -569,34 +566,30 @@ public sealed class CleanerViewModel : PageViewModel
                 : $"•  {item.Name} — {Format.Bytes(item.CleanableBytes)}");
         }
         if (selected.Count > 14)
-            sb.AppendLine($"•  и ещё {Format.Count(selected.Count - 14, "категория", "категории", "категорий")}");
+            sb.AppendLine(T.F("•  и ещё {0}", Format.Count(selected.Count - 14, "категория", "категории", "категорий")));
         sb.AppendLine();
-        sb.AppendLine($"Всего: около {Format.Bytes(selected.Sum(i => i.CleanableBytes))}.");
+        sb.AppendLine(T.F("Всего: около {0}.", Format.Bytes(selected.Sum(i => i.CleanableBytes))));
         sb.AppendLine();
-        sb.AppendLine("Удаляются только временные файлы и кэш: ваши документы, пароли, история и cookie браузеров " +
-                      "не затрагиваются. Файлы, занятые запущенными программами, будут пропущены, а программы при " +
-                      "необходимости создадут кэш заново.");
+        sb.AppendLine(T._("Удаляются только временные файлы и кэш: ваши документы, пароли, история и cookie браузеров не затрагиваются. Файлы, занятые запущенными программами, будут пропущены, а программы при необходимости создадут кэш заново."));
 
         if (ShownRecycleBin(selected) is { } bin)
         {
             sb.AppendLine();
-            sb.AppendLine($"Корзина будет очищена полностью (сейчас в ней {bin.Text}) — файлы из неё восстановить будет " +
-                          "нельзя. Если к началу её очистки в корзину попадут новые файлы, программа спросит ещё раз.");
+            sb.AppendLine(T.F("Корзина будет очищена полностью (сейчас в ней {0}) — файлы из неё восстановить будет нельзя. Если к началу её очистки в корзину попадут новые файлы, программа спросит ещё раз.", bin.Text));
         }
         var running = selected.Where(i => i.IsRunning).Select(i => i.Name).Distinct().ToList();
         if (running.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"Сейчас запущены: {string.Join(", ", running)}. Их кэш очистится частично — " +
-                          "для полной очистки закройте эти программы.");
+            sb.AppendLine(T.F("Сейчас запущены: {0}. Их кэш очистится частично — для полной очистки закройте эти программы.", string.Join(", ", running)));
         }
         if (selected.Any(i => i.PartlyNeedsAdmin))
         {
             sb.AppendLine();
-            sb.AppendLine("Системные папки, для которых нужны права администратора, будут пропущены.");
+            sb.AppendLine(T._("Системные папки, для которых нужны права администратора, будут пропущены."));
         }
         sb.AppendLine();
-        sb.Append("Удалённые файлы не попадают в корзину, поэтому отменить очистку будет нельзя. Продолжить?");
+        sb.Append(T._("Удалённые файлы не попадают в корзину, поэтому отменить очистку будет нельзя. Продолжить?"));
         return sb.ToString();
     }
 
@@ -618,40 +611,33 @@ public sealed class CleanerViewModel : PageViewModel
                 await Task.Delay(DiskCleanupCooldown);
                 break;
             case DiskCleanupLaunch.AlreadyOpen:
-                Dialogs.Info("Очистка диска",
-                    "Мастер очистки диска Windows уже открыт — переключитесь на его окно через панель задач.");
+                Dialogs.Info(T._("Очистка диска"),
+                    T._("Мастер очистки диска Windows уже открыт — переключитесь на его окно через панель задач."));
                 break;
             default:
-                Dialogs.Error("Очистка диска",
-                    "Не удалось открыть встроенную утилиту «Очистка диска». Подробности — в журнале (раздел «Настройки»).");
+                Dialogs.Error(T._("Очистка диска"),
+                    T._("Не удалось открыть встроенную утилиту «Очистка диска». Подробности — в журнале (раздел «Настройки»)."));
                 break;
         }
     }
 
     private async Task RunComponentCleanupAsync()
     {
-        if (!ElevatedRestart.RequireElevation("Очистка компонентов Windows (DISM)"))
+        if (!ElevatedRestart.RequireElevation(T._("Очистка компонентов Windows (DISM)")))
             return;
-        var confirmed = Dialogs.Confirm("Очистка компонентов Windows",
-            "Будет запущена встроенная команда Windows:\n" +
-            "DISM /Online /Cleanup-Image /StartComponentCleanup\n\n" +
-            "Она удаляет старые версии системных компонентов, которые остались после установки обновлений, " +
-            "и обычно освобождает от нескольких сотен мегабайт до нескольких гигабайт.\n\n" +
-            "•  Это займёт от 5 до 30 минут. Прерывать процесс нельзя, но компьютером можно пользоваться.\n" +
-            "•  После очистки уже установленные обновления нельзя будет удалить (откатить) — это нормально.\n" +
-            "•  Отменить саму очистку нельзя. Перед запуском будет создана точка восстановления (если это " +
-            "включено в настройках).\n\nЗапустить?");
+        var confirmed = Dialogs.Confirm(T._("Очистка компонентов Windows"),
+            T._("Будет запущена встроенная команда Windows:\nDISM /Online /Cleanup-Image /StartComponentCleanup\n\nОна удаляет старые версии системных компонентов, которые остались после установки обновлений, и обычно освобождает от нескольких сотен мегабайт до нескольких гигабайт.\n\n•  Это займёт от 5 до 30 минут. Прерывать процесс нельзя, но компьютером можно пользоваться.\n•  После очистки уже установленные обновления нельзя будет удалить (откатить) — это нормально.\n•  Отменить саму очистку нельзя. Перед запуском будет создана точка восстановления (если это включено в настройках).\n\nЗапустить?"));
         if (!confirmed)
             return;
 
-        await RunBusyAsync("Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…",
+        await RunBusyAsync(T._("Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…"),
             async ct =>
             {
                 DismStatus = DismRunning;
-                await RestorePoint.TryCreateAsync("Очистка компонентов Windows", ct);
-                ReportProgress(-1, "Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…");
+                await RestorePoint.TryCreateAsync(T._("Очистка компонентов Windows"), ct);
+                ReportProgress(-1, T._("Очистка компонентов Windows (DISM) — это может занять до 30 минут, не выключайте компьютер…"));
                 DismStatus = await _service.RunComponentCleanupAsync(ct);
-                Dialogs.Info("Очистка компонентов Windows", DismStatus);
+                Dialogs.Info(T._("Очистка компонентов Windows"), DismStatus);
             });
         if (DismStatus == DismRunning)
             DismStatus = null;

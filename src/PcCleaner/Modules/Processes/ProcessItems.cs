@@ -1,4 +1,5 @@
 using System.IO;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Processes;
@@ -24,7 +25,7 @@ public enum ProcessStatusKind
 public abstract class ProcessItem : ObservableObject
 {
     /// <summary>Checkbox tooltip of a protected Windows process.</summary>
-    internal const string CannotCheckText = "Системный процесс Windows — его нельзя завершать";
+    internal static string CannotCheckText => T._("Системный процесс Windows — его нельзя завершать");
 
     private static readonly string WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
@@ -48,6 +49,9 @@ public abstract class ProcessItem : ObservableObject
     internal KillVerdict Verdict { get; private set; }
 
     internal string? ProtectionReason { get; private set; }
+
+    /// <summary>The protection is that the process is the cleaner itself (decided by the PID, never by the words of the reason).</summary>
+    internal bool ProtectionIsSelf { get; private set; }
 
     public abstract bool IsGroup { get; }
 
@@ -136,8 +140,8 @@ public abstract class ProcessItem : ObservableObject
     public bool HasPath => Path is not null;
 
     public string PathText => Path ?? (AccessDenied
-        ? Admin.IsElevated ? "Windows не даёт доступа к этому процессу" : "Нет доступа — нужны права администратора"
-        : "У этого процесса нет файла на диске (часть ядра Windows)");
+        ? Admin.IsElevated ? T._("Windows не даёт доступа к этому процессу") : T._("Нет доступа — нужны права администратора")
+        : T._("У этого процесса нет файла на диске (часть ядра Windows)"));
 
     public string? Description
     {
@@ -175,7 +179,7 @@ public abstract class ProcessItem : ObservableObject
                 return signer;
             if (!string.IsNullOrWhiteSpace(Company))
                 return Company!;
-            return Path is null && AccessDenied ? "нет доступа" : "—";
+            return Path is null && AccessDenied ? T._("нет доступа") : "—";
         }
     }
 
@@ -197,20 +201,20 @@ public abstract class ProcessItem : ObservableObject
         }
     }
 
-    public string SignatureText => Signature?.StatusText ?? (Path is null ? "Не проверялась — нет доступа к файлу" : "Проверяется…");
+    public string SignatureText => Signature?.StatusText ?? (Path is null ? T._("Не проверялась — нет доступа к файлу") : T._("Проверяется…"));
 
     /// <summary>For the signature badge colour: Valid / Unsigned / Invalid / ... or null while unknown.</summary>
     public SignatureStatus? SignatureKind => Signature?.Status;
 
     public string SignatureBadgeText => Signature?.Status switch
     {
-        SignatureStatus.Valid => "Подписан",
-        SignatureStatus.Unsigned => "Без подписи",
-        SignatureStatus.Invalid => "Подпись повреждена",
-        SignatureStatus.Untrusted => "Недоверенная подпись",
-        SignatureStatus.NotFound => "Файл не найден",
-        SignatureStatus.Error => "Подпись не проверена",
-        _ => Path is null ? "" : "Проверка подписи…",
+        SignatureStatus.Valid => T._("Подписан"),
+        SignatureStatus.Unsigned => T._("Без подписи"),
+        SignatureStatus.Invalid => T._("Подпись повреждена"),
+        SignatureStatus.Untrusted => T._("Недоверенная подпись"),
+        SignatureStatus.NotFound => T._("Файл не найден"),
+        SignatureStatus.Error => T._("Подпись не проверена"),
+        _ => Path is null ? "" : T._("Проверка подписи…"),
     };
 
     /// <summary>"1" for a process, the number of processes for a program.</summary>
@@ -263,8 +267,7 @@ public abstract class ProcessItem : ObservableObject
 
     /// <summary>Explanation in the details panel for the cleaner's own helpers (null when there is nothing to say).</summary>
     public virtual string? OwnNote => OwnRole == ProcessOwnRole.Helper
-        ? "Это служебный процесс WaterCa7s PC Cleaner: программа запустила его сама, чтобы проверить систему. " +
-          "Свои процессы программа не оценивает — они завершаются сами, когда проверка закончится."
+        ? T._("Это служебный процесс WaterCa7s PC Cleaner: программа запустила его сама, чтобы проверить систему. Свои процессы программа не оценивает — они завершаются сами, когда проверка закончится.")
         : null;
 
     protected void OnOwnNoteChanged() => OnPropertyChanged(nameof(OwnNote));
@@ -325,28 +328,28 @@ public abstract class ProcessItem : ObservableObject
 
     public string StatusText => StatusKind switch
     {
-        ProcessStatusKind.High => "Высокий риск",
-        ProcessStatusKind.Medium => "Подозрительно",
-        ProcessStatusKind.Low => "Внимание",
-        ProcessStatusKind.Trusted => "Доверенный",
-        ProcessStatusKind.Pending => "Проверка…",
-        ProcessStatusKind.NoAccess => "нет доступа",
-        ProcessStatusKind.Own => OwnRole == ProcessOwnRole.Self ? "Эта программа" : "Служебный",
+        ProcessStatusKind.High => T._("Высокий риск"),
+        ProcessStatusKind.Medium => T._("Подозрительно"),
+        ProcessStatusKind.Low => T._("Внимание"),
+        ProcessStatusKind.Trusted => T._("Доверенный"),
+        ProcessStatusKind.Pending => T._("Проверка…"),
+        ProcessStatusKind.NoAccess => T._("нет доступа"),
+        ProcessStatusKind.Own => OwnRole == ProcessOwnRole.Self ? T._("Эта программа") : T._("Служебный"),
         _ => "",
     };
 
     public string StatusToolTip => StatusKind switch
     {
         ProcessStatusKind.Own => OwnRole == ProcessOwnRole.Self
-            ? "Это сам WaterCa7s PC Cleaner. Свои процессы программа не оценивает."
-            : "Служебный процесс WaterCa7s PC Cleaner: программа запустила его сама для проверки системы и не оценивает его.",
-        ProcessStatusKind.High => "Несколько серьёзных признаков вредоносной программы. Откройте подробности справа.",
-        ProcessStatusKind.Medium => "Есть признаки, из-за которых программу стоит проверить. Подробности — справа.",
-        ProcessStatusKind.Low => "Мелкое замечание (например, нет цифровой подписи). Обычно это не опасно.",
-        ProcessStatusKind.Trusted => "Вы отметили эту программу как доверенную.",
-        ProcessStatusKind.Pending => "Проверяется цифровая подпись файла.",
-        ProcessStatusKind.NoAccess => "Windows не даёт прочитать сведения об этом процессе без прав администратора.",
-        _ => "Ничего подозрительного не найдено.",
+            ? T._("Это сам WaterCa7s PC Cleaner. Свои процессы программа не оценивает.")
+            : T._("Служебный процесс WaterCa7s PC Cleaner: программа запустила его сама для проверки системы и не оценивает его."),
+        ProcessStatusKind.High => T._("Несколько серьёзных признаков вредоносной программы. Откройте подробности справа."),
+        ProcessStatusKind.Medium => T._("Есть признаки, из-за которых программу стоит проверить. Подробности — справа."),
+        ProcessStatusKind.Low => T._("Мелкое замечание (например, нет цифровой подписи). Обычно это не опасно."),
+        ProcessStatusKind.Trusted => T._("Вы отметили эту программу как доверенную."),
+        ProcessStatusKind.Pending => T._("Проверяется цифровая подпись файла."),
+        ProcessStatusKind.NoAccess => T._("Windows не даёт прочитать сведения об этом процессе без прав администратора."),
+        _ => T._("Ничего подозрительного не найдено."),
     };
 
     /// <summary>Tooltip of the status icon on a narrow list: the badge's caption plus its explanation (null when clean).</summary>
@@ -420,20 +423,20 @@ public abstract class ProcessItem : ObservableObject
     public string KillToolTip => Verdict == KillVerdict.Blocked
         ? ProtectionReason ?? ProcessGuard.CriticalText
         : IsGroup && this is ProcessGroup { Count: > 1 } g
-            ? $"Принудительно завершить все процессы программы ({g.Count}). Несохранённые данные будут потеряны."
-            : "Принудительно завершить процесс. Несохранённые данные будут потеряны.";
+            ? T.F("Принудительно завершить все процессы программы ({0}). Несохранённые данные будут потеряны.", g.Count)
+            : T._("Принудительно завершить процесс. Несохранённые данные будут потеряны.");
 
     public string KillTreeToolTip => Verdict == KillVerdict.Blocked
         ? ProtectionReason ?? ProcessGuard.CriticalText
-        : "Завершить процесс и все запущенные им процессы (дочерние окна, помощники, установщики).";
+        : T._("Завершить процесс и все запущенные им процессы (дочерние окна, помощники, установщики).");
 
     public bool CanQuarantine => _quarantineBlockReason is null;
 
     public string QuarantineToolTip => _quarantineBlockReason is { Length: > 0 } reason
         ? reason
         : _quarantineBlockReason is null
-            ? "Завершить процесс и переместить файл в карантин. Файл переименуется и не сможет запуститься; восстановить его можно в «Настройках»."
-            : "Подождите, идёт проверка.";
+            ? T._("Завершить процесс и переместить файл в карантин. Файл переименуется и не сможет запуститься; восстановить его можно в «Настройках».")
+            : T._("Подождите, идёт проверка.");
 
     // ---- checkbox ("Завершить отмеченные") ----
 
@@ -471,7 +474,7 @@ public abstract class ProcessItem : ObservableObject
     /// <summary>Why the checkbox is disabled; null when it can be checked.</summary>
     public virtual string? CheckTooltip => CanCheck
         ? null
-        : ProtectionReason == ProcessGuard.SelfText ? ProcessGuard.SelfText : CannotCheckText;
+        : ProtectionIsSelf ? ProcessGuard.SelfText : CannotCheckText;
 
     /// <summary>The page's checked set changed: the checkbox reads it again.</summary>
     internal void OnCheckedChanged() => OnPropertyChanged(nameof(IsChecked));
@@ -485,7 +488,7 @@ public abstract class ProcessItem : ObservableObject
     /// <summary>Called after the kill verdict changed (a program tells its processes: their checkboxes depend on it).</summary>
     protected virtual void OnProtectionChanged() { }
 
-    public string TrustButtonText => IsTrusted ? "Не доверять" : "Доверять";
+    public string TrustButtonText => IsTrusted ? T._("Не доверять") : T._("Доверять");
 
     /// <summary>
     /// Trusting only makes sense for a file with warnings (or to undo an earlier "Доверять"). A Microsoft-signed file is
@@ -497,15 +500,14 @@ public abstract class ProcessItem : ObservableObject
     private bool IsMicrosoftSigned => Signature?.IsMicrosoft == true;
 
     public string TrustToolTip => IsTrusted
-        ? "Снова проверять эту программу и показывать предупреждения о ней."
+        ? T._("Снова проверять эту программу и показывать предупреждения о ней.")
         : CanTrust
-            ? "Больше не считать эту программу подозрительной (во всех разделах). Используйте только для программ, в которых уверены."
+            ? T._("Больше не считать эту программу подозрительной (во всех разделах). Используйте только для программ, в которых уверены.")
             : Path is null
-                ? "Нет доступа к файлу процесса."
+                ? T._("Нет доступа к файлу процесса.")
                 : IsMicrosoftSigned && Suspicion is { Score: > 0 }
-                    ? "Это программа Microsoft: замечание относится к тому, с какими параметрами её запустили, а не к самому файлу. " +
-                      "Отметить её доверенной нельзя — иначе приложение перестанет замечать опасные скрипты, запущенные через неё."
-                    : "К этой программе нет замечаний — отмечать её доверенной не нужно.";
+                    ? T._("Это программа Microsoft: замечание относится к тому, с какими параметрами её запустили, а не к самому файлу. Отметить её доверенной нельзя — иначе приложение перестанет замечать опасные скрипты, запущенные через неё.")
+                    : T._("К этой программе нет замечаний — отмечать её доверенной не нужно.");
 
     public string? DefenderStatus
     {
@@ -528,12 +530,13 @@ public abstract class ProcessItem : ObservableObject
 
     internal void InvalidateSearchText() => _searchText = null;
 
-    internal void SetProtection(KillVerdict verdict, string? reason)
+    internal void SetProtection(KillVerdict verdict, string? reason, bool isSelf = false)
     {
-        if (Verdict == verdict && ProtectionReason == reason)
+        if (Verdict == verdict && ProtectionReason == reason && ProtectionIsSelf == isSelf)
             return;
         Verdict = verdict;
         ProtectionReason = reason;
+        ProtectionIsSelf = isSelf;
         OnPropertyChanged(nameof(CanKill));
         OnPropertyChanged(nameof(IsProtected));
         OnPropertyChanged(nameof(HasKillWarning));
@@ -593,7 +596,7 @@ public sealed class ProcessRow : ProcessItem
     public override bool CanCheck => CanKill && Group?.CanKill != false;
 
     public override string? CheckTooltip => CanKill && Group is { CanKill: false }
-        ? "Входит в программу с защищённым процессом — отметить нельзя; завершить его можно кнопкой «Завершить»"
+        ? T._("Входит в программу с защищённым процессом — отметить нельзя; завершить его можно кнопкой «Завершить»")
         : base.CheckTooltip;
 
     internal long CreateTime { get; }
@@ -629,7 +632,7 @@ public sealed class ProcessRow : ProcessItem
     public DateTime? StartTime { get; }
 
     public override string StartTimeText => StartTime is { } t
-        ? $"{Format.DateTime(t)} · работает {Format.Duration(DateTime.Now - t)}"
+        ? T.F("{0} · работает {1}", Format.DateTime(t), Format.Duration(DateTime.Now - t))
         : "—";
 
     public int ParentPid
@@ -673,10 +676,10 @@ public sealed class ProcessRow : ProcessItem
             if (!string.IsNullOrWhiteSpace(CommandLine))
                 return CommandLine!;
             if (!DetailsLoaded)
-                return "Загрузка…";
+                return T._("Загрузка…");
             if (IsPseudo)
                 return "—";
-            return Admin.IsElevated ? "Недоступна" : "Недоступна — для процессов других пользователей и служб нужны права администратора";
+            return Admin.IsElevated ? T._("Недоступна") : T._("Недоступна — для процессов других пользователей и служб нужны права администратора");
         }
     }
 
@@ -700,7 +703,7 @@ public sealed class ProcessRow : ProcessItem
 
     public string ServicesText => string.Join("\n", Services);
 
-    private string ServicesShort => Services.Count == 1 ? Services[0] : $"{Services[0]} и ещё {Services.Count - 1}";
+    private string ServicesShort => Services.Count == 1 ? Services[0] : T.F("{0} и ещё {1}", Services[0], Services.Count - 1);
 
     /// <summary>Kept the processor at 80%+ over several refreshes (see <see cref="CpuStreaks"/>).</summary>
     internal bool SustainedHighCpu { get; set; }
@@ -756,7 +759,7 @@ public sealed class ProcessGroup : ProcessItem
 
     public override string InstanceCountText => Count.ToString();
 
-    public override string CountToolTip => $"{Format.Count(Count, "процесс", "процесса", "процессов")}. Нажмите на стрелку, чтобы увидеть каждый.";
+    public override string CountToolTip => T.F("{0}. Нажмите на стрелку, чтобы увидеть каждый.", Format.Count(Count, "процесс", "процесса", "процессов"));
 
     public override bool IsGroup => true;
 
@@ -790,7 +793,7 @@ public sealed class ProcessGroup : ProcessItem
         {
             const int max = 12;
             var pids = string.Join(", ", _instances.Take(max).Select(r => r.Pid));
-            return _instances.Count > max ? $"PID {pids} и ещё {_instances.Count - max}" : $"PID {pids}";
+            return _instances.Count > max ? T.F("PID {0} и ещё {1}", pids, _instances.Count - max) : $"PID {pids}";
         }
     }
 
@@ -812,10 +815,9 @@ public sealed class ProcessGroup : ProcessItem
             if (own == 0)
                 return null;
             return own == 1
-                ? "Один из процессов — служебный процесс WaterCa7s PC Cleaner: программа запустила его сама, чтобы проверить систему, " +
-                  "и не оценивает его."
-                : $"{own} из {Count} {Format.Plural(Count, "процесса", "процессов", "процессов")} — служебные процессы WaterCa7s PC Cleaner: программа запустила их сама, " +
-                  "чтобы проверить систему, и не оценивает их.";
+                ? T._("Один из процессов — служебный процесс WaterCa7s PC Cleaner: программа запустила его сама, чтобы проверить систему, и не оценивает его.")
+                : T.F("{0} из {1} {2} — служебные процессы WaterCa7s PC Cleaner: программа запустила их сама, чтобы проверить систему, и не оценивает их.",
+                    own, Count, Format.Plural(Count, "процесса", "процессов", "процессов"));
         }
     }
 

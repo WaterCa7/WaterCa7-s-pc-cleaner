@@ -1,5 +1,6 @@
 using System.IO;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -25,17 +26,17 @@ public sealed class QuarantineRow
 
     public string TimeText => Format.DateTime(Item.Time);
 
-    public string Reason => string.IsNullOrWhiteSpace(Item.Reason) ? "Причина не указана" : Item.Reason.Trim();
+    public string Reason => string.IsNullOrWhiteSpace(Item.Reason) ? T._("Причина не указана") : Item.Reason.Trim();
 
     public long SizeBytes { get; }
 
     public bool StoredExists { get; }
 
-    public string SizeText => StoredExists ? Format.Bytes(SizeBytes) : "нет файла";
+    public string SizeText => StoredExists ? Format.Bytes(SizeBytes) : T._("нет файла");
 
     public string ToolTipText =>
-        $"{Item.OriginalPath}\n\nПричина: {Reason}\nПомещён в карантин: {TimeText}" +
-        (StoredExists ? "" : "\n\nФайл в папке карантина не найден — возможно, его удалили вручную.");
+        T.F("{0}\n\nПричина: {1}\nПомещён в карантин: {2}", Item.OriginalPath, Reason, TimeText) +
+        (StoredExists ? "" : "\n\n" + T._("Файл в папке карантина не найден — возможно, его удалили вручную."));
 }
 
 internal enum QuarantineRestoreStatus
@@ -74,7 +75,7 @@ internal static class QuarantineActions
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
                                            or NotSupportedException)
             {
-                Log.Warn($"Карантин: не удалось прочитать {item.StoredPath}: {ex.Message}");
+                Log.Warn(T.F("Карантин: не удалось прочитать {0}: {1}", item.StoredPath, ErrorText.For(ex)), ex);
             }
             rows.Add(new QuarantineRow(item, size, exists));
         }
@@ -90,7 +91,7 @@ internal static class QuarantineActions
         var ext = Path.GetExtension(originalPath);
         for (var i = 1; i < 1000; i++)
         {
-            var suffix = i == 1 ? " (восстановлен)" : $" (восстановлен {i})";
+            var suffix = i == 1 ? " " + T._("(восстановлен)") : " " + T.F("(восстановлен {0})", i);
             var candidate = Path.Combine(dir, name + suffix + ext);
             if (!exists(candidate))
                 return candidate;
@@ -107,26 +108,26 @@ internal static class QuarantineActions
     {
         if (!IsOwnStoredFile(item))
         {
-            Log.Warn($"Карантин: запись указывает на файл вне папки карантина ({item.StoredPath}) — пропущено");
+            Log.Warn(T.F("Карантин: запись указывает на файл вне папки карантина ({0}) — пропущено", item.StoredPath));
             return new(QuarantineRestoreStatus.Failed, null,
-                "Запись карантина повреждена: файл находится вне папки карантина.");
+                T._("Запись карантина повреждена: файл находится вне папки карантина."));
         }
         if (string.IsNullOrWhiteSpace(item.OriginalPath) || !Path.IsPathFullyQualified(item.OriginalPath)
                                                          || Path.GetFileName(item.OriginalPath).Length == 0)
         {
-            Log.Warn($"Карантин: в записи нет полного исходного пути ({item.OriginalPath}) — пропущено");
+            Log.Warn(T.F("Карантин: в записи нет полного исходного пути ({0}) — пропущено", item.OriginalPath));
             return new(QuarantineRestoreStatus.Failed, null,
-                "Запись карантина повреждена: не указан полный исходный путь файла.");
+                T._("Запись карантина повреждена: не указан полный исходный путь файла."));
         }
         if (!File.Exists(item.StoredPath))
             return new(QuarantineRestoreStatus.MissingStoredFile, null,
-                "Файл в папке карантина не найден — возможно, его удалили вручную или антивирусом.");
+                T._("Файл в папке карантина не найден — возможно, его удалили вручную или антивирусом."));
 
         var target = item.OriginalPath;
         if (File.Exists(target) || Directory.Exists(target))
         {
             if (!renameIfExists)
-                return new(QuarantineRestoreStatus.Conflict, target, $"По исходному пути уже есть файл: {target}");
+                return new(QuarantineRestoreStatus.Conflict, target, T.F("По исходному пути уже есть файл: {0}", target));
             target = AlternativePath(item.OriginalPath);
         }
 
@@ -136,26 +137,26 @@ internal static class QuarantineActions
         }
         catch (UnauthorizedAccessException ex)
         {
-            Log.Warn($"Карантин: нет доступа для восстановления {target}: {ex.Message}");
+            Log.Warn(T.F("Карантин: нет доступа для восстановления {0}: {1}", target, ErrorText.For(ex)), ex);
             return new(QuarantineRestoreStatus.AccessDenied, target,
-                "Нет доступа к исходной папке. Попробуйте запустить программу от имени администратора.");
+                T._("Нет доступа к исходной папке. Попробуйте запустить программу от имени администратора."));
         }
         catch (IOException ex) when (File.Exists(target) || Directory.Exists(target))
         {
-            Log.Warn($"Карантин: {ex.Message}");
-            return new(QuarantineRestoreStatus.Conflict, target, $"По исходному пути уже есть файл: {target}");
+            Log.Warn(T.F("Карантин: {0}", ErrorText.For(ex)), ex);
+            return new(QuarantineRestoreStatus.Conflict, target, T.F("По исходному пути уже есть файл: {0}", target));
         }
         catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException
                                        or System.Security.SecurityException or InvalidOperationException)
         {
             // InvalidOperationException: the quarantine list (index.json) cannot be read, so Core changed nothing.
-            Log.Warn($"Карантин: не удалось восстановить {item.OriginalPath}: {ex.Message}");
-            return new(QuarantineRestoreStatus.Failed, target, $"Не удалось восстановить файл: {ErrorPhrase(ex)}.");
+            Log.Warn(T.F("Карантин: не удалось восстановить {0}: {1}", item.OriginalPath, ErrorText.For(ex)), ex);
+            return new(QuarantineRestoreStatus.Failed, target, T.F("Не удалось восстановить файл: {0}.", ErrorPhrase(ex)));
         }
 
         return string.Equals(target, item.OriginalPath, StringComparison.OrdinalIgnoreCase)
-            ? new(QuarantineRestoreStatus.Restored, target, $"Восстановлен: {target}")
-            : new(QuarantineRestoreStatus.RestoredAs, target, $"Восстановлен под новым именем: {target}");
+            ? new(QuarantineRestoreStatus.Restored, target, T.F("Восстановлен: {0}", target))
+            : new(QuarantineRestoreStatus.RestoredAs, target, T.F("Восстановлен под новым именем: {0}", target));
     }
 
     /// <summary>Permanently deletes a quarantined file (caller has confirmed).</summary>
@@ -163,18 +164,18 @@ internal static class QuarantineActions
     {
         if (!IsOwnStoredFile(item))
         {
-            Log.Warn($"Карантин: запись указывает на файл вне папки карантина ({item.StoredPath}) — удаление отменено");
-            return (false, $"{item.FileName}: запись повреждена, файл вне папки карантина — удаление отменено.");
+            Log.Warn(T.F("Карантин: запись указывает на файл вне папки карантина ({0}) — удаление отменено", item.StoredPath));
+            return (false, T.F("{0}: запись повреждена, файл вне папки карантина — удаление отменено.", item.FileName));
         }
         try
         {
             Quarantine.Delete(item);
-            return (true, $"{item.FileName}: удалён навсегда.");
+            return (true, T.F("{0}: удалён навсегда.", item.FileName));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            Log.Warn($"Карантин: не удалось удалить {item.StoredPath}: {ex.Message}");
-            return (false, $"{item.FileName}: не удалось удалить — {ErrorPhrase(ex)}.");
+            Log.Warn(T.F("Карантин: не удалось удалить {0}: {1}", item.StoredPath, ErrorText.For(ex)), ex);
+            return (false, T.F("{0}: не удалось удалить — {1}.", item.FileName, ErrorPhrase(ex)));
         }
     }
 

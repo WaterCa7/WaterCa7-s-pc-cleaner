@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -29,7 +30,7 @@ public sealed class SecurityViewModel : PageViewModel
     private int _score;
     private string _scoreLabel = "";
     private SecurityStatus _overallStatus = SecurityStatus.Unknown;
-    private string _overallText = "Проверяем антивирус, брандмауэр, файл hosts и другие параметры защиты…";
+    private string _overallText = T._("Проверяем антивирус, брандмауэр, файл hosts и другие параметры защиты…");
     private int _okCount;
     private int _infoCount;
     private int _warningCount;
@@ -84,7 +85,7 @@ public sealed class SecurityViewModel : PageViewModel
         SearchExtensionCommand = new RelayCommand(p =>
         {
             if (p is BrowserExtension e)
-                FileTools.SearchWeb($"{e.Name} расширение {e.Browser}");
+                FileTools.SearchWeb(T.F("{0} расширение {1}", e.Name, e.Browser));
         }, p => p is BrowserExtension);
         OpenExtensionStoreCommand = new RelayCommand(p =>
         {
@@ -126,14 +127,14 @@ public sealed class SecurityViewModel : PageViewModel
         OpenWindowsFeaturesCommand = new RelayCommand(() => ProcessRunner.ShellOpen("optionalfeatures.exe"));
         OpenDeviceSecurityCommand = new RelayCommand(() => ProcessRunner.ShellOpen(DeviceSecurityUri));
         OpenCoreIsolationCommand = new RelayCommand(() => ProcessRunner.ShellOpen(CoreIsolationUri));
-        SecureBootHowToCommand = new RelayCommand(() => Dialogs.Info("Как включить Secure Boot", SecurityRules.SecureBootHowTo));
-        TpmHowToCommand = new RelayCommand(() => Dialogs.Info("Как включить TPM", SecurityRules.TpmHowTo));
+        SecureBootHowToCommand = new RelayCommand(() => Dialogs.Info(T._("Как включить Secure Boot"), SecurityRules.SecureBootHowTo));
+        TpmHowToCommand = new RelayCommand(() => Dialogs.Info(T._("Как включить TPM"), SecurityRules.TpmHowTo));
         OpenEncryptionSettingsCommand = new RelayCommand(OpenEncryptionSettings);
     }
 
-    public override string Title => "Безопасность";
+    public override string Title => T._("Безопасность");
 
-    public override string Subtitle => "Антивирус, брандмауэр, файл hosts, SMBv1, Secure Boot, TPM, шифрование и другие проверки защиты";
+    public override string Subtitle => T._("Антивирус, брандмауэр, файл hosts, SMBv1, Secure Boot, TPM, шифрование и другие проверки защиты");
 
     public override string IconGlyph => "";
 
@@ -202,15 +203,15 @@ public sealed class SecurityViewModel : PageViewModel
         private set => Set(ref _unknownCount, value);
     }
 
-    public string OkCountText => $"{OkCount} в порядке";
+    public string OkCountText => T.F("{0} в порядке", OkCount);
 
-    public string InfoCountText => $"{InfoCount} — к сведению";
+    public string InfoCountText => T.F("{0} — к сведению", InfoCount);
 
-    public string WarningCountText => $"{WarningCount} — внимание";
+    public string WarningCountText => T.F("{0} — внимание", WarningCount);
 
-    public string DangerCountText => $"{DangerCount} — опасно";
+    public string DangerCountText => T.F("{0} — опасно", DangerCount);
 
-    public string UnknownCountText => $"{UnknownCount} — нет данных";
+    public string UnknownCountText => T.F("{0} — нет данных", UnknownCount);
 
     public string LastScanText
     {
@@ -263,9 +264,9 @@ public sealed class SecurityViewModel : PageViewModel
     /// "Стоит посмотреть · 6 проблем и 1 совет": counted like the dashboard tile and the log line. Without problems and
     /// tips (only "к сведению" / "нет данных" cards) there is no count, so the header never says "проблем нет" above cards.
     /// </summary>
-    public string AttentionHeader => _findingsText is null ? "Стоит посмотреть" : $"Стоит посмотреть · {_findingsText}";
+    public string AttentionHeader => _findingsText is null ? T._("Стоит посмотреть") : T.F("Стоит посмотреть · {0}", _findingsText);
 
-    public string OkHeader => $"В порядке · {OkChecks.Count}";
+    public string OkHeader => T.F("В порядке · {0}", OkChecks.Count);
 
     public ObservableCollection<HostsEntry> HostsEntries
     {
@@ -299,8 +300,8 @@ public sealed class SecurityViewModel : PageViewModel
     }
 
     public string RemoveHostsText => SelectedHostsCount > 0
-        ? $"Удалить выбранные ({SelectedHostsCount})"
-        : "Удалить выбранные строки";
+        ? T.F("Удалить выбранные ({0})", SelectedHostsCount)
+        : T._("Удалить выбранные строки");
 
     public ObservableCollection<ThreatDetection> Threats
     {
@@ -344,30 +345,30 @@ public sealed class SecurityViewModel : PageViewModel
         set => Set(ref _selectedDetailsTab, value);
     }
 
-    public string HostsTabHeader => $"Файл hosts ({HostsEntries.Count})";
+    public string HostsTabHeader => T.F("Файл hosts ({0})", HostsEntries.Count);
 
-    public string ThreatsTabHeader => $"Найденные угрозы ({Threats.Count})";
+    public string ThreatsTabHeader => T.F("Найденные угрозы ({0})", Threats.Count);
 
     /// <summary>Defender works and has detections it did not neutralize ("Обезвредить угрозы" is shown).</summary>
     public bool HasActiveThreats => _report?.CanRemoveThreats == true;
 
-    public string RemoveThreatsText => $"Обезвредить угрозы ({_report?.ActiveThreats.Count ?? 0})";
+    public string RemoveThreatsText => T.F("Обезвредить угрозы ({0})", _report?.ActiveThreats.Count ?? 0);
 
-    public string ExtensionsTabHeader => $"Расширения ({_allExtensions.Count})";
+    public string ExtensionsTabHeader => T.F("Расширения ({0})", _allExtensions.Count);
 
     public string DnsTabHeader => $"DNS ({DnsServers.Count})";
 
-    public string IfeoTabHeader => $"Перехваты ({IfeoEntries.Count})";
+    public string IfeoTabHeader => T.F("Перехваты ({0})", IfeoEntries.Count);
 
     public string ThreatsEmptyText => _report?.Defender is null && _report is not null
-        ? "Список угроз Защитника Windows недоступен — возможно, используется другой антивирус."
-        : "Защитник Windows ничего не находил — отлично!";
+        ? T._("Список угроз Защитника Windows недоступен — возможно, используется другой антивирус.")
+        : T._("Защитник Windows ничего не находил — отлично!");
 
     public string ExtensionsEmptyText => OnlySuspiciousExtensions && _allExtensions.Count > 0
-        ? "Подозрительных расширений нет — все расширения в порядке."
+        ? T._("Подозрительных расширений нет — все расширения в порядке.")
         : _report?.BrowsersFound == 0
-            ? "Поддерживаемые браузеры не найдены."
-            : "В браузерах нет установленных расширений.";
+            ? T._("Поддерживаемые браузеры не найдены.")
+            : T._("В браузерах нет установленных расширений.");
 
     // ===================== Commands =====================
 
@@ -447,7 +448,7 @@ public sealed class SecurityViewModel : PageViewModel
     {
         if (_scanTask is { IsCompleted: false })
             return _scanTask;
-        _scanTask = RunBusyAsync("Проверяем защиту компьютера…", async ct =>
+        _scanTask = RunBusyAsync(T._("Проверяем защиту компьютера…"), async ct =>
         {
             var report = await _service.ScanAsync((p, text) => ReportProgress(p, text), ct);
             Ui.Invoke(() => Apply(report));
@@ -498,20 +499,19 @@ public sealed class SecurityViewModel : PageViewModel
         Score = SecurityRules.Score(checks);
         var (problems, tips) = _service.CountFindings(report);
         _findingsText = problems + tips > 0 ? SecurityRules.FindingsText(problems, tips) : null;
-        ScoreLabel = Score >= 90 ? "Отлично" : Score >= 75 ? "Хорошо" : Score >= 50 ? "Есть проблемы" : "Плохо";
+        ScoreLabel = Score >= 90 ? T._("Отлично") : Score >= 75 ? T._("Хорошо") : Score >= 50 ? T._("Есть проблемы") : T._("Плохо");
         OverallStatus = DangerCount > 0 ? SecurityStatus.Danger
             : WarningCount > 0 ? SecurityStatus.Warning
             : UnknownCount > 0 ? SecurityStatus.Info
             : SecurityStatus.Ok;
         OverallText = DangerCount > 0
-            ? "Найдены серьёзные проблемы защиты. Начните с карточек, отмеченных красным."
+            ? T._("Найдены серьёзные проблемы защиты. Начните с карточек, отмеченных красным.")
             : WarningCount > 0
-                ? "Защита работает, но кое-что стоит поправить — посмотрите жёлтые карточки."
+                ? T._("Защита работает, но кое-что стоит поправить — посмотрите жёлтые карточки.")
                 : UnknownCount > 0
-                    ? $"Явных проблем не найдено, но {Format.Count(UnknownCount, "проверку", "проверки", "проверок")} выполнить не удалось " +
-                      "(серые карточки) — их стоит посмотреть в «Безопасности Windows»."
-                    : "Всё в порядке: компьютер хорошо защищён.";
-        LastScanText = $"Проверено в {report.ScannedAt:HH:mm}";
+                    ? T.F("Явных проблем не найдено, но {0} выполнить не удалось (серые карточки) — их стоит посмотреть в «Безопасности Windows».", Format.Count(UnknownCount, "проверку", "проверки", "проверок"))
+                    : T._("Всё в порядке: компьютер хорошо защищён.");
+        LastScanText = T.F("Проверено в {0:HH:mm}", report.ScannedAt);
         HasData = true;
 
         foreach (var name in new[]
@@ -573,137 +573,137 @@ public sealed class SecurityViewModel : PageViewModel
                 var realtimeOff = d is not null && !report.HasThirdPartyAntivirus && d.AntivirusEnabled && !d.RealTimeEnabled &&
                                   !d.PolicyDisablesRealtime;
                 if (realtimeOff)
-                    actions.Add(new CardAction("Включить защиту", EnableRealtimeCommand, CardActionKind.Primary,
-                        "Включить защиту в реальном времени Защитника Windows (нужны права администратора)"));
+                    actions.Add(new CardAction(T._("Включить защиту"), EnableRealtimeCommand, CardActionKind.Primary,
+                        T._("Включить защиту в реальном времени Защитника Windows (нужны права администратора)")));
                 // Scans and updates need a working Defender engine (on or in passive mode next to another antivirus).
                 if (report.MpCmdRunAvailable && d is not null && d.ServiceEnabled && (d.AntivirusEnabled || d.IsPassive))
                 {
-                    actions.Add(new CardAction("Быстрая проверка", QuickScanCommand,
+                    actions.Add(new CardAction(T._("Быстрая проверка"), QuickScanCommand,
                         realtimeOff ? CardActionKind.Normal : CardActionKind.Primary,
-                        "Проверить места, где чаще всего прячутся вирусы (5–15 минут)"));
-                    actions.Add(new CardAction("Полная проверка", FullScanCommand, CardActionKind.Normal,
-                        "Проверить все файлы на всех дисках — может занять несколько часов"));
-                    actions.Add(new CardAction("Обновить базы", UpdateSignaturesCommand, CardActionKind.Normal,
-                        "Скачать свежие антивирусные базы Защитника Windows"));
+                        T._("Проверить места, где чаще всего прячутся вирусы (5–15 минут)")));
+                    actions.Add(new CardAction(T._("Полная проверка"), FullScanCommand, CardActionKind.Normal,
+                        T._("Проверить все файлы на всех дисках — может занять несколько часов")));
+                    actions.Add(new CardAction(T._("Обновить базы"), UpdateSignaturesCommand, CardActionKind.Normal,
+                        T._("Скачать свежие антивирусные базы Защитника Windows")));
                 }
                 if (report.CanRemoveThreats)
-                    actions.Insert(0, new CardAction("Обезвредить угрозы", RemoveThreatsCommand, CardActionKind.Danger,
-                        "Защитник Windows применит к найденным угрозам своё действие — обычно карантин (нужны права администратора)"));
+                    actions.Insert(0, new CardAction(T._("Обезвредить угрозы"), RemoveThreatsCommand, CardActionKind.Danger,
+                        T._("Защитник Windows применит к найденным угрозам своё действие — обычно карантин (нужны права администратора)")));
                 if (report.Threats.Count > 0)
-                    actions.Add(new CardAction("Найденные угрозы", ShowDetailsCommand, CardActionKind.Normal,
-                        "Показать список угроз, которые находил Защитник Windows", ThreatsTab));
+                    actions.Add(new CardAction(T._("Найденные угрозы"), ShowDetailsCommand, CardActionKind.Normal,
+                        T._("Показать список угроз, которые находил Защитник Windows"), ThreatsTab));
                 if (report.ActiveAntivirusNames.Count >= 2)
-                    actions.Add(new CardAction("Открыть «Программы»", OpenProgramsCommand, CardActionKind.Normal,
-                        "Удалить лишний антивирус в разделе «Программы»"));
+                    actions.Add(new CardAction(T._("Открыть «Программы»"), OpenProgramsCommand, CardActionKind.Normal,
+                        T._("Удалить лишний антивирус в разделе «Программы»")));
                 if (actions.Count == 0)
-                    actions.Add(new CardAction("Безопасность Windows", OpenWindowsSecurityCommand, CardActionKind.Normal,
-                        "Открыть приложение «Безопасность Windows»"));
+                    actions.Add(new CardAction(T._("Безопасность Windows"), OpenWindowsSecurityCommand, CardActionKind.Normal,
+                        T._("Открыть приложение «Безопасность Windows»")));
                 break;
             }
             case SecurityCheckIds.Firewall:
                 if (bad && !report.FirewallOffOnlyByPolicy)
-                    actions.Add(new CardAction("Включить брандмауэр", EnableFirewallCommand, CardActionKind.Primary,
-                        "Включить брандмауэр Windows для всех типов сетей (нужны права администратора)"));
-                actions.Add(new CardAction("Настройки", OpenFirewallSettingsCommand, CardActionKind.Normal,
-                    "«Безопасность Windows» → «Брандмауэр и защита сети»"));
+                    actions.Add(new CardAction(T._("Включить брандмауэр"), EnableFirewallCommand, CardActionKind.Primary,
+                        T._("Включить брандмауэр Windows для всех типов сетей (нужны права администратора)")));
+                actions.Add(new CardAction(T._("Настройки"), OpenFirewallSettingsCommand, CardActionKind.Normal,
+                    T._("«Безопасность Windows» → «Брандмауэр и защита сети»")));
                 break;
             case SecurityCheckIds.Uac:
                 if (bad)
-                    actions.Add(new CardAction(r.Status == SecurityStatus.Danger ? "Включить UAC" : "Включить запросы",
+                    actions.Add(new CardAction(r.Status == SecurityStatus.Danger ? T._("Включить UAC") : T._("Включить запросы"),
                         EnableUacCommand, CardActionKind.Primary,
-                        "Вернуть стандартные настройки UAC (нужны права администратора)"));
-                actions.Add(new CardAction("Настройки UAC", OpenUacSettingsCommand, CardActionKind.Normal,
-                    "Открыть окно «Параметры управления учётными записями»"));
+                        T._("Вернуть стандартные настройки UAC (нужны права администратора)")));
+                actions.Add(new CardAction(T._("Настройки UAC"), OpenUacSettingsCommand, CardActionKind.Normal,
+                    T._("Открыть окно «Параметры управления учётными записями»")));
                 break;
             case SecurityCheckIds.Hosts:
                 if (report.Hosts.Entries.Count > 0)
-                    actions.Add(new CardAction("Показать записи", ShowDetailsCommand,
-                        bad ? CardActionKind.Primary : CardActionKind.Normal, "Список строк файла hosts с оценкой", HostsTab));
+                    actions.Add(new CardAction(T._("Показать записи"), ShowDetailsCommand,
+                        bad ? CardActionKind.Primary : CardActionKind.Normal, T._("Список строк файла hosts с оценкой"), HostsTab));
                 if (report.Hosts.Exists)
-                    actions.Add(new CardAction("Открыть в Блокноте", OpenHostsInNotepadCommand, CardActionKind.Normal,
-                        "Открыть файл hosts для просмотра"));
+                    actions.Add(new CardAction(T._("Открыть в Блокноте"), OpenHostsInNotepadCommand, CardActionKind.Normal,
+                        T._("Открыть файл hosts для просмотра")));
                 break;
             case SecurityCheckIds.Winlogon:
                 if (r.Status == SecurityStatus.Danger)
-                    actions.Add(new CardAction("Восстановить по умолчанию", RestoreWinlogonCommand, CardActionKind.Danger,
-                        "Вернуть Shell = explorer.exe и Userinit = userinit.exe (с резервной копией реестра)"));
+                    actions.Add(new CardAction(T._("Восстановить по умолчанию"), RestoreWinlogonCommand, CardActionKind.Danger,
+                        T._("Вернуть Shell = explorer.exe и Userinit = userinit.exe (с резервной копией реестра)")));
                 break;
             case SecurityCheckIds.Ifeo:
                 if (report.Ifeo.Count == 1 && bad)
-                    actions.Add(new CardAction("Удалить перехват", RemoveIfeoCommand, CardActionKind.Danger,
-                        "Удалить значение Debugger (с резервной копией реестра)", report.Ifeo[0]));
+                    actions.Add(new CardAction(T._("Удалить перехват"), RemoveIfeoCommand, CardActionKind.Danger,
+                        T._("Удалить значение Debugger (с резервной копией реестра)"), report.Ifeo[0]));
                 if (report.Ifeo.Count > 0)
-                    actions.Add(new CardAction("Показать список", ShowDetailsCommand, CardActionKind.Normal,
-                        "Все найденные перехваты запуска", IfeoTab));
+                    actions.Add(new CardAction(T._("Показать список"), ShowDetailsCommand, CardActionKind.Normal,
+                        T._("Все найденные перехваты запуска"), IfeoTab));
                 break;
             case SecurityCheckIds.Proxy:
                 if (bad)
-                    actions.Add(new CardAction("Отключить прокси", DisableProxyCommand, CardActionKind.Primary,
-                        "Выключить прокси и скрипт настройки (с резервной копией реестра)"));
-                actions.Add(new CardAction("Настройки прокси", OpenProxySettingsCommand, CardActionKind.Normal,
-                    "«Параметры» → «Сеть и Интернет» → «Прокси-сервер»"));
+                    actions.Add(new CardAction(T._("Отключить прокси"), DisableProxyCommand, CardActionKind.Primary,
+                        T._("Выключить прокси и скрипт настройки (с резервной копией реестра)")));
+                actions.Add(new CardAction(T._("Настройки прокси"), OpenProxySettingsCommand, CardActionKind.Normal,
+                    T._("«Параметры» → «Сеть и Интернет» → «Прокси-сервер»")));
                 break;
             case SecurityCheckIds.Dns:
                 if (report.Dns.Count > 0)
-                    actions.Add(new CardAction("Показать серверы", ShowDetailsCommand, CardActionKind.Normal,
-                        "DNS-серверы всех подключений", DnsTab));
-                actions.Add(new CardAction("Настройки сети", OpenNetworkSettingsCommand, CardActionKind.Normal,
-                    "«Параметры» → «Сеть и Интернет»"));
+                    actions.Add(new CardAction(T._("Показать серверы"), ShowDetailsCommand, CardActionKind.Normal,
+                        T._("DNS-серверы всех подключений"), DnsTab));
+                actions.Add(new CardAction(T._("Настройки сети"), OpenNetworkSettingsCommand, CardActionKind.Normal,
+                    T._("«Параметры» → «Сеть и Интернет»")));
                 break;
             case SecurityCheckIds.Updates:
-                actions.Add(new CardAction("Открыть Центр обновления", OpenWindowsUpdateCommand,
-                    bad ? CardActionKind.Primary : CardActionKind.Normal, "Открыть Центр обновления Windows"));
+                actions.Add(new CardAction(T._("Открыть Центр обновления"), OpenWindowsUpdateCommand,
+                    bad ? CardActionKind.Primary : CardActionKind.Normal, T._("Открыть Центр обновления Windows")));
                 break;
             case SecurityCheckIds.SmartScreen:
-                actions.Add(new CardAction("Настройки", OpenSmartScreenSettingsCommand,
+                actions.Add(new CardAction(T._("Настройки"), OpenSmartScreenSettingsCommand,
                     bad ? CardActionKind.Primary : CardActionKind.Normal,
-                    "«Безопасность Windows» → «Управление приложениями/браузером»"));
+                    T._("«Безопасность Windows» → «Управление приложениями/браузером»")));
                 break;
             case SecurityCheckIds.Rdp:
-                actions.Add(new CardAction("Настройки", OpenRdpSettingsCommand,
-                    bad ? CardActionKind.Primary : CardActionKind.Normal, "«Параметры» → «Система» → «Удалённый рабочий стол»"));
+                actions.Add(new CardAction(T._("Настройки"), OpenRdpSettingsCommand,
+                    bad ? CardActionKind.Primary : CardActionKind.Normal, T._("«Параметры» → «Система» → «Удалённый рабочий стол»")));
                 break;
             case SecurityCheckIds.Extensions:
                 if (report.Extensions.Count > 0)
-                    actions.Add(new CardAction("Показать список", ShowDetailsCommand,
-                        bad ? CardActionKind.Primary : CardActionKind.Normal, "Все расширения браузеров с оценкой", ExtensionsTab));
+                    actions.Add(new CardAction(T._("Показать список"), ShowDetailsCommand,
+                        bad ? CardActionKind.Primary : CardActionKind.Normal, T._("Все расширения браузеров с оценкой"), ExtensionsTab));
                 if (bad)
-                    actions.Add(new CardAction("Как удалить", HowToRemoveExtensionCommand, CardActionKind.Normal,
-                        "Инструкция по удалению расширений в каждом браузере"));
+                    actions.Add(new CardAction(T._("Как удалить"), HowToRemoveExtensionCommand, CardActionKind.Normal,
+                        T._("Инструкция по удалению расширений в каждом браузере")));
                 break;
             case SecurityCheckIds.Smb1:
                 if (bad)
-                    actions.Add(new CardAction("Отключить SMBv1", DisableSmb1Command, CardActionKind.Primary,
-                        "Отключить компонент Windows «SMB 1.0» (нужны права администратора, затем — перезагрузка)"));
-                actions.Add(new CardAction("Компоненты Windows", OpenWindowsFeaturesCommand, CardActionKind.Normal,
-                    "Открыть окно «Включение или отключение компонентов Windows»"));
+                    actions.Add(new CardAction(T._("Отключить SMBv1"), DisableSmb1Command, CardActionKind.Primary,
+                        T._("Отключить компонент Windows «SMB 1.0» (нужны права администратора, затем — перезагрузка)")));
+                actions.Add(new CardAction(T._("Компоненты Windows"), OpenWindowsFeaturesCommand, CardActionKind.Normal,
+                    T._("Открыть окно «Включение или отключение компонентов Windows»")));
                 break;
             case SecurityCheckIds.SecureBoot:
                 if (bad)
-                    actions.Add(new CardAction("Как включить", SecureBootHowToCommand, CardActionKind.Primary,
-                        "Пошаговая инструкция для BIOS/UEFI"));
-                actions.Add(new CardAction("Безопасность устройства", OpenDeviceSecurityCommand, CardActionKind.Normal,
-                    "«Безопасность Windows» → «Безопасность устройства»"));
+                    actions.Add(new CardAction(T._("Как включить"), SecureBootHowToCommand, CardActionKind.Primary,
+                        T._("Пошаговая инструкция для BIOS/UEFI")));
+                actions.Add(new CardAction(T._("Безопасность устройства"), OpenDeviceSecurityCommand, CardActionKind.Normal,
+                    T._("«Безопасность Windows» → «Безопасность устройства»")));
                 break;
             case SecurityCheckIds.Tpm:
                 if (bad)
-                    actions.Add(new CardAction("Как включить", TpmHowToCommand, CardActionKind.Primary,
-                        "Где включить fTPM (AMD) или PTT (Intel) в BIOS/UEFI"));
-                actions.Add(new CardAction("Безопасность устройства", OpenDeviceSecurityCommand, CardActionKind.Normal,
-                    "«Безопасность Windows» → «Безопасность устройства» → «Обработчик безопасности»"));
+                    actions.Add(new CardAction(T._("Как включить"), TpmHowToCommand, CardActionKind.Primary,
+                        T._("Где включить fTPM (AMD) или PTT (Intel) в BIOS/UEFI")));
+                actions.Add(new CardAction(T._("Безопасность устройства"), OpenDeviceSecurityCommand, CardActionKind.Normal,
+                    T._("«Безопасность Windows» → «Безопасность устройства» → «Обработчик безопасности»")));
                 break;
             case SecurityCheckIds.BitLocker:
                 if (report.BitLocker.Encryption is not (DriveEncryption.NotSupported or DriveEncryption.Unknown))
-                    actions.Add(new CardAction("Параметры шифрования", OpenEncryptionSettingsCommand,
+                    actions.Add(new CardAction(T._("Параметры шифрования"), OpenEncryptionSettingsCommand,
                         bad ? CardActionKind.Primary : CardActionKind.Normal,
                         report.BitLocker.IsHomeEdition
-                            ? "«Параметры» → «Конфиденциальность и защита» → «Шифрование устройства»"
-                            : "«Панель управления» → «Шифрование диска BitLocker»"));
+                            ? T._("«Параметры» → «Конфиденциальность и защита» → «Шифрование устройства»")
+                            : T._("«Панель управления» → «Шифрование диска BitLocker»")));
                 break;
             case SecurityCheckIds.MemoryIntegrity:
-                actions.Add(new CardAction("Изоляция ядра", OpenCoreIsolationCommand,
+                actions.Add(new CardAction(T._("Изоляция ядра"), OpenCoreIsolationCommand,
                     r.Status == SecurityStatus.Info && !report.DeviceGuard.HvciConfigured ? CardActionKind.Primary : CardActionKind.Normal,
-                    "«Безопасность Windows» → «Безопасность устройства» → «Изоляция ядра»"));
+                    T._("«Безопасность Windows» → «Безопасность устройства» → «Изоляция ядра»")));
                 break;
         }
 
@@ -748,7 +748,7 @@ public sealed class SecurityViewModel : PageViewModel
         if (r.ThreatsFound)
         {
             // Opening the journal changes nothing: a neutral question, not a confirmation.
-            if (Dialogs.Ask(title, r.Message + "\n\nОткрыть журнал защиты сейчас?"))
+            if (Dialogs.Ask(title, r.Message + "\n\n" + T._("Открыть журнал защиты сейчас?")))
                 ProcessRunner.ShellOpen(ProtectionHistoryUri);
         }
         else if (r.Success)
@@ -763,18 +763,15 @@ public sealed class SecurityViewModel : PageViewModel
 
     private async Task DefenderScanAsync(bool full)
     {
-        var title = full ? "Полная проверка" : "Быстрая проверка";
+        var title = full ? T._("Полная проверка") : T._("Быстрая проверка");
         var question = full
-            ? "Защитник Windows проверит все файлы на всех дисках. Это может занять несколько часов, " +
-              "компьютер в это время может работать медленнее.\n\n"
-            : "Защитник Windows проверит места, где чаще всего прячутся вирусы: запущенные программы, " +
-              "автозагрузку и системные папки. Обычно это 5–15 минут.\n\n";
-        question += "Найденные угрозы Защитник Windows обезвредит сам (их можно восстановить в «Безопасность Windows» → «Журнал защиты»). " +
-                    "Проверку можно остановить кнопкой «Отмена».\n\nНачать проверку?";
+            ? T._("Защитник Windows проверит все файлы на всех дисках. Это может занять несколько часов, компьютер в это время может работать медленнее.\n\n")
+            : T._("Защитник Windows проверит места, где чаще всего прячутся вирусы: запущенные программы, автозагрузку и системные папки. Обычно это 5–15 минут.\n\n");
+        question += T._("Найденные угрозы Защитник Windows обезвредит сам (их можно восстановить в «Безопасность Windows» → «Журнал защиты»). Проверку можно остановить кнопкой «Отмена».\n\nНачать проверку?");
         if (!Dialogs.Confirm(title, question))
             return;
 
-        var text = full ? "Полная проверка Защитником Windows…" : "Быстрая проверка Защитником Windows…";
+        var text = full ? T._("Полная проверка Защитником Windows…") : T._("Быстрая проверка Защитником Windows…");
         SecurityActionResult? result = null;
         await RunBusyAsync(text, async ct =>
         {
@@ -783,7 +780,7 @@ public sealed class SecurityViewModel : PageViewModel
             while (!task.IsCompleted)
             {
                 await Task.WhenAny(task, Task.Delay(1000));
-                ReportProgress(-1, $"{text} Прошло {Format.Duration(sw.Elapsed)}.");
+                ReportProgress(-1, T.F("{0} Прошло {1}.", text, Format.Duration(sw.Elapsed)));
             }
             result = await task;
         });
@@ -795,55 +792,50 @@ public sealed class SecurityViewModel : PageViewModel
 
     private async Task UpdateSignaturesAsync()
     {
-        if (!Dialogs.Confirm("Обновить базы",
-                "Защитник Windows скачает свежие антивирусные базы с серверов Microsoft. Обычно это 1–3 минуты.\n\nОбновить базы?"))
+        if (!Dialogs.Confirm(T._("Обновить базы"),
+                T._("Защитник Windows скачает свежие антивирусные базы с серверов Microsoft. Обычно это 1–3 минуты.\n\nОбновить базы?")))
             return;
-        await RunActionAsync("Обновляем антивирусные базы…", "Обновление баз", _service.UpdateSignaturesAsync);
+        await RunActionAsync(T._("Обновляем антивирусные базы…"), T._("Обновление баз"), _service.UpdateSignaturesAsync);
     }
 
     private async Task EnableRealtimeAsync()
     {
-        if (!Admin.RequireElevation("Включение защиты в реальном времени"))
+        if (!Admin.RequireElevation(T._("Включение защиты в реальном времени")))
             return;
-        if (!Dialogs.Confirm("Включить защиту",
-                "Будет включена защита в реальном времени Защитника Windows (Set-MpPreference -DisableRealtimeMonitoring $false).\n\n" +
-                "Выключить её снова можно в «Безопасность Windows» → «Защита от вирусов и угроз» → «Управление настройками».\n\nВключить?"))
+        if (!Dialogs.Confirm(T._("Включить защиту"),
+                T._("Будет включена защита в реальном времени Защитника Windows (Set-MpPreference -DisableRealtimeMonitoring $false).\n\nВыключить её снова можно в «Безопасность Windows» → «Защита от вирусов и угроз» → «Управление настройками».\n\nВключить?")))
             return;
-        await RunActionAsync("Включаем защиту в реальном времени…", "Защита в реальном времени",
+        await RunActionAsync(T._("Включаем защиту в реальном времени…"), T._("Защита в реальном времени"),
             _service.EnableRealtimeProtectionAsync);
     }
 
     private async Task EnableFirewallAsync()
     {
-        if (!Admin.RequireElevation("Включение брандмауэра"))
+        if (!Admin.RequireElevation(T._("Включение брандмауэра")))
             return;
-        if (!Dialogs.Confirm("Включить брандмауэр",
-                "Будет включён брандмауэр Windows для всех типов сетей — доменной, частной и общедоступной " +
-                "(команда netsh advfirewall set allprofiles state on).\n\n" +
-                "Если какой-то программе понадобится доступ к сети, Windows спросит разрешение. " +
-                "Выключить брандмауэр снова можно в «Безопасность Windows» → «Брандмауэр и защита сети».\n\nВключить?"))
+        if (!Dialogs.Confirm(T._("Включить брандмауэр"),
+                T._("Будет включён брандмауэр Windows для всех типов сетей — доменной, частной и общедоступной (команда netsh advfirewall set allprofiles state on).\n\nЕсли какой-то программе понадобится доступ к сети, Windows спросит разрешение. Выключить брандмауэр снова можно в «Безопасность Windows» → «Брандмауэр и защита сети».\n\nВключить?")))
             return;
-        await RunActionAsync("Включаем брандмауэр…", "Брандмауэр", _service.EnableFirewallAsync);
+        await RunActionAsync(T._("Включаем брандмауэр…"), T._("Брандмауэр"), _service.EnableFirewallAsync);
     }
 
     private async Task EnableUacAsync()
     {
-        if (!Admin.RequireElevation("Включение UAC"))
+        if (!Admin.RequireElevation(T._("Включение UAC")))
             return;
         var (luaOff, consentOff) = SecurityService.UacChangesNeeded(_report?.Uac.EnableLua, _report?.Uac.ConsentPromptBehaviorAdmin);
         var changes = new List<string>();
         if (luaOff)
-            changes.Add("• EnableLUA = 1 (UAC включён)");
+            changes.Add(T._("• EnableLUA = 1 (UAC включён)"));
         if (consentOff)
-            changes.Add("• ConsentPromptBehaviorAdmin = 5 (спрашивать разрешение)");
+            changes.Add(T._("• ConsentPromptBehaviorAdmin = 5 (спрашивать разрешение)"));
         if (changes.Count == 0)
             return;
-        if (!Dialogs.Confirm("Контроль учётных записей",
-                "Будут восстановлены стандартные настройки UAC:\n" + string.Join("\n", changes) + "\n\n" +
-                "Перед изменением раздел реестра сохраняется в резервную копию — по ней можно вернуть всё как было." +
-                (luaOff ? "\n\nПосле включения UAC нужно перезагрузить компьютер." : "") + "\n\nПродолжить?"))
+        if (!Dialogs.Confirm(T._("Контроль учётных записей"),
+                T.F("Будут восстановлены стандартные настройки UAC:\n{0}\n\nПеред изменением раздел реестра сохраняется в резервную копию — по ней можно вернуть всё как было.", string.Join("\n", changes)) +
+                (luaOff ? "\n\n" + T._("После включения UAC нужно перезагрузить компьютер.") : "") + "\n\n" + T._("Продолжить?")))
             return;
-        await RunActionAsync("Включаем UAC…", "Контроль учётных записей", _service.EnableUacAsync);
+        await RunActionAsync(T._("Включаем UAC…"), T._("Контроль учётных записей"), _service.EnableUacAsync);
     }
 
     private async Task RemoveHostsLinesAsync()
@@ -851,23 +843,21 @@ public sealed class SecurityViewModel : PageViewModel
         var selected = HostsEntries.Where(e => e.IsSelected).OrderBy(e => e.LineIndex).ToList();
         if (selected.Count == 0)
         {
-            Dialogs.Info("Файл hosts", "Отметьте строки, которые нужно удалить.");
+            Dialogs.Info(T._("Файл hosts"), T._("Отметьте строки, которые нужно удалить."));
             return;
         }
-        if (!Admin.RequireElevation("Изменение файла hosts"))
+        if (!Admin.RequireElevation(T._("Изменение файла hosts")))
             return;
-        var shown = selected.Take(12).Select(e => $"• строка {e.LineNumber}: {e.RawLine.Trim()}").ToList();
+        var shown = selected.Take(12).Select(e => T.F("• строка {0}: {1}", e.LineNumber, e.RawLine.Trim())).ToList();
         if (selected.Count > 12)
-            shown.Add($"• … и ещё {selected.Count - 12}");
-        if (!Dialogs.Confirm("Удалить строки из файла hosts",
-                $"Из файла hosts {SecurityRules.LinesToRemoveText(selected.Count)}:\n" +
-                string.Join("\n", shown) + "\n\n" +
-                "Строка удаляется целиком, со всеми сайтами в ней. Остальные строки не изменятся. " +
-                $"Перед изменением копия файла сохраняется в папку {AppPaths.BackupsDir}, после — очищается кэш DNS." +
-                (HostsReadOnly ? " Атрибут «только чтение» снимается на время записи и возвращается обратно." : "") +
-                "\n\nУдалить?"))
+            shown.Add(T.F("• … и ещё {0}", selected.Count - 12));
+        if (!Dialogs.Confirm(T._("Удалить строки из файла hosts"),
+                T.F("Из файла hosts {0}:\n{1}\n\nСтрока удаляется целиком, со всеми сайтами в ней. Остальные строки не изменятся. Перед изменением копия файла сохраняется в папку {2}, после — очищается кэш DNS.",
+                    SecurityRules.LinesToRemoveText(selected.Count), string.Join("\n", shown), AppPaths.BackupsDir) +
+                (HostsReadOnly ? " " + T._("Атрибут «только чтение» снимается на время записи и возвращается обратно.") : "") +
+                "\n\n" + T._("Удалить?")))
             return;
-        await RunActionAsync("Изменяем файл hosts…", "Файл hosts", ct => _service.RemoveHostsLinesAsync(selected, ct));
+        await RunActionAsync(T._("Изменяем файл hosts…"), T._("Файл hosts"), ct => _service.RemoveHostsLinesAsync(selected, ct));
     }
 
     private void OpenHostsInNotepad()
@@ -880,8 +870,8 @@ public sealed class SecurityViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Log.Warn($"Не удалось открыть Блокнот: {ex.Message}");
-            Dialogs.Error("Файл hosts", $"Не удалось открыть Блокнот: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Не удалось открыть Блокнот: {0}", ErrorText.For(ex)), ex);
+            Dialogs.Error(T._("Файл hosts"), T.F("Не удалось открыть Блокнот: {0}.", ErrorText.For(ex)));
         }
     }
 
@@ -892,28 +882,27 @@ public sealed class SecurityViewModel : PageViewModel
             return;
         var win = _service.Env.WindowsDir;
         var hklm = !SecurityRules.IsShellDefault(w.Shell, win) || !SecurityRules.IsUserinitDefault(w.Userinit, win);
-        if (hklm && !Admin.RequireElevation("Восстановление параметров входа в систему"))
+        if (hklm && !Admin.RequireElevation(T._("Восстановление параметров входа в систему")))
             return;
         var lines = new List<string>();
         if (!SecurityRules.IsShellDefault(w.Shell, win))
-            lines.Add($"• Shell: «{w.Shell}» → «explorer.exe»");
+            lines.Add(T.F("• Shell: «{0}» → «explorer.exe»", w.Shell));
         if (!SecurityRules.IsUserinitDefault(w.Userinit, win))
-            lines.Add($"• Userinit: «{w.Userinit}» → «{SecurityRules.DefaultUserinit(win)}»");
+            lines.Add(T.F("• Userinit: «{0}» → «{1}»", w.Userinit, SecurityRules.DefaultUserinit(win)));
         if (!string.IsNullOrWhiteSpace(w.UserShell) && !SecurityRules.IsShellDefault(w.UserShell, win))
-            lines.Add($"• удалить пользовательский Shell «{w.UserShell}»");
-        if (!Dialogs.Confirm("Восстановить параметры входа",
-                "Будут восстановлены стандартные значения Winlogon:\n" + string.Join("\n", lines) + "\n\n" +
-                "Перед изменением создаётся точка восстановления (если она включена в настройках), а раздел реестра сохраняется в резервную копию — по ней можно вернуть всё как было. " +
-                "После восстановления перезагрузите компьютер и проверьте его антивирусом.\n\nПродолжить?"))
+            lines.Add(T.F("• удалить пользовательский Shell «{0}»", w.UserShell));
+        if (!Dialogs.Confirm(T._("Восстановить параметры входа"),
+                T.F("Будут восстановлены стандартные значения Winlogon:\n{0}\n\nПеред изменением создаётся точка восстановления (если она включена в настройках), а раздел реестра сохраняется в резервную копию — по ней можно вернуть всё как было. После восстановления перезагрузите компьютер и проверьте его антивирусом.", string.Join("\n", lines)) +
+                "\n\n" + T._("Продолжить?")))
             return;
-        await RunActionAsync("Восстанавливаем параметры входа…", "Параметры входа", async ct =>
+        await RunActionAsync(T._("Восстанавливаем параметры входа…"), T._("Параметры входа"), async ct =>
         {
             RestorePointResult? restorePoint = null;
             if (hklm)
             {
-                ReportProgress(-1, "Создаём точку восстановления…");
-                restorePoint = await RestorePoint.CreateAsync("Восстановление параметров входа (Winlogon)", ct);
-                ReportProgress(-1, "Восстанавливаем параметры входа…");
+                ReportProgress(-1, T._("Создаём точку восстановления…"));
+                restorePoint = await RestorePoint.CreateAsync(T._("Восстановление параметров входа (Winlogon)"), ct);
+                ReportProgress(-1, T._("Восстанавливаем параметры входа…"));
             }
             // Pass the confirmed values: if they changed since the scan, nothing is modified.
             var result = await _service.RestoreWinlogonAsync(w, ct);
@@ -927,14 +916,12 @@ public sealed class SecurityViewModel : PageViewModel
     {
         if (entry is null)
             return;
-        if (entry.Location.NeedsAdmin && !Admin.RequireElevation("Удаление перехвата запуска"))
+        if (entry.Location.NeedsAdmin && !Admin.RequireElevation(T._("Удаление перехвата запуска")))
             return;
-        if (!Dialogs.Confirm("Удалить перехват запуска",
-                $"Для программы {entry.ImageName} будет удалено значение Debugger = «{entry.Debugger}» " +
-                $"в разделе:\n{entry.KeyPath}\n\n" +
-                "Другие настройки раздела не изменятся. Перед изменением раздел сохраняется в резервную копию.\n\nУдалить перехват?"))
+        if (!Dialogs.Confirm(T._("Удалить перехват запуска"),
+                T.F("Для программы {0} будет удалено значение Debugger = «{1}» в разделе:\n{2}\n\nДругие настройки раздела не изменятся. Перед изменением раздел сохраняется в резервную копию.\n\nУдалить перехват?", entry.ImageName, entry.Debugger, entry.KeyPath)))
             return;
-        await RunActionAsync("Удаляем перехват запуска…", "Перехват запуска", ct => _service.RemoveIfeoDebuggerAsync(entry, ct));
+        await RunActionAsync(T._("Удаляем перехват запуска…"), T._("Перехват запуска"), ct => _service.RemoveIfeoDebuggerAsync(entry, ct));
     }
 
     private async Task DisableProxyAsync()
@@ -944,19 +931,16 @@ public sealed class SecurityViewModel : PageViewModel
             return;
         var what = new List<string>();
         if (p.Enabled)
-            what.Add($"• выключить прокси-сервер {p.Server}");
+            what.Add(T.F("• выключить прокси-сервер {0}", p.Server));
         if (!string.IsNullOrWhiteSpace(p.AutoConfigUrl))
-            what.Add($"• удалить скрипт настройки {p.AutoConfigUrl}");
+            what.Add(T.F("• удалить скрипт настройки {0}", p.AutoConfigUrl));
         if (what.Count == 0)
-            what.Add("• выключить прокси-сервер");
-        if (!Dialogs.Confirm("Отключить прокси",
-                "Будет сделано:\n" + string.Join("\n", what) + "\n\n" +
-                "Если прокси нужен для VPN, работы или обхода блокировок, интернет через него перестанет работать. " +
-                "Включить прокси снова можно в «Параметры» → «Сеть и Интернет» → «Прокси-сервер». " +
-                "Перед изменением настройки сохраняются в резервную копию.\n\nОтключить прокси?"))
+            what.Add(T._("• выключить прокси-сервер"));
+        if (!Dialogs.Confirm(T._("Отключить прокси"),
+                T.F("Будет сделано:\n{0}\n\nЕсли прокси нужен для VPN, работы или обхода блокировок, интернет через него перестанет работать. Включить прокси снова можно в «Параметры» → «Сеть и Интернет» → «Прокси-сервер». Перед изменением настройки сохраняются в резервную копию.\n\nОтключить прокси?", string.Join("\n", what))))
             return;
         // Pass the confirmed settings: if they changed since the scan, nothing is modified.
-        await RunActionAsync("Отключаем прокси…", "Прокси-сервер", ct => _service.DisableProxyAsync(p, ct));
+        await RunActionAsync(T._("Отключаем прокси…"), T._("Прокси-сервер"), ct => _service.DisableProxyAsync(p, ct));
     }
 
     private async Task RemoveThreatsAsync()
@@ -964,38 +948,30 @@ public sealed class SecurityViewModel : PageViewModel
         var active = _report?.ActiveThreats ?? Array.Empty<ThreatDetection>();
         if (active.Count == 0)
             return;
-        if (!Admin.RequireElevation("Обезвреживание угроз"))
+        if (!Admin.RequireElevation(T._("Обезвреживание угроз")))
             return;
         var names = active.GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => $"• {g.Key}" + (string.IsNullOrWhiteSpace(g.First().Resources) ? "" : $" — {Shorten(g.First().Resources, 90)}"))
             .ToList();
         var shown = names.Take(10).ToList();
         if (names.Count > 10)
-            shown.Add($"• … и ещё {names.Count - 10}");
-        if (!Dialogs.Confirm("Обезвредить угрозы",
-                $"Защитник Windows обезвредит все найденные и не обезвреженные угрозы ({active.Count}):\n" +
-                string.Join("\n", shown) + "\n\n" +
-                "Он применит к ним своё стандартное действие — обычно поместит файлы в карантин (команда Remove-MpThreat). " +
-                "Если файл оказался нужным, его можно восстановить в «Безопасность Windows» → «Журнал защиты».\n\nОбезвредить?"))
+            shown.Add(T.F("• … и ещё {0}", names.Count - 10));
+        if (!Dialogs.Confirm(T._("Обезвредить угрозы"),
+                T.F("Защитник Windows обезвредит все найденные и не обезвреженные угрозы ({0}):\n{1}\n\nОн применит к ним своё стандартное действие — обычно поместит файлы в карантин (команда Remove-MpThreat). Если файл оказался нужным, его можно восстановить в «Безопасность Windows» → «Журнал защиты».\n\nОбезвредить?", active.Count, string.Join("\n", shown))))
             return;
-        await RunActionAsync("Обезвреживаем угрозы…", "Найденные угрозы", _service.RemoveActiveThreatsAsync);
+        await RunActionAsync(T._("Обезвреживаем угрозы…"), T._("Найденные угрозы"), _service.RemoveActiveThreatsAsync);
     }
 
     private static string Shorten(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
 
     private async Task DisableSmb1Async()
     {
-        if (!Admin.RequireElevation("Отключение SMBv1"))
+        if (!Admin.RequireElevation(T._("Отключение SMBv1")))
             return;
-        if (!Dialogs.Confirm("Отключить SMBv1",
-                "Будет отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» " +
-                "(Disable-WindowsOptionalFeature SMB1Protocol). Перед этим создаётся точка восстановления (если она включена в настройках).\n\n" +
-                "Изменение вступит в силу после перезагрузки. Современные сетевые папки, принтеры и NAS работают по SMB 2/3 и " +
-                "ничего не заметят; перестанут открываться только очень старые устройства, которые умеют лишь SMBv1.\n\n" +
-                "Вернуть: «Включение или отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».\n\n" +
-                "Отключить SMBv1?"))
+        if (!Dialogs.Confirm(T._("Отключить SMBv1"),
+                T._("Будет отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» (Disable-WindowsOptionalFeature SMB1Protocol). Перед этим создаётся точка восстановления (если она включена в настройках).\n\nИзменение вступит в силу после перезагрузки. Современные сетевые папки, принтеры и NAS работают по SMB 2/3 и ничего не заметят; перестанут открываться только очень старые устройства, которые умеют лишь SMBv1.\n\nВернуть: «Включение или отключение компонентов Windows» → «Поддержка общего доступа к файлам SMB 1.0/CIFS».\n\nОтключить SMBv1?")))
             return;
-        await RunActionAsync("Отключаем SMBv1 — это может занять несколько минут, не закрывайте программу…", "SMBv1",
+        await RunActionAsync(T._("Отключаем SMBv1 — это может занять несколько минут, не закрывайте программу…"), "SMBv1",
             _service.DisableSmb1Async);
     }
 
@@ -1012,22 +988,14 @@ public sealed class SecurityViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            Log.Warn($"Не удалось открыть параметры BitLocker: {ex.Message}");
-            Dialogs.Error("Шифрование диска", $"Не удалось открыть параметры BitLocker: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Не удалось открыть параметры BitLocker: {0}", ErrorText.For(ex)), ex);
+            Dialogs.Error(T._("Шифрование диска"), T.F("Не удалось открыть параметры BitLocker: {0}.", ErrorText.For(ex)));
         }
     }
 
     private void ShowHowToRemoveExtension()
     {
-        Dialogs.Info("Как удалить расширение",
-            "Расширения удаляются в самом браузере:\n\n" +
-            "• Google Chrome — откройте адрес chrome://extensions и нажмите «Удалить» у расширения.\n" +
-            "• Microsoft Edge — edge://extensions → «Удалить».\n" +
-            "• Яндекс Браузер — меню ☰ → «Дополнения» (browser://tune) → наведите на расширение → «Удалить».\n" +
-            "• Opera — opera://extensions → «Удалить».\n" +
-            "• Brave и Vivaldi — brave://extensions или vivaldi://extensions.\n" +
-            "• Firefox — меню ☰ → «Дополнения и темы» (about:addons) → «…» → «Удалить».\n\n" +
-            "Если кнопки «Удалить» нет, а браузер пишет «Установлено администратором», расширение закреплено политикой. " +
-            "Удалите программу, которая его поставила (раздел «Программы»), и проверьте компьютер антивирусом.");
+        Dialogs.Info(T._("Как удалить расширение"),
+            T._("Расширения удаляются в самом браузере:\n\n• Google Chrome — откройте адрес chrome://extensions и нажмите «Удалить» у расширения.\n• Microsoft Edge — edge://extensions → «Удалить».\n• Яндекс Браузер — меню ☰ → «Дополнения» (browser://tune) → наведите на расширение → «Удалить».\n• Opera — opera://extensions → «Удалить».\n• Brave и Vivaldi — brave://extensions или vivaldi://extensions.\n• Firefox — меню ☰ → «Дополнения и темы» (about:addons) → «…» → «Удалить».\n\nЕсли кнопки «Удалить» нет, а браузер пишет «Установлено администратором», расширение закреплено политикой. Удалите программу, которая его поставила (раздел «Программы»), и проверьте компьютер антивирусом."));
     }
 }

@@ -1,3 +1,4 @@
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -139,6 +140,12 @@ public sealed record DisplayInfo
 {
     public string DeviceName { get; init; } = "";
     public string? MonitorName { get; init; }
+
+    /// <summary>
+    /// <see cref="MonitorName"/> is a name the program made up ("Monitor 2") because Windows gave none: such a name is no use for a
+    /// web search. The probe says it; nobody reads the words of the name.
+    /// </summary>
+    public bool MonitorNameIsGeneric { get; init; }
 
     /// <summary>Name of the video adapter the monitor is connected to.</summary>
     public string? AdapterName { get; init; }
@@ -490,20 +497,20 @@ public sealed class Recommendation : ObservableObject
 
     public string CategoryText => Category switch
     {
-        RecommendationCategory.Hardware => "Железо",
+        RecommendationCategory.Hardware => T._("Железо"),
         RecommendationCategory.Windows => "Windows",
-        RecommendationCategory.Games => "Игры",
-        RecommendationCategory.Maintenance => "Обслуживание",
+        RecommendationCategory.Games => T._("Игры"),
+        RecommendationCategory.Maintenance => T._("Обслуживание"),
         _ => "",
     };
 
     public string ImpactText => Kind == RecommendationKind.Info
-        ? "Для сведения"
+        ? T._("Для сведения")
         : Impact switch
         {
-            RecommendationImpact.High => "Высокий эффект",
-            RecommendationImpact.Medium => "Средний эффект",
-            _ => "Низкий эффект",
+            RecommendationImpact.High => T._("Высокий эффект"),
+            RecommendationImpact.Medium => T._("Средний эффект"),
+            _ => T._("Низкий эффект"),
         };
 
     public Tone ImpactTone => Kind == RecommendationKind.Info
@@ -517,11 +524,11 @@ public sealed class Recommendation : ObservableObject
 
     public string KindText => Kind switch
     {
-        RecommendationKind.AutoFix => NeedsAdmin ? "Автоматически (нужны права администратора)" : "Можно применить автоматически",
-        RecommendationKind.Manual => "Вручную по инструкции",
-        RecommendationKind.Navigate => "В другом разделе",
-        RecommendationKind.Good => "В порядке",
-        _ => "Для сведения",
+        RecommendationKind.AutoFix => NeedsAdmin ? T._("Автоматически (нужны права администратора)") : T._("Можно применить автоматически"),
+        RecommendationKind.Manual => T._("Вручную по инструкции"),
+        RecommendationKind.Navigate => T._("В другом разделе"),
+        RecommendationKind.Good => T._("В порядке"),
+        _ => T._("Для сведения"),
     };
 
     public string CategoryIcon => Category switch
@@ -549,4 +556,8 @@ public static class TweakIds
 }
 
 /// <summary>Result of applying or reverting a tweak.</summary>
-public sealed record TweakResult(bool Success, string Message, bool Changed = false);
+/// <param name="OpensWithFailure">
+/// The failed <paramref name="Message"/> already opens with the sentence that says the change could not be made («Не удалось …» /
+/// "Could not …"), so the dashboard does not put its own «Не удалось исправить: » in front of it. The producer says it; nobody reads the words.
+/// </param>
+public sealed record TweakResult(bool Success, string Message, bool Changed = false, bool OpensWithFailure = false);

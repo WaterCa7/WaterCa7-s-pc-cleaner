@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -74,7 +75,7 @@ internal static class NativeProbes
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or MarshalDirectiveException)
         {
-            Log.Warn($"Ускорение: не удалось получить список мониторов: {ex.Message}");
+            Log.Warn(T.F("Ускорение: не удалось получить список мониторов: {0}", ErrorText.For(ex)), ex);
         }
         return list;
     }
@@ -143,7 +144,7 @@ internal static class NativeProbes
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or MarshalDirectiveException)
         {
-            Log.Info($"Ускорение: запрос возможностей видеодрайвера недоступен ({ex.GetType().Name})");
+            Log.Info(T.F("Ускорение: запрос возможностей видеодрайвера недоступен ({0})", ex.GetType().Name));
             return null;
         }
     }

@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Network;
 
@@ -50,7 +51,7 @@ public static class IpTables
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
-            Log.Warn($"Сеть: не удалось разобрать таблицу соединений: {ex.Message}");
+            Log.Warn(T.F("Сеть: не удалось разобрать таблицу соединений: {0}", ErrorText.For(ex)), ex);
         }
     }
 
@@ -195,7 +196,7 @@ public static class IpTables
                 Marshal.FreeHGlobal(ptr);
             }
         }
-        Log.Warn($"Сеть: таблица {(tcp ? "TCP" : "UDP")} ({(family == AfInet ? "IPv4" : "IPv6")}) недоступна, код {rc}");
+        Log.Warn(T.F("Сеть: таблица {0} ({1}) недоступна, код {2}", tcp ? "TCP" : "UDP", family == AfInet ? "IPv4" : "IPv6", rc));
         return null;
     }
 

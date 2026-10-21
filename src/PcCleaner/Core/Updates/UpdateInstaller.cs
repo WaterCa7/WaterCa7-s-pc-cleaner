@@ -1,5 +1,6 @@
 using System.IO;
 using System.Security.Cryptography;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -87,12 +88,12 @@ public static class UpdateInstaller
         {
             total += read;
             if (total > expected.Size)
-                throw new UpdateException("подготовленный файл больше, чем указано в update.json");
+                throw new UpdateException(T._("подготовленный файл больше, чем указано в update.json"));
             hash.AppendData(buffer, 0, read);
             target.Write(buffer, 0, read);
         }
         if (total != expected.Size || Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant() != expected.Sha256)
-            throw new UpdateException("подготовленный файл не совпадает с update.json");
+            throw new UpdateException(T._("подготовленный файл не совпадает с update.json"));
         target.Flush(flushToDisk: true);
     }
 }

@@ -1,3 +1,4 @@
+using PcCleaner.Core.Localization;
 namespace PcCleaner.Modules.Disk;
 
 /// <summary>Kind of physical storage device (inferred from MSFT_PhysicalDisk).</summary>
@@ -72,19 +73,16 @@ internal static class StorageLabels
         DriveKind.Ssd => "SSD",
         DriveKind.NvmeSsd => "NVMe SSD",
         DriveKind.Scm => "SCM",
-        _ => "Тип неизвестен",
+        _ => T._("Тип неизвестен"),
     };
 
     public static string KindDescription(DriveKind kind) => kind switch
     {
-        DriveKind.Hdd => "Жёсткий диск (HDD) с вращающимися пластинами. Он медленнее SSD, и ему полезна " +
-                         "периодическая дефрагментация — Windows делает её сама раз в неделю.",
-        DriveKind.Ssd => "Твердотельный накопитель (SSD): быстрый, без движущихся частей. Дефрагментация ему " +
-                         "не нужна — вместо неё Windows отправляет команду TRIM.",
-        DriveKind.NvmeSsd => "Быстрый твердотельный накопитель, подключённый по шине NVMe (PCI Express). " +
-                             "Дефрагментация ему не нужна — вместо неё Windows отправляет команду TRIM.",
-        DriveKind.Scm => "Накопитель на энергонезависимой памяти (Storage Class Memory).",
-        _ => "Windows не сообщает тип этого накопителя (так бывает с виртуальными и некоторыми USB-дисками).",
+        DriveKind.Hdd => T._("Жёсткий диск (HDD) с вращающимися пластинами. Он медленнее SSD, и ему полезна периодическая дефрагментация — Windows делает её сама раз в неделю."),
+        DriveKind.Ssd => T._("Твердотельный накопитель (SSD): быстрый, без движущихся частей. Дефрагментация ему не нужна — вместо неё Windows отправляет команду TRIM."),
+        DriveKind.NvmeSsd => T._("Быстрый твердотельный накопитель, подключённый по шине NVMe (PCI Express). Дефрагментация ему не нужна — вместо неё Windows отправляет команду TRIM."),
+        DriveKind.Scm => T._("Накопитель на энергонезависимой памяти (Storage Class Memory)."),
+        _ => T._("Windows не сообщает тип этого накопителя (так бывает с виртуальными и некоторыми USB-дисками)."),
     };
 
     public static string BusLabel(long? busType) => busType switch
@@ -100,15 +98,15 @@ internal static class StorageLabels
         9 => "iSCSI",
         10 => "SAS",
         11 => "SATA",
-        12 => "SD-карта",
+        12 => T._("SD-карта"),
         13 => "MMC",
-        14 => "Виртуальный",
-        15 => "Виртуальный (файл)",
-        16 => "Дисковые пространства",
+        14 => T._("Виртуальный"),
+        15 => T._("Виртуальный (файл)"),
+        16 => T._("Дисковые пространства"),
         17 => "NVMe",
         18 => "SCM",
         19 => "UFS",
-        _ => "Неизвестно",
+        _ => T._("Неизвестно"),
     };
 
     /// <summary>HealthStatus: 0 = Healthy, 1 = Warning, 2 = Unhealthy, 5 = Unknown.</summary>
@@ -122,10 +120,10 @@ internal static class StorageLabels
 
     public static string HealthLabel(DiskHealth health) => health switch
     {
-        DiskHealth.Healthy => "Исправен",
-        DiskHealth.Warning => "Предупреждение",
-        DiskHealth.Unhealthy => "Неисправен",
-        _ => "Нет данных",
+        DiskHealth.Healthy => T._("Исправен"),
+        DiskHealth.Warning => T._("Предупреждение"),
+        DiskHealth.Unhealthy => T._("Неисправен"),
+        _ => T._("Нет данных"),
     };
 
     public static Tone HealthTone(DiskHealth health) => health switch
@@ -138,43 +136,41 @@ internal static class StorageLabels
 
     public static string HealthDescription(DiskHealth health) => health switch
     {
-        DiskHealth.Healthy => "Накопитель сообщает, что с ним всё в порядке.",
-        DiskHealth.Warning => "Накопитель сообщает о проблемах (например, растёт число ошибок или он изношен). " +
-                              "Сделайте резервную копию важных файлов.",
-        DiskHealth.Unhealthy => "Накопитель сообщает о серьёзной неисправности и может выйти из строя в любой момент. " +
-                                "Срочно скопируйте важные файлы на другой диск или в облако.",
-        _ => "Windows не получила от накопителя сведений о его состоянии.",
+        DiskHealth.Healthy => T._("Накопитель сообщает, что с ним всё в порядке."),
+        DiskHealth.Warning => T._("Накопитель сообщает о проблемах (например, растёт число ошибок или он изношен). Сделайте резервную копию важных файлов."),
+        DiskHealth.Unhealthy => T._("Накопитель сообщает о серьёзной неисправности и может выйти из строя в любой момент. Срочно скопируйте важные файлы на другой диск или в облако."),
+        _ => T._("Windows не получила от накопителя сведений о его состоянии."),
     };
 
     /// <summary>One value of MSFT_PhysicalDisk.OperationalStatus.</summary>
     public static string OperationalStatusLabel(long code) => code switch
     {
-        0 => "Неизвестно",
-        1 => "Другое",
-        2 => "Работает нормально",
-        3 => "Работает с ошибками",
-        4 => "Перегружен",
-        5 => "Прогнозируется сбой",
-        6 => "Ошибка",
-        7 => "Неустранимая ошибка",
-        8 => "Запускается",
-        9 => "Останавливается",
-        10 => "Остановлен",
-        11 => "На обслуживании",
-        12 => "Нет связи",
-        13 => "Связь потеряна",
-        14 => "Прервано",
-        15 => "Неактивен",
-        16 => "Ошибка связанного устройства",
-        17 => "Завершено",
-        _ => $"Код состояния {code}",
+        0 => T._("Неизвестно"),
+        1 => T._("Другое"),
+        2 => T._("Работает нормально"),
+        3 => T._("Работает с ошибками"),
+        4 => T._("Перегружен"),
+        5 => T._("Прогнозируется сбой"),
+        6 => T._("Ошибка"),
+        7 => T._("Неустранимая ошибка"),
+        8 => T._("Запускается"),
+        9 => T._("Останавливается"),
+        10 => T._("Остановлен"),
+        11 => T._("На обслуживании"),
+        12 => T._("Нет связи"),
+        13 => T._("Связь потеряна"),
+        14 => T._("Прервано"),
+        15 => T._("Неактивен"),
+        16 => T._("Ошибка связанного устройства"),
+        17 => T._("Завершено"),
+        _ => T.F("Код состояния {0}", code),
     };
 
     /// <summary>Combined label for the OperationalStatus array (WMI returns ushort[]).</summary>
     public static string OperationalStatusLabel(object? raw)
     {
         var codes = ToCodes(raw);
-        return codes.Count == 0 ? "Нет данных" : string.Join(", ", codes.Select(OperationalStatusLabel).Distinct());
+        return codes.Count == 0 ? T._("Нет данных") : string.Join(", ", codes.Select(OperationalStatusLabel).Distinct());
     }
 
     public static bool IsOperationalOk(object? raw)
@@ -222,5 +218,5 @@ internal static class StorageLabels
     }
 
     /// <summary>SpindleSpeed: 0 = no spindle (SSD), uint.MaxValue = unknown, otherwise RPM.</summary>
-    public static string? SpindleLabel(long? rpm) => rpm is > 0 and < uint.MaxValue ? $"{rpm} об/мин" : null;
+    public static string? SpindleLabel(long? rpm) => rpm is > 0 and < uint.MaxValue ? T.F("{0} об/мин", rpm) : null;
 }

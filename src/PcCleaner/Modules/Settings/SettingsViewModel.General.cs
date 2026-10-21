@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -26,8 +27,8 @@ public sealed partial class SettingsViewModel
                 return;
             Settings.CreateRestorePoint = value;
             SaveSettings(value
-                ? "Настройки: точка восстановления перед изменениями системы — включено"
-                : "Настройки: точка восстановления перед изменениями системы — выключено");
+                ? T._("Настройки: точка восстановления перед изменениями системы — включено")
+                : T._("Настройки: точка восстановления перед изменениями системы — выключено"));
         }
     }
 
@@ -41,13 +42,112 @@ public sealed partial class SettingsViewModel
                 return;
             Settings.RunAsAdmin = value;
             SaveSettings(value
-                ? "Настройки: запуск с правами администратора — включён"
-                : "Настройки: запуск с правами администратора — выключен");
+                ? T._("Настройки: запуск с правами администратора — включён")
+                : T._("Настройки: запуск с правами администратора — выключен"));
         }
     }
 
+    // ----- «Режим» and «Язык» -----
+    // Two option buttons each (RadioButtons in one group). Choosing writes "false" into the other one too, so a setter only reacts to
+    // "true". Nothing is kept here: the settings are the one truth, and LoadGeneral tells the buttons to read them again.
+
+    /// <summary>«Простой»: the sidebar shows four pages (<see cref="UiModes"/>). Applies at once, no restart.</summary>
+    public bool IsSimpleMode
+    {
+        get => UiModes.Of(Settings) == UiMode.Simple;
+        set => ChooseMode(value, UiMode.Simple);
+    }
+
+    /// <summary>«Опытный»: every page. Also what is shown while no mode is chosen yet.</summary>
+    public bool IsExpertMode
+    {
+        get => UiModes.Of(Settings) == UiMode.Expert;
+        set => ChooseMode(value, UiMode.Expert);
+    }
+
+    private void ChooseMode(bool selected, UiMode mode)
+    {
+        if (!selected || _loadingGeneral)
+            return;
+        if (UiModes.Choose(Settings, mode, _save))
+            RaiseModeChanged();
+    }
+
+    private void RaiseModeChanged()
+    {
+        OnPropertyChanged(nameof(IsSimpleMode));
+        OnPropertyChanged(nameof(IsExpertMode));
+    }
+
+    /// <summary>The language of the buttons: the saved choice, else the one this run started with (the system's).</summary>
+    private string SelectedLanguage => Settings.Language ?? T.Language;
+
+    /// <summary>«Русский».</summary>
+    public bool IsRussian
+    {
+        get => SelectedLanguage == T.Russian;
+        set => ChooseLanguage(value, T.Russian, "Русский");
+    }
+
+    /// <summary>«English».</summary>
+    public bool IsEnglish
+    {
+        get => SelectedLanguage == T.English;
+        set => ChooseLanguage(value, T.English, "English");
+    }
+
+    /// <summary>The chosen language is not the one this run shows: «Перезапустить сейчас» is offered.</summary>
+    public bool LanguageNeedsRestart => SelectedLanguage != T.Language;
+
+    private void ChooseLanguage(bool selected, string language, string name)
+    {
+        if (!selected || _loadingGeneral || Settings.Language == language)
+            return;
+        Settings.Language = language;
+        SaveSettings(T.F("Настройки: язык — {0}", name));
+        RaiseLanguageChanged();
+    }
+
+    private void RaiseLanguageChanged()
+    {
+        OnPropertyChanged(nameof(IsRussian));
+        OnPropertyChanged(nameof(IsEnglish));
+        OnPropertyChanged(nameof(LanguageNeedsRestart));
+    }
+
+    /// <summary>
+    /// Restarts the program (<see cref="AppRestart"/>). The public constructor puts the real one here; the constructor of the
+    /// tests leaves one that starts nothing, so no test can ever start the program.
+    /// </summary>
+    internal Func<bool> RestartProgram { get; set; } = () => false;
+
+    /// <summary>The pages whose work a restart would interrupt (all pages of the shell).</summary>
+    internal Func<IEnumerable<PageViewModel>> OpenPages { get; set; } = () => AppServices.Navigator?.Pages ?? Enumerable.Empty<PageViewModel>();
+
+    /// <summary>The Yes/No question (<see cref="Dialogs.Confirm"/>); tests replace it.</summary>
+    internal Func<string, string, bool> Confirm { get; set; } = Dialogs.Confirm;
+
+    public RelayCommand RestartNowCommand { get; private set; } = null!;
+
+    /// <summary>«Перезапустить сейчас»: asks first if a page is still working, then starts the program again with the same arguments.</summary>
+    private void RestartNow()
+    {
+        var busy = OpenPages().Where(p => p.IsBusy).ToList();
+        if (busy.Count > 0)
+        {
+            var list = string.Join("\n", busy.Select(p => $"• {T.Quote(p.Title)}"));
+            if (!Confirm(T._("Перезапуск программы"),
+                    T.F("Сейчас ещё идёт работа:\n{0}\n\nПри перезапуске она прервётся. Перезапустить программу сейчас?", list)))
+                return;
+        }
+        if (RestartProgram())
+            return;
+        Log.Warn(T._("Не удалось перезапустить программу"));
+        Dialogs.Error(T._("Перезапуск программы"), T._("Не удалось перезапустить программу. Закройте её и откройте снова."));
+    }
+
     public string RunAsAdminHint =>
-        "Windows будет спрашивать разрешение при каждом запуске; без прав часть проверок и исправлений недоступна.";
+        T._("Windows будет спрашивать разрешение при каждом запуске; без прав часть проверок и исправлений недоступна.");
 
     public List<AgeOption> AgeOptions
     {
@@ -66,16 +166,16 @@ public sealed partial class SettingsViewModel
             if (hours == Settings.CleanerMinFileAgeHours)
                 return;
             Settings.CleanerMinFileAgeHours = hours;
-            SaveSettings($"Настройки: не удалять временные файлы моложе {Format.Count(hours, "часа", "часов", "часов")}");
+            SaveSettings(T.F("Настройки: не удалять временные файлы моложе {0}", Format.Count(hours, "часа", "часов", "часов")));
             OnPropertyChanged(nameof(AgeHint));
         }
     }
 
     public string AgeHint => (SelectedAgeOption?.Hours ?? SettingsLogic.DefaultMinAgeHours) switch
     {
-        0 => "Внимание: временные файлы будут удаляться сразу, даже если их только что создала работающая программа или установщик.",
-        < 6 => "Короткий срок: возможны ошибки у программ, которые прямо сейчас что-то устанавливают или обновляют.",
-        _ => "Свежие временные файлы часто принадлежат работающим программам и установщикам — их безопаснее не трогать.",
+        0 => T._("Внимание: временные файлы будут удаляться сразу, даже если их только что создала работающая программа или установщик."),
+        < 6 => T._("Короткий срок: возможны ошибки у программ, которые прямо сейчас что-то устанавливают или обновляют."),
+        _ => T._("Свежие временные файлы часто принадлежат работающим программам и установщикам — их безопаснее не трогать."),
     };
 
     public ObservableCollection<string> Exclusions
@@ -113,12 +213,11 @@ public sealed partial class SettingsViewModel
     }
 
     public string RestorePointHint =>
-        "Перед пакетными изменениями (службы, оптимизация, удаление программ) Windows сохранит состояние системы — если что-то пойдёт не так, его можно будет вернуть. " +
-        "Если защита системы выключена, точка не создаётся — программа её не включает сама.";
+        T._("Перед пакетными изменениями (службы, оптимизация, удаление программ) Windows сохранит состояние системы — если что-то пойдёт не так, его можно будет вернуть. Если защита системы выключена, точка не создаётся — программа её не включает сама.");
 
     public string? RestorePointAdminWarning => Admin.IsElevated
         ? null
-        : "Без прав администратора точки не создаются.";
+        : T._("Без прав администратора точки не создаются.");
 
     // ----- "Данные программы" tiles -----
 
@@ -145,6 +244,7 @@ public sealed partial class SettingsViewModel
         RemoveTrustedCommand = new RelayCommand(p => RemoveTrusted(ItemsFrom<string>(p)),
             p => ItemsFrom<string>(p).Count > 0);
         ResetSettingsCommand = new RelayCommand(ResetSettings);
+        RestartNowCommand = new RelayCommand(RestartNow);
         SelectTabCommand = new RelayCommand(p =>
         {
             if (int.TryParse(p?.ToString(), out var tab) && tab is >= TabGeneral and <= TabAbout)
@@ -158,7 +258,7 @@ public sealed partial class SettingsViewModel
         var s = Settings;
         var fixes = SettingsLogic.Sanitize(s);
         if (fixes > 0)
-            Log.Info($"Настройки: исправлено некорректных значений — {fixes}");
+            Log.Info(T.F("Настройки: исправлено некорректных значений — {0}", fixes));
 
         _loadingGeneral = true;
         try
@@ -171,6 +271,8 @@ public sealed partial class SettingsViewModel
             _autoUpdate = s.AutoUpdate;
             OnPropertyChanged(nameof(AutoUpdate));
             OnPropertyChanged(nameof(LastCheckText));
+            RaiseModeChanged();
+            RaiseLanguageChanged();
 
             var options = SettingsLogic.BuildAgeOptions(s.CleanerMinFileAgeHours);
             if (!options.SequenceEqual(AgeOptions))
@@ -202,7 +304,7 @@ public sealed partial class SettingsViewModel
         if (result != ExclusionAddResult.Added)
             return false;
 
-        SaveSettings($"Настройки: добавлено исключение очистки — {normalized}");
+        SaveSettings(T.F("Настройки: добавлено исключение очистки — {0}", normalized));
         Exclusions = new ObservableCollection<string>(Settings.CleanerExclusions);
         NewExclusionText = "";
         return true;
@@ -214,7 +316,7 @@ public sealed partial class SettingsViewModel
         var initial = last is not null && !SettingsLogic.IsNetworkPath(last)
             ? last
             : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var path = FolderPicker.Pick("Папка, которую очистка не должна трогать", initial);
+        var path = FolderPicker.Pick(T._("Папка, которую очистка не должна трогать"), initial);
         if (path is null)
             return;
         NewExclusionText = path;
@@ -229,9 +331,9 @@ public sealed partial class SettingsViewModel
         if (removed == 0)
             return;
         Settings.CleanerExclusions = remaining;
-        SaveSettings($"Настройки: удалено исключений очистки — {removed}: {string.Join("; ", items)}");
+        SaveSettings(T.F("Настройки: удалено исключений очистки — {0}: {1}", removed, string.Join("; ", items)));
         Exclusions = new ObservableCollection<string>(Settings.CleanerExclusions);
-        ExclusionMessage = removed == 1 ? "Исключение удалено." : $"Удалено исключений: {removed}.";
+        ExclusionMessage = removed == 1 ? T._("Исключение удалено.") : T.F("Удалено исключений: {0}.", removed);
         ExclusionMessageIsError = false;
     }
 
@@ -246,8 +348,8 @@ public sealed partial class SettingsViewModel
         if (removed == 0)
             return;
         TrustedMessage = removed == 1
-            ? "Убрано из доверенных. Проверки в «Процессах», «Автозагрузке» и «Программах» снова будут это учитывать."
-            : $"Убрано из доверенных: {Format.Number(removed)}. Проверки снова будут их учитывать.";
+            ? T._("Убрано из доверенных. Проверки в «Процессах», «Автозагрузке» и «Программах» снова будут это учитывать.")
+            : T.F("Убрано из доверенных: {0}. Проверки снова будут их учитывать.", Format.Number(removed));
     }
 
     /// <summary>Result of the last removal from the trusted list (shown under the list).</summary>
@@ -263,22 +365,15 @@ public sealed partial class SettingsViewModel
     {
         var s = Settings;
         var message =
-            "Вернуть настройки программы к значениям по умолчанию?\n\n" +
-            "• точка восстановления перед изменениями системы — включена;\n" +
-            "• не удалять временные файлы моложе 24 часов;\n" +
-            $"• список исключений очистки будет очищен (сейчас в нём {Format.Count(s.CleanerExclusions.Count, "запись", "записи", "записей")});\n" +
-            $"• список доверенных программ будет очищен (сейчас в нём {Format.Count(s.TrustedItems.Count, "запись", "записи", "записей")});\n" +
-            "• выбор категорий на странице «Очистка» будет сброшен.\n\n" +
-            "Журнал, резервные копии, карантин и сведения для отмены оптимизаций не изменятся. " +
-            "Сам сброс отменить нельзя — исключения и доверенные программы придётся добавить заново.";
-        if (!Dialogs.Confirm("Сброс настроек", message))
+            T.F("Вернуть настройки программы к значениям по умолчанию?\n\n• точка восстановления перед изменениями системы — включена;\n• не удалять временные файлы моложе 24 часов;\n• список исключений очистки будет очищен (сейчас в нём {0});\n• список доверенных программ будет очищен (сейчас в нём {1});\n• выбор категорий на странице «Очистка» будет сброшен.\n\nЖурнал, резервные копии, карантин и сведения для отмены оптимизаций не изменятся. Сам сброс отменить нельзя — исключения и доверенные программы придётся добавить заново.", Format.Count(s.CleanerExclusions.Count, "запись", "записи", "записей"), Format.Count(s.TrustedItems.Count, "запись", "записи", "записей"));
+        if (!Dialogs.Confirm(T._("Сброс настроек"), message))
             return;
 
         SettingsLogic.ResetToDefaults(s);
-        SaveSettings("Настройки сброшены к значениям по умолчанию");
+        SaveSettings(T._("Настройки сброшены к значениям по умолчанию"));
         LoadGeneral();
         ExclusionMessage = null;
-        Dialogs.Info("Сброс настроек", "Готово: настройки возвращены к значениям по умолчанию.");
+        Dialogs.Info(T._("Сброс настроек"), T._("Готово: настройки возвращены к значениям по умолчанию."));
     }
 
     private void SaveSettings(string logMessage)

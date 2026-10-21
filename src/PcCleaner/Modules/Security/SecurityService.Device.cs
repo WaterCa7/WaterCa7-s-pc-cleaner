@@ -2,6 +2,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -11,7 +12,7 @@ public sealed partial class SecurityService
     private const string TpmNamespace = @"root\cimv2\Security\MicrosoftTpm";
     private const string BitLockerNamespace = @"root\cimv2\Security\MicrosoftVolumeEncryption";
     private const string DeviceGuardNamespace = @"root\Microsoft\Windows\DeviceGuard";
-    private const string TestEnvironmentMessage = "Недоступно в тестовом окружении — ничего не изменено.";
+    private static string TestEnvironmentMessage => T._("Недоступно в тестовом окружении — ничего не изменено.");
 
     private volatile bool _smb1RebootPending;
 
@@ -44,13 +45,12 @@ public sealed partial class SecurityService
         if (!features.ContainsKey("SMB1Protocol") && Admin.IsElevated)
         {
             var r = ProcessRunner.PowerShellAsync(
-                    "Get-WindowsOptionalFeature -Online -FeatureName 'SMB1Protocol*' -ErrorAction Stop | " +
-                    "ForEach-Object { $_.FeatureName + '=' + $_.State }", TimeSpan.FromSeconds(40), ct)
+                    "Get-WindowsOptionalFeature -Online -FeatureName 'SMB1Protocol*' -ErrorAction Stop | ForEach-Object { $_.FeatureName + '=' + $_.State }", TimeSpan.FromSeconds(40), ct)
                 .GetAwaiter().GetResult();
             if (r.Success)
                 features = SecurityRules.ParseFeatureList(r.StdOut);
             else
-                Log.Warn($"Безопасность: Get-WindowsOptionalFeature SMB1Protocol: {FirstLine(r.StdErr)}");
+                Log.Warn(T.F("Безопасность: Get-WindowsOptionalFeature SMB1Protocol: {0}", FirstLine(r.StdErr)));
         }
 
         FeatureState F(string name) => features.TryGetValue(name, out var s) ? s : FeatureState.Unknown;
@@ -127,11 +127,11 @@ public sealed partial class SecurityService
             var fromTbs = SecurityRules.TpmFromTbs(result, info.TpmVersion);
             if (fromTbs.Present is not null)
                 return fromTbs;
-            Log.Info($"Безопасность: служба TPM ответила кодом 0x{result:X8}, пробуем tpmtool");
+            Log.Info(T.F("Безопасность: служба TPM ответила кодом 0x{0:X8}, пробуем tpmtool", result));
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
-            Log.Info($"Безопасность: TPM Base Services недоступны ({ex.Message}), пробуем tpmtool");
+            Log.Info(T.F("Безопасность: TPM Base Services недоступны ({0}), пробуем tpmtool", ErrorText.For(ex)), ex);
         }
 
         // Note: without a console window tpmtool prints only the values, without the labels — then nothing is parsed
@@ -149,7 +149,7 @@ public sealed partial class SecurityService
                 return parsed;
             if (r.TimedOut || string.IsNullOrWhiteSpace(r.StdOut))
             {
-                Log.Warn($"Безопасность: tpmtool не ответил (код {r.ExitCode}): {FirstLine(r.StdErr)}");
+                Log.Warn(T.F("Безопасность: tpmtool не ответил (код {0}): {1}", r.ExitCode, FirstLine(r.StdErr)));
                 break;
             }
         }
@@ -209,7 +209,7 @@ public sealed partial class SecurityService
             {
                 var type = Type.GetTypeFromProgID("Shell.Application");
                 if (type is null)
-                    throw new COMException("Shell.Application недоступен");
+                    throw ErrorText.Own(new COMException(T._("Shell.Application недоступен")));
                 shell = Activator.CreateInstance(type);
                 dynamic folder = ((dynamic)shell!).NameSpace(drive);
                 value = folder is null ? null : folder.Self.ExtendedProperty(property);
@@ -233,15 +233,14 @@ public sealed partial class SecurityService
         if (thread.Join(TimeSpan.FromSeconds(8)) && error is null)
             return SecurityRules.MapShellBitLocker(value);
 
-        Log.Info($"Безопасность: свойство шифрования диска недоступно напрямую ({error?.Message ?? "нет ответа"}), читаем через PowerShell");
+        Log.Info(T.F("Безопасность: свойство шифрования диска недоступно напрямую ({0}), читаем через PowerShell", error is null ? T._("нет ответа") : ErrorText.For(error)), error);
         var r = ProcessRunner.PowerShellAsync(
-                $"$v = (New-Object -ComObject Shell.Application).NameSpace('{drive}').Self.ExtendedProperty('{property}')\r\n" +
-                "'VALUE:' + $v", TimeSpan.FromSeconds(30), ct)
+                $"$v = (New-Object -ComObject Shell.Application).NameSpace('{drive}').Self.ExtendedProperty('{property}')\r\n'VALUE:' + $v", TimeSpan.FromSeconds(30), ct)
             .GetAwaiter().GetResult();
         var line = r.StdOut.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("VALUE:", StringComparison.Ordinal));
         if (line is null)
         {
-            Log.Warn($"Безопасность: не удалось узнать состояние шифрования диска: {FirstLine(r.StdErr)}");
+            Log.Warn(T.F("Безопасность: не удалось узнать состояние шифрования диска: {0}", FirstLine(r.StdErr)));
             return DriveEncryption.Unknown;
         }
         var text = line["VALUE:".Length..].Trim();
@@ -296,28 +295,26 @@ public sealed partial class SecurityService
         if (!Admin.IsElevated)
             return SecurityActionResult.Fail(NeedAdminMessage);
 
-        var restorePoint = await RestorePoint.CreateAsync("Отключение SMBv1", ct);
+        var restorePoint = await RestorePoint.CreateAsync(T._("Отключение SMBv1"), ct);
         ct.ThrowIfCancellationRequested();
         // Not cancellable once started: "Отмена" would kill PowerShell together with DismHost in the middle of
         // servicing the component store. The generous timeout is only a safety net for a hung servicing stack.
         var r = await ProcessRunner.PowerShellAsync(
-            "$r = Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart -ErrorAction Stop\r\n" +
-            "'RESTART:' + $r.RestartNeeded", TimeSpan.FromMinutes(30), CancellationToken.None);
+            "$r = Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart -ErrorAction Stop\r\n'RESTART:' + $r.RestartNeeded", TimeSpan.FromMinutes(30), CancellationToken.None);
         var restartLine = r.StdOut.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("RESTART:", StringComparison.Ordinal));
         if (!r.Success || restartLine is null)
         {
-            var reason = r.TimedOut ? "Windows не ответила вовремя" : FirstLine(r.StdErr + "\n" + r.StdOut);
-            Log.Warn($"Не удалось отключить SMBv1: {reason}");
-            return SecurityActionResult.Fail(
-                $"Не удалось отключить SMBv1: {reason}.\n\nОтключите его вручную: «Включение или отключение компонентов Windows» → " +
-                "снимите флажок «Поддержка общего доступа к файлам SMB 1.0/CIFS».");
+            var reason = r.TimedOut ? T._("Windows не ответила вовремя") : FirstLine(r.StdErr + "\n" + r.StdOut);
+            Log.Warn(T.F("Не удалось отключить SMBv1: {0}", reason));
+            return SecurityActionResult.Failed(
+                T.F("Не удалось отключить SMBv1: {0}.\n\nОтключите его вручную: «Включение или отключение компонентов Windows» → снимите флажок «Поддержка общего доступа к файлам SMB 1.0/CIFS».", reason));
         }
         var restart = !restartLine.EndsWith("False", StringComparison.OrdinalIgnoreCase);
         // Until the reboot the SMBv1 driver keeps running: the next scans say so instead of "SMBv1 выключен"
         // (or, if Windows still lists the feature as enabled, instead of offering to disable it again).
         Smb1RebootPending = restart;
-        Log.Action("Отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» (SMB1Protocol)" +
-                   (restart ? ", нужна перезагрузка" : "") + ". " + SecurityRules.RestorePointText(restorePoint));
+        Log.Action(T.F("Отключён компонент Windows «Поддержка общего доступа к файлам SMB 1.0/CIFS» (SMB1Protocol){0}. {1}",
+            restart ? ", " + T._("нужна перезагрузка") : "", SecurityRules.RestorePointText(restorePoint)));
         return SecurityActionResult.Ok(SecurityRules.Smb1DisabledText(restart, restorePoint));
     }
 
@@ -334,8 +331,8 @@ public sealed partial class SecurityService
 
         var before = await Task.Run(CountActiveThreats, ct);
         if (before == 0)
-            return SecurityActionResult.Ok("Необезвреженных угроз уже нет — делать ничего не нужно.");
-        Log.Action($"Запущено обезвреживание угроз Защитником Windows (Remove-MpThreat), активных угроз: {before}");
+            return SecurityActionResult.Ok(T._("Необезвреженных угроз уже нет — делать ничего не нужно."));
+        Log.Action(T.F("Запущено обезвреживание угроз Защитником Windows (Remove-MpThreat), активных угроз: {0}", before));
         var r = await ProcessRunner.PowerShellAsync("Remove-MpThreat -ErrorAction Stop\r\n'OK'", TimeSpan.FromMinutes(10), ct);
         // Defender finishes the remediation in its service: give it a moment before counting again. Remove-MpThreat
         // has run by now, so "Отмена" no longer hides the outcome (the wait is only a few seconds).
@@ -347,9 +344,9 @@ public sealed partial class SecurityService
         }
         var removed = Math.Max(0, before - after);
         if (after > 0)
-            Log.Warn($"Remove-MpThreat: осталось активных угроз {after} из {before}. {FirstLine(r.StdErr)}");
+            Log.Warn(T.F("Remove-MpThreat: осталось активных угроз {0} из {1}. {2}", after, before, FirstLine(r.StdErr)));
         if (removed > 0)
-            Log.Action($"Защитник Windows обезвредил угрозы: {removed} из {before}");
+            Log.Action(T.F("Защитник Windows обезвредил угрозы: {0} из {1}", removed, before));
         return SecurityRules.ThreatRemovalOutcome(before, after, FirstLine(r.StdErr));
     }
 }

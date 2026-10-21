@@ -1,4 +1,5 @@
 using System.Windows;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -46,7 +47,7 @@ public static class Dialogs
     {
         ConfirmHandler = (_, _) => false;
         InfoHandler = (_, _) => { };
-        ErrorHandler = (t, m) => Log.Warn($"[диалог] {t}: {m}");
+        ErrorHandler = (t, m) => Log.Warn(T.F("[диалог] {0}: {1}", t, m));
     }
 
     /// <summary>

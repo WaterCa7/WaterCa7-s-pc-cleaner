@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -46,8 +47,8 @@ public sealed class BatteryReportGenerator
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            Log.Warn($"Ускорение: нет доступа к папке для отчёта о батарее: {ex.Message}");
-            return new BatteryReportResult(false, $"Не удалось подготовить папку для отчёта: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Ускорение: нет доступа к папке для отчёта о батарее: {0}", ErrorText.For(ex)), ex);
+            return new BatteryReportResult(false, T.F("Не удалось подготовить папку для отчёта: {0}.", ErrorText.For(ex)));
         }
 
         var before = LastWrite(path);
@@ -55,14 +56,14 @@ public sealed class BatteryReportGenerator
         var after = LastWrite(path);
         if (result.Success && after is not null && after != before)
         {
-            Log.Info($"Ускорение: создан отчёт о батарее — {path}");
-            return new BatteryReportResult(true, $"Отчёт о батарее сохранён: {path}", path);
+            Log.Info(T.F("Ускорение: создан отчёт о батарее — {0}", path));
+            return new BatteryReportResult(true, T.F("Отчёт о батарее сохранён: {0}", path), path);
         }
 
         var reason = FirstLine(result.StdErr) ?? FirstLine(result.StdOut) ??
-                     (result.TimedOut ? "powercfg не ответил вовремя" : $"код завершения {result.ExitCode}");
-        Log.Warn($"Ускорение: не удалось создать отчёт о батарее: {reason}");
-        return new BatteryReportResult(false, $"Windows не смогла создать отчёт о батарее: {reason}");
+                     (result.TimedOut ? T._("powercfg не ответил вовремя") : T.F("код завершения {0}", result.ExitCode));
+        Log.Warn(T.F("Ускорение: не удалось создать отчёт о батарее: {0}", reason));
+        return new BatteryReportResult(false, T.F("Windows не смогла создать отчёт о батарее: {0}", reason));
     }
 
     private static DateTime? LastWrite(string path)

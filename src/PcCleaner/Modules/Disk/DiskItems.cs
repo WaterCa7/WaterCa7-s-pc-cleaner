@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Input;
 using System.Windows.Media;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Disk;
@@ -28,7 +29,7 @@ public sealed class DriveItem : ObservableObject
     public char Letter => Model.Letter;
 
     public string Title => string.IsNullOrWhiteSpace(Model.Label)
-        ? $"Локальный диск ({Model.Letter}:)"
+        ? T.F("Локальный диск ({0}:)", Model.Letter)
         : $"{Model.Label} ({Model.Letter}:)";
 
     public string SubTitle
@@ -41,16 +42,16 @@ public sealed class DriveItem : ObservableObject
             if (Model.Disk is not null)
                 parts.Add(Model.Disk.Model);
             else if (Model.DiskNumber is not null)
-                parts.Add($"Диск {Model.DiskNumber}");
+                parts.Add(T.F("Диск {0}", Model.DiskNumber));
             return string.Join(" · ", parts);
         }
     }
 
     public string FreeText => Format.Bytes(Model.FreeBytes);
 
-    public string TotalText => $"свободно из {Format.Bytes(Model.TotalBytes)}";
+    public string TotalText => T.F("свободно из {0}", Format.Bytes(Model.TotalBytes));
 
-    public string UsedText => $"Занято {Format.Bytes(Model.UsedBytes)} ({Format.Percent(Model.UsedPercent)})";
+    public string UsedText => T.F("Занято {0} ({1})", Format.Bytes(Model.UsedBytes), Format.Percent(Model.UsedPercent));
 
     public double UsedPercent => Model.UsedPercent;
 
@@ -66,26 +67,26 @@ public sealed class DriveItem : ObservableObject
             if (Model.Disk is not null && Kind != DriveKind.Unknown)
                 list.Add(new BadgeItem(StorageLabels.KindLabel(Kind), Tone.Info, StorageLabels.KindDescription(Kind)));
             if (Model.Disk?.BusType == StorageLabels.BusUsb)
-                list.Add(new BadgeItem("USB", Tone.Neutral, "Накопитель подключён по USB."));
+                list.Add(new BadgeItem("USB", Tone.Neutral, T._("Накопитель подключён по USB.")));
             if (Model.IsSystemDrive)
-                list.Add(new BadgeItem("Системный", Tone.Neutral, "На этом диске установлена Windows."));
+                list.Add(new BadgeItem(T._("Системный"), Tone.Neutral, T._("На этом диске установлена Windows.")));
             return list;
         }
     }
 
-    public string HealthText => Model.Disk is null ? "Нет данных" : StorageLabels.HealthLabel(Model.Disk.Health);
+    public string HealthText => Model.Disk is null ? T._("Нет данных") : StorageLabels.HealthLabel(Model.Disk.Health);
 
     public Tone HealthTone => Model.Disk is null ? Tone.Neutral : StorageLabels.HealthTone(Model.Disk.Health);
 
     public string HealthToolTip => Model.Disk is null
-        ? "Не удалось сопоставить этот том с физическим диском."
+        ? T._("Не удалось сопоставить этот том с физическим диском.")
         : StorageLabels.HealthDescription(Model.Disk.Health);
 
     public bool IsLowSpace => Model.FreePercent < 15 && Model.FreeBytes < (64L << 30);
 
     public string LowSpaceText => Model.FreePercent < 10
-        ? "Очень мало свободного места — Windows может работать медленнее."
-        : "Свободного места становится мало.";
+        ? T._("Очень мало свободного места — Windows может работать медленнее.")
+        : T._("Свободного места становится мало.");
 
     public TrimState Trim
     {
@@ -105,9 +106,9 @@ public sealed class DriveItem : ObservableObject
 
     public string TrimText => _trim switch
     {
-        TrimState.Enabled => "TRIM включён",
-        TrimState.Disabled => "TRIM выключен",
-        _ => "TRIM: нет данных",
+        TrimState.Enabled => T._("TRIM включён"),
+        TrimState.Disabled => T._("TRIM выключен"),
+        _ => T._("TRIM: нет данных"),
     };
 
     public Tone TrimTone => _trim switch
@@ -119,16 +120,14 @@ public sealed class DriveItem : ObservableObject
 
     public bool CanEnableTrim => IsSolidState && _trim == TrimState.Disabled;
 
-    public string OptimizeText => "Оптимизировать";
+    public string OptimizeText => T._("Оптимизировать");
 
     public string OptimizeToolTip => Kind switch
     {
-        DriveKind.Hdd => "Дефрагментация: собирает части файлов в непрерывные участки, чтобы жёсткий диск читал их быстрее. " +
-                         "Может занять от нескольких минут до нескольких часов. Нужны права администратора.",
+        DriveKind.Hdd => T._("Дефрагментация: собирает части файлов в непрерывные участки, чтобы жёсткий диск читал их быстрее. Может занять от нескольких минут до нескольких часов. Нужны права администратора."),
         DriveKind.Ssd or DriveKind.NvmeSsd or DriveKind.Scm =>
-            "Для SSD выполняется ReTrim: Windows сообщает накопителю обо всех свободных блоках. Быстро и безопасно. " +
-            "Нужны права администратора.",
-        _ => "Windows сама выберет подходящий способ оптимизации для этого диска. Нужны права администратора.",
+            T._("Для SSD выполняется ReTrim: Windows сообщает накопителю обо всех свободных блоках. Быстро и безопасно. Нужны права администратора."),
+        _ => T._("Windows сама выберет подходящий способ оптимизации для этого диска. Нужны права администратора."),
     };
 }
 
@@ -142,21 +141,21 @@ public sealed class PhysicalDiskItem
         if (model.Kind != DriveKind.Unknown)
             badges.Add(new BadgeItem(StorageLabels.KindLabel(model.Kind), Tone.Info, StorageLabels.KindDescription(model.Kind)));
         if (model.BusType is not null && model.BusType != StorageLabels.BusNvme)
-            badges.Add(new BadgeItem(StorageLabels.BusLabel(model.BusType), Tone.Neutral, "Интерфейс подключения накопителя."));
+            badges.Add(new BadgeItem(StorageLabels.BusLabel(model.BusType), Tone.Neutral, T._("Интерфейс подключения накопителя.")));
         badges.Add(new BadgeItem(StorageLabels.HealthLabel(model.Health), StorageLabels.HealthTone(model.Health),
             StorageLabels.HealthDescription(model.Health)));
         Badges = badges;
 
         var details = new List<string>();
         if (model.Number is not null)
-            details.Add($"Диск {model.Number}");
+            details.Add(T.F("Диск {0}", model.Number));
         if (model.SizeBytes > 0)
             details.Add(Format.Bytes(model.SizeBytes));
         details.Add(model.Letters.Count switch
         {
-            0 => "без буквы диска",
-            1 => $"том {model.Letters[0]}:",
-            _ => "тома " + string.Join(", ", model.Letters.Select(l => l + ":")),
+            0 => T._("без буквы диска"),
+            1 => T.F("том {0}:", model.Letters[0]),
+            _ => T.F("тома {0}", string.Join(", ", model.Letters.Select(l => l + ":"))),
         });
         var rpm = StorageLabels.SpindleLabel(model.SpindleSpeed);
         if (rpm is not null)
@@ -165,35 +164,35 @@ public sealed class PhysicalDiskItem
 
         var stats = new List<StatItem>
         {
-            new("Состояние", model.OperationalStatus, model.OperationalOk ? Tone.Neutral : Tone.Warning,
-                "Рабочее состояние, о котором сообщает Windows."),
+            new(T._("Состояние"), model.OperationalStatus, model.OperationalOk ? Tone.Neutral : Tone.Warning,
+                T._("Рабочее состояние, о котором сообщает Windows.")),
         };
         if (StorageLabels.IsSolidState(model.Kind))
         {
             stats.Add(new StatItem("TRIM", trim switch
                 {
-                    TrimState.Enabled => "включён",
-                    TrimState.Disabled => "выключен",
-                    _ => "нет данных",
+                    TrimState.Enabled => T._("включён"),
+                    TrimState.Disabled => T._("выключен"),
+                    _ => T._("нет данных"),
                 }, trim == TrimState.Disabled ? Tone.Warning : trim == TrimState.Enabled ? Tone.Accent : Tone.Neutral,
-                "TRIM сообщает SSD об удалённых данных, чтобы он не замедлялся со временем. Должен быть включён."));
+                T._("TRIM сообщает SSD об удалённых данных, чтобы он не замедлялся со временем. Должен быть включён.")));
         }
 
         var r = model.Reliability;
         if (r is not null)
         {
             if (r.TemperatureC is { } t)
-                stats.Add(new StatItem("Температура", $"{t} °C", t >= 60 ? Tone.Danger : t >= 50 ? Tone.Warning : Tone.Neutral,
-                    "Текущая температура накопителя. Нормально — до 50 °C, выше 60 °C — стоит улучшить охлаждение."));
+                stats.Add(new StatItem(T._("Температура"), $"{t} °C", t >= 60 ? Tone.Danger : t >= 50 ? Tone.Warning : Tone.Neutral,
+                    T._("Текущая температура накопителя. Нормально — до 50 °C, выше 60 °C — стоит улучшить охлаждение.")));
             if (r.WearPercent is { } w)
-                stats.Add(new StatItem("Износ", $"{w}%", w >= 90 ? Tone.Danger : w >= 70 ? Tone.Warning : Tone.Neutral,
-                    "Сколько ресурса записи SSD уже израсходовано. 100% — ресурс исчерпан."));
+                stats.Add(new StatItem(T._("Износ"), $"{w}%", w >= 90 ? Tone.Danger : w >= 70 ? Tone.Warning : Tone.Neutral,
+                    T._("Сколько ресурса записи SSD уже израсходовано. 100% — ресурс исчерпан.")));
             if (r.PowerOnHours is { } h)
-                stats.Add(new StatItem("Наработка", $"{Format.Number(h)} ч", Tone.Neutral,
-                    $"Сколько часов накопитель проработал за всё время (≈ {Format.Number(h / 24)} дн.)."));
+                stats.Add(new StatItem(T._("Наработка"), T.F("{0} ч", Format.Number(h)), Tone.Neutral,
+                    T.F("Сколько часов накопитель проработал за всё время (≈ {0} дн.).", Format.Number(h / 24))));
             if (r.ReadErrorsUncorrected is { } e)
-                stats.Add(new StatItem("Ошибки чтения", Format.Number(e), e > 0 ? Tone.Danger : Tone.Neutral,
-                    "Неисправимые ошибки чтения. Если их больше нуля — сделайте резервную копию данных."));
+                stats.Add(new StatItem(T._("Ошибки чтения"), Format.Number(e), e > 0 ? Tone.Danger : Tone.Neutral,
+                    T._("Неисправимые ошибки чтения. Если их больше нуля — сделайте резервную копию данных.")));
         }
         Stats = stats;
         ShowAdminHint = !reliabilityRequested && !Admin.IsElevated;
@@ -266,12 +265,11 @@ public sealed class FolderRow
     public string Path => Node?.FullPath ?? "";
 
     public string ToolTip => IsLink
-        ? "Это ссылка (junction или символическая ссылка) на другую папку. Её содержимое не учитывается здесь, " +
-          "чтобы не посчитать одни и те же файлы дважды."
+        ? T._("Это ссылка (junction или символическая ссылка) на другую папку. Её содержимое не учитывается здесь, чтобы не посчитать одни и те же файлы дважды.")
         : IsFilesEntry
-            ? "Файлы, которые лежат прямо в этой папке (не во вложенных)."
+            ? T._("Файлы, которые лежат прямо в этой папке (не во вложенных).")
             : IsInaccessible
-                ? $"{Path}\nЧасть содержимого не прочитана: нужны права администратора."
+                ? T.F("{0}\nЧасть содержимого не прочитана: нужны права администратора.", Path)
                 : Path;
 }
 
@@ -360,7 +358,7 @@ public sealed class LargeFileRow : ObservableObject
                                 Hit.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
 
     public string ToolTip => IsProtected
-        ? $"{Hit.Path}\nСистемный файл или файл программы — удалять его отсюда нельзя."
+        ? T.F("{0}\nСистемный файл или файл программы — удалять его отсюда нельзя.", Hit.Path)
         : RiskNote is null ? Hit.Path : $"{Hit.Path}\n{RiskNote}";
 
     public bool IsChecked
@@ -458,17 +456,18 @@ public sealed class SuggestionItem : ObservableObject
 
     public long Bytes { get; private set; }
 
-    public string? SizeText => Bytes > 0 ? (SizePrefix + Format.Bytes(Bytes)) : null;
+    public string? SizeText => Bytes > 0 ? (IsAtLeast ? T.F("не меньше {0}", Format.Bytes(Bytes)) : Format.Bytes(Bytes)) : null;
 
-    public string SizePrefix { get; private set; } = "";
+    /// <summary>The size is a lower bound (the measurement was cut short): "at least …".</summary>
+    public bool IsAtLeast { get; private set; }
 
     /// <summary>Updates the size (e.g. after a slow background measurement finished).</summary>
-    public void SetSize(long bytes, string prefix)
+    public void SetSize(long bytes, bool atLeast)
     {
         Bytes = bytes;
-        SizePrefix = prefix;
+        IsAtLeast = atLeast;
         OnPropertyChanged(nameof(Bytes));
-        OnPropertyChanged(nameof(SizePrefix));
+        OnPropertyChanged(nameof(IsAtLeast));
         OnPropertyChanged(nameof(SizeText));
     }
 
@@ -497,12 +496,12 @@ public sealed class SuggestionItem : ObservableObject
     }
 
     public string ExpandText => IsExpanded
-        ? "Скрыть файлы"
-        : $"Показать {Format.Count(Files.Count, "файл", "файла", "файлов")}";
+        ? T._("Скрыть файлы")
+        : T.F("Показать {0}", Format.Count(Files.Count, "файл", "файла", "файлов"));
 
     public string CheckedText => _checkedCount == 0
-        ? "Ничего не отмечено"
-        : $"Отмечено {Format.Count(_checkedCount, "файл", "файла", "файлов")} — {Format.Bytes(_checkedBytes)}";
+        ? T._("Ничего не отмечено")
+        : T.F("Отмечено {0} — {1}", Format.Count(_checkedCount, "файл", "файла", "файлов"), Format.Bytes(_checkedBytes));
 
     public bool HasChecked => _checkedCount > 0;
 

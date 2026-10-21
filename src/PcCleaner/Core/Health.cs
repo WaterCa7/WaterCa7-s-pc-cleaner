@@ -1,3 +1,5 @@
+using PcCleaner.Core.Localization;
+
 namespace PcCleaner.Core;
 
 public enum IssueSeverity
@@ -57,8 +59,8 @@ public sealed class HealthIssue : ObservableObject
     /// <summary>True if the fix is low-risk: the row shows the «Безопасно исправить» badge. «Исправить всё» is gated by InFixAll.</summary>
     public bool AutoFixSafe { get; init; }
 
-    /// <summary>The fix button's text when a module does not say what exactly the fix does.</summary>
-    public const string DefaultFixLabel = "Исправить";
+    /// <summary>The fix button's text when a module does not say what exactly the fix does, in the language of the UI.</summary>
+    public static string DefaultFixLabel => T._("Исправить");
 
     /// <summary>Text of the fix button: "Исправить", or what exactly happens ("Перезагрузить", "Удалить программу").</summary>
     public string FixLabel { get; init; } = DefaultFixLabel;

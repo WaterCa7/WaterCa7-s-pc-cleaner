@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.NetworkInformation;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Network;
 
@@ -213,7 +214,7 @@ public sealed record SocketSnapshot(IReadOnlyList<SocketEntry> Entries, IReadOnl
     public IReadOnlyDictionary<string, string> ProgramWarnings { get; init; } = NoWarnings;
 
     public ProcessIdentity Owner(int pid)
-        => Processes.TryGetValue(pid, out var p) ? p : new ProcessIdentity(pid, $"PID {pid}", null, $"Процесс {pid}", false, true);
+        => Processes.TryGetValue(pid, out var p) ? p : new ProcessIdentity(pid, $"PID {pid}", null, T.F("Процесс {0}", pid), false, true);
 
     /// <summary>Why the program looks unusual (see <see cref="ProgramWarnings"/>), null if nothing is known against it.</summary>
     public string? ProgramWarning(ProcessIdentity process)

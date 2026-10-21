@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -74,9 +75,9 @@ public sealed partial class SettingsViewModel
         var other = list.Count - registry;
         var size = list.Sum(b => b.SizeBytes);
         BackupsSummary = list.Count == 0
-            ? "Резервных копий пока нет"
+            ? T._("Резервных копий пока нет")
             : $"{Format.Count(registry, "копия реестра", "копии реестра", "копий реестра")}" +
-              (other > 0 ? $" и {Format.Count(other, "другой файл", "других файла", "других файлов")}" : "") +
+              (other > 0 ? " " + T.F("и {0}", Format.Count(other, "другой файл", "других файла", "других файлов")) : "") +
               $" · {Format.Bytes(size)}";
     }
 
@@ -86,7 +87,7 @@ public sealed partial class SettingsViewModel
             return;
         if (!PathGuard.IsDirectChild(backup.FullPath, AppPaths.BackupsDir) || !File.Exists(backup.FullPath))
         {
-            Dialogs.Info("Восстановление", "Файл резервной копии не найден. Обновите список.");
+            Dialogs.Info(T._("Восстановление"), T._("Файл резервной копии не найден. Обновите список."));
             await LoadBackupsAsync(CancellationToken.None);
             return;
         }
@@ -97,19 +98,19 @@ public sealed partial class SettingsViewModel
         // (imported from a private locked copy), so rewriting the file in the user-writable backups folder while the
         // confirmation is open changes nothing.
         var (bytes, reg) = await Task.Run(() => BackupCatalog.ReadForRestore(backup.FullPath));
-        var refusal = RestoreRefusal(reg) ?? (bytes is null ? "Не удалось прочитать файл копии." : null);
+        var refusal = RestoreRefusal(reg) ?? (bytes is null ? T._("Не удалось прочитать файл копии.") : null);
         if (refusal is not null || bytes is null)
         {
-            refusal ??= "Не удалось прочитать файл копии.";
-            Log.Warn($"Восстановление из {backup.FileName} отменено: {refusal}");
-            Dialogs.Info("Восстановление из резервной копии", refusal + "\n\nРеестр не изменён.");
+            refusal ??= T._("Не удалось прочитать файл копии.");
+            Log.Warn(T.F("Восстановление из {0} отменено: {1}", backup.FileName, refusal));
+            Dialogs.Info(T._("Восстановление из резервной копии"), refusal + "\n\n" + T._("Реестр не изменён."));
             return;
         }
 
         var key = reg.RootKey!;
         var title = BackupCatalog.FriendlyKeyName(key);
         var needsAdmin = BackupCatalog.NeedsAdmin(key);
-        if (needsAdmin && !ElevatedRestart.RequireElevation("Восстановить системный раздел реестра"))
+        if (needsAdmin && !ElevatedRestart.RequireElevation(T._("Восстановить системный раздел реестра")))
             return;
 
         // Read-only: compare every value in the copy with the registry, so the confirmation lists the real data
@@ -117,37 +118,34 @@ public sealed partial class SettingsViewModel
         var (exists, plan) = await Task.Run(() => (KeyExists(key), RegRestorePlan.Build(reg, RegRestorePlan.ReadCurrent)));
         if (exists && plan.ChangesNothing)
         {
-            Dialogs.Info("Восстановление из резервной копии",
-                $"{RegRestorePlan.Visible(title, 120)}\n{RegRestorePlan.Visible(key, 200)}\n\n" +
-                $"Все значения в копии от {backup.TimeText} совпадают с текущими — восстанавливать нечего. Реестр не изменён.");
+            Dialogs.Info(T._("Восстановление из резервной копии"),
+                T.F("{0}\n{1}\n\nВсе значения в копии от {2} совпадают с текущими — восстанавливать нечего. Реестр не изменён.", RegRestorePlan.Visible(title, 120), RegRestorePlan.Visible(key, 200), backup.TimeText));
             return;
         }
         if (plan.IsTruncated)
-            Log.Info($"Восстановление из {backup.FileName} изменит: {plan.DescribeAll()}");
+            Log.Info(T.F("Восстановление из {0} изменит: {1}", backup.FileName, plan.DescribeAll()));
 
         var message = RestoreConfirmation(backup.TimeText, backup.Description, key, title, exists, plan);
-        if (!Dialogs.Confirm("Восстановление из резервной копии", message))
+        if (!Dialogs.Confirm(T._("Восстановление из резервной копии"), message))
             return;
 
         string? resultMessage = null;
-        await RunBusyAsync("Восстановление раздела реестра…", async ct =>
+        await RunBusyAsync(T._("Восстановление раздела реестра…"), async ct =>
         {
             using var copy = await Task.Run(() => LockedRegCopy.Create(bytes, backup.FileName), ct);
             if (copy is null)
             {
-                resultMessage = "Не удалось подготовить файл копии к восстановлению, поэтому восстановление отменено — " +
-                                "реестр не изменён. Подробности во вкладке «Журнал».";
+                resultMessage = T._("Не удалось подготовить файл копии к восстановлению, поэтому восстановление отменено — реестр не изменён. Подробности во вкладке «Журнал».");
                 return;
             }
 
             // Back up the current state first (if the key exists at all — after a deletion it usually doesn't).
             if (exists)
             {
-                var current = await RegistryBackup.ExportAsync(key, $"Перед восстановлением из копии {backup.FileName}", ct);
+                var current = await RegistryBackup.ExportAsync(key, T.F("Перед восстановлением из копии {0}", backup.FileName), ct);
                 if (current is null)
                 {
-                    resultMessage = "Не удалось сохранить текущее состояние раздела, поэтому восстановление отменено — " +
-                                    "реестр не изменён. Подробности во вкладке «Журнал».";
+                    resultMessage = T._("Не удалось сохранить текущее состояние раздела, поэтому восстановление отменено — реестр не изменён. Подробности во вкладке «Журнал».");
                     return;
                 }
             }
@@ -159,21 +157,21 @@ public sealed partial class SettingsViewModel
             {
                 // RegistryBackup.ImportCheckedAsync has already logged the action with the file name; add the key and the values.
                 var changes = plan.DescribeAll();
-                Log.Info($"Раздел реестра восстановлен из резервной копии от {backup.TimeText}: {key}" +
-                         (changes.Length > 0 ? $". Записано: {changes}" : ""));
-                resultMessage = $"Готово: раздел «{RegRestorePlan.Visible(title, 120)}» восстановлен из копии от {backup.TimeText}.\n\n" +
-                                "Некоторые изменения вступят в силу после перезапуска программ или перезагрузки компьютера.";
+                Log.Info(changes.Length > 0
+                    ? T.F("Раздел реестра восстановлен из резервной копии от {0}: {1}. Записано: {2}", backup.TimeText, key, changes)
+                    : T.F("Раздел реестра восстановлен из резервной копии от {0}: {1}", backup.TimeText, key));
+                resultMessage = T.F("Готово: раздел «{0}» восстановлен из копии от {1}.\n\nНекоторые изменения вступят в силу после перезапуска программ или перезагрузки компьютера.", RegRestorePlan.Visible(title, 120), backup.TimeText);
             }
             else
             {
-                resultMessage = "Windows не смогла импортировать резервную копию. Подробности — во вкладке «Журнал»." +
-                                (needsAdmin && !Admin.IsElevated ? "\n\nДля системных разделов нужны права администратора." : "");
+                resultMessage = T._("Windows не смогла импортировать резервную копию. Подробности — во вкладке «Журнал».") +
+                                (needsAdmin && !Admin.IsElevated ? "\n\n" + T._("Для системных разделов нужны права администратора.") : "");
             }
         });
 
         await LoadBackupsAsync(CancellationToken.None);
         if (resultMessage is not null)
-            Dialogs.Info("Восстановление из резервной копии", resultMessage);
+            Dialogs.Info(T._("Восстановление из резервной копии"), resultMessage);
     }
 
     /// <summary>
@@ -192,18 +190,15 @@ public sealed partial class SettingsViewModel
     internal static string? RestoreRefusal(RegFileInfo reg)
     {
         if (reg.Problem is not null)
-            return reg.Problem + " Программа восстанавливает только собственные копии, сохранённые без изменений.";
+            return reg.Problem + " " + T._("Программа восстанавливает только собственные копии, сохранённые без изменений.");
         if (reg.RootKey is null)
-            return "Не удалось прочитать раздел реестра из файла копии — возможно, файл повреждён.";
+            return T._("Не удалось прочитать раздел реестра из файла копии — возможно, файл повреждён.");
         if (!reg.SingleRoot)
-            return "Файл копии затрагивает сразу несколько разных разделов реестра — похоже, его изменили вручную. " +
-                   "Программа восстанавливает только собственные копии одного раздела.";
+            return T._("Файл копии затрагивает сразу несколько разных разделов реестра — похоже, его изменили вручную. Программа восстанавливает только собственные копии одного раздела.");
         if (reg.DeletesKeys)
-            return "Файл копии удаляет разделы реестра — похоже, его изменили вручную. " +
-                   "Программа восстанавливает только собственные копии.";
+            return T._("Файл копии удаляет разделы реестра — похоже, его изменили вручную. Программа восстанавливает только собственные копии.");
         if (reg.DeletesValues)
-            return "Файл копии удаляет значения реестра — похоже, его изменили вручную. " +
-                   "Программа восстанавливает только собственные копии.";
+            return T._("Файл копии удаляет значения реестра — похоже, его изменили вручную. Программа восстанавливает только собственные копии.");
         return null;
     }
 
@@ -216,22 +211,22 @@ public sealed partial class SettingsViewModel
         RegRestorePlan plan)
     {
         var sb = new System.Text.StringBuilder();
-        sb.Append("Восстановить раздел реестра из резервной копии от ").Append(timeText).Append("?\n\n")
+        sb.Append(T.F("Восстановить раздел реестра из резервной копии от {0}?", timeText)).Append("\n\n")
           .Append(RegRestorePlan.Visible(title, 120)).Append('\n')
           .Append(RegRestorePlan.Visible(key, 200)).Append("\n\n");
         if (!string.IsNullOrWhiteSpace(description))
-            sb.Append("Копия сделана перед действием: ").Append(RegRestorePlan.OneLine(description, 200)).Append("\n\n");
+            sb.Append(T.F("Копия сделана перед действием: {0}", RegRestorePlan.OneLine(description, 200))).Append("\n\n");
         if (plan.DescribeLaunchValues() is { } launch)
             sb.Append(launch).Append("\n\n");
         if (plan.DescribeChanges() is { Length: > 0 } changes)
             sb.Append(changes).Append("\n\n");
-        sb.Append("Что произойдёт:\n")
-          .Append("• значения из копии будут заново записаны в реестр, а значения, появившиеся позже, останутся как есть;\n")
+        sb.Append(T._("Что произойдёт:")).Append('\n')
+          .Append(T._("• значения из копии будут заново записаны в реестр, а значения, появившиеся позже, останутся как есть;")).Append('\n')
           .Append(exists
-              ? "• перед этим текущее состояние раздела сохранится в новую резервную копию — так восстановление можно отменить."
-              : "• сейчас этого раздела в реестре нет — он будет создан заново из копии.");
+              ? T._("• перед этим текущее состояние раздела сохранится в новую резервную копию — так восстановление можно отменить.")
+              : T._("• сейчас этого раздела в реестре нет — он будет создан заново из копии."));
         if (plan.IsTruncated)
-            sb.Append("\n• полный список изменений записан во вкладку «Журнал» — нажмите «Нет», чтобы сначала просмотреть его.");
+            sb.Append('\n').Append(T._("• полный список изменений записан во вкладку «Журнал» — нажмите «Нет», чтобы сначала просмотреть его."));
         return sb.ToString();
     }
 
@@ -275,23 +270,23 @@ public sealed partial class SettingsViewModel
             .Select(BackupCatalog.ModuleDisplayName)
             .Distinct()
             .ToList();
+        var names = string.Join(", ", users.Select(u => T.Quote(u)));
         var message =
-            $"Удалить резервную копию от {backup.TimeText}?\n\n{backup.Title}\n{backup.KeyPath}\n\n" +
-            "Будет удалён только файл копии в папке программы — реестр Windows не изменится. " +
-            "Но после удаления вернуть этот раздел к сохранённому состоянию будет нельзя." +
-            (users.Count > 0
-                ? $"\n\nВнимание: эта копия нужна {(users.Count == 1 ? "разделу" : "разделам")} " +
-                  $"{string.Join(", ", users.Select(u => $"«{u}»"))}, " +
-                  "чтобы отменить сделанные там изменения. После удаления копии отменить их будет нельзя."
-                : "");
-        if (!Dialogs.Confirm("Удаление резервной копии", message))
+            T.F("Удалить резервную копию от {0}?\n\n{1}\n{2}\n\nБудет удалён только файл копии в папке программы — реестр Windows не изменится. Но после удаления вернуть этот раздел к сохранённому состоянию будет нельзя.",
+                backup.TimeText, backup.Title, backup.KeyPath) +
+            (users.Count == 0
+                ? ""
+                : "\n\n" + (users.Count == 1
+                    ? T.F("Внимание: эта копия нужна разделу {0}, чтобы отменить сделанные там изменения. После удаления копии отменить их будет нельзя.", names)
+                    : T.F("Внимание: эта копия нужна разделам {0}, чтобы отменить сделанные там изменения. После удаления копии отменить их будет нельзя.", names)));
+        if (!Dialogs.Confirm(T._("Удаление резервной копии"), message))
             return;
 
         var (ok, result) = BackupCatalog.DeleteBackup(backup.FullPath, AppPaths.BackupsDir);
         await LoadBackupsAsync(CancellationToken.None);
         if (ok)
-            Dialogs.Info("Удаление резервной копии", result);
+            Dialogs.Info(T._("Удаление резервной копии"), result);
         else
-            Dialogs.Error("Удаление резервной копии", result);
+            Dialogs.Error(T._("Удаление резервной копии"), result);
     }
 }

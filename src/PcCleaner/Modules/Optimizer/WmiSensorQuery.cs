@@ -1,5 +1,6 @@
 using System.Management;
 using System.Runtime.InteropServices;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -52,7 +53,7 @@ internal static class WmiSensorQuery
         }
         catch (Exception ex) when (ex is ManagementException or COMException or TimeoutException)
         {
-            Log.Warn($"Ускорение: WMI ({scope}) «{query}»: {ex.Message.Trim()}");
+            Log.Warn(T.F("Ускорение: WMI ({0}) «{1}»: {2}", scope, query, ErrorText.For(ex)), ex);
             return (rows, SensorState.Unknown);
         }
     }

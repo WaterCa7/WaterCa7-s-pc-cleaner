@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -104,11 +105,11 @@ public sealed class SeverityToTextConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
-        IssueSeverity.Critical => "Критично",
-        IssueSeverity.High => "Важно",
-        IssueSeverity.Medium => "Внимание",
-        IssueSeverity.Low => "Мелочь",
-        IssueSeverity.Info => "Совет",
+        IssueSeverity.Critical => T._("Критично"),
+        IssueSeverity.High => T._("Важно"),
+        IssueSeverity.Medium => T._("Внимание"),
+        IssueSeverity.Low => T._("Мелочь"),
+        IssueSeverity.Info => T._("Совет"),
         _ => value?.ToString() ?? "",
     };
 

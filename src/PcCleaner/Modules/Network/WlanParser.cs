@@ -37,6 +37,7 @@ public static class WlanParser
 
     private static readonly Dictionary<string, Field> Keys = new(StringComparer.OrdinalIgnoreCase)
     {
+        // l10n:data-begin — the words of netsh output (any Windows language), matched and never shown
         ["Name"] = Field.Name,
         ["Имя"] = Field.Name,
         ["Ім'я"] = Field.Name,
@@ -76,12 +77,14 @@ public static class WlanParser
         ["Профиль"] = Field.Profile,
         ["Профіль"] = Field.Profile,
         ["Profil"] = Field.Profile,
+        // l10n:data-end
     };
 
     private static Field? Resolve(string key)
     {
         if (Keys.TryGetValue(key, out var f))
             return f;
+        // l10n:data-begin — the words of netsh output, matched and never shown
         // "Receive rate (Mbps)", "Скорость приема (Мбит/с)", "Скорость приёма (Мбит/с)"
         if (key.StartsWith("Receive rate", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("Скорость прием", StringComparison.OrdinalIgnoreCase) ||
@@ -90,6 +93,7 @@ public static class WlanParser
         if (key.StartsWith("Transmit rate", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("Скорость передач", StringComparison.OrdinalIgnoreCase))
             return Field.Transmit;
+        // l10n:data-end
         return null;
     }
 
@@ -137,9 +141,11 @@ public static class WlanParser
     /// <summary>Windows 11 hides Wi-Fi details from netsh while apps may not use the location.</summary>
     public static bool IsLocationBlocked(string? output)
         => !string.IsNullOrEmpty(output) &&
+           // l10n:data-begin — the words of netsh output, matched and never shown
            (output.Contains("location permission", StringComparison.OrdinalIgnoreCase) ||
             output.Contains("местоположени", StringComparison.OrdinalIgnoreCase) ||
             output.Contains("расположени", StringComparison.OrdinalIgnoreCase));
+           // l10n:data-end
 
     private static WifiInterfaceInfo Build(Dictionary<Field, string> f)
     {
@@ -181,12 +187,16 @@ public static class WlanParser
     public static bool IsConnectedState(string? state)
     {
         var s = (state ?? "").Trim().ToLowerInvariant();
+        // l10n:data-begin — the words of netsh output, matched and never shown
         return s == "connected" || s == "verbunden" || s.StartsWith("подключ") || s.StartsWith("підключ");
+        // l10n:data-end
     }
 
+    // l10n:data-begin — the words of netsh output, matched and never shown
     private static readonly Regex KnownState = new(
         @"^(connected|disconnected|disconnecting|associating|authenticating|discovering|not ready|ad hoc|подключ|отключ|" +
         @"підключ|відключ|verbunden|getrennt)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // l10n:data-end
 
     /// <summary>A state word this parser understands (otherwise the signal decides whether the interface is connected).</summary>
     private static bool IsKnownState(string state) => KnownState.IsMatch(state.Trim());

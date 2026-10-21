@@ -1,3 +1,5 @@
+using PcCleaner.Core.Localization;
+
 namespace PcCleaner.Modules.Security;
 
 /// <summary>
@@ -24,9 +26,9 @@ public readonly record struct AvProductState(int Raw)
 
     public string StateText => ScannerState switch
     {
-        1 => "включён",
-        2 => "приостановлен",
-        3 => "срок лицензии истёк",
-        _ => "выключен",
+        1 => T._("включён"),
+        2 => T._("приостановлен"),
+        3 => T._("срок лицензии истёк"),
+        _ => T._("выключен"),
     };
 }

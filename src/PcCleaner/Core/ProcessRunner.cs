@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -35,6 +36,29 @@ public static class ProcessRunner
             catch
             {
                 return Encoding.UTF8;
+            }
+        }
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetACP();
+
+    /// <summary>
+    /// ANSI code page of the system ("language for non-Unicode programs", 1251 on Russian Windows), for files written by
+    /// non-Unicode programs. Not CultureInfo.CurrentCulture's: the start sets the culture to the UI language.
+    /// Latin-1 if the code page is not available.
+    /// </summary>
+    public static Encoding AnsiEncoding
+    {
+        get
+        {
+            try
+            {
+                return Encoding.GetEncoding((int)GetACP());
+            }
+            catch
+            {
+                return Encoding.Latin1;
             }
         }
     }
@@ -146,11 +170,11 @@ public static class ProcessRunner
                 timeout, ct, utf8);
             if (!IsScriptExecutionBlocked(result))
                 return result;
-            Log.Warn("Запуск .ps1 запрещён политикой — используется резервный способ запуска PowerShell");
+            Log.Warn(T._("Запуск .ps1 запрещён политикой — используется резервный способ запуска PowerShell"));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"Не удалось создать временный скрипт PowerShell: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Не удалось создать временный скрипт PowerShell: {0}", ErrorText.For(ex)));
         }
         finally
         {
@@ -188,13 +212,13 @@ public static class ProcessRunner
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            Log.Info($"Открытие отменено пользователем: {target}");
+            Log.Info(T.F("Открытие отменено пользователем: {0}", target));
         }
         catch (Exception ex)
         {
             // Environment problems (no default browser, missing file) are not app bugs.
-            Log.Warn($"Не удалось открыть {target}: {ErrorText.For(ex)}");
-            Dialogs.Error("Не удалось открыть", $"{target}\n\n{ErrorText.Sentence(ex)}");
+            Log.Warn(T.F("Не удалось открыть {0}: {1}", target, ErrorText.For(ex)));
+            Dialogs.Error(T._("Не удалось открыть"), $"{target}\n\n{ErrorText.Sentence(ex)}");
         }
     }
 
@@ -214,11 +238,11 @@ public static class ProcessRunner
             else if (Directory.Exists(path))
                 Process.Start(ExplorerPath, $"\"{path}\"")?.Dispose();
             else
-                Dialogs.Info("Файл не найден", path);
+                Dialogs.Info(T._("Файл не найден"), path);
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось открыть проводник для {path}: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Не удалось открыть проводник для {0}: {1}", path, ErrorText.For(ex)));
         }
     }
 }

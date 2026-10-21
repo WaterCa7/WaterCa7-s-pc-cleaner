@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Network;
 
@@ -48,13 +49,13 @@ public sealed class NetworkService : IHealthContributor
         budget.CancelAfter(AnalysisBudget);
         var token = budget.Token;
 
-        var adapters = await Safe("адаптеры", () => GetAdaptersAsync(token), token).ConfigureAwait(false) ?? new List<AdapterInfo>();
-        var upload = Safe("трафик", () => NetworkProbes.MeasureUploadAsync(adapters, TimeSpan.FromSeconds(2), token), token);
-        var latency = Safe("задержка", () => MeasureLatencyAsync(adapters, token), token);
+        var adapters = await Safe(T._("адаптеры"), () => GetAdaptersAsync(token), token).ConfigureAwait(false) ?? new List<AdapterInfo>();
+        var upload = Safe(T._("трафик"), () => NetworkProbes.MeasureUploadAsync(adapters, TimeSpan.FromSeconds(2), token), token);
+        var latency = Safe(T._("задержка"), () => MeasureLatencyAsync(adapters, token), token);
         var dns = Safe("DNS", () => MeasureDnsAsync(token), token);
         var wifi = Safe("Wi-Fi", () => ReadWifiAsync(adapters, token), token);
-        var sockets = Safe("соединения", () => ReadSocketsAsync(token), token);
-        var firewall = Safe("брандмауэр", () => ReadFirewallAsync(token), token);
+        var sockets = Safe(T._("соединения"), () => ReadSocketsAsync(token), token);
+        var firewall = Safe(T._("брандмауэр"), () => ReadFirewallAsync(token), token);
         await Task.WhenAll(upload, latency, dns, wifi, sockets, firewall).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
 
@@ -90,12 +91,11 @@ public sealed class NetworkService : IHealthContributor
         ct.ThrowIfCancellationRequested(); // "Отмена" during the check is a cancellation, not "DNS still broken"
         if (dns is { Lookups.Count: > 0, AllFailed: false })
         {
-            Log.Action("Сеть: после очистки кэша DNS адреса сайтов находятся");
-            return "Кэш DNS очищен — адреса сайтов снова находятся.";
+            Log.Action(T._("Сеть: после очистки кэша DNS адреса сайтов находятся"));
+            return T._("Кэш DNS очищен — адреса сайтов снова находятся.");
         }
-        Log.Warn("Сеть: кэш DNS очищен, но адреса сайтов по-прежнему не находятся");
-        return "Не удалось восстановить DNS: кэш очищен, но адреса сайтов по-прежнему не находятся — " +
-               "смените DNS-сервер в настройках сети.";
+        Log.Warn(T._("Сеть: кэш DNS очищен, но адреса сайтов по-прежнему не находятся"));
+        return T._("Не удалось восстановить DNS: кэш очищен, но адреса сайтов по-прежнему не находятся — смените DNS-сервер в настройках сети.");
     }
 
     /// <summary>The name lookups of <see cref="MeasureDnsAsync"/>. Tests replace it, so that no real lookup runs.</summary>
@@ -105,7 +105,7 @@ public sealed class NetworkService : IHealthContributor
     internal Func<string, string, TimeSpan, CancellationToken, Task<(bool Ok, string Output, int ExitCode)>> RunTool { get; set; } = RunToolAsync;
 
     /// <summary>Runs one measurement; a failure or timeout of one part never breaks the others.</summary>
-    internal static async Task<T?> Safe<T>(string what, Func<Task<T>> work, CancellationToken ct) where T : class
+    internal static async Task<TResult?> Safe<TResult>(string what, Func<Task<TResult>> work, CancellationToken ct) where TResult : class
     {
         try
         {
@@ -119,7 +119,7 @@ public sealed class NetworkService : IHealthContributor
                                        or System.ComponentModel.Win32Exception or System.Net.Sockets.SocketException
                                        or System.Net.NetworkInformation.NetworkInformationException)
         {
-            Log.Warn($"Сеть: проверка «{what}» не удалась: {ex.Message}");
+            Log.Warn(T.F("Сеть: проверка «{0}» не удалась: {1}", what, ErrorText.For(ex)), ex);
             return null;
         }
     }
@@ -136,7 +136,7 @@ public sealed class NetworkService : IHealthContributor
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Net.NetworkInformation.NetworkInformationException)
         {
-            Log.Warn($"Сеть: проверка «{what}» не удалась: {ex.Message}");
+            Log.Warn(T.F("Сеть: проверка «{0}» не удалась: {1}", what, ErrorText.For(ex)), ex);
             return null;
         }
     }
@@ -150,12 +150,12 @@ public sealed class NetworkService : IHealthContributor
         var (ok, output, exitCode) = await RunTool(ipconfig, "/flushdns", TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
         if (ok)
         {
-            Log.Action("Сеть: очищен кэш DNS (ipconfig /flushdns)");
-            return (true, "Кэш DNS очищен. Сайты, которые не открывались после смены адреса или DNS, должны заработать.");
+            Log.Action(T._("Сеть: очищен кэш DNS (ipconfig /flushdns)"));
+            return (true, T._("Кэш DNS очищен. Сайты, которые не открывались после смены адреса или DNS, должны заработать."));
         }
-        var reason = FailureReason(output) ?? $"код {exitCode}";
-        Log.Warn($"Сеть: не удалось очистить кэш DNS: {reason}");
-        return (false, $"Не удалось очистить кэш DNS: {reason}");
+        var reason = FailureReason(output) ?? T.F("код {0}", exitCode);
+        Log.Warn(T.F("Сеть: не удалось очистить кэш DNS: {0}", reason));
+        return (false, T.F("Не удалось очистить кэш DNS: {0}", reason));
     }
 
     /// <summary>
@@ -170,9 +170,11 @@ public sealed class NetworkService : IHealthContributor
         return (result.Success, output, result.TimedOut ? -1 : result.ExitCode);
     }
 
+    // l10n:data-begin — the words of the failure lines of ipconfig/netsh in the Windows language; matched and never shown
     private static readonly Regex FailureLine = new(
         @"fail|denied|error|could not|unable|cannot|ошиб|сбой|отказ|не удалось|не удается|не удаётся|невозможно",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // l10n:data-end
 
     /// <summary>
     /// The line that explains a failure ("Resetting , failed. Access is denied."), not the tool's header or progress
@@ -185,6 +187,9 @@ public sealed class NetworkService : IHealthContributor
         return failures.Count > 0 ? string.Join(" ", failures) : lines.LastOrDefault();
     }
 
+    /// <summary>What the reset answers without administrator rights.</summary>
+    internal static string ResetNeedsAdminText => T._("Для сброса сетевых настроек нужны права администратора — ничего не изменено.");
+
     /// <summary>
     /// netsh winsock reset + netsh int ip reset (admin only; the page creates a restore point first).
     /// Returns a result message; nothing is changed without admin rights.
@@ -192,7 +197,7 @@ public sealed class NetworkService : IHealthContributor
     public async Task<(bool Ok, string Message)> ResetNetworkAsync(CancellationToken ct)
     {
         if (!Admin.IsElevated)
-            return (false, "Для сброса сетевых настроек нужны права администратора — ничего не изменено.");
+            return (false, ResetNeedsAdminText);
 
         var netsh = Path.Combine(Environment.SystemDirectory, "netsh.exe");
         return await ResetStepsAsync((args, token) => RunTool(netsh, args, ResetStepTimeout, token), ct).ConfigureAwait(false);
@@ -212,8 +217,8 @@ public sealed class NetworkService : IHealthContributor
     {
         var steps = new (string Args, string Title)[]
         {
-            ("winsock reset", "каталог Winsock сброшен (netsh winsock reset)"),
-            ("int ip reset", "параметры TCP/IP сброшены (netsh int ip reset)"),
+            ("winsock reset", T._("каталог Winsock сброшен (netsh winsock reset)")),
+            ("int ip reset", T._("параметры TCP/IP сброшены (netsh int ip reset)")),
         };
         var done = new List<string>();
         foreach (var (args, title) in steps)
@@ -222,38 +227,31 @@ public sealed class NetworkService : IHealthContributor
             {
                 if (done.Count == 0)
                     ct.ThrowIfCancellationRequested(); // nothing was changed
-                Log.Action($"Сеть: сброс сетевых настроек остановлен пользователем, выполнено: {string.Join("; ", done)}");
-                return (false, "Сброс остановлен по вашей команде. Выполнено: " + string.Join("; ", done) +
-                               $". Команда «netsh {args}» не запускалась. Перезагрузите компьютер — уже сброшенные параметры начнут " +
-                               "действовать после перезагрузки. Если после неё интернет не заработает, запустите сброс ещё раз.");
+                Log.Action(T.F("Сеть: сброс сетевых настроек остановлен пользователем, выполнено: {0}", string.Join("; ", done)));
+                return (false, T.F("Сброс остановлен по вашей команде. Выполнено: {0}. Команда «netsh {1}» не запускалась. Перезагрузите компьютер — уже сброшенные параметры начнут действовать после перезагрузки. Если после неё интернет не заработает, запустите сброс ещё раз.", string.Join("; ", done), args));
             }
             // CancellationToken.None: see above — a running netsh is always allowed to finish.
             var (ok, output, exitCode) = await run(args, CancellationToken.None).ConfigureAwait(false);
             if (ok)
             {
-                Log.Action($"Сеть: {title}");
+                Log.Action(T.F("Сеть: {0}", title));
                 done.Add(title);
             }
             else
             {
-                var reason = FailureReason(output) ?? $"код {exitCode}";
-                Log.Warn($"Сеть: netsh {args} завершился с ошибкой: {reason}");
-                var message = $"Команда «netsh {args}» завершилась с ошибкой: {reason.TrimEnd('.')}.";
+                var reason = FailureReason(output) ?? T.F("код {0}", exitCode);
+                Log.Warn(T.F("Сеть: netsh {0} завершился с ошибкой: {1}", args, reason));
+                var message = T.F("Команда «netsh {0}» завершилась с ошибкой: {1}.", args, reason.TrimEnd('.'));
                 if (done.Count > 0)
                 {
                     // "netsh int ip reset" usually resets almost everything and fails on one protected setting; what was
                     // reset (and the Winsock reset before it) only takes effect after a reboot.
-                    Log.Action($"Сеть: сброс сетевых настроек выполнен не полностью (netsh {args}: {reason})");
-                    message = "Выполнено: " + string.Join("; ", done) + ". " + message +
-                              " Перезагрузите компьютер — уже сброшенные параметры начнут действовать после перезагрузки. " +
-                              "Если интернет не заработает, воспользуйтесь «Параметры» → «Сеть и Интернет» → " +
-                              "«Дополнительные сетевые параметры» → «Сброс сети».";
+                    Log.Action(T.F("Сеть: сброс сетевых настроек выполнен не полностью (netsh {0}: {1})", args, reason));
+                    message = T.F("Выполнено: {0}. {1} Перезагрузите компьютер — уже сброшенные параметры начнут действовать после перезагрузки. Если интернет не заработает, воспользуйтесь «Параметры» → «Сеть и Интернет» → «Дополнительные сетевые параметры» → «Сброс сети».", string.Join("; ", done), message);
                 }
                 return (false, message);
             }
         }
-        return (true, "Сетевые настройки сброшены: " + string.Join("; ", done) +
-                      ". Перезагрузите компьютер, чтобы изменения вступили в силу. Если вы пользовались статическим IP-адресом, " +
-                      "своим DNS или VPN-программой, проверьте их настройки после перезагрузки.");
+        return (true, T.F("Сетевые настройки сброшены: {0}. Перезагрузите компьютер, чтобы изменения вступили в силу. Если вы пользовались статическим IP-адресом, своим DNS или VPN-программой, проверьте их настройки после перезагрузки.", string.Join("; ", done)));
     }
 }

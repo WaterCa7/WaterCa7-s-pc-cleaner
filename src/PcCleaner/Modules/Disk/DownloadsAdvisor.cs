@@ -1,4 +1,5 @@
 using System.IO;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Disk;
 
@@ -78,19 +79,26 @@ internal static class DownloadsAdvisor
 
     public static string GroupTitle(DownloadKind kind) => kind switch
     {
-        DownloadKind.Installers => "Старые установщики программ",
-        DownloadKind.Archives => "Старые архивы",
-        _ => "Старые образы дисков",
+        DownloadKind.Installers => T._("Старые установщики программ"),
+        DownloadKind.Archives => T._("Старые архивы"),
+        _ => T._("Старые образы дисков"),
+    };
+
+    /// <summary>The title of an old-downloads suggestion card on the Disks page.</summary>
+    public static string GroupTitleInDownloads(DownloadKind kind) => kind switch
+    {
+        DownloadKind.Installers => T._("Старые установщики программ в «Загрузках»"),
+        DownloadKind.Archives => T._("Старые архивы в «Загрузках»"),
+        _ => T._("Старые образы дисков в «Загрузках»"),
     };
 
     public static string GroupDescription(DownloadKind kind, int days) => kind switch
     {
         DownloadKind.Installers =>
-            $"Установочные файлы (.exe, .msi) в «Загрузках», которые скачаны больше {days} дней назад. Программы из них " +
-            "обычно уже установлены, а свежую версию всегда можно скачать снова.",
+            T.F("Установочные файлы (.exe, .msi) в «Загрузках», которые скачаны больше {0} дней назад. Программы из них обычно уже установлены, а свежую версию всегда можно скачать снова.", days),
         DownloadKind.Archives =>
-            $"Архивы (.zip, .rar, .7z) в «Загрузках» старше {days} дней. Если вы их уже распаковали, сами архивы больше не нужны.",
-        _ => $"Образы дисков (.iso) в «Загрузках» старше {days} дней — обычно это дистрибутивы, которые уже использовали.",
+            T.F("Архивы (.zip, .rar, .7z) в «Загрузках» старше {0} дней. Если вы их уже распаковали, сами архивы больше не нужны.", days),
+        _ => T.F("Образы дисков (.iso) в «Загрузках» старше {0} дней — обычно это дистрибутивы, которые уже использовали.", days),
     };
 
     public static string GroupIcon(DownloadKind kind) => kind switch

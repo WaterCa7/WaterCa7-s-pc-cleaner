@@ -16,9 +16,11 @@ internal static class ToolOutputParsers
 
     private static readonly Regex VolumeRegex = new(@"\((?<v>[A-Za-z]:)\)", RegexOptions.CultureInvariant);
 
+    // l10n:data-begin — Russian words of the output of Windows tools, matched and never shown
     private static readonly Regex SizeRegex = new(
         @"(?<num>\d[\d   ]*(?:[.,]\d+)?)\s*(?<unit>bytes|байт|[KMGTPE]?B|[КМГТП]?Б)(?![\p{L}])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // l10n:data-end
 
     private static readonly Regex PercentRegex = new(@"\((?<p>\d+(?:[.,]\d+)?)\s*%\)", RegexOptions.CultureInvariant);
 
@@ -140,12 +142,14 @@ internal static class ToolOutputParsers
     private static string ClassifyShadowKey(string key)
     {
         var k = key.ToLowerInvariant();
+        // l10n:data-begin — Russian words of the output of Windows tools, matched and never shown
         if (k.Contains("used") || k.Contains("использ"))
             return "used";
         if (k.Contains("allocated") || k.Contains("выделен"))
             return "allocated";
         if (k.Contains("maximum") || k.Contains("максим"))
             return "max";
+        // l10n:data-end
         return "?";
     }
 
@@ -163,11 +167,13 @@ internal static class ToolOutputParsers
         var unit = m.Groups["unit"].Value.ToUpperInvariant();
         var multiplier = unit switch
         {
+            // l10n:data-begin — Russian words of the output of Windows tools, matched and never shown
             "KB" or "КБ" => 1L << 10,
             "MB" or "МБ" => 1L << 20,
             "GB" or "ГБ" => 1L << 30,
             "TB" or "ТБ" => 1L << 40,
             "PB" or "ПБ" => 1L << 50,
+            // l10n:data-end
             "EB" => 1L << 60,
             _ => 1L,
         };

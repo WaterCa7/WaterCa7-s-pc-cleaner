@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -35,7 +36,7 @@ public static class Quarantine
             }
             catch (Exception ex)
             {
-                Log.Warn($"Не удалось прочитать список карантина: {ErrorText.For(ex)}");
+                Log.Warn(T.F("Не удалось прочитать список карантина: {0}", ErrorText.For(ex)));
                 return new List<QuarantineItem>();
             }
         }
@@ -46,10 +47,10 @@ public static class Quarantine
     {
         var full = Path.GetFullPath(path);
         if (!File.Exists(full))
-            throw new FileNotFoundException("Файл не найден", full);
+            throw new FileNotFoundException(T._("Файл не найден"), full);
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         if (Suspicion.IsUnder(full, windows))
-            throw new InvalidOperationException("Системные файлы Windows нельзя помещать в карантин.");
+            throw ErrorText.Own(new InvalidOperationException(T._("Системные файлы Windows нельзя помещать в карантин.")));
 
         lock (Lock)
         {
@@ -71,17 +72,17 @@ public static class Quarantine
                 try
                 {
                     File.Move(stored, full);
-                    Log.Warn($"Карантин: не удалось записать список карантина ({ErrorText.For(ex)}) — файл возвращён на место: {full}");
+                    Log.Warn(T.F("Карантин: не удалось записать список карантина ({0}) — файл возвращён на место: {1}", ErrorText.For(ex), full));
                 }
                 catch (Exception back)
                 {
-                    Log.Error($"Карантин: не удалось записать список карантина и вернуть файл на место. " +
-                              $"Файл {full} сейчас хранится как {stored}", back);
+                    Log.Error(T.F("Карантин: не удалось записать список карантина и вернуть файл на место. Файл {0} сейчас хранится как {1}",
+                        full, stored), back);
                 }
-                throw new InvalidOperationException(
-                    $"Не удалось записать список карантина: {ErrorText.For(ex)}. Файл оставлен на месте.", ex);
+                throw ErrorText.Own(new InvalidOperationException(
+                    T.F("Не удалось записать список карантина: {0}. Файл оставлен на месте.", ErrorText.For(ex)), ex));
             }
-            Log.Action($"Файл помещён в карантин: {full}");
+            Log.Action(T.F("Файл помещён в карантин: {0}", full));
             return item;
         }
     }
@@ -96,11 +97,11 @@ public static class Quarantine
             var list = ReadIndex(forUpdate: true);
             var target = Path.GetFullPath(targetPath);
             if (File.Exists(target))
-                throw new IOException($"По этому пути уже есть файл: {target}");
+                throw new IOException(T.F("По этому пути уже есть файл: {0}", target));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Move(item.StoredPath, target);
             SaveIndex(list.Where(i => i.Id != item.Id).ToList());
-            Log.Action($"Файл восстановлен из карантина: {target}");
+            Log.Action(T.F("Файл восстановлен из карантина: {0}", target));
         }
     }
 
@@ -113,7 +114,7 @@ public static class Quarantine
             if (File.Exists(item.StoredPath))
                 File.Delete(item.StoredPath);
             SaveIndex(list.Where(i => i.Id != item.Id).ToList());
-            Log.Action($"Файл из карантина удалён навсегда: {item.OriginalPath}");
+            Log.Action(T.F("Файл из карантина удалён навсегда: {0}", item.OriginalPath));
         }
     }
 
@@ -135,14 +136,13 @@ public static class Quarantine
         {
             if (forUpdate)
             {
-                Log.Warn($"Список карантина не читается ({ErrorText.For(ex)}) — изменения в карантине отменены");
-                throw new InvalidOperationException(
-                    "Список карантина (index.json в папке карантина) не читается, поэтому ничего не изменено: иначе пропали бы " +
-                    "записи о файлах, которые уже лежат в карантине, и их нельзя было бы восстановить.", ex);
+                Log.Warn(T.F("Список карантина не читается ({0}) — изменения в карантине отменены", ErrorText.For(ex)));
+                throw ErrorText.Own(new InvalidOperationException(
+                    T._("Список карантина (index.json в папке карантина) не читается, поэтому ничего не изменено: иначе пропали бы записи о файлах, которые уже лежат в карантине, и их нельзя было бы восстановить."), ex));
             }
             if (TryRead(BackupIndexFile) is { } previous)
             {
-                Log.Warn($"Список карантина не читается ({ErrorText.For(ex)}) — показана его предыдущая копия");
+                Log.Warn(T.F("Список карантина не читается ({0}) — показана его предыдущая копия", ErrorText.For(ex)));
                 return previous;
             }
             throw;

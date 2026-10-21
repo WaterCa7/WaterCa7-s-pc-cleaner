@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Optimizer;
@@ -40,8 +41,8 @@ public static class HardwareText
             if (!owner.Success || !int.TryParse(owner.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) || n == 0)
                 return letter;
             return owner.Groups[1].Value.Equals("P", StringComparison.OrdinalIgnoreCase)
-                ? $"{letter} (процессор {n + 1})"
-                : $"{letter} (контроллер {n})";
+                ? T.F("{0} (процессор {1})", letter, n + 1)
+                : T.F("{0} (контроллер {1})", letter, n);
         }
         foreach (var text in new[] { deviceLocator, bankLabel })
         {
@@ -80,19 +81,19 @@ public static class HardwareText
         if (bytes <= 0)
             return "—";
         var gb = bytes / (double)GiB;
-        return (gb >= 10 ? Math.Round(gb) : Math.Round(gb, 1)).ToString("0.#", Format.Ru) + " ГБ";
+        return T.F("{0} ГБ", (gb >= 10 ? Math.Round(gb) : Math.Round(gb, 1)).ToString("0.#", T.Culture));
     }
 
-    public static string Mhz(int mhz) => $"{mhz.ToString(CultureInfo.InvariantCulture)} МГц";
+    public static string Mhz(int mhz) => T.F("{0} МГц", mhz.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>3792 -> "3,8 ГГц" (WMI reports clocks with bus-clock jitter, so one decimal is honest enough).</summary>
-    public static string Ghz(int mhz) => Math.Round(mhz / 1000.0, 1).ToString("0.0", Format.Ru) + " ГГц";
+    public static string Ghz(int mhz) => T.F("{0} ГГц", Math.Round(mhz / 1000.0, 1).ToString("0.0", T.Culture));
 
     /// <summary>"Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz" -> "Intel Core i7-10700K".</summary>
     public static string ShortCpuName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return "Неизвестный процессор";
+            return T._("Неизвестный процессор");
         var s = Regex.Replace(name, @"\((R|TM|tm|r)\)|®|™", "");
         s = Regex.Replace(s, @"\s+@\s+[\d.,]+\s*GHz", "", RegexOptions.IgnoreCase);
         s = Regex.Replace(s, @"\b(CPU|Processor|\d+-Core Processor|with Radeon Graphics)\b", "", RegexOptions.IgnoreCase);
@@ -150,7 +151,7 @@ public static class HardwareText
         var years = months / 12;
         var rest = months % 12;
         var y = Format.Count(years, "год", "года", "лет");
-        return rest == 0 ? y : $"{y} и {Format.Count(rest, "месяц", "месяца", "месяцев")}";
+        return rest == 0 ? y : T.F("{0} и {1}", y, Format.Count(rest, "месяц", "месяца", "месяцев"));
     }
 
     public static string DaysText(TimeSpan span) => Format.Count((long)span.TotalDays, "день", "дня", "дней");
@@ -384,15 +385,19 @@ public static class HardwareText
     }
 
     /// <summary>"45,2 Вт·ч" from milliwatt-hours.</summary>
-    public static string WattHours(long mwh) => (mwh / 1000.0).ToString(mwh >= 100_000 ? "0" : "0.#", Format.Ru) + " Вт·ч";
+    public static string WattHours(long mwh) => T.F("{0} Вт·ч", (mwh / 1000.0).ToString(mwh >= 100_000 ? "0" : "0.#", T.Culture));
 }
 
 /// <summary>Classifies video adapters by name and PnP id.</summary>
 public static class GpuClassifier
 {
+    // The driver pages of the vendors: the Russian ones for the Russian UI, the English ones otherwise (see DriverUrl).
     public const string NvidiaDriverUrl = "https://www.nvidia.com/ru-ru/drivers/";
     public const string AmdDriverUrl = "https://www.amd.com/ru/support/download/drivers.html";
     public const string IntelDriverUrl = "https://www.intel.ru/content/www/ru/ru/support/detect.html";
+    public const string NvidiaDriverUrlEnglish = "https://www.nvidia.com/en-us/drivers/";
+    public const string AmdDriverUrlEnglish = "https://www.amd.com/en/support/download/drivers.html";
+    public const string IntelDriverUrlEnglish = "https://www.intel.com/content/www/us/en/support/detect.html";
 
     private static readonly string[] VirtualMarkers =
     {
@@ -400,11 +405,13 @@ public static class GpuClassifier
         "iddcx", "spacedesk", "displaylink", "sunshine", "usb mobile monitor", "dameware", "radmin", "teamviewer",
     };
 
+    // l10n:data-begin — Russian words that Windows gives, matched and never shown
     private static readonly string[] BasicDriverNames =
     {
         "microsoft basic display adapter", "базовый видеоадаптер (майкрософт)", "microsoft basic render driver",
         "standard vga graphics adapter", "стандартный vga графический адаптер",
     };
+    // l10n:data-end
 
     public static GpuVendor Vendor(string? name, string? pnpDeviceId)
     {
@@ -422,8 +429,10 @@ public static class GpuClassifier
             return GpuVendor.Amd;
         if (n.Contains("intel"))
             return GpuVendor.Intel;
+        // l10n:data-begin — Russian words that Windows gives, matched and never shown
         if (n.Contains("microsoft") || n.Contains("майкрософт"))
             return GpuVendor.Microsoft;
+        // l10n:data-end
         return GpuVendor.Unknown;
     }
 
@@ -491,11 +500,12 @@ public static class GpuClassifier
     public static bool IsFrameGenerationCapable(GpuInfo gpu)
         => gpu.Vendor == GpuVendor.Nvidia && Regex.IsMatch(gpu.Name, @"RTX\s?[45]0\d{2}", RegexOptions.IgnoreCase);
 
+    /// <summary>The driver page of the vendor in the language of the UI; null for a vendor without one.</summary>
     public static string? DriverUrl(GpuVendor vendor) => vendor switch
     {
-        GpuVendor.Nvidia => NvidiaDriverUrl,
-        GpuVendor.Amd => AmdDriverUrl,
-        GpuVendor.Intel => IntelDriverUrl,
+        GpuVendor.Nvidia => T.IsEnglish ? NvidiaDriverUrlEnglish : NvidiaDriverUrl,
+        GpuVendor.Amd => T.IsEnglish ? AmdDriverUrlEnglish : AmdDriverUrl,
+        GpuVendor.Intel => T.IsEnglish ? IntelDriverUrlEnglish : IntelDriverUrl,
         _ => null,
     };
 
@@ -505,7 +515,7 @@ public static class GpuClassifier
         GpuVendor.Amd => "AMD",
         GpuVendor.Intel => "Intel",
         GpuVendor.Microsoft => "Microsoft",
-        _ => "производителя",
+        _ => T._("производителя"),
     };
 }
 
@@ -524,6 +534,7 @@ public static class PowerPlans
     private static readonly Regex GuidOnly = new(
         @"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", RegexOptions.CultureInvariant);
 
+    // l10n:data-begin — Russian words that Windows gives, matched and never shown
     private static readonly Dictionary<string, PowerPlanKind> KnownNames = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Максимальная производительность"] = PowerPlanKind.UltimatePerformance,
@@ -537,6 +548,7 @@ public static class PowerPlans
         ["Экономия электроэнергии"] = PowerPlanKind.PowerSaver,
         ["Power saver"] = PowerPlanKind.PowerSaver,
     };
+    // l10n:data-end
 
     public static bool IsGuid(string? text) => text is not null && GuidOnly.IsMatch(text.Trim());
 
@@ -590,10 +602,10 @@ public static class PowerPlans
             return plan.Name;
         return plan.Kind switch
         {
-            PowerPlanKind.UltimatePerformance => "Максимальная производительность",
-            PowerPlanKind.HighPerformance => "Высокая производительность",
-            PowerPlanKind.Balanced => "Сбалансированная",
-            PowerPlanKind.PowerSaver => "Экономия энергии",
+            PowerPlanKind.UltimatePerformance => T._("Максимальная производительность"),
+            PowerPlanKind.HighPerformance => T._("Высокая производительность"),
+            PowerPlanKind.Balanced => T._("Сбалансированная"),
+            PowerPlanKind.PowerSaver => T._("Экономия энергии"),
             _ => plan.Guid,
         };
     }

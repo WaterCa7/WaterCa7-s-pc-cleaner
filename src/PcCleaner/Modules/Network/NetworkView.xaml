@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Network"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=local:NetworkViewModel}"
              d:DesignWidth="1000" d:DesignHeight="700">
@@ -221,8 +222,8 @@
                             </Border>
                             <Border Style="{StaticResource Badge}" Margin="0,0,6,2" Background="{StaticResource InfoSoftBrush}"
                                     Visibility="{Binding IsPrimary, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Через это подключение компьютер выходит в интернет">
-                                <TextBlock Text="Основное" Style="{StaticResource BadgeText}" Foreground="{StaticResource InfoBrush}" />
+                                    ToolTip="{loc:T 'Через это подключение компьютер выходит в интернет'}">
+                                <TextBlock Text="{loc:T 'Основное'}" Style="{StaticResource BadgeText}" Foreground="{StaticResource InfoBrush}" />
                             </Border>
                         </WrapPanel>
                         <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12" TextWrapping="NoWrap"
@@ -245,7 +246,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" MinWidth="128" VerticalAlignment="Top"
-                                ToolTip="Сколько данных компьютер принимает (↓) и отправляет (↑) через это подключение прямо сейчас">
+                                ToolTip="{loc:T 'Сколько данных компьютер принимает (↓) и отправляет (↑) через это подключение прямо сейчас'}">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE896;" FontSize="13" Foreground="{StaticResource AccentBrush}" />
                             <TextBlock Text="{Binding ReceiveRate}" FontSize="15" FontWeight="SemiBold" Margin="7,0,0,0" />
@@ -256,7 +257,7 @@
                         </StackPanel>
                         <TextBlock Text="{Binding Totals}" Style="{StaticResource Muted}" FontSize="11" HorizontalAlignment="Right"
                                    TextWrapping="NoWrap" Margin="0,5,0,0"
-                                   ToolTip="Сколько данных прошло через подключение с момента его включения" />
+                                   ToolTip="{loc:T 'Сколько данных прошло через подключение с момента его включения'}" />
                     </StackPanel>
 
                     <Border Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource Strip}" Background="{StaticResource WarningSoftBrush}"
@@ -289,14 +290,14 @@
 
                 <!-- Internet -->
                 <Border Style="{StaticResource Card}" Padding="14,12"
-                        ToolTip="Есть ли доступ в интернет и как быстро отвечают серверы (задержка, или «пинг»). До 50 мс — отлично, до 100 мс — нормально.">
+                        ToolTip="{loc:T 'Есть ли доступ в интернет и как быстро отвечают серверы (задержка, или «пинг»). До 50 мс — отлично, до 100 мс — нормально.'}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock Style="{StaticResource CardLabel}" Text="Интернет" />
+                            <TextBlock Style="{StaticResource CardLabel}" Text="{loc:T 'Интернет'}" />
                             <TextBlock Style="{StaticResource CardNumber}" Text="{Binding InternetValue}"
                                        Foreground="{Binding InternetTone, Converter={StaticResource ToneText}}" />
                             <TextBlock Style="{StaticResource CardHint}" Text="{Binding InternetHint}" Margin="0,3,0,0" />
@@ -311,14 +312,14 @@
 
                 <!-- Connection -->
                 <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,12"
-                        ToolTip="Как компьютер подключён к сети и с какой скоростью связан с роутером.">
+                        ToolTip="{loc:T 'Как компьютер подключён к сети и с какой скоростью связан с роутером.'}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock Style="{StaticResource CardLabel}" Text="Подключение" />
+                            <TextBlock Style="{StaticResource CardLabel}" Text="{loc:T 'Подключение'}" />
                             <TextBlock Style="{StaticResource CardNumber}" Text="{Binding ConnectionValue}"
                                        Foreground="{Binding ConnectionTone, Converter={StaticResource ToneText}}" />
                             <TextBlock Style="{StaticResource CardHint}" Text="{Binding ConnectionHint}" Margin="0,3,0,0" />
@@ -333,7 +334,7 @@
 
                 <!-- Wi-Fi -->
                 <Border Grid.Column="4" Style="{StaticResource Card}" Padding="14,12"
-                        ToolTip="Уровень сигнала Wi-Fi. Ниже 50% скорость заметно падает.">
+                        ToolTip="{loc:T 'Уровень сигнала Wi-Fi. Ниже 50% скорость заметно падает.'}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -355,7 +356,7 @@
 
                 <!-- Connections / ports -->
                 <Border Grid.Column="6" Style="{StaticResource Card}" Padding="14,12" Cursor="Hand"
-                        ToolTip="Сколько соединений с другими компьютерами открыли программы и сколько портов ждут подключений из сети. Нажмите, чтобы открыть список.">
+                        ToolTip="{loc:T 'Сколько соединений с другими компьютерами открыли программы и сколько портов ждут подключений из сети. Нажмите, чтобы открыть список.'}">
                     <Border.InputBindings>
                         <MouseBinding Gesture="LeftClick" Command="{Binding ShowSocketsCommand}" CommandParameter="connections:" />
                     </Border.InputBindings>
@@ -365,7 +366,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock Style="{StaticResource CardLabel}" Text="Соединения" />
+                            <TextBlock Style="{StaticResource CardLabel}" Text="{loc:T 'Соединения'}" />
                             <TextBlock Style="{StaticResource CardNumber}" Text="{Binding SocketsValue}"
                                        Foreground="{Binding SocketsTone, Converter={StaticResource ToneText}}" />
                             <TextBlock Style="{StaticResource CardHint}" Text="{Binding SocketsHint}" Margin="0,3,0,0" />
@@ -386,7 +387,7 @@
                     Visibility="{Binding Message, Converter={StaticResource HasValueToVis}}">
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding DismissMessageCommand}"
-                            ToolTip="Скрыть" VerticalAlignment="Top" Margin="8,-4,-6,0">
+                            ToolTip="{loc:T 'Скрыть'}" VerticalAlignment="Top" Margin="8,-4,-6,0">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="11" />
                     </Button>
                     <TextBlock Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,1,10,0"
@@ -417,10 +418,10 @@
                         </StackPanel>
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="176">
                             <Button Style="{StaticResource AccentButton}" Command="{Binding RecheckCommand}" HorizontalAlignment="Stretch"
-                                    ToolTip="Повторить все проверки (только чтение, ничего не меняется)">
+                                    ToolTip="{loc:T 'Повторить все проверки (только чтение, ничего не меняется)'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" Foreground="{StaticResource AccentTextBrush}" />
-                                    <TextBlock Text="Проверить снова" Margin="8,0,0,0" />
+                                    <TextBlock Text="{loc:T 'Проверить снова'}" Margin="8,0,0,0" />
                                 </StackPanel>
                             </Button>
                             <TextBlock Text="{Binding LastCheckText}" Style="{StaticResource Muted}" FontSize="11.5" HorizontalAlignment="Center"
@@ -464,18 +465,18 @@
                 <StackPanel>
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5" VerticalAlignment="Center"
-                                   TextWrapping="NoWrap" Text="Скорость обновляется каждую секунду" Margin="12,0,0,0" />
-                        <TextBlock Style="{StaticResource H2}" Text="Сетевые подключения" Margin="0" />
+                                   TextWrapping="NoWrap" Text="{loc:T 'Скорость обновляется каждую секунду'}" Margin="12,0,0,0" />
+                        <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Сетевые подключения'}" Margin="0" />
                     </DockPanel>
                     <ItemsControl ItemsSource="{Binding Adapters}" ItemTemplate="{StaticResource AdapterTemplate}" Focusable="False" />
                     <StackPanel Visibility="{Binding Adapters.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}"
                                 HorizontalAlignment="Center" Margin="0,20,0,12">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE839;" FontSize="30" HorizontalAlignment="Center"
                                    Foreground="{StaticResource DangerBrush}" />
-                        <TextBlock Style="{StaticResource H3}" Text="Нет активных сетевых подключений" HorizontalAlignment="Center" Margin="0,10,0,4" />
+                        <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Нет активных сетевых подключений'}" HorizontalAlignment="Center" Margin="0,10,0,4" />
                         <TextBlock Style="{StaticResource Muted}" TextAlignment="Center" MaxWidth="440"
-                                   Text="Проверьте, что кабель вставлен до щелчка, или подключитесь к Wi-Fi через значок сети на панели задач." />
-                        <Button Content="Параметры сети" Command="{Binding OpenNetworkSettingsCommand}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+                                   Text="{loc:T 'Проверьте, что кабель вставлен до щелчка, или подключитесь к Wi-Fi через значок сети на панели задач.'}" />
+                        <Button Content="{loc:T 'Параметры сети'}" Command="{Binding OpenNetworkSettingsCommand}" HorizontalAlignment="Center" Margin="0,10,0,0" />
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -496,7 +497,7 @@
                             <Border Style="{StaticResource SectionIcon}">
                                 <TextBlock Style="{StaticResource SectionGlyph}" Text="&#xE916;" />
                             </Border>
-                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="Задержка (пинг)" Margin="10,0,8,0" VerticalAlignment="Center"
+                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="{loc:T 'Задержка (пинг)'}" Margin="10,0,8,0" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                             <Border Grid.Column="2" Style="{StaticResource Badge}" Background="{Binding LatencyTone, Converter={StaticResource ToneSoft}}">
                                 <TextBlock Text="{Binding LatencyBadge}" Style="{StaticResource BadgeText}"
@@ -510,7 +511,7 @@
                         </DockPanel>
                         <StackPanel Margin="0,10,0,0">
                             <TextBlock Style="{StaticResource Muted}"
-                                       Text="Сколько времени нужно, чтобы связаться с сервером. До 50 мс — отлично, до 100 мс — нормально, больше — заметно в играх и видеозвонках." />
+                                       Text="{loc:T 'Сколько времени нужно, чтобы связаться с сервером. До 50 мс — отлично, до 100 мс — нормально, больше — заметно в играх и видеозвонках.'}" />
                             <Border Style="{StaticResource Strip}" Visibility="{Binding LatencyNote, Converter={StaticResource HasValueToVis}}">
                                 <DockPanel>
                                     <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE705;" FontSize="13"
@@ -565,14 +566,14 @@
                             </Border>
                         </Grid>
                         <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                            <Button Content="Как сменить DNS" Command="{Binding HowToChangeDnsCommand}" Margin="0,4,8,0" Padding="12,6" FontSize="12.5"
-                                    ToolTip="Пошаговая инструкция: какие DNS выбрать и где их указать" />
-                            <Button Content="Параметры адаптера" Command="{Binding OpenAdapterSettingsCommand}" Margin="0,4,0,0" Padding="12,6"
-                                    FontSize="12.5" ToolTip="Открыть «Параметры» → «Сеть и Интернет» → «Дополнительные сетевые параметры»" />
+                            <Button Content="{loc:T 'Как сменить DNS'}" Command="{Binding HowToChangeDnsCommand}" Margin="0,4,8,0" Padding="12,6" FontSize="12.5"
+                                    ToolTip="{loc:T 'Пошаговая инструкция: какие DNS выбрать и где их указать'}" />
+                            <Button Content="{loc:T 'Параметры адаптера'}" Command="{Binding OpenAdapterSettingsCommand}" Margin="0,4,0,0" Padding="12,6"
+                                    FontSize="12.5" ToolTip="{loc:T 'Открыть «Параметры» → «Сеть и Интернет» → «Дополнительные сетевые параметры»'}" />
                         </WrapPanel>
                         <StackPanel Margin="0,10,0,0">
                             <TextBlock Style="{StaticResource Muted}"
-                                       Text="DNS переводит адреса сайтов (например, ya.ru) в IP-адреса. Если он медленный, каждый сайт начинает открываться с задержкой." />
+                                       Text="{loc:T 'DNS переводит адреса сайтов (например, ya.ru) в IP-адреса. Если он медленный, каждый сайт начинает открываться с задержкой.'}" />
                             <ItemsControl ItemsSource="{Binding DnsServers}" Margin="0,4,0,0" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type local:DnsServerItem}">
@@ -594,10 +595,10 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="DNS-серверы не заданы."
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="{loc:T 'DNS-серверы не заданы.'}"
                                        Visibility="{Binding DnsServers.Count, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                             <TextBlock Text="{Binding DnsTimeText}" FontSize="12.5" Margin="0,12,0,0" TextWrapping="Wrap"
-                                       ToolTip="Сколько времени DNS ищет адреса нескольких известных сайтов (example.com, wikipedia.org, github.com…)" />
+                                       ToolTip="{loc:T 'Сколько времени DNS ищет адреса нескольких известных сайтов (example.com, wikipedia.org, github.com…)'}" />
                             <Border Style="{StaticResource Strip}" Background="{StaticResource WarningSoftBrush}"
                                     Visibility="{Binding DnsAdvice, Converter={StaticResource HasValueToVis}}">
                                 <DockPanel>
@@ -630,8 +631,8 @@
                             </Border>
                         </Grid>
 
-                        <Button DockPanel.Dock="Bottom" Content="Параметры Wi-Fi" Command="{Binding OpenWifiSettingsCommand}" HorizontalAlignment="Left"
-                                Margin="0,10,0,0" Padding="12,6" FontSize="12.5" ToolTip="Открыть «Параметры» → «Сеть и Интернет» → «Wi-Fi»"
+                        <Button DockPanel.Dock="Bottom" Content="{loc:T 'Параметры Wi-Fi'}" Command="{Binding OpenWifiSettingsCommand}" HorizontalAlignment="Left"
+                                Margin="0,10,0,0" Padding="12,6" FontSize="12.5" ToolTip="{loc:T 'Открыть «Параметры» → «Сеть и Интернет» → «Wi-Fi»'}"
                                 Visibility="{Binding HasWifi, Converter={StaticResource BoolToVis}}" />
 
                         <!-- Connected -->
@@ -642,13 +643,13 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Bottom">
-                                    <TextBlock Text="Сеть" Style="{StaticResource FieldLabel}" />
+                                    <TextBlock Text="{loc:T 'Сеть'}" Style="{StaticResource FieldLabel}" />
                                     <TextBlock Text="{Binding WifiSsid}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                                ToolTip="{Binding WifiSsid}" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" Text="{Binding WifiValue}" Style="{StaticResource BigNumber}" FontSize="24"
                                            VerticalAlignment="Bottom" Foreground="{Binding WifiTone, Converter={StaticResource ToneText}}"
-                                           ToolTip="Уровень сигнала Wi-Fi" />
+                                           ToolTip="{loc:T 'Уровень сигнала Wi-Fi'}" />
                             </Grid>
                             <ProgressBar Margin="0,8,0,0" Maximum="100" Value="{Binding WifiPercent, Mode=OneWay}"
                                          Foreground="{Binding WifiTone, Converter={StaticResource ToneBrush}}" />
@@ -686,7 +687,7 @@
                             <TextBlock Style="{StaticResource H3}" Text="{Binding WifiEmptyTitle}" HorizontalAlignment="Center" Margin="0,10,0,4"
                                        TextAlignment="Center" TextWrapping="Wrap" />
                             <TextBlock Style="{StaticResource Muted}" Text="{Binding WifiEmptyText}" TextAlignment="Center" MaxWidth="380" />
-                            <Button Content="Параметры расположения" Command="{Binding OpenLocationSettingsCommand}" HorizontalAlignment="Center"
+                            <Button Content="{loc:T 'Параметры расположения'}" Command="{Binding OpenLocationSettingsCommand}" HorizontalAlignment="Center"
                                     Margin="0,10,0,0" Padding="12,6" FontSize="12.5"
                                     Visibility="{Binding WifiLocationBlocked, Converter={StaticResource BoolToVis}}" />
                         </StackPanel>
@@ -704,7 +705,7 @@
                             <Border Style="{StaticResource SectionIcon}">
                                 <TextBlock Style="{StaticResource SectionGlyph}" Text="&#xE90F;" />
                             </Border>
-                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="Инструменты" Margin="10,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Style="{StaticResource H3}" Text="{loc:T 'Инструменты'}" Margin="10,0,8,0" VerticalAlignment="Center" />
                         </Grid>
 
                         <Grid Margin="0,14,0,0">
@@ -713,12 +714,12 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,12,0">
-                                <TextBlock Text="Очистить кэш DNS" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock Text="{loc:T 'Очистить кэш DNS'}" FontWeight="SemiBold" FontSize="13" />
                                 <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
-                                           Text="Помогает, если сайт не открывается после смены DNS или переезда сайта. Безопасно." />
+                                           Text="{loc:T 'Помогает, если сайт не открывается после смены DNS или переезда сайта. Безопасно.'}" />
                             </StackPanel>
-                            <Button Grid.Column="1" Content="Очистить" Command="{Binding FlushDnsCommand}" VerticalAlignment="Center"
-                                    Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="Выполнить ipconfig /flushdns (с подтверждением)" />
+                            <Button Grid.Column="1" Content="{loc:T 'Очистить'}" Command="{Binding FlushDnsCommand}" VerticalAlignment="Center"
+                                    Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="{loc:T 'Выполнить ipconfig /flushdns (с подтверждением)'}" />
                         </Grid>
 
                         <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,12,0,0">
@@ -729,20 +730,20 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,12,0">
                                     <WrapPanel>
-                                        <TextBlock Text="Сбросить сетевые настройки" FontWeight="SemiBold" FontSize="13" Margin="0,0,8,2" />
+                                        <TextBlock Text="{loc:T 'Сбросить сетевые настройки'}" FontWeight="SemiBold" FontSize="13" Margin="0,0,8,2" />
                                         <Border Style="{StaticResource Badge}" Background="{StaticResource WarningSoftBrush}" Margin="0,0,0,2"
                                                 Visibility="{Binding IsAdmin, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"
-                                                ToolTip="Сброс меняет общие настройки Windows, поэтому нужен запуск от имени администратора">
-                                            <TextBlock Text="Нужны права администратора" Style="{StaticResource BadgeText}" FontSize="11"
+                                                ToolTip="{loc:T 'Сброс меняет общие настройки Windows, поэтому нужен запуск от имени администратора'}">
+                                            <TextBlock Text="{loc:T 'Нужны права администратора'}" Style="{StaticResource BadgeText}" FontSize="11"
                                                        Foreground="{StaticResource WarningBrush}" />
                                         </Border>
                                     </WrapPanel>
                                     <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
-                                               Text="Крайняя мера, если интернета нет, а перезагрузка роутера не помогла. Потом нужна перезагрузка компьютера." />
+                                               Text="{loc:T 'Крайняя мера, если интернета нет, а перезагрузка роутера не помогла. Потом нужна перезагрузка компьютера.'}" />
                                 </StackPanel>
-                                <Button Grid.Column="1" Style="{StaticResource DangerButton}" Content="Сбросить…" Command="{Binding ResetNetworkCommand}"
+                                <Button Grid.Column="1" Style="{StaticResource DangerButton}" Content="{loc:T 'Сбросить…'}" Command="{Binding ResetNetworkCommand}"
                                         VerticalAlignment="Center" Padding="12,6" FontSize="12.5" MinWidth="104"
-                                        ToolTip="netsh winsock reset и netsh int ip reset (с подтверждением и точкой восстановления)" />
+                                        ToolTip="{loc:T 'netsh winsock reset и netsh int ip reset (с подтверждением и точкой восстановления)'}" />
                             </Grid>
                         </Border>
 
@@ -753,12 +754,12 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,12,0">
-                                    <TextBlock Text="Параметры сети" FontWeight="SemiBold" FontSize="13" />
+                                    <TextBlock Text="{loc:T 'Параметры сети'}" FontWeight="SemiBold" FontSize="13" />
                                     <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
-                                               Text="Состояние подключения, тип сети (общедоступная или частная), использование трафика." />
+                                               Text="{loc:T 'Состояние подключения, тип сети (общедоступная или частная), использование трафика.'}" />
                                 </StackPanel>
-                                <Button Grid.Column="1" Content="Открыть" Command="{Binding OpenNetworkSettingsCommand}" VerticalAlignment="Center"
-                                        Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="«Параметры» → «Сеть и Интернет»" />
+                                <Button Grid.Column="1" Content="{loc:T 'Открыть'}" Command="{Binding OpenNetworkSettingsCommand}" VerticalAlignment="Center"
+                                        Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="{loc:T '«Параметры» → «Сеть и Интернет»'}" />
                             </Grid>
                         </Border>
 
@@ -769,12 +770,12 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,12,0">
-                                    <TextBlock Text="Сетевые подключения" FontWeight="SemiBold" FontSize="13" />
+                                    <TextBlock Text="{loc:T 'Сетевые подключения'}" FontWeight="SemiBold" FontSize="13" />
                                     <TextBlock Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"
-                                               Text="Классическое окно со всеми адаптерами: включить, отключить, открыть свойства." />
+                                               Text="{loc:T 'Классическое окно со всеми адаптерами: включить, отключить, открыть свойства.'}" />
                                 </StackPanel>
-                                <Button Grid.Column="1" Content="Открыть" Command="{Binding OpenConnectionsCommand}" VerticalAlignment="Center"
-                                        Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="Панель управления → «Сетевые подключения» (ncpa.cpl)" />
+                                <Button Grid.Column="1" Content="{loc:T 'Открыть'}" Command="{Binding OpenConnectionsCommand}" VerticalAlignment="Center"
+                                        Padding="12,6" FontSize="12.5" MinWidth="104" ToolTip="{loc:T 'Панель управления → «Сетевые подключения» (ncpa.cpl)'}" />
                             </Grid>
                         </Border>
                     </StackPanel>
@@ -791,18 +792,18 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock Style="{StaticResource H2}" Text="Соединения и открытые порты" Margin="0" />
+                            <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Соединения и открытые порты'}" Margin="0" />
                             <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0"
-                                       Text="Какие программы сейчас обмениваются данными с другими компьютерами и какие порты ждут подключений. Это только просмотр — ничего не блокируется." />
+                                       Text="{loc:T 'Какие программы сейчас обмениваются данными с другими компьютерами и какие порты ждут подключений. Это только просмотр — ничего не блокируется.'}" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
                             <TextBlock Text="{Binding SocketsUpdatedText}" Style="{StaticResource Muted}" FontSize="11.5" VerticalAlignment="Center"
                                        TextWrapping="NoWrap" Margin="0,0,10,0" />
                             <Button Command="{Binding RefreshSocketsCommand}" Padding="12,6" FontSize="12.5"
-                                    ToolTip="Перечитать список соединений и портов">
+                                    ToolTip="{loc:T 'Перечитать список соединений и портов'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="12" />
-                                    <TextBlock Text="Обновить" Margin="7,0,0,0" />
+                                    <TextBlock Text="{loc:T 'Обновить'}" Margin="7,0,0,0" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -817,21 +818,21 @@
                         <Grid Width="260" VerticalAlignment="Top">
                             <TextBox x:Name="SearchBox" Padding="30,7,28,7" VerticalContentAlignment="Center"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=200}"
-                                     ToolTip="Ищет по программе, адресу, имени узла, порту и PID" />
+                                     ToolTip="{loc:T 'Ищет по программе, адресу, имени узла, порту и PID'}" />
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
                                        Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
-                            <TextBlock Text="Поиск: программа, адрес, порт" Foreground="{StaticResource MutedBrush}" FontSize="12.5"
+                            <TextBlock Text="{loc:T 'Поиск: программа, адрес, порт'}" Foreground="{StaticResource MutedBrush}" FontSize="12.5"
                                        Margin="31,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                             <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
-                                    Padding="5" Click="OnClearSearch" ToolTip="Очистить поиск"
+                                    Padding="5" Click="OnClearSearch" ToolTip="{loc:T 'Очистить поиск'}"
                                     Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}}">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="10" />
                             </Button>
                         </Grid>
                         <WrapPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
-                            <CheckBox Content="Показывать соединения внутри компьютера" IsChecked="{Binding ShowLocalConnections}" Margin="0,4,0,4"
-                                      ToolTip="Программы часто общаются друг с другом через адрес 127.0.0.1 — это не выход в сеть, поэтому по умолчанию такие соединения скрыты.">
+                            <CheckBox Content="{loc:T 'Показывать соединения внутри компьютера'}" IsChecked="{Binding ShowLocalConnections}" Margin="0,4,0,4"
+                                      ToolTip="{loc:T 'Программы часто общаются друг с другом через адрес 127.0.0.1 — это не выход в сеть, поэтому по умолчанию такие соединения скрыты.'}">
                                 <CheckBox.Style>
                                     <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
                                         <Style.Triggers>
@@ -842,8 +843,8 @@
                                     </Style>
                                 </CheckBox.Style>
                             </CheckBox>
-                            <CheckBox Content="Только доступные из сети" IsChecked="{Binding OnlyNetworkPorts}" Margin="0,4,0,4"
-                                      ToolTip="Скрыть порты, к которым могут подключиться только программы на этом компьютере (127.0.0.1, ::1).">
+                            <CheckBox Content="{loc:T 'Только доступные из сети'}" IsChecked="{Binding OnlyNetworkPorts}" Margin="0,4,0,4"
+                                      ToolTip="{loc:T 'Скрыть порты, к которым могут подключиться только программы на этом компьютере (127.0.0.1, ::1).'}">
                                 <CheckBox.Style>
                                     <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
                                         <Style.Triggers>
@@ -866,7 +867,7 @@
                                           Sorting="OnConnectionsSorting" SizeChanged="OnConnectionsGridSizeChanged"
                                           Visibility="{Binding VisibleConnections, Converter={StaticResource HasValueToVis}}">
                                     <DataGrid.Columns>
-                                        <DataGridTemplateColumn Header="Программа и адрес" Width="1.6*" MinWidth="170" SortMemberPath="Address">
+                                        <DataGridTemplateColumn Header="{loc:T 'Программа и адрес'}" Width="1.6*" MinWidth="170" SortMemberPath="Address">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate DataType="{x:Type local:ConnectionListItem}">
                                                     <Grid Background="Transparent" ToolTip="{Binding ToolTip}">
@@ -878,7 +879,7 @@
                                                         <Button Style="{StaticResource ChevronButton}" Command="{Binding DataContext.ToggleGroupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}" HorizontalAlignment="Left"
                                                                 Visibility="{Binding IsGroup, Converter={StaticResource BoolToVis}}"
-                                                                ToolTip="Показать или скрыть соединения программы">
+                                                                ToolTip="{loc:T 'Показать или скрыть соединения программы'}">
                                                             <TextBlock FontSize="10">
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
@@ -938,7 +939,7 @@
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Header="Соединений" Width="96" SortMemberPath="Count">
+                                        <DataGridTemplateColumn Header="{loc:T 'Соединений'}" Width="96" SortMemberPath="Count">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate DataType="{x:Type local:ConnectionListItem}">
                                                     <Grid Background="Transparent" ToolTip="{Binding CountToolTip}"
@@ -953,21 +954,21 @@
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Header="Узел" Width="1*" MinWidth="110" SortMemberPath="Host">
+                                        <DataGridTemplateColumn Header="{loc:T 'Узел'}" Width="1*" MinWidth="110" SortMemberPath="Host">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate DataType="{x:Type local:ConnectionListItem}">
                                                     <TextBlock Text="{Binding HostText}" Style="{StaticResource CellMuted}" ToolTip="{Binding HostText}" />
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn x:Name="ConnServiceColumn" Header="Служба" Width="100" SortMemberPath="Service">
+                                        <DataGridTemplateColumn x:Name="ConnServiceColumn" Header="{loc:T 'Служба'}" Width="100" SortMemberPath="Service">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate DataType="{x:Type local:ConnectionListItem}">
                                                     <TextBlock Text="{Binding Service}" Style="{StaticResource CellMuted}" ToolTip="{Binding Service}" />
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Header="Состояние" Width="108" SortMemberPath="State">
+                                        <DataGridTemplateColumn Header="{loc:T 'Состояние'}" Width="108" SortMemberPath="State">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate DataType="{x:Type local:ConnectionListItem}">
                                                     <TextBlock Text="{Binding StateText}" Style="{StaticResource CellMuted}" ToolTip="{Binding StateToolTip}" />
@@ -978,22 +979,22 @@
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Показать в разделе «Процессы»"
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="{loc:T 'Показать в разделе «Процессы»'}"
                                                                 Command="{Binding DataContext.ShowInProcessesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}">
                                                             <TextBlock Style="{StaticResource RowIcon}" Text="&#xE71D;" />
                                                         </Button>
-                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Проверить IP на AbuseIPDB (откроется в браузере)"
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="{loc:T 'Проверить IP на AbuseIPDB (откроется в браузере)'}"
                                                                 Command="{Binding DataContext.CheckIpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}">
                                                             <TextBlock Style="{StaticResource RowIcon}" Text="&#xEA18;" />
                                                         </Button>
-                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Найти в интернете"
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="{loc:T 'Найти в интернете'}"
                                                                 Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}">
                                                             <TextBlock Style="{StaticResource RowIcon}" Text="&#xE721;" />
                                                         </Button>
-                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="Скопировать"
+                                                        <Button Style="{StaticResource RowIconButton}" ToolTip="{loc:T 'Скопировать'}"
                                                                 Command="{Binding DataContext.CopyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}">
                                                             <TextBlock Style="{StaticResource RowIcon}" Text="&#xE8C8;" />
@@ -1010,7 +1011,7 @@
                                                 <MenuItem.Header>
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE71D;" />
-                                                        <TextBlock Text="Показать в разделе «Процессы»" />
+                                                        <TextBlock Text="{loc:T 'Показать в разделе «Процессы»'}" />
                                                     </StackPanel>
                                                 </MenuItem.Header>
                                             </MenuItem>
@@ -1019,7 +1020,7 @@
                                                 <MenuItem.Header>
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Style="{StaticResource MenuIcon}" Text="&#xEA18;" />
-                                                        <TextBlock Text="Проверить IP (AbuseIPDB)" />
+                                                        <TextBlock Text="{loc:T 'Проверить IP (AbuseIPDB)'}" />
                                                     </StackPanel>
                                                 </MenuItem.Header>
                                             </MenuItem>
@@ -1028,7 +1029,7 @@
                                                 <MenuItem.Header>
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE721;" />
-                                                        <TextBlock Text="Найти в интернете" />
+                                                        <TextBlock Text="{loc:T 'Найти в интернете'}" />
                                                     </StackPanel>
                                                 </MenuItem.Header>
                                             </MenuItem>
@@ -1037,7 +1038,7 @@
                                                 <MenuItem.Header>
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8C8;" />
-                                                        <TextBlock Text="Скопировать" />
+                                                        <TextBlock Text="{loc:T 'Скопировать'}" />
                                                     </StackPanel>
                                                 </MenuItem.Header>
                                             </MenuItem>
@@ -1056,13 +1057,13 @@
                         <TabItem Header="{Binding PortsTabHeader}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
-                                           Text="Порт — это «дверь», через которую программа принимает подключения. Адреса 0.0.0.0 и :: значат, что порт доступен из сети; 127.0.0.1 и ::1 — только программам на этом компьютере." />
+                                           Text="{loc:T 'Порт — это «дверь», через которую программа принимает подключения. Адреса 0.0.0.0 и :: значат, что порт доступен из сети; 127.0.0.1 и ::1 — только программам на этом компьютере.'}" />
                                 <Grid>
                                     <DataGrid x:Name="PortsGrid" Style="{StaticResource NetGrid}" ItemsSource="{Binding PortsView}"
                                               SizeChanged="OnPortsGridSizeChanged"
                                               Visibility="{Binding VisiblePorts, Converter={StaticResource HasValueToVis}}">
                                         <DataGrid.Columns>
-                                            <DataGridTemplateColumn Header="Порт" Width="94" SortMemberPath="Port">
+                                            <DataGridTemplateColumn Header="{loc:T 'Порт'}" Width="94" SortMemberPath="Port">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}">
@@ -1072,7 +1073,7 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Программа" Width="1.3*" MinWidth="110" SortMemberPath="ProcessDisplay">
+                                            <DataGridTemplateColumn Header="{loc:T 'Программа'}" Width="1.3*" MinWidth="110" SortMemberPath="ProcessDisplay">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Style="{StaticResource CellText}" ToolTip="{Binding ToolTip}">
@@ -1082,7 +1083,7 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Доступ" Width="124" SortMemberPath="IsNetwork">
+                                            <DataGridTemplateColumn Header="{loc:T 'Доступ'}" Width="124" SortMemberPath="IsNetwork">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal" ToolTip="{Binding AccessToolTip}" Background="Transparent">
@@ -1105,7 +1106,7 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn x:Name="PortServiceColumn" Header="Что это" Width="1.4*" MinWidth="110"
+                                            <DataGridTemplateColumn x:Name="PortServiceColumn" Header="{loc:T 'Что это'}" Width="1.4*" MinWidth="110"
                                                                     SortMemberPath="ServiceText">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
@@ -1113,7 +1114,7 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Оценка" Width="104" SortMemberPath="KindRank">
+                                            <DataGridTemplateColumn Header="{loc:T 'Оценка'}" Width="104" SortMemberPath="KindRank">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <Border Style="{StaticResource Badge}" Background="{Binding Tone, Converter={StaticResource ToneSoft}}"
@@ -1128,17 +1129,17 @@
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="Показать в разделе «Процессы»"
+                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="{loc:T 'Показать в разделе «Процессы»'}"
                                                                     Command="{Binding DataContext.ShowInProcessesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}">
                                                                 <TextBlock Style="{StaticResource RowIcon}" Text="&#xE71D;" />
                                                             </Button>
-                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="Найти порт в интернете"
+                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="{loc:T 'Найти порт в интернете'}"
                                                                     Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}">
                                                                 <TextBlock Style="{StaticResource RowIcon}" Text="&#xE721;" />
                                                             </Button>
-                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="Скопировать"
+                                                            <Button Style="{StaticResource RowIconButton}" ToolTip="{loc:T 'Скопировать'}"
                                                                     Command="{Binding DataContext.CopyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}">
                                                                 <TextBlock Style="{StaticResource RowIcon}" Text="&#xE8C8;" />
@@ -1155,7 +1156,7 @@
                                                     <MenuItem.Header>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE71D;" />
-                                                            <TextBlock Text="Показать в разделе «Процессы»" />
+                                                            <TextBlock Text="{loc:T 'Показать в разделе «Процессы»'}" />
                                                         </StackPanel>
                                                     </MenuItem.Header>
                                                 </MenuItem>
@@ -1164,7 +1165,7 @@
                                                     <MenuItem.Header>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE721;" />
-                                                            <TextBlock Text="Найти в интернете" />
+                                                            <TextBlock Text="{loc:T 'Найти в интернете'}" />
                                                         </StackPanel>
                                                     </MenuItem.Header>
                                                 </MenuItem>
@@ -1173,7 +1174,7 @@
                                                     <MenuItem.Header>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8C8;" />
-                                                            <TextBlock Text="Скопировать" />
+                                                            <TextBlock Text="{loc:T 'Скопировать'}" />
                                                         </StackPanel>
                                                     </MenuItem.Header>
                                                 </MenuItem>

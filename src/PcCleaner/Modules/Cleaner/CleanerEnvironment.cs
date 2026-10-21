@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Cleaner;
 
@@ -98,7 +99,7 @@ public sealed class CleanerEnvironment
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            Core.Log.Warn($"Не удалось открыть мастер очистки диска: {ex.Message}");
+            Core.Log.Warn(T.F("Не удалось открыть мастер очистки диска: {0}", Core.ErrorText.For(ex)), ex);
             return false;
         }
     }

@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Win32.SafeHandles;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -45,14 +46,14 @@ public sealed record SignatureInfo(SignatureStatus Status, string? Publisher, bo
     public string StatusText => Status switch
     {
         SignatureStatus.Valid when IsPackageSigned => Publisher is null
-            ? "Подписан (пакет приложения)"
-            : $"Подписан: {Publisher} (пакет приложения)",
-        SignatureStatus.Valid => Publisher is null ? "Подписан" : $"Подписан: {Publisher}",
-        SignatureStatus.Unsigned => "Без подписи",
-        SignatureStatus.Invalid => "Подпись повреждена!",
-        SignatureStatus.Untrusted => Publisher is null ? "Недоверенная подпись" : $"Недоверенная подпись: {Publisher}",
-        SignatureStatus.NotFound => "Файл не найден",
-        _ => "Не удалось проверить",
+            ? T._("Подписан (пакет приложения)")
+            : T.F("Подписан: {0} (пакет приложения)", Publisher),
+        SignatureStatus.Valid => Publisher is null ? T._("Подписан") : T.F("Подписан: {0}", Publisher),
+        SignatureStatus.Unsigned => T._("Без подписи"),
+        SignatureStatus.Invalid => T._("Подпись повреждена!"),
+        SignatureStatus.Untrusted => Publisher is null ? T._("Недоверенная подпись") : T.F("Недоверенная подпись: {0}", Publisher),
+        SignatureStatus.NotFound => T._("Файл не найден"),
+        _ => T._("Не удалось проверить"),
     };
 }
 
@@ -80,7 +81,7 @@ public static class FileSignature
         }
         catch (Exception ex)
         {
-            Log.Warn($"Проверка подписи {path}: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Проверка подписи {0}: {1}", path, ErrorText.For(ex)));
             return new SignatureInfo(SignatureStatus.Error, null);
         }
     }

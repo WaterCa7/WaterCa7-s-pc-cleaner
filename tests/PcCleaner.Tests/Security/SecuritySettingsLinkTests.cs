@@ -49,7 +49,11 @@ public class SecuritySettingsLinkTests
             () => new SecurityReport { Checks = With(SecurityCheckIds.Updates, SecurityStatus.Warning, "Обновлений не было 90 дней") },
             "Windows давно не обновлялась", "ms-settings:windowsupdate");
         yield return Case("windows update service is off",
-            () => new SecurityReport { Checks = With(SecurityCheckIds.Updates, SecurityStatus.Warning, "Служба обновлений отключена") },
+            () => new SecurityReport
+            {
+                Updates = new UpdatesState(null, 0, null, ServiceDisabled: true), // the title comes from this, not from the words of the card
+                Checks = With(SecurityCheckIds.Updates, SecurityStatus.Warning, "Служба обновлений отключена"),
+            },
             "Служба обновлений Windows отключена", "ms-settings:windowsupdate");
         yield return Case("SmartScreen",
             () => new SecurityReport { Checks = With(SecurityCheckIds.SmartScreen, SecurityStatus.Warning, "SmartScreen выключен") },

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Dashboard;
 
@@ -12,12 +13,12 @@ namespace PcCleaner.Modules.Dashboard;
 /// </summary>
 public static class ReportBuilder
 {
-    /// <summary>"Отчёт WaterCa7s PC Cleaner 2026-10-16 20-35.html".</summary>
+    /// <summary>"Отчёт WaterCa7s PC Cleaner 2026-10-16 20-35.html" ("WaterCa7s PC Cleaner report 2026-10-16 20-35.html" in English).</summary>
     public static string DefaultFileName(DateTime time)
-        => $"Отчёт WaterCa7s PC Cleaner {time.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture)}.html";
+        => T.F("Отчёт WaterCa7s PC Cleaner {0}.html", time.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture));
 
-    /// <summary>"16 октября 2026 г., 20:35".</summary>
-    public static string LongDateTime(DateTime time) => time.ToString("d MMMM yyyy 'г.,' HH:mm", Format.Ru);
+    /// <summary>"16 октября 2026 г., 20:35" ("October 16, 2026, 20:35" in English): the format itself is the catalog text.</summary>
+    public static string LongDateTime(DateTime time) => time.ToString(T._("d MMMM yyyy 'г.,' HH:mm"), T.Culture);
 
     // ============================================================ HTML
 
@@ -26,22 +27,22 @@ public static class ReportBuilder
         var sb = new StringBuilder(48 * 1024);
         var scoreClass = ScoreClass(r.Score, r.FailedModules);
 
-        sb.Append("<!DOCTYPE html>\n<html lang=\"ru\">\n<head>\n<meta charset=\"utf-8\">\n");
+        sb.Append("<!DOCTYPE html>\n<html lang=\"").Append(T.Language).Append("\">\n<head>\n<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("<meta name=\"color-scheme\" content=\"light dark\">\n");
         sb.Append("<meta name=\"generator\" content=\"").Append(E($"{r.AppName} {r.AppVersion}")).Append("\">\n");
-        sb.Append("<title>").Append(E($"Отчёт о проверке компьютера {r.Pc.ComputerName} — {Format.DateTime(r.ScanTime)}"))
+        sb.Append("<title>").Append(E(T.F("Отчёт о проверке компьютера {0} — {1}", r.Pc.ComputerName, Format.DateTime(r.ScanTime))))
             .Append("</title>\n<style>\n").Append(Css).Append("</style>\n</head>\n<body>\n<main class=\"page\">\n");
 
         // ----- masthead
         sb.Append("<header class=\"masthead\">\n");
         sb.Append("<div class=\"brand\"><span class=\"logo\" aria-hidden=\"true\"><span class=\"drop\"></span></span>")
             .Append("<span>").Append(E(r.AppName)).Append("</span></div>\n");
-        sb.Append("<h1>Отчёт о проверке компьютера</h1>\n");
-        sb.Append("<p class=\"meta\">Проверка: ").Append(E(LongDateTime(r.ScanTime)))
-            .Append(" · Компьютер: ").Append(E(r.Pc.ComputerName));
+        sb.Append("<h1>").Append(T._("Отчёт о проверке компьютера")).Append("</h1>\n");
+        sb.Append("<p class=\"meta\">").Append(T.F("Проверка: {0}", E(LongDateTime(r.ScanTime))))
+            .Append(" · ").Append(T.F("Компьютер: {0}", E(r.Pc.ComputerName)));
         if (Math.Abs((r.CreatedAt - r.ScanTime).TotalMinutes) >= 1)
-            sb.Append(" · Отчёт создан: ").Append(E(LongDateTime(r.CreatedAt)));
+            sb.Append(" · ").Append(T.F("Отчёт создан: {0}", E(LongDateTime(r.CreatedAt))));
         sb.Append("</p>\n</header>\n");
 
         // ----- score
@@ -49,10 +50,10 @@ public static class ReportBuilder
         sb.Append("<section class=\"card hero\">\n");
         sb.Append("<div class=\"gauge ").Append(scoreClass).Append("\" style=\"--p:")
             .Append(score.ToString(CultureInfo.InvariantCulture)).Append("\" role=\"img\" aria-label=\"")
-            .Append(E(r.Score is null ? "Оценки нет" : $"Оценка {score} из 100")).Append("\">")
+            .Append(E(r.Score is null ? T._("Оценки нет") : T.F("Оценка {0} из 100", score))).Append("\">")
             .Append("<div class=\"gauge-value\"><b>").Append(r.Score is null ? "—" : score.ToString(CultureInfo.InvariantCulture))
-            .Append("</b><span>из 100</span></div></div>\n");
-        sb.Append("<div class=\"hero-text\">\n<div class=\"eyebrow\">Состояние компьютера</div>\n");
+            .Append("</b><span>").Append(T._("из 100")).Append("</span></div></div>\n");
+        sb.Append("<div class=\"hero-text\">\n<div class=\"eyebrow\">").Append(T._("Состояние компьютера")).Append("</div>\n");
         sb.Append("<div class=\"verdict ").Append(scoreClass).Append("\">").Append(E(r.Verdict)).Append("</div>\n");
         sb.Append("<p class=\"lead\">").Append(E(r.VerdictDescription)).Append("</p>\n<div class=\"chips\">");
         if (r.Delta is { } delta)
@@ -68,11 +69,11 @@ public static class ReportBuilder
         }
         sb.Append("<span class=\"chip\">").Append(E(r.FindingsText)).Append("</span>");
         if (r.FixedCount > 0)
-            sb.Append("<span class=\"chip chip-good\">").Append(E($"Исправлено в этом сеансе: {r.FixedCount}")).Append("</span>");
+            sb.Append("<span class=\"chip chip-good\">").Append(E(T.F("Исправлено в этом сеансе: {0}", r.FixedCount))).Append("</span>");
         if (r.Reclaimable.AutoText is { } auto)
             sb.Append("<span class=\"chip chip-accent\">").Append(E(auto)).Append("</span>");
         if (r.Reclaimable.ManualText is { } manual)
-            sb.Append("<span class=\"chip\" title=\"Windows.old и другое, что удаляете вы сами в «Очистке диска»\">")
+            sb.Append("<span class=\"chip\" title=\"").Append(T._("Windows.old и другое, что удаляете вы сами в «Очистке диска»")).Append("\">")
                 .Append(E(manual)).Append("</span>");
         sb.Append("</div>\n</div>\n</section>\n");
 
@@ -80,15 +81,15 @@ public static class ReportBuilder
             sb.Append("<p class=\"note note-warn\">").Append(E(r.Warning)).Append("</p>\n");
 
         // ----- computer + modules
-        sb.Append("<div class=\"columns\">\n<section class=\"card\">\n<h2>Об этом компьютере</h2>\n<dl class=\"facts\">\n");
+        sb.Append("<div class=\"columns\">\n<section class=\"card\">\n<h2>").Append(T._("Об этом компьютере")).Append("</h2>\n<dl class=\"facts\">\n");
         foreach (var (label, value) in r.Pc.Rows())
             sb.Append("<div><dt>").Append(E(label)).Append("</dt><dd>").Append(E(value)).Append("</dd></div>\n");
         sb.Append("</dl>\n</section>\n");
 
-        sb.Append("<section class=\"card\">\n<h2>Проверенные разделы</h2>\n");
+        sb.Append("<section class=\"card\">\n<h2>").Append(T._("Проверенные разделы")).Append("</h2>\n");
         if (r.Modules.Count == 0)
         {
-            sb.Append("<p class=\"muted\">Нет данных о разделах.</p>\n");
+            sb.Append("<p class=\"muted\">").Append(T._("Нет данных о разделах.")).Append("</p>\n");
         }
         else
         {
@@ -107,23 +108,25 @@ public static class ReportBuilder
         sb.Append("</section>\n</div>\n");
 
         // ----- findings
-        sb.Append("<section class=\"card\">\n<h2>Найденные проблемы</h2>\n");
+        sb.Append("<section class=\"card\">\n<h2>").Append(T._("Найденные проблемы")).Append("</h2>\n");
         var all = r.AllIssues.ToList();
         if (all.Count == 0 && r.IsIncomplete)
         {
-            sb.Append("<p class=\"muted\">В проверенных разделах проблем не найдено. Часть разделов проверить не удалось ")
-                .Append("(см. «Проверенные разделы») — их проблемы в отчёт не попали.</p>\n");
+            sb.Append("<p class=\"muted\">")
+                .Append(T._("В проверенных разделах проблем не найдено. Часть разделов проверить не удалось (см. «Проверенные разделы») — их проблемы в отчёт не попали."))
+                .Append("</p>\n");
         }
         else if (all.Count == 0)
         {
             sb.Append("<div class=\"empty\"><div class=\"empty-mark\" aria-hidden=\"true\">✓</div>")
-                .Append("<p><b>Проблем не найдено</b></p><p class=\"muted\">")
-                .Append("Компьютер в отличной форме. Чтобы так и оставалось, запускайте проверку примерно раз в неделю.</p></div>\n");
+                .Append("<p><b>").Append(T._("Проблем не найдено")).Append("</b></p><p class=\"muted\">")
+                .Append(T._("Компьютер в отличной форме. Чтобы так и оставалось, запускайте проверку примерно раз в неделю.")).Append("</p></div>\n");
         }
         else
         {
-            var summary = r.FindingsText + (r.FixedCount > 0 ? $", исправлено {r.FixedCount}" : "");
-            sb.Append("<p class=\"muted\">").Append(E(summary)).Append(". Проблемы сгруппированы по важности — сверху самые серьёзные.</p>\n");
+            var summary = r.FixedCount > 0 ? T.F("{0}, исправлено {1}", r.FindingsText, r.FixedCount) : r.FindingsText;
+            sb.Append("<p class=\"muted\">").Append(E(summary)).Append(". ")
+                .Append(T._("Проблемы сгруппированы по важности — сверху самые серьёзные.")).Append("</p>\n");
             foreach (var group in r.Groups.Where(g => g.Issues.Count > 0))
             {
                 var sev = SeverityClass(group.Severity);
@@ -138,10 +141,11 @@ public static class ReportBuilder
         sb.Append("</section>\n");
 
         // ----- footer
-        sb.Append("<footer class=\"footer\">\n<p>Отчёт создан программой <b>").Append(E(r.AppName)).Append("</b> ")
-            .Append(E(r.AppVersion)).Append(" · <a href=\"").Append(E(r.RepoUrl)).Append("\">").Append(E(DisplayUrl(r.RepoUrl)))
-            .Append("</a></p>\n<p>Перед тем как отправить отчёт другим людям, просмотрите его: в описаниях могут встречаться имена ")
-            .Append("ваших файлов и папок. Пароли и содержимое файлов в отчёт не попадают.</p>\n</footer>\n");
+        sb.Append("<footer class=\"footer\">\n<p>").Append(T.F("Отчёт создан программой {0}", $"<b>{E(r.AppName)}</b> {E(r.AppVersion)}"))
+            .Append(" · <a href=\"").Append(E(r.RepoUrl)).Append("\">").Append(E(DisplayUrl(r.RepoUrl)))
+            .Append("</a></p>\n<p>")
+            .Append(T._("Перед тем как отправить отчёт другим людям, просмотрите его: в описаниях могут встречаться имена ваших файлов и папок. Пароли и содержимое файлов в отчёт не попадают."))
+            .Append("</p>\n</footer>\n");
 
         sb.Append("</main>\n</body>\n</html>\n");
         return sb.ToString();
@@ -150,12 +154,12 @@ public static class ReportBuilder
     private static void AppendIssue(StringBuilder sb, ReportIssue issue, ReportGroup group, string sev)
     {
         sb.Append("<article class=\"issue ").Append(sev).Append(issue.IsFixed ? " is-fixed" : "").Append("\">\n<div class=\"badges\">")
-            .Append("<span class=\"badge badge-sev\">").Append(E(SeverityLabel(group.Severity))).Append("</span>")
+            .Append("<span class=\"badge badge-sev\">").Append(E(HealthScoring.SeverityLabel(group.Severity))).Append("</span>")
             .Append("<span class=\"badge\">").Append(E(issue.Module)).Append("</span>");
         if (issue.IsFixed)
-            sb.Append("<span class=\"badge badge-ok\">✓ Исправлено</span>");
+            sb.Append("<span class=\"badge badge-ok\">✓ ").Append(T._("Исправлено")).Append("</span>");
         else if (issue.FixFailed)
-            sb.Append("<span class=\"badge badge-bad\">Не исправлено</span>");
+            sb.Append("<span class=\"badge badge-bad\">").Append(T._("Не исправлено")).Append("</span>");
         sb.Append("</div>\n<h4>").Append(E(issue.Title)).Append("</h4>\n");
         if (!string.IsNullOrWhiteSpace(issue.Details))
             sb.Append("<p class=\"details\">").Append(E(issue.Details.Trim())).Append("</p>\n");
@@ -164,7 +168,7 @@ public static class ReportBuilder
         if (!string.IsNullOrWhiteSpace(issue.FixResult))
         {
             sb.Append("<p class=\"result ").Append(issue.IsFixed ? "result-ok" : "result-bad").Append("\"><b>")
-                .Append(issue.IsFixed ? "Результат исправления:" : "Попытка исправления:").Append("</b> ")
+                .Append(issue.IsFixed ? T._("Результат исправления:") : T._("Попытка исправления:")).Append("</b> ")
                 .Append(E(issue.FixResult)).Append("</p>\n");
         }
         sb.Append("</article>\n");
@@ -177,27 +181,27 @@ public static class ReportBuilder
         var sb = new StringBuilder(16 * 1024);
         var nl = Environment.NewLine;
 
-        sb.Append("Отчёт о проверке компьютера — ").Append(r.AppName).Append(nl);
-        sb.Append("Проверка: ").Append(LongDateTime(r.ScanTime)).Append(nl).Append(nl);
+        sb.Append(T.F("Отчёт о проверке компьютера — {0}", r.AppName)).Append(nl);
+        sb.Append(T.F("Проверка: {0}", LongDateTime(r.ScanTime))).Append(nl).Append(nl);
 
-        sb.Append("Оценка: ").Append(r.Score is { } s ? $"{Math.Clamp(s, 0, 100)} из 100" : "нет").Append(" — ").Append(r.Verdict).Append(nl);
+        sb.Append(T.F("Оценка: {0} — {1}", r.Score is { } s ? T.F("{0} из 100", Math.Clamp(s, 0, 100)) : T._("нет"), r.Verdict)).Append(nl);
         sb.Append(r.VerdictDescription).Append(nl);
         if (r.Delta is { } delta)
         {
             var explanation = DeltaExplanation(delta);
-            sb.Append(delta.Text).Append(" — ").Append(char.ToLower(explanation[0], Format.Ru)).Append(explanation[1..]).Append(nl);
+            sb.Append(delta.Text).Append(" — ").Append(char.ToLower(explanation[0], T.Culture)).Append(explanation[1..]).Append(nl);
         }
-        sb.Append(r.FindingsText).Append(r.FixedCount > 0 ? $", исправлено в этом сеансе: {r.FixedCount}" : "").Append(nl);
+        sb.Append(r.FixedCount > 0 ? T.F("{0}, исправлено в этом сеансе: {1}", r.FindingsText, r.FixedCount) : r.FindingsText).Append(nl);
         if (r.Reclaimable.SummaryText is { } space)
             sb.Append(space).Append(nl);
         if (!string.IsNullOrWhiteSpace(r.Warning))
-            sb.Append("Внимание: ").Append(r.Warning).Append(nl);
+            sb.Append(T.F("Внимание: {0}", r.Warning)).Append(nl);
 
-        sb.Append(nl).Append("ОБ ЭТОМ КОМПЬЮТЕРЕ").Append(nl);
+        sb.Append(nl).Append(T._("Об этом компьютере").ToUpper(T.Culture)).Append(nl);
         foreach (var (label, value) in r.Pc.Rows())
             sb.Append("  ").Append(label).Append(": ").Append(value).Append(nl);
 
-        sb.Append(nl).Append("ПРОВЕРЕННЫЕ РАЗДЕЛЫ").Append(nl);
+        sb.Append(nl).Append(T._("Проверенные разделы").ToUpper(T.Culture)).Append(nl);
         foreach (var m in r.Modules)
         {
             sb.Append("  ").Append(ModuleMark(m.State)).Append(' ').Append(m.Name).Append(" — ").Append(m.StatusText);
@@ -206,12 +210,12 @@ public static class ReportBuilder
             sb.Append(nl);
         }
 
-        sb.Append(nl).Append("НАЙДЕННЫЕ ПРОБЛЕМЫ").Append(nl);
+        sb.Append(nl).Append(T._("Найденные проблемы").ToUpper(T.Culture)).Append(nl);
         if (!r.AllIssues.Any())
         {
-            sb.Append(r.IsIncomplete
-                ? "  В проверенных разделах проблем не найдено (часть разделов проверить не удалось)."
-                : "  Проблем не найдено.").Append(nl);
+            sb.Append("  ").Append(r.IsIncomplete
+                ? T._("В проверенных разделах проблем не найдено (часть разделов проверить не удалось).")
+                : T._("Проблем не найдено.")).Append(nl);
         }
         else
         {
@@ -224,14 +228,14 @@ public static class ReportBuilder
                     n++;
                     sb.Append("  ").Append(n).Append(". [").Append(issue.Module).Append("] ").Append(issue.Title);
                     if (issue.IsFixed)
-                        sb.Append(" — исправлено");
+                        sb.Append(" — ").Append(T._("исправлено"));
                     sb.Append(nl);
                     if (!string.IsNullOrWhiteSpace(issue.Details))
                         AppendIndented(sb, issue.Details, "     ", nl);
                     if (!string.IsNullOrWhiteSpace(issue.Gain))
-                        sb.Append("     Что даст: ").Append(issue.Gain).Append(nl);
+                        sb.Append("     ").Append(T.F("Что даст: {0}", issue.Gain)).Append(nl);
                     if (!string.IsNullOrWhiteSpace(issue.FixResult))
-                        sb.Append("     ").Append(issue.IsFixed ? "Результат исправления: " : "Не исправлено: ").Append(issue.FixResult).Append(nl);
+                        sb.Append("     ").Append(issue.IsFixed ? T.F("Результат исправления: {0}", issue.FixResult) : T.F("Не исправлено: {0}", issue.FixResult)).Append(nl);
                 }
             }
         }
@@ -255,11 +259,11 @@ public static class ReportBuilder
     /// "Сравнение с проверкой 14 октября 2026 г., 09:00". Absolute, not "вчера": a saved report is read days later.
     /// </summary>
     internal static string DeltaExplanation(ScoreDelta delta) => delta.PreviousTime is { } t
-        ? "Сравнение с проверкой " + LongDateTime(t)
-        : "Сравнение с прошлой проверкой";
+        ? T.F("Сравнение с проверкой {0}", LongDateTime(t))
+        : T._("Сравнение с прошлой проверкой");
 
     private static string Capitalize(string? s)
-        => string.IsNullOrEmpty(s) ? "" : char.ToUpper(s[0], Format.Ru) + s[1..];
+        => string.IsNullOrEmpty(s) ? "" : char.ToUpper(s[0], T.Culture) + s[1..];
 
     private static string DisplayUrl(string url)
     {
@@ -292,12 +296,6 @@ public static class ReportBuilder
         IssueSeverity.Low => "sev-low",
         > IssueSeverity.Critical => "sev-critical",
         _ => "sev-info",
-    };
-
-    private static string SeverityLabel(IssueSeverity severity) => HealthScoring.GroupTitle(severity) switch
-    {
-        "Советы" => "Совет",
-        var t => t,
     };
 
     private static string ModuleClass(ModuleScanState state) => state switch

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Startup;
@@ -111,7 +112,7 @@ internal static class StartupNative
         }
         catch (Exception ex)
         {
-            Log.Warn($"Автозагрузка: не удалось прочитать ярлык {Path.GetFileName(lnkPath)}: {ex.Message}");
+            Log.Warn(T.F("Автозагрузка: не удалось прочитать ярлык {0}: {1}", Path.GetFileName(lnkPath), ErrorText.For(ex)), ex);
             return null;
         }
         finally

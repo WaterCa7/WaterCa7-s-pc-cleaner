@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -42,6 +43,22 @@ public sealed class AppSettings
     /// </summary>
     public bool RunAsAdmin { get; set; } = true;
 
+    /// <summary>
+    /// UI language: "ru" or "en". Null only in settings that have none yet: <see cref="App.EnsureLanguageSaved"/> fills it at start —
+    /// Russian for settings written by an older version (they were Russian only), the system language (ru-* → Russian, otherwise
+    /// English) for a new install. Read once at start (<see cref="Localization.T"/>), so a change applies after a restart;
+    /// anything else is reset by SettingsLogic.Sanitize.
+    /// </summary>
+    public string? Language { get; set; }
+
+    /// <summary>
+    /// The mode of the program: Simple (four pages) or Expert (all pages); null — not chosen yet, every page is shown
+    /// (<see cref="UiModes.Effective"/>). Stored as "simple" / "expert"; <see cref="UiModes.Choose"/> changes it, anything else
+    /// is reset by SettingsLogic.Sanitize.
+    /// </summary>
+    [JsonConverter(typeof(UiModeJsonConverter))]
+    public UiMode? UiMode { get; set; }
+
     /// <summary>When update.json was last read successfully (UTC).</summary>
     public DateTime? LastUpdateCheckUtc { get; set; }
 
@@ -52,21 +69,34 @@ public sealed class AppSettings
     /// </summary>
     public Dictionary<string, Dictionary<string, string>> ModuleData { get; set; } = new();
 
-    public static AppSettings Load()
+    /// <summary>
+    /// True when a settings.json existed when these settings were loaded (even an unreadable one); false for new settings. Not saved.
+    /// App uses it to tell an older install, which had no <see cref="Language"/> yet, from a new one.
+    /// </summary>
+    [JsonIgnore]
+    internal bool ExistedOnLoad { get; set; }
+
+    public static AppSettings Load() => Load(AppPaths.SettingsFile);
+
+    internal static AppSettings Load(string file)
     {
+        var existed = false;
         try
         {
-            if (File.Exists(AppPaths.SettingsFile))
+            if (File.Exists(file))
             {
-                var json = File.ReadAllText(AppPaths.SettingsFile);
-                return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+                existed = true;
+                var json = File.ReadAllText(file);
+                var loaded = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+                loaded.ExistedOnLoad = true;
+                return loaded;
             }
         }
         catch (Exception ex)
         {
-            Log.Warn($"Не удалось прочитать настройки, используются значения по умолчанию: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Не удалось прочитать настройки, используются значения по умолчанию: {0}", ErrorText.For(ex)), ex);
         }
-        return new AppSettings();
+        return new AppSettings { ExistedOnLoad = existed };
     }
 
     private long _snapshotVersion;
@@ -96,7 +126,7 @@ public sealed class AppSettings
         }
         catch (Exception ex)
         {
-            Log.Error("Не удалось сохранить настройки", ex);
+            Log.Error(T._("Не удалось сохранить настройки"), ex);
         }
     }
 
@@ -159,7 +189,7 @@ public sealed class AppSettings
         lock (TrustedLock)
             TrustedItems = new List<string>(TrustedItems) { pathOrName };
         Save();
-        Log.Action($"Добавлено в доверенные: {pathOrName}");
+        Log.Action(T.F("Добавлено в доверенные: {0}", pathOrName));
     }
 
     /// <summary>Removes an item from the trusted list (copy-on-write, thread-safe) and saves.</summary>
@@ -168,7 +198,7 @@ public sealed class AppSettings
         lock (TrustedLock)
             TrustedItems = TrustedItems.Where(t => !string.Equals(t, pathOrName, StringComparison.OrdinalIgnoreCase)).ToList();
         Save();
-        Log.Action($"Удалено из доверенных: {pathOrName}");
+        Log.Action(T.F("Удалено из доверенных: {0}", pathOrName));
     }
 
     private static readonly object TrustedLock = new();

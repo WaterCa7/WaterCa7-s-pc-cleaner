@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Settings;
 
@@ -45,7 +46,7 @@ internal static class SystemRestoreInfo
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException
                                        or System.IO.IOException)
         {
-            Log.Warn($"Не удалось прочитать параметры восстановления системы: {ex.Message}");
+            Log.Warn(T.F("Не удалось прочитать параметры восстановления системы: {0}", ErrorText.For(ex)), ex);
         }
         return new SystemRestoreStatus(frequency, fromRegistry, disabledByPolicy, protectionOn);
     }
@@ -53,11 +54,11 @@ internal static class SystemRestoreInfo
     /// <summary>"не чаще одного раза в 24 часа" etc.</summary>
     public static string FrequencyText(int minutes) => minutes switch
     {
-        <= 0 => "без ограничения по времени",
-        1440 => "не чаще одного раза в 24 часа",
-        _ when minutes % 1440 == 0 => $"не чаще одного раза в {Format.Count(minutes / 1440, "день", "дня", "дней")}",
-        _ when minutes % 60 == 0 => $"не чаще одного раза в {Format.Count(minutes / 60, "час", "часа", "часов")}",
-        _ => $"не чаще одного раза в {Format.Count(minutes, "минуту", "минуты", "минут")}",
+        <= 0 => T._("без ограничения по времени"),
+        1440 => T._("не чаще одного раза в 24 часа"),
+        _ when minutes % 1440 == 0 => T.F("не чаще одного раза в {0}", Format.Count(minutes / 1440, "день", "дня", "дней")),
+        _ when minutes % 60 == 0 => T.F("не чаще одного раза в {0}", Format.Count(minutes / 60, "час", "часа", "часов")),
+        _ => T.F("не чаще одного раза в {0}", Format.Count(minutes, "минуту", "минуты", "минут")),
     };
 
     /// <summary>Existing restore points, newest first. Needs admin (returns empty otherwise, without warnings).</summary>
@@ -67,7 +68,7 @@ internal static class SystemRestoreInfo
             return new List<RestorePointInfo>();
         return Wmi.Query("SELECT Description, CreationTime, RestorePointType FROM SystemRestore", @"root\default",
                 TimeSpan.FromSeconds(15))
-            .Select(r => new RestorePointInfo(r.Date("CreationTime"), r.Str("Description") ?? "Без описания",
+            .Select(r => new RestorePointInfo(r.Date("CreationTime"), r.Str("Description") ?? T._("Без описания"),
                 TypeText(r.Long("RestorePointType"))))
             .OrderByDescending(p => p.Time ?? DateTime.MinValue)
             .ToList();
@@ -75,11 +76,11 @@ internal static class SystemRestoreInfo
 
     public static string TypeText(long? type) => type switch
     {
-        0 => "Установка программы",
-        1 => "Удаление программы",
-        10 => "Установка драйвера",
-        12 => "Изменение настроек",
-        13 => "Отменённая операция",
-        _ => "Точка восстановления",
+        0 => T._("Установка программы"),
+        1 => T._("Удаление программы"),
+        10 => T._("Установка драйвера"),
+        12 => T._("Изменение настроек"),
+        13 => T._("Отменённая операция"),
+        _ => T._("Точка восстановления"),
     };
 }

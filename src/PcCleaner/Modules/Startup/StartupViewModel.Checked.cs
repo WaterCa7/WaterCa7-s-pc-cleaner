@@ -1,4 +1,5 @@
 using System.Text;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 using ElevatedRestart = PcCleaner.Modules.Settings.ElevatedRestart;
 
@@ -155,20 +156,20 @@ public sealed partial class StartupViewModel
         RelayCommand.Refresh();
     }
 
-    private const string ProtectedReason = "системная запись Windows, программа её не меняет";
+    private static string ProtectedReason => T._("системная запись Windows, программа её не меняет");
 
-    private const string NeedsAdminReason = "нужны права администратора";
+    private static string NeedsAdminReason => T._("нужны права администратора");
 
     /// <summary>Why a checkable entry is left alone by the action; null when the action changes it.</summary>
     private static string? NotApplicableReason(StartupItem item, StartupBulkAction action) => action switch
     {
         StartupBulkAction.Disable => !item.CanToggle
-            ? "однократный запуск нельзя отключить, его можно только удалить"
-            : item.IsEnabled ? null : "уже отключена",
+            ? T._("однократный запуск нельзя отключить, его можно только удалить")
+            : item.IsEnabled ? null : T._("уже отключена"),
         StartupBulkAction.Enable => !item.CanToggle
-            ? "однократный запуск не бывает отключённым, включать нечего"
-            : item.IsEnabled ? "уже включена" : null,
-        _ => item.CanDelete ? null : "службы не удаляются, их можно только перевести в ручной режим",
+            ? T._("однократный запуск не бывает отключённым, включать нечего")
+            : item.IsEnabled ? T._("уже включена") : null,
+        _ => item.CanDelete ? null : T._("службы не удаляются, их можно только перевести в ручной режим"),
     };
 
     /// <summary>
@@ -244,12 +245,12 @@ public sealed partial class StartupViewModel
                 return;
             var nothing = action switch
             {
-                StartupBulkAction.Disable => "Нечего отключать",
-                StartupBulkAction.Enable => "Нечего включать",
-                _ => "Нечего удалять",
+                StartupBulkAction.Disable => T._("Нечего отключать"),
+                StartupBulkAction.Enable => T._("Нечего включать"),
+                _ => T._("Нечего удалять"),
             };
-            ShowMessage($"{nothing}: ни одна из отмеченных записей не подходит для этого действия.");
-            ShowInfo("Автозагрузка", $"{nothing}.\n\n{SkippedSection(plan.Skipped)}");
+            ShowMessage(T.F("{0}: ни одна из отмеченных записей не подходит для этого действия.", nothing));
+            ShowInfo(T._("Автозагрузка"), nothing + ".\n\n" + SkippedSection(plan.Skipped));
             return;
         }
 
@@ -259,9 +260,9 @@ public sealed partial class StartupViewModel
         var outcome = new CheckedOutcome();
         await RunBusyAsync(action switch
         {
-            StartupBulkAction.Disable => "Отключаем отмеченные записи…",
-            StartupBulkAction.Enable => "Включаем отмеченные записи…",
-            _ => "Удаляем отмеченные записи из автозагрузки…",
+            StartupBulkAction.Disable => T._("Отключаем отмеченные записи…"),
+            StartupBulkAction.Enable => T._("Включаем отмеченные записи…"),
+            _ => T._("Удаляем отмеченные записи из автозагрузки…"),
         }, ct => RunCheckedAsync(plan, outcome, ct));
 
         // Whatever happened, the rows show the real state again (this also resets a switch after a failure or «Отмена»), and what was
@@ -274,8 +275,8 @@ public sealed partial class StartupViewModel
         {
             // Stopped or failed half way: some entries may be gone already, so show the real list.
             ShowMessage(outcome.Cancelled
-                ? "Удаление остановлено. Часть записей могла быть удалена — список обновлён."
-                : "Не удалось удалить отмеченные записи. Список обновлён.", isError: !outcome.Cancelled);
+                ? T._("Удаление остановлено. Часть записей могла быть удалена — список обновлён.")
+                : T._("Не удалось удалить отмеченные записи. Список обновлён."), isError: !outcome.Cancelled);
             await LoadAsync();
             return;
         }
@@ -310,7 +311,7 @@ public sealed partial class StartupViewModel
         if (done == 0 && needsAdmin && !IsElevated)
             RequireElevation(ElevationText(action));
         else
-            ShowInfo("Автозагрузка", details);
+            ShowInfo(T._("Автозагрузка"), details);
     }
 
     private async Task RunCheckedAsync(StartupCheckedPlan plan, CheckedOutcome outcome, CancellationToken ct)
@@ -330,15 +331,16 @@ public sealed partial class StartupViewModel
                 if (services > 0)
                 {
                     // One restore point for all of them, like the single switch makes one for its service.
-                    ReportProgress(-1, "Создаём точку восстановления…");
-                    await CreateRestorePoint($"Автозагрузка: {Format.Count(services, "служба", "службы", "служб")}", ct);
+                    ReportProgress(-1, T._("Создаём точку восстановления…"));
+                    await CreateRestorePoint(T.F("Автозагрузка: {0}", Format.Count(services, "служба", "службы", "служб")), ct);
                 }
                 for (var i = 0; i < items.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
                     var item = items[i];
-                    ReportProgress(i * 100.0 / items.Count,
-                        $"{(enable ? "Включаем" : "Отключаем")} «{item.DisplayName}»… ({i + 1} из {items.Count})");
+                    ReportProgress(i * 100.0 / items.Count, enable
+                        ? T.F("Включаем {0}… ({1} из {2})", T.Quote(item.DisplayName), i + 1, items.Count)
+                        : T.F("Отключаем {0}… ({1} из {2})", T.Quote(item.DisplayName), i + 1, items.Count));
                     outcome.Attempted.Add(item);
                     var result = await _service.SetEnabledAsync(item, enable, ct);
                     if (result.Success)
@@ -360,9 +362,9 @@ public sealed partial class StartupViewModel
 
     private static string ElevationText(StartupBulkAction action) => action switch
     {
-        StartupBulkAction.Disable => "Отключение отмеченных записей автозагрузки",
-        StartupBulkAction.Enable => "Включение отмеченных записей автозагрузки",
-        _ => "Удаление отмеченных записей из автозагрузки",
+        StartupBulkAction.Disable => T._("Отключение отмеченных записей автозагрузки"),
+        StartupBulkAction.Enable => T._("Включение отмеченных записей автозагрузки"),
+        _ => T._("Удаление отмеченных записей из автозагрузки"),
     };
 
     private static string CheckedTitle(StartupCheckedPlan plan)
@@ -370,22 +372,22 @@ public sealed partial class StartupViewModel
         var one = plan.Count == 1;
         return plan.Action switch
         {
-            StartupBulkAction.Disable => one ? "Отключить отмеченную запись?" : "Отключить отмеченные записи?",
-            StartupBulkAction.Enable => one ? "Включить отмеченную запись?" : "Включить отмеченные записи?",
-            _ => one ? "Удалить отмеченную запись из автозагрузки?" : "Удалить отмеченные записи из автозагрузки?",
+            StartupBulkAction.Disable => one ? T._("Отключить отмеченную запись?") : T._("Отключить отмеченные записи?"),
+            StartupBulkAction.Enable => one ? T._("Включить отмеченную запись?") : T._("Включить отмеченные записи?"),
+            _ => one ? T._("Удалить отмеченную запись из автозагрузки?") : T._("Удалить отмеченные записи из автозагрузки?"),
         };
     }
 
     /// <summary>One line per entry: its name and where it comes from, so two entries of the same name can be told apart.</summary>
     private static string EntryLine(StartupItem item) => item.Kind switch
     {
-        StartupKind.ScheduledTask => $"{item.DisplayName} — Планировщик, {item.TaskPath}",
-        StartupKind.Service => $"{item.DisplayName} — служба {item.ServiceName}",
+        StartupKind.ScheduledTask => T.F("{0} — Планировщик, {1}", item.DisplayName, item.TaskPath),
+        StartupKind.Service => T.F("{0} — служба {1}", item.DisplayName, item.ServiceName),
         _ => $"{item.DisplayName} — {item.SourceShort}, {item.SourceDetail}",
     };
 
     private static string SkippedSection(IReadOnlyList<(StartupItem Item, string Reason)> skipped)
-        => $"Не затронуты ({skipped.Count}):\n" + BulkText.BulletList(skipped.Select(s => $"{s.Item.DisplayName} — {s.Reason}"));
+        => T.F("Не затронуты ({0}):", skipped.Count) + "\n" + BulkText.BulletList(skipped.Select(s => $"{s.Item.DisplayName} — {s.Reason}"));
 
     /// <summary>The question before a bulk action: exactly the entries the action will change, hidden ones first.</summary>
     private static string BuildCheckedConfirm(StartupCheckedPlan plan)
@@ -393,9 +395,9 @@ public sealed partial class StartupViewModel
         var count = Format.Count(plan.Count, "запись", "записи", "записей");
         var total = plan.Action switch
         {
-            StartupBulkAction.Disable => $"Отключить автозапуск ({count})",
-            StartupBulkAction.Enable => $"Включить автозапуск ({count})",
-            _ => $"Удалить из автозагрузки ({count})",
+            StartupBulkAction.Disable => T.F("Отключить автозапуск ({0})", count),
+            StartupBulkAction.Enable => T.F("Включить автозапуск ({0})", count),
+            _ => T.F("Удалить из автозагрузки ({0})", count),
         };
 
         var sb = new StringBuilder();
@@ -411,33 +413,28 @@ public sealed partial class StartupViewModel
         switch (plan.Action)
         {
             case StartupBulkAction.Disable:
-                sb.AppendLine("Записи не удаляются: Windows просто перестанет запускать их при входе — так же, как в Диспетчере задач. " +
-                              "Включить их обратно можно здесь в любой момент.");
+                sb.AppendLine(T._("Записи не удаляются: Windows просто перестанет запускать их при входе — так же, как в Диспетчере задач. Включить их обратно можно здесь в любой момент."));
                 if (items.Any(i => i.IsService))
-                    sb.AppendLine("Службы будут переведены в ручной режим запуска и не удаляются: программы смогут запустить их, когда понадобится. " +
-                                  "Прежний режим запоминается — «Включить» вернёт его. " +
-                                  "Перед изменением будет создана точка восстановления Windows (если это разрешено в настройках).");
+                    sb.AppendLine(T._("Службы будут переведены в ручной режим запуска и не удаляются: программы смогут запустить их, когда понадобится. Прежний режим запоминается — «Включить» вернёт его. Перед изменением будет создана точка восстановления Windows (если это разрешено в настройках)."));
                 if (items.Any(i => i.IsTask))
-                    sb.AppendLine("Задания останутся в планировщике, но перестанут запускаться.");
+                    sb.AppendLine(T._("Задания останутся в планировщике, но перестанут запускаться."));
                 break;
 
             case StartupBulkAction.Enable:
-                sb.AppendLine("Записи снова будут запускаться вместе с Windows.");
+                sb.AppendLine(T._("Записи снова будут запускаться вместе с Windows."));
                 if (items.Any(i => i.IsService))
-                    sb.AppendLine("Службам вернётся прежний автоматический запуск. " +
-                                  "Перед изменением будет создана точка восстановления Windows (если это разрешено в настройках).");
+                    sb.AppendLine(T._("Службам вернётся прежний автоматический запуск. Перед изменением будет создана точка восстановления Windows (если это разрешено в настройках)."));
                 break;
 
             default:
-                sb.AppendLine("Сами программы не удаляются — исчезнут только записи автозапуска.");
-                sb.AppendLine($"Перед удалением сохраняются резервные копии: реестр — в .reg-файлы, задания — в XML (папка {AppPaths.BackupsDir}), " +
-                              "ярлыки перемещаются в Корзину.");
+                sb.AppendLine(T._("Сами программы не удаляются — исчезнут только записи автозапуска."));
+                sb.AppendLine(T.F("Перед удалением сохраняются резервные копии: реестр — в .reg-файлы, задания — в XML (папка {0}), ярлыки перемещаются в Корзину.", AppPaths.BackupsDir));
                 if (items.Any(i => !i.IsBroken && !i.IsRunOnce))
-                    sb.AppendLine("Совет: если вы просто не хотите, чтобы программы запускались сами, их достаточно отключить — это обратимо.");
+                    sb.AppendLine(T._("Совет: если вы просто не хотите, чтобы программы запускались сами, их достаточно отключить — это обратимо."));
                 break;
         }
         sb.AppendLine();
-        sb.Append("Продолжить?");
+        sb.Append(T._("Продолжить?"));
         return sb.ToString();
     }
 
@@ -454,19 +451,19 @@ public sealed partial class StartupViewModel
     {
         var verb = action switch
         {
-            StartupBulkAction.Disable => "Отключено",
-            StartupBulkAction.Enable => "Включено",
-            _ => "Удалено",
+            StartupBulkAction.Disable => T.F("Отключено: {0}", done),
+            StartupBulkAction.Enable => T.F("Включено: {0}", done),
+            _ => T.F("Удалено: {0}", done),
         };
-        var text = $"{verb}: {done}";
+        var text = verb;
         if (failed > 0)
-            text += $", не удалось: {failed}";
+            text += ", " + T.F("не удалось: {0}", failed);
         if (skipped > 0)
-            text += $", не затронуто: {skipped}";
+            text += ", " + T.F("не затронуто: {0}", skipped);
         return text + stop switch
         {
-            CheckedStop.Cancelled => ". Остановлено — остальные записи не тронуты.",
-            CheckedStop.Error => ". Остановлено из-за ошибки — остальные записи не тронуты.",
+            CheckedStop.Cancelled => ". " + T._("Остановлено — остальные записи не тронуты."),
+            CheckedStop.Error => ". " + T._("Остановлено из-за ошибки — остальные записи не тронуты."),
             _ => ".",
         };
     }
@@ -478,15 +475,17 @@ public sealed partial class StartupViewModel
         var lines = new List<string>
         {
             outcome.Done.Count > 0
-                ? $"{(enable ? "Включено" : "Отключено")}: {Format.Count(outcome.Done.Count, "запись", "записи", "записей")}."
-                : $"Ничего не {(enable ? "включено" : "отключено")}.",
+                ? (enable
+                    ? T.F("Включено: {0}.", Format.Count(outcome.Done.Count, "запись", "записи", "записей"))
+                    : T.F("Отключено: {0}.", Format.Count(outcome.Done.Count, "запись", "записи", "записей")))
+                : enable ? T._("Ничего не включено.") : T._("Ничего не отключено."),
         };
         if (outcome.Cancelled)
-            lines.Add("Остановлено: остальные записи не тронуты.");
+            lines.Add(T._("Остановлено: остальные записи не тронуты."));
         if (outcome.Failed.Count > 0)
         {
             lines.Add("");
-            lines.Add($"Не удалось изменить ({outcome.Failed.Count}):");
+            lines.Add(T.F("Не удалось изменить ({0}):", outcome.Failed.Count));
             lines.Add(BulkText.BulletList(outcome.Failed.Select(f => $"{f.Item.DisplayName} — {f.Error}"), 10));
         }
         if (plan.Skipped.Count > 0)

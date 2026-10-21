@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Security;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Startup;
 
@@ -41,28 +42,28 @@ public sealed record StartupBulkResult(IReadOnlyList<StartupItem> Done, IReadOnl
         {
             var lines = new List<string>();
             lines.Add(Done.Count > 0
-                ? $"Удалено из автозагрузки: {Format.Count(Done.Count, "запись", "записи", "записей")}."
+                ? T.F("Удалено из автозагрузки: {0}.", Format.Count(Done.Count, "запись", "записи", "записей"))
                 : Failed.Count == 0 && Skipped.Count > 0
-                    ? "Удалять нечего."
-                    : "Ничего не удалено.");
+                    ? T._("Удалять нечего.")
+                    : T._("Ничего не удалено."));
             if (Done.Count > 0)
-                lines.Add($"Резервные копии сохранены в папке {AppPaths.BackupsDir} (ярлыки — в Корзине).");
+                lines.Add(T.F("Резервные копии сохранены в папке {0} (ярлыки — в Корзине).", AppPaths.BackupsDir));
             if (Skipped.Count > 0)
             {
                 lines.Add("");
-                lines.Add($"Оставлены без изменений — после проверки записи изменились ({Skipped.Count}):");
+                lines.Add(T.F("Оставлены без изменений — после проверки записи изменились ({0}):", Skipped.Count));
                 lines.AddRange(Skipped.Take(10).Select(s => $"• {s.Item.DisplayName} — {s.Reason}"));
                 if (Skipped.Count > 10)
-                    lines.Add($"• …и ещё {Skipped.Count - 10}");
-                lines.Add("Обновите список автозагрузки, чтобы увидеть их текущее состояние.");
+                    lines.Add("• " + T.F("…и ещё {0}", Skipped.Count - 10));
+                lines.Add(T._("Обновите список автозагрузки, чтобы увидеть их текущее состояние."));
             }
             if (Failed.Count > 0)
             {
                 lines.Add("");
-                lines.Add($"Не удалось удалить ({Failed.Count}):");
+                lines.Add(T.F("Не удалось удалить ({0}):", Failed.Count));
                 lines.AddRange(Failed.Take(10).Select(f => $"• {f.Item.DisplayName} — {f.Error}"));
                 if (Failed.Count > 10)
-                    lines.Add($"• …и ещё {Failed.Count - 10}");
+                    lines.Add("• " + T.F("…и ещё {0}", Failed.Count - 10));
             }
             return string.Join(Environment.NewLine, lines);
         }
@@ -89,7 +90,7 @@ public sealed partial class StartupService : IHealthContributor
         _env = environment;
     }
 
-    public string ModuleName => "Автозагрузка";
+    public string ModuleName => T._("Автозагрузка");
 
     /// <summary>Raised when entries were changed outside the Startup page (e.g. a dashboard fix).</summary>
     public event Action? ChangedExternally;
@@ -110,28 +111,28 @@ public sealed partial class StartupService : IHealthContributor
         var sw = Stopwatch.StartNew();
         var items = new List<StartupItem>();
 
-        progress?.Invoke(4, "Читаем разделы реестра Run…");
+        progress?.Invoke(4, T._("Читаем разделы реестра Run…"));
         items.AddRange(ScanRegistry(ct));
 
-        progress?.Invoke(10, "Проверяем папки «Автозагрузка»…");
+        progress?.Invoke(10, T._("Проверяем папки «Автозагрузка»…"));
         items.AddRange(ScanFolders(ct));
 
         if (_env.IncludeTasks)
         {
-            progress?.Invoke(16, "Просматриваем задания планировщика…");
+            progress?.Invoke(16, T._("Просматриваем задания планировщика…"));
             items.AddRange(ScanTasks(ct));
         }
 
         if (_env.IncludeServices)
         {
-            progress?.Invoke(32, "Собираем службы с автозапуском…");
+            progress?.Invoke(32, T._("Собираем службы с автозапуском…"));
             items.AddRange(ScanServices(ct));
         }
 
         Enrich(items, ct, (done, total) =>
-            progress?.Invoke(40 + 60.0 * done / Math.Max(1, total), $"Проверяем цифровые подписи ({done} из {total})…"));
+            progress?.Invoke(40 + 60.0 * done / Math.Max(1, total), T.F("Проверяем цифровые подписи ({0} из {1})…", done, total)));
 
-        Log.Info($"Автозагрузка: найдено {Format.Count(items.Count, "запись", "записи", "записей")} за {sw.Elapsed.TotalSeconds:0.0} с");
+        Log.Info(T.F("Автозагрузка: найдено {0} за {1:0.0} с", Format.Count(items.Count, "запись", "записи", "записей"), sw.Elapsed.TotalSeconds));
         return Sort(items);
     }
 
@@ -216,7 +217,7 @@ public sealed partial class StartupService : IHealthContributor
         // ProgramData\Microsoft\Windows Defender\Platform) as genuine, and still flags a signed copy started from Temp.
         var result = Suspicion.Analyze(item.TargetFile, item.Signature, item.Command);
         // Known unwanted programs are often recognisable only by the entry name or publisher.
-        if (!result.Reasons.Any(r => r.StartsWith("Потенциально нежелательная", StringComparison.Ordinal)))
+        if (!result.Flags.HasFlag(SuspicionFlags.KnownPup))
         {
             var pup = KnownPups.Match(item.Name, item.Publisher) ?? KnownPups.Match(item.FileDescription, null);
             if (pup is not null && !item.IsMicrosoft)
@@ -240,7 +241,7 @@ public sealed partial class StartupService : IHealthContributor
         var score = Math.Min(100, result.Score + 35);
         if (signature is { IsValid: true } && result.Reasons.Count == 0)
             score = Math.Min(score, BelowMediumScore);
-        return new SuspicionResult(score, result.Reasons.Append(pup).ToList());
+        return result with { Score = score, Reasons = result.Reasons.Append(pup).ToList(), Flags = result.Flags | SuspicionFlags.KnownPup };
     }
 
     /// <summary>
@@ -306,15 +307,15 @@ public sealed partial class StartupService : IHealthContributor
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Подозрительная запись в автозагрузке: {item.DisplayName}",
-                Details = $"{string.Join("; ", item.Reasons)}. Источник: {item.SourceText}. Команда: {item.Command}\n" +
-                          "Проверьте файл на VirusTotal или Защитником Windows; если программа вам незнакома — " +
-                          (item.IsRunOnce
-                              ? "кнопка удалит эту запись (сначала сохранится резервная копия)."
-                              : "кнопка отключит её; включить обратно можно на странице «Автозагрузка»."),
+                Title = T.F("Подозрительная запись в автозагрузке: {0}", item.DisplayName),
+                Details = item.IsRunOnce
+                    ? T.F("{0}. Источник: {1}. Команда: {2}\nПроверьте файл на VirusTotal или Защитником Windows; если программа вам незнакома — кнопка удалит эту запись (сначала сохранится резервная копия).",
+                        string.Join("; ", item.Reasons), item.SourceText, item.Command)
+                    : T.F("{0}. Источник: {1}. Команда: {2}\nПроверьте файл на VirusTotal или Защитником Windows; если программа вам незнакома — кнопка отключит её; включить обратно можно на странице «Автозагрузка».",
+                        string.Join("; ", item.Reasons), item.SourceText, item.Command),
                 Severity = item.RiskLevel == SuspicionLevel.High ? IssueSeverity.High : IssueSeverity.Medium,
                 TargetPageKey = ModuleKey,
-                FixLabel = item.IsRunOnce ? "Удалить запись" : "Отключить",
+                FixLabel = item.IsRunOnce ? T._("Удалить запись") : T._("Отключить"),
                 FixAsync = token => FixSuspiciousAsync(item, token),
             });
         }
@@ -324,15 +325,14 @@ public sealed partial class StartupService : IHealthContributor
         if (programs.Count > 8)
         {
             var names = programs.Select(p => p.DisplayName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var list = string.Join(", ", names.Take(12)) + (names.Count > 12 ? $" и ещё {names.Count - 12}" : "");
+            var list = string.Join(", ", names.Take(12)) + (names.Count > 12 ? " " + T.F("и ещё {0}", names.Count - 12) : "");
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Много программ в автозагрузке ({programs.Count})",
-                Details = $"Вместе с Windows запускаются: {list}. Отключите те, что не нужны сразу после включения, — " +
-                          "компьютер будет загружаться быстрее, а в фоне освободится память. Отключение обратимо.",
+                Title = T.F("Много программ в автозагрузке ({0})", programs.Count),
+                Details = T.F("Вместе с Windows запускаются: {0}. Отключите те, что не нужны сразу после включения, — компьютер будет загружаться быстрее, а в фоне освободится память. Отключение обратимо.", list),
                 Severity = IssueSeverity.Medium,
-                Gain = "Быстрее включение компьютера",
+                Gain = T._("Быстрее включение компьютера"),
                 TargetPageKey = ModuleKey,
             });
         }
@@ -341,15 +341,14 @@ public sealed partial class StartupService : IHealthContributor
         var broken = items.Where(i => i.IsBroken && i.CanDelete).ToList();
         if (broken.Count > 0)
         {
-            var list = string.Join(", ", broken.Take(8).Select(b => b.DisplayName)) + (broken.Count > 8 ? $" и ещё {broken.Count - 8}" : "");
+            var list = string.Join(", ", broken.Take(8).Select(b => b.DisplayName)) + (broken.Count > 8 ? " " + T.F("и ещё {0}", broken.Count - 8) : "");
             issues.Add(new HealthIssue
             {
                 Module = ModuleName,
-                Title = $"Битые записи в автозагрузке ({broken.Count})",
-                Details = $"Эти записи ссылаются на файлы, которых больше нет: {list}. Они ничего не запускают, только засоряют список. " +
-                          "Исправление удалит их, предварительно сохранив резервные копии.",
+                Title = T.F("Битые записи в автозагрузке ({0})", broken.Count),
+                Details = T.F("Эти записи ссылаются на файлы, которых больше нет: {0}. Они ничего не запускают, только засоряют список. Исправление удалит их, предварительно сохранив резервные копии.", list),
                 Severity = IssueSeverity.Low,
-                Gain = "Порядок в автозагрузке",
+                Gain = T._("Порядок в автозагрузке"),
                 TargetPageKey = ModuleKey,
                 AutoFixSafe = false,
                 FixAsync = ct => FixBrokenAsync(broken, ct),
@@ -368,9 +367,9 @@ public sealed partial class StartupService : IHealthContributor
     {
         var current = (await ScanAsync(null, ct)).FirstOrDefault(i => i.Id == scanned.Id);
         if (current is null)
-            return "Запись уже удалена из автозагрузки — делать ничего не нужно.";
+            return T._("Запись уже удалена из автозагрузки — делать ничего не нужно.");
         if (!current.IsSuspicious)
-            return $"Запись «{current.DisplayName}» больше не считается подозрительной — делать ничего не нужно.";
+            return T.F("Запись {0} больше не считается подозрительной — делать ничего не нужно.", T.Quote(current.DisplayName));
 
         var removed = current.IsRunOnce;
         var result = removed ? await DeleteAsync(current, ct) : await SetEnabledAsync(current, false, ct);
@@ -385,15 +384,17 @@ public sealed partial class StartupService : IHealthContributor
         var name = item.DisplayName;
         if (result.Success)
             return removed
-                ? $"Запись «{name}» удалена из автозагрузки — резервная копия сохранена."
-                : $"Запись «{name}» отключена — включить её можно на странице «Автозагрузка».";
+                ? T.F("Запись {0} удалена из автозагрузки — резервная копия сохранена.", T.Quote(name))
+                : T.F("Запись {0} отключена — включить её можно на странице «Автозагрузка».", T.Quote(name));
         if (result.NeedsAdmin)
-            return $"Нужны права администратора: {result.Message}";
-        // The reason may already say "Не удалось …" (the Startup page shows it alone): one "Не удалось" is enough, and the
-        // dashboard row already names the entry.
-        return result.Message.TrimStart().StartsWith("Не удалось", StringComparison.OrdinalIgnoreCase)
-            ? result.Message.Trim()
-            : $"Не удалось {(removed ? "удалить" : "отключить")} «{name}»: {result.Message}";
+            return T.F("Нужны права администратора: {0}", result.Message);
+        // The reason may already say that it could not be done (the Startup page shows it alone): one such phrase is enough, and the
+        // dashboard row already names the entry. The dashboard's own reading of a result decides, in every language.
+        if (PcCleaner.Modules.Dashboard.HealthScoring.LooksLikeFailure(result.Message))
+            return result.Message.Trim();
+        return removed
+            ? T.F("Не удалось удалить {0}: {1}", T.Quote(name), result.Message)
+            : T.F("Не удалось отключить {0}: {1}", T.Quote(name), result.Message);
     }
 
     /// <summary>Enabled non-Microsoft programs that start at logon (Run, Startup folder, tasks). Hidden Windows items never count.</summary>
@@ -421,11 +422,11 @@ public sealed partial class StartupService : IHealthContributor
         try
         {
             if (current.Count == 0)
-                return "Битых записей больше нет — исправлять нечего.";
+                return T._("Битых записей больше нет — исправлять нечего.");
             var needAdmin = current.Where(i => i.RequiresAdmin).ToList();
             if (needAdmin.Count > 0 && !_env.IsElevated())
-                return $"Нужны права администратора: {Format.Count(needAdmin.Count, "запись относится", "записи относятся", "записей относятся")} " +
-                       "ко всем пользователям. Ничего не изменено — перезапустите программу от имени администратора и повторите.";
+                return T.F("Нужны права администратора: {0} ко всем пользователям. Ничего не изменено — перезапустите программу от имени администратора и повторите.",
+                    Format.Count(needAdmin.Count, "запись относится", "записи относятся", "записей относятся"));
 
             var result = await DeleteBrokenAsync(current, ct);
             changed |= result.Done.Count > 0 || result.Skipped.Count > 0;
@@ -438,8 +439,8 @@ public sealed partial class StartupService : IHealthContributor
         }
     }
 
-    internal const string ChangedSinceScan = "в записи теперь другая команда запуска (похоже, программу обновили или переустановили)";
-    internal const string TargetIsBack = "файл программы снова на месте";
+    internal static string ChangedSinceScan => T._("в записи теперь другая команда запуска (похоже, программу обновили или переустановили)");
+    internal static string TargetIsBack => T._("файл программы снова на месте");
 
     /// <summary>
     /// The re-check made right before a "broken" entry is deleted. <paramref name="currentCommand"/> / <paramref name="currentTarget"/>
@@ -470,13 +471,13 @@ public sealed partial class StartupService : IHealthContributor
             case StartupKind.RegistryRun or StartupKind.RegistryRunOnce when item.RegistryKeyPath is not null:
             {
                 var (exists, command) = await Task.Run(() => ReadRunValue(item), ct);
-                return exists ? WhyNoLongerBroken(item, command, StartupTargets.Resolve(command)) : "записи уже нет";
+                return exists ? WhyNoLongerBroken(item, command, StartupTargets.Resolve(command)) : T._("записи уже нет");
             }
             case StartupKind.StartupFolder when !string.IsNullOrWhiteSpace(item.FilePath):
             {
                 var path = item.FilePath;
                 var current = await Task.Run(() => File.Exists(path) ? DescribeFolderFile(path) : ((string Command, string? Target)?)null, ct);
-                return current is { } c ? WhyNoLongerBroken(item, c.Command, c.Target) : "ярлыка уже нет";
+                return current is { } c ? WhyNoLongerBroken(item, c.Command, c.Target) : T._("ярлыка уже нет");
             }
             case StartupKind.ScheduledTask when !string.IsNullOrWhiteSpace(item.TaskPath):
             {
@@ -488,7 +489,7 @@ public sealed partial class StartupService : IHealthContributor
                 catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException ||
                                            (ex is COMException com && (uint)com.HResult is 0x80070002 or 0x80070003))
                 {
-                    return "задания уже нет";
+                    return T._("задания уже нет");
                 }
                 return WhyNoLongerBroken(item, current.Command, current.Target);
             }
@@ -523,7 +524,7 @@ public sealed partial class StartupService : IHealthContributor
         if (item.IsRunOnce)
             return StartupActionResult.Fail(item.ToggleBlockedReason);
         if (item.IsEnabled == enable)
-            return StartupActionResult.Ok(enable ? "Запись уже включена." : "Запись уже отключена.");
+            return StartupActionResult.Ok(enable ? T._("Запись уже включена.") : T._("Запись уже отключена."));
 
         try
         {
@@ -532,18 +533,18 @@ public sealed partial class StartupService : IHealthContributor
                 StartupKind.RegistryRun or StartupKind.StartupFolder => await SetApprovedAsync(item, enable, ct),
                 StartupKind.ScheduledTask => await SetTaskEnabledAsync(item, enable, ct),
                 StartupKind.Service => await SetServiceEnabledAsync(item, enable, ct),
-                _ => StartupActionResult.Fail("Эту запись нельзя отключить."),
+                _ => StartupActionResult.Fail(T._("Эту запись нельзя отключить.")),
             };
         }
         catch (Exception ex) when (IsAccessDenied(ex))
         {
-            Log.Warn($"Автозагрузка: нет прав на изменение «{item.DisplayName}»: {ex.Message}");
-            return StartupActionResult.Admin("Не хватает прав для этого изменения. Запустите программу от имени администратора.");
+            Log.Warn(T.F("Автозагрузка: нет прав на изменение {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
+            return StartupActionResult.Admin(T._("Не хватает прав для этого изменения. Запустите программу от имени администратора."));
         }
         catch (Exception ex) when (ex is IOException or COMException or Win32Exception or InvalidOperationException)
         {
-            Log.Warn($"Автозагрузка: не удалось изменить «{item.DisplayName}»: {ex.Message}");
-            return StartupActionResult.Fail($"Не удалось изменить запись: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Автозагрузка: не удалось изменить {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
+            return StartupActionResult.Fail(T.F("Не удалось изменить запись: {0}.", ErrorText.For(ex)));
         }
     }
 
@@ -560,8 +561,8 @@ public sealed partial class StartupService : IHealthContributor
     {
         if (!item.CanDelete)
             return StartupActionResult.Fail(item.IsService
-                ? "Службы не удаляются — их можно только перевести в ручной режим."
-                : "Системные записи Windows программа не удаляет.");
+                ? T._("Службы не удаляются — их можно только перевести в ручной режим.")
+                : T._("Системные записи Windows программа не удаляет."));
 
         try
         {
@@ -570,18 +571,18 @@ public sealed partial class StartupService : IHealthContributor
                 StartupKind.RegistryRun or StartupKind.RegistryRunOnce => await DeleteRegistryValueAsync(item, onlyIfStillBroken, ct),
                 StartupKind.StartupFolder => await DeleteFolderItemAsync(item, onlyIfStillBroken, ct),
                 StartupKind.ScheduledTask => await DeleteTaskAsync(item, onlyIfStillBroken, ct),
-                _ => StartupActionResult.Fail("Эту запись нельзя удалить."),
+                _ => StartupActionResult.Fail(T._("Эту запись нельзя удалить.")),
             };
         }
         catch (Exception ex) when (IsAccessDenied(ex))
         {
-            Log.Warn($"Автозагрузка: нет прав на удаление «{item.DisplayName}»: {ex.Message}");
-            return StartupActionResult.Admin("Не хватает прав для удаления. Запустите программу от имени администратора.");
+            Log.Warn(T.F("Автозагрузка: нет прав на удаление {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
+            return StartupActionResult.Admin(T._("Не хватает прав для удаления. Запустите программу от имени администратора."));
         }
         catch (Exception ex) when (ex is IOException or COMException or Win32Exception or InvalidOperationException)
         {
-            Log.Warn($"Автозагрузка: не удалось удалить «{item.DisplayName}»: {ex.Message}");
-            return StartupActionResult.Fail($"Не удалось удалить запись: {ErrorText.For(ex)}.");
+            Log.Warn(T.F("Автозагрузка: не удалось удалить {0}: {1}", T.Quote(item.DisplayName), ErrorText.For(ex)), ex);
+            return StartupActionResult.Fail(T.F("Не удалось удалить запись: {0}.", ErrorText.For(ex)));
         }
     }
 
@@ -651,7 +652,7 @@ public sealed partial class StartupService : IHealthContributor
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Автозагрузка: нет доступа к {StartupEnvironment.HiveName(hive)}\\{keyPath}: {ex.Message}");
+            Log.Warn(T.F("Автозагрузка: нет доступа к {0}\\{1}: {2}", StartupEnvironment.HiveName(hive), keyPath, ErrorText.For(ex)), ex);
         }
         return result;
     }

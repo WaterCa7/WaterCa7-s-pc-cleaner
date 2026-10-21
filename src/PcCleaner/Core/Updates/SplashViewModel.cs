@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -111,7 +112,7 @@ public sealed class SplashViewModel : ObservableObject
 
         try
         {
-            StatusText = CheckingText;
+            StatusText = T._(CheckingText);
             Progress = 0;
             ShowProgress = false;
             CanSkip = false;
@@ -130,7 +131,7 @@ public sealed class SplashViewModel : ObservableObject
 
             if (_updates.State == UpdateState.Downloading)
             {
-                StatusText = $"Скачиваем версию {_updates.Manifest?.Version}…";
+                StatusText = T.F("Скачиваем версию {0}…", _updates.Manifest?.Version);
                 Progress = _updates.Progress;
                 ShowProgress = true;
                 CanSkip = true;
@@ -145,7 +146,7 @@ public sealed class SplashViewModel : ObservableObject
             // in the same launch. The update strip in the window offers «Перезапустить сейчас» for it.
             if (_updates.State == UpdateState.Ready && downloaded.Task.IsCompleted)
             {
-                StatusText = InstallingText;
+                StatusText = T._(InstallingText);
                 Progress = 1;
                 ShowProgress = true;
                 if (await Task.Run(_installNow))
@@ -165,7 +166,7 @@ public sealed class SplashViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log.Error("Экран загрузки", ex);
+            Log.Error(T._("Экран загрузки"), ex);
         }
         finally
         {

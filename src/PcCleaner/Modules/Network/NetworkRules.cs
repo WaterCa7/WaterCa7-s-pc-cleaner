@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using PcCleaner.Modules.Security;
 
 namespace PcCleaner.Modules.Network;
@@ -49,10 +50,10 @@ public static class LatencyMath
         if (ms is null)
             return "—";
         if (ms < 1)
-            return "< 1 мс";
+            return T._("< 1 мс");
         if (ms < 10)
-            return ms.Value.ToString("0.#", Format.Ru) + " мс";
-        return Math.Round(ms.Value).ToString("0", Format.Ru) + " мс";
+            return T.F("{0} мс", ms.Value.ToString("0.#", T.Culture));
+        return T.F("{0} мс", Math.Round(ms.Value).ToString("0", T.Culture));
     }
 
     /// <summary>Bytes/s from two counter readings (a counter reset gives 0, never a negative rate).</summary>
@@ -60,35 +61,35 @@ public static class LatencyMath
         => seconds <= 0 || current < previous ? 0 : (current - previous) / seconds;
 
     /// <summary>"1,2 МБ/с".</summary>
-    public static string FormatRate(double bytesPerSecond) => Format.Bytes((long)Math.Max(0, bytesPerSecond)) + "/с";
+    public static string FormatRate(double bytesPerSecond) => T.F("{0}/с", Format.Bytes((long)Math.Max(0, bytesPerSecond)));
 
     /// <summary>Internet latency → tone and word.</summary>
     public static (NetTone Tone, string Word) RateInternet(double? ms) => ms switch
     {
-        null => (NetTone.Danger, "нет ответа"),
-        <= 50 => (NetTone.Ok, "отлично"),
-        <= 100 => (NetTone.Info, "нормально"),
-        <= 200 => (NetTone.Warning, "высокая"),
-        _ => (NetTone.Danger, "очень высокая"),
+        null => (NetTone.Danger, T._("нет ответа")),
+        <= 50 => (NetTone.Ok, T._("отлично")),
+        <= 100 => (NetTone.Info, T._("нормально")),
+        <= 200 => (NetTone.Warning, T._("высокая")),
+        _ => (NetTone.Danger, T._("очень высокая")),
     };
 
     /// <summary>Router (LAN) latency → tone and word.</summary>
     public static (NetTone Tone, string Word) RateRouter(double? ms) => ms switch
     {
-        null => (NetTone.Neutral, "не отвечает на ping"),
-        <= 5 => (NetTone.Ok, "отлично"),
-        <= 20 => (NetTone.Info, "нормально"),
-        <= 50 => (NetTone.Warning, "медленно"),
-        _ => (NetTone.Danger, "очень медленно"),
+        null => (NetTone.Neutral, T._("не отвечает на ping")),
+        <= 5 => (NetTone.Ok, T._("отлично")),
+        <= 20 => (NetTone.Info, T._("нормально")),
+        <= 50 => (NetTone.Warning, T._("медленно")),
+        _ => (NetTone.Danger, T._("очень медленно")),
     };
 
     /// <summary>DNS resolve time → tone and word.</summary>
     public static (NetTone Tone, string Word) RateDns(double? ms) => ms switch
     {
-        null => (NetTone.Danger, "не отвечает"),
-        <= 60 => (NetTone.Ok, "быстрый"),
-        <= NetworkRules.SlowDnsMs => (NetTone.Info, "нормальный"),
-        _ => (NetTone.Warning, "медленный"),
+        null => (NetTone.Danger, T._("не отвечает")),
+        <= 60 => (NetTone.Ok, T._("быстрый")),
+        <= NetworkRules.SlowDnsMs => (NetTone.Info, T._("нормальный")),
+        _ => (NetTone.Warning, T._("медленный")),
     };
 }
 
@@ -98,7 +99,7 @@ public static class LatencyMath
 /// </summary>
 public static class NetworkRules
 {
-    public const string ModuleName = "Сеть";
+    public static string ModuleName => T._("Сеть");
     public const string PageKey = "Network";
 
     public const double HighLatencyMs = 100;
@@ -107,11 +108,11 @@ public static class NetworkRules
     public const int WeakSignalPercent = 50;
 
     /// <summary>Servers used for the latency check (TCP connect to port 443, nothing is sent).</summary>
-    public static readonly IReadOnlyList<LatencyTarget> LatencyTargets = new[]
+    public static IReadOnlyList<LatencyTarget> LatencyTargets => new[]
     {
         new LatencyTarget("Cloudflare", "1.1.1.1"),
         new LatencyTarget("Google", "8.8.8.8"),
-        new LatencyTarget("Яндекс", "ya.ru"),
+        new LatencyTarget(T._("Яндекс"), "ya.ru"),
         new LatencyTarget("Microsoft", "www.microsoft.com"),
     };
 
@@ -161,8 +162,8 @@ public static class NetworkRules
         AdapterKind.Ethernet => "Ethernet",
         AdapterKind.WiFi => "Wi-Fi",
         AdapterKind.Vpn => "VPN",
-        AdapterKind.Virtual => "Виртуальный",
-        _ => "Другое",
+        AdapterKind.Virtual => T._("Виртуальный"),
+        _ => T._("Другое"),
     };
 
     public static string KindGlyph(AdapterKind kind) => kind switch
@@ -181,10 +182,10 @@ public static class NetworkRules
             return "—";
         var mbps = bitsPerSecond / 1_000_000.0;
         if (mbps >= 1000)
-            return (mbps / 1000).ToString("0.#", Format.Ru) + " Гбит/с";
+            return T.F("{0} Гбит/с", (mbps / 1000).ToString("0.#", T.Culture));
         if (mbps >= 1)
-            return mbps.ToString("0.#", Format.Ru) + " Мбит/с";
-        return (bitsPerSecond / 1000.0).ToString("0", Format.Ru) + " Кбит/с";
+            return T.F("{0} Мбит/с", mbps.ToString("0.#", T.Culture));
+        return T.F("{0} Кбит/с", (bitsPerSecond / 1000.0).ToString("0", T.Culture));
     }
 
     private static readonly Regex GigabitPattern = new(
@@ -242,24 +243,24 @@ public static class NetworkRules
 
     // ===================================================================== DNS
 
-    private static readonly Dictionary<string, string> KnownDns = BuildKnownDns();
+    private static readonly Dictionary<string, Func<string>> KnownDns = BuildKnownDns();
 
-    private static Dictionary<string, string> BuildKnownDns()
+    private static Dictionary<string, Func<string>> BuildKnownDns()
     {
-        var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        void Add(string label, params string[] ips)
+        var d = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase);
+        void Add(Func<string> label, params string[] ips)
         {
             foreach (var ip in ips)
                 d[IPAddress.Parse(ip).ToString()] = label;
         }
-        Add("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
-        Add("Cloudflare", "1.1.1.1", "1.0.0.1", "1.1.1.2", "1.0.0.2", "1.1.1.3", "1.0.0.3", "2606:4700:4700::1111", "2606:4700:4700::1001");
-        Add("Quad9", "9.9.9.9", "149.112.112.112", "9.9.9.10", "2620:fe::fe", "2620:fe::9");
-        Add("Яндекс", "77.88.8.8", "77.88.8.1", "77.88.8.88", "77.88.8.2", "77.88.8.7", "77.88.8.3",
+        Add(() => "Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
+        Add(() => "Cloudflare", "1.1.1.1", "1.0.0.1", "1.1.1.2", "1.0.0.2", "1.1.1.3", "1.0.0.3", "2606:4700:4700::1111", "2606:4700:4700::1001");
+        Add(() => "Quad9", "9.9.9.9", "149.112.112.112", "9.9.9.10", "2620:fe::fe", "2620:fe::9");
+        Add(() => T._("Яндекс"), "77.88.8.8", "77.88.8.1", "77.88.8.88", "77.88.8.2", "77.88.8.7", "77.88.8.3",
             "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff");
-        Add("AdGuard", "94.140.14.14", "94.140.15.15", "94.140.14.15", "94.140.15.16", "94.140.14.140", "94.140.14.141",
+        Add(() => "AdGuard", "94.140.14.14", "94.140.15.15", "94.140.14.15", "94.140.15.16", "94.140.14.140", "94.140.14.141",
             "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
-        Add("OpenDNS", "208.67.222.222", "208.67.220.220", "208.67.222.123", "208.67.220.123", "2620:119:35::35", "2620:119:53::53");
+        Add(() => "OpenDNS", "208.67.222.222", "208.67.220.220", "208.67.222.123", "208.67.220.123", "2620:119:35::35", "2620:119:53::53");
         return d;
     }
 
@@ -271,14 +272,14 @@ public static class NetworkRules
         if (percent > 0)
             key = key[..percent];
         if (KnownDns.TryGetValue(key, out var label))
-            return (label, DnsKind.Known);
+            return (label(), DnsKind.Known);
         return NetAddress.Classify(address) switch
         {
-            AddressScope.Loopback => ("Этот компьютер (программа-посредник)", DnsKind.Local),
-            AddressScope.Private or AddressScope.LinkLocal or AddressScope.Cgnat when adapterIsVpn => ("DNS VPN-сервиса", DnsKind.Vpn),
-            AddressScope.Private or AddressScope.LinkLocal or AddressScope.Cgnat => ("Роутер / провайдер", DnsKind.Router),
-            _ when adapterIsVpn => ("DNS VPN-сервиса", DnsKind.Vpn),
-            _ => ("Провайдер или другой сервер", DnsKind.Other),
+            AddressScope.Loopback => (T._("Этот компьютер (программа-посредник)"), DnsKind.Local),
+            AddressScope.Private or AddressScope.LinkLocal or AddressScope.Cgnat when adapterIsVpn => (T._("DNS VPN-сервиса"), DnsKind.Vpn),
+            AddressScope.Private or AddressScope.LinkLocal or AddressScope.Cgnat => (T._("Роутер / провайдер"), DnsKind.Router),
+            _ when adapterIsVpn => (T._("DNS VPN-сервиса"), DnsKind.Vpn),
+            _ => (T._("Провайдер или другой сервер"), DnsKind.Other),
         };
     }
 
@@ -310,127 +311,123 @@ public static class NetworkRules
 
     private sealed record PortInfo(string Service, string? Explanation = null);
 
-    private const string DatabaseExplanation =
-        "База данных принимает подключения из сети. Открытые в сеть базы — частая причина утечек и взломов: проверьте, что задан " +
-        "пароль, и разрешите подключения только с этого компьютера (адрес 127.0.0.1) или закройте порт в брандмауэре. " +
-        "Если не знаете, откуда эта программа, посмотрите её в разделе «Процессы».";
+    private const string DatabaseExplanation = "База данных принимает подключения из сети. Открытые в сеть базы — частая причина утечек и взломов: проверьте, что задан пароль, и разрешите подключения только с этого компьютера (адрес 127.0.0.1) или закройте порт в брандмауэре. Если не знаете, откуда эта программа, посмотрите её в разделе «Процессы».";
 
-    /// <summary>Services that should not be reachable from the network unless you really need them.</summary>
-    private static readonly Dictionary<int, PortInfo> RiskyTcp = new()
+    private const string VncExplanation = "Программа удалённого доступа (VNC) ждёт подключений. Если вы её не устанавливали — это повод насторожиться. Если устанавливали — задайте надёжный пароль и не открывайте этот порт в интернет.";
+
+    private const string WinRmExplanation = "Служба удалённого управления Windows (PowerShell Remoting) ждёт подключений. Дома она обычно не нужна: если вы её не включали, остановите службу «Служба удалённого управления Windows (WS-Management)».";
+
+    /// <summary>Services that should not be reachable from the network unless you really need them (null = not one of them).</summary>
+    private static PortInfo? RiskyTcp(int port) => port switch
     {
-        [21] = new("FTP — передача файлов без шифрования",
-            "FTP-сервер принимает подключения из сети. Пароли по FTP передаются открытым текстом, а открытый в интернет FTP " +
-            "часто взламывают. Если вы не раздаёте файлы по FTP — остановите эту программу или службу."),
-        [23] = new("Telnet — управление компьютером без шифрования",
-            "Telnet-сервер позволяет управлять компьютером по сети, а пароли идут открытым текстом. Сегодня он почти не нужен — " +
-            "отключите его (компонент «Telnet Server» или программу, которая его открыла)."),
-        [3389] = new("Удалённый рабочий стол (RDP)",
-            "К компьютеру можно подключиться удалённо. Если порт доступен из интернета, его постоянно пытаются взломать подбором " +
-            "пароля. Если вы не подключаетесь к этому компьютеру удалённо — выключите: «Параметры» → «Система» → «Удалённый рабочий стол»."),
-        [5900] = new("VNC — удалённое управление",
-            "Программа удалённого доступа (VNC) ждёт подключений. Если вы её не устанавливали — это повод насторожиться. " +
-            "Если устанавливали — задайте надёжный пароль и не открывайте этот порт в интернет."),
-        [5901] = new("VNC — удалённое управление",
-            "Программа удалённого доступа (VNC) ждёт подключений. Если вы её не устанавливали — это повод насторожиться. " +
-            "Если устанавливали — задайте надёжный пароль и не открывайте этот порт в интернет."),
-        [5985] = new("WinRM — удалённое управление Windows",
-            "Служба удалённого управления Windows (PowerShell Remoting) ждёт подключений. Дома она обычно не нужна: если вы её " +
-            "не включали, остановите службу «Служба удалённого управления Windows (WS-Management)»."),
-        [5986] = new("WinRM — удалённое управление Windows (HTTPS)",
-            "Служба удалённого управления Windows (PowerShell Remoting) ждёт подключений. Дома она обычно не нужна: если вы её " +
-            "не включали, остановите службу «Служба удалённого управления Windows (WS-Management)»."),
-        [1433] = new("База данных Microsoft SQL Server", DatabaseExplanation),
-        [3306] = new("База данных MySQL / MariaDB", DatabaseExplanation),
-        [5432] = new("База данных PostgreSQL", DatabaseExplanation),
-        [6379] = new("База данных Redis (часто работает без пароля)", DatabaseExplanation),
-        [27017] = new("База данных MongoDB (часто работает без пароля)", DatabaseExplanation),
-        [11211] = new("Кэш Memcached (работает без пароля)", DatabaseExplanation),
+        21 => new(T._("FTP — передача файлов без шифрования"), T._("FTP-сервер принимает подключения из сети. Пароли по FTP передаются открытым текстом, а открытый в интернет FTP часто взламывают. Если вы не раздаёте файлы по FTP — остановите эту программу или службу.")),
+        23 => new(T._("Telnet — управление компьютером без шифрования"), T._("Telnet-сервер позволяет управлять компьютером по сети, а пароли идут открытым текстом. Сегодня он почти не нужен — отключите его (компонент «Telnet Server» или программу, которая его открыла).")),
+        3389 => new(T._("Удалённый рабочий стол (RDP)"), T._("К компьютеру можно подключиться удалённо. Если порт доступен из интернета, его постоянно пытаются взломать подбором пароля. Если вы не подключаетесь к этому компьютеру удалённо — выключите: «Параметры» → «Система» → «Удалённый рабочий стол».")),
+        5900 or 5901 => new(T._("VNC — удалённое управление"), T._(VncExplanation)),
+        5985 => new(T._("WinRM — удалённое управление Windows"), T._(WinRmExplanation)),
+        5986 => new(T._("WinRM — удалённое управление Windows (HTTPS)"), T._(WinRmExplanation)),
+        1433 => new(T._("База данных Microsoft SQL Server"), T._(DatabaseExplanation)),
+        3306 => new(T._("База данных MySQL / MariaDB"), T._(DatabaseExplanation)),
+        5432 => new(T._("База данных PostgreSQL"), T._(DatabaseExplanation)),
+        6379 => new(T._("База данных Redis (часто работает без пароля)"), T._(DatabaseExplanation)),
+        27017 => new(T._("База данных MongoDB (часто работает без пароля)"), T._(DatabaseExplanation)),
+        11211 => new(T._("Кэш Memcached (работает без пароля)"), T._(DatabaseExplanation)),
+        _ => null,
     };
 
-    private static readonly Dictionary<int, PortInfo> RiskyUdp = new()
+    private static PortInfo? RiskyUdp(int port) => port switch
     {
-        [3389] = new("Удалённый рабочий стол (RDP)", RiskyTcp[3389].Explanation),
-        [11211] = new("Кэш Memcached (работает без пароля)", DatabaseExplanation),
+        3389 => new(T._("Удалённый рабочий стол (RDP)"), T._("К компьютеру можно подключиться удалённо. Если порт доступен из интернета, его постоянно пытаются взломать подбором пароля. Если вы не подключаетесь к этому компьютеру удалённо — выключите: «Параметры» → «Система» → «Удалённый рабочий стол».")),
+        11211 => new(T._("Кэш Memcached (работает без пароля)"), T._(DatabaseExplanation)),
+        _ => null,
     };
 
-    /// <summary>Ports Windows opens by itself.</summary>
-    private static readonly Dictionary<int, string> WindowsTcp = new()
+    private static PortInfo? Risky(SocketProtocol protocol, int port) => protocol == SocketProtocol.Tcp ? RiskyTcp(port) : RiskyUdp(port);
+
+    private static string? WindowsName(SocketProtocol protocol, int port) => protocol == SocketProtocol.Tcp ? WindowsTcp(port) : WindowsUdp(port);
+
+    /// <summary>Ports Windows opens by itself (null = not one of them).</summary>
+    private static string? WindowsTcp(int port) => port switch
     {
-        [135] = "RPC — служебный обмен Windows",
-        [139] = "NetBIOS — общий доступ к файлам (старый)",
-        [445] = "SMB — общий доступ к файлам и принтерам",
-        [2869] = "UPnP — обнаружение устройств в сети",
-        [5040] = "Платформа подключённых устройств Windows",
-        [5357] = "WSD — обнаружение принтеров и устройств",
-        [5358] = "WSD — обнаружение принтеров и устройств",
-        [7680] = "Оптимизация доставки обновлений Windows",
-        [10243] = "Общий доступ к мультимедиа Windows",
+        135 => T._("RPC — служебный обмен Windows"),
+        139 => T._("NetBIOS — общий доступ к файлам (старый)"),
+        445 => T._("SMB — общий доступ к файлам и принтерам"),
+        2869 => T._("UPnP — обнаружение устройств в сети"),
+        5040 => T._("Платформа подключённых устройств Windows"),
+        5357 => T._("WSD — обнаружение принтеров и устройств"),
+        5358 => T._("WSD — обнаружение принтеров и устройств"),
+        7680 => T._("Оптимизация доставки обновлений Windows"),
+        10243 => T._("Общий доступ к мультимедиа Windows"),
+        _ => null,
     };
 
-    private static readonly Dictionary<int, string> WindowsUdp = new()
+    private static string? WindowsUdp(int port) => port switch
     {
-        [67] = "DHCP — получение IP-адреса",
-        [68] = "DHCP — получение IP-адреса",
-        [123] = "NTP — синхронизация времени",
-        [137] = "NetBIOS — имена компьютеров в сети",
-        [138] = "NetBIOS — служба датаграмм",
-        [500] = "IKE — подключения VPN",
-        [546] = "DHCPv6 — получение IPv6-адреса",
-        [1900] = "SSDP / UPnP — обнаружение устройств",
-        [3702] = "WS-Discovery — обнаружение устройств",
-        [4500] = "IPsec NAT-T — подключения VPN",
-        [5050] = "Служба обнаружения Windows",
-        [5353] = "mDNS — поиск устройств в сети",
-        [5355] = "LLMNR — поиск компьютеров по имени",
+        67 => T._("DHCP — получение IP-адреса"),
+        68 => T._("DHCP — получение IP-адреса"),
+        123 => T._("NTP — синхронизация времени"),
+        137 => T._("NetBIOS — имена компьютеров в сети"),
+        138 => T._("NetBIOS — служба датаграмм"),
+        500 => T._("IKE — подключения VPN"),
+        546 => T._("DHCPv6 — получение IPv6-адреса"),
+        1900 => T._("SSDP / UPnP — обнаружение устройств"),
+        3702 => T._("WS-Discovery — обнаружение устройств"),
+        4500 => T._("IPsec NAT-T — подключения VPN"),
+        5050 => T._("Служба обнаружения Windows"),
+        5353 => T._("mDNS — поиск устройств в сети"),
+        5355 => T._("LLMNR — поиск компьютеров по имени"),
+        _ => null,
     };
 
-    private static readonly Dictionary<int, string> CommonServices = new()
+    private static string? CommonService(int port) => port switch
     {
-        [20] = "FTP (данные)",
-        [22] = "SSH — защищённое удалённое управление",
-        [25] = "SMTP — отправка почты",
-        [53] = "DNS",
-        [80] = "HTTP — веб-сервер",
-        [110] = "POP3 — почта",
-        [143] = "IMAP — почта",
-        [443] = "HTTPS — веб-сервер",
-        [465] = "SMTP — почта (защищённая)",
-        [587] = "SMTP — почта",
-        [853] = "DNS через TLS",
-        [993] = "IMAP — почта (защищённая)",
-        [995] = "POP3 — почта (защищённая)",
-        [1080] = "SOCKS-прокси",
-        [1194] = "OpenVPN",
-        [1935] = "RTMP — трансляции",
-        [3478] = "STUN — звонки и видеосвязь",
-        [3479] = "STUN — звонки и видеосвязь",
-        [5222] = "XMPP — мессенджеры",
-        [5223] = "Push-уведомления Apple",
-        [5228] = "Push-уведомления Google",
-        [8080] = "HTTP — веб-сервер / прокси",
-        [8443] = "HTTPS (альтернативный)",
-        [9050] = "Tor (SOCKS)",
-        [9150] = "Tor Browser (SOCKS)",
-        [27036] = "Steam — передача игр по локальной сети",
-        [51820] = "WireGuard VPN",
-        [57621] = "Spotify — воспроизведение на устройствах",
+        20 => T._("FTP (данные)"),
+        22 => T._("SSH — защищённое удалённое управление"),
+        25 => T._("SMTP — отправка почты"),
+        53 => "DNS",
+        80 => T._("HTTP — веб-сервер"),
+        110 => T._("POP3 — почта"),
+        143 => T._("IMAP — почта"),
+        443 => T._("HTTPS — веб-сервер"),
+        465 => T._("SMTP — почта (защищённая)"),
+        587 => T._("SMTP — почта"),
+        853 => T._("DNS через TLS"),
+        993 => T._("IMAP — почта (защищённая)"),
+        995 => T._("POP3 — почта (защищённая)"),
+        1080 => T._("SOCKS-прокси"),
+        1194 => "OpenVPN",
+        1935 => T._("RTMP — трансляции"),
+        3478 => T._("STUN — звонки и видеосвязь"),
+        3479 => T._("STUN — звонки и видеосвязь"),
+        5222 => T._("XMPP — мессенджеры"),
+        5223 => T._("Push-уведомления Apple"),
+        5228 => T._("Push-уведомления Google"),
+        8080 => T._("HTTP — веб-сервер / прокси"),
+        8443 => T._("HTTPS (альтернативный)"),
+        9050 => "Tor (SOCKS)",
+        9150 => "Tor Browser (SOCKS)",
+        27036 => T._("Steam — передача игр по локальной сети"),
+        51820 => "WireGuard VPN",
+        57621 => T._("Spotify — воспроизведение на устройствах"),
+        _ => null,
     };
 
-    private static readonly Dictionary<int, string> SuspiciousRemote = new()
+    private static string? SuspiciousRemote(int port) => port switch
     {
-        [4444] = "порт по умолчанию у инструментов взлома и удалённого управления (Metasploit)",
-        [1337] = "«хакерский» порт — его часто используют трояны и бэкдоры",
-        [31337] = "«хакерский» порт — его часто используют трояны и бэкдоры",
-        [6666] = "IRC — через такие каналы управляют ботнетами (если вы сами не пользуетесь IRC-чатом)",
-        [6667] = "IRC — через такие каналы управляют ботнетами (если вы сами не пользуетесь IRC-чатом)",
-        [3333] = "порт майнинг-пулов — так скрытые майнеры отправляют результаты работы",
-        [5555] = "порт майнинг-пулов — так скрытые майнеры отправляют результаты работы (или отладка Android-устройств)",
-        [7777] = "порт майнинг-пулов — так скрытые майнеры отправляют результаты работы (некоторые игры тоже его используют)",
-        [14444] = "порт майнинг-пулов (Monero) — так скрытые майнеры отправляют результаты работы",
-        [14433] = "порт майнинг-пулов (Monero, TLS) — так скрытые майнеры отправляют результаты работы",
-        [45700] = "порт майнинг-пулов (Monero) — так скрытые майнеры отправляют результаты работы",
-        [9050] = "сеть Tor — через неё вирусы прячут связь со своими серверами (Tor Browser тоже её использует)",
-        [9150] = "сеть Tor — через неё вирусы прячут связь со своими серверами (Tor Browser тоже её использует)",
+        4444 => T._("порт по умолчанию у инструментов взлома и удалённого управления (Metasploit)"),
+        1337 => T._("«хакерский» порт — его часто используют трояны и бэкдоры"),
+        31337 => T._("«хакерский» порт — его часто используют трояны и бэкдоры"),
+        6666 => T._("IRC — через такие каналы управляют ботнетами (если вы сами не пользуетесь IRC-чатом)"),
+        6667 => T._("IRC — через такие каналы управляют ботнетами (если вы сами не пользуетесь IRC-чатом)"),
+        3333 => T._("порт майнинг-пулов — так скрытые майнеры отправляют результаты работы"),
+        5555 => T._("порт майнинг-пулов — так скрытые майнеры отправляют результаты работы (или отладка Android-устройств)"),
+        7777 => T._("порт майнинг-пулов — так скрытые майнеры отправляют результаты работы (некоторые игры тоже его используют)"),
+        14444 => T._("порт майнинг-пулов (Monero) — так скрытые майнеры отправляют результаты работы"),
+        14433 => T._("порт майнинг-пулов (Monero, TLS) — так скрытые майнеры отправляют результаты работы"),
+        45700 => T._("порт майнинг-пулов (Monero) — так скрытые майнеры отправляют результаты работы"),
+        9050 => T._("сеть Tor — через неё вирусы прячут связь со своими серверами (Tor Browser тоже её использует)"),
+        9150 => T._("сеть Tor — через неё вирусы прячут связь со своими серверами (Tor Browser тоже её использует)"),
+        _ => null,
     };
 
     /// <summary>
@@ -460,25 +457,25 @@ public static class NetworkRules
     public static bool IsPeerToPeerClient(ProcessIdentity process) => PeerToPeerClients.Contains(process.Name);
 
     public static bool IsRiskyPort(SocketProtocol protocol, int port)
-        => (protocol == SocketProtocol.Tcp ? RiskyTcp : RiskyUdp).ContainsKey(port);
+        => Risky(protocol, port) is not null;
 
     public static bool IsWindowsDefaultPort(SocketProtocol protocol, int port)
-        => (protocol == SocketProtocol.Tcp ? WindowsTcp : WindowsUdp).ContainsKey(port) ||
+        => WindowsName(protocol, port) is not null ||
            (protocol == SocketProtocol.Tcp && port is >= 49664 and <= 49670);
 
     /// <summary>What a remote port usually means when a program connects to it on the internet; null = nothing unusual.</summary>
-    public static string? SuspiciousRemotePortReason(int port) => SuspiciousRemote.TryGetValue(port, out var r) ? r : null;
+    public static string? SuspiciousRemotePortReason(int port) => SuspiciousRemote(port);
 
     /// <summary>Short description of a port ("HTTPS — веб-сервер"), empty if unknown.</summary>
     public static string ServiceName(SocketProtocol protocol, int port)
     {
-        if ((protocol == SocketProtocol.Tcp ? RiskyTcp : RiskyUdp).TryGetValue(port, out var risky))
+        if (Risky(protocol, port) is { } risky)
             return risky.Service;
-        if ((protocol == SocketProtocol.Tcp ? WindowsTcp : WindowsUdp).TryGetValue(port, out var win))
+        if (WindowsName(protocol, port) is { } win)
             return win;
         if (protocol == SocketProtocol.Tcp && port is >= 49664 and <= 49670)
-            return "Динамический порт RPC Windows";
-        return CommonServices.TryGetValue(port, out var common) ? common : "";
+            return T._("Динамический порт RPC Windows");
+        return CommonService(port) ?? "";
     }
 
     /// <summary>Short name of a remote service for the connections list ("HTTPS", "DNS"…).</summary>
@@ -487,26 +484,26 @@ public static class NetworkRules
         443 => "HTTPS",
         80 => "HTTP",
         53 => "DNS",
-        853 => "DNS через TLS",
+        853 => T._("DNS через TLS"),
         22 => "SSH",
-        993 or 143 => "Почта (IMAP)",
-        995 or 110 => "Почта (POP3)",
-        465 or 587 or 25 => "Почта (SMTP)",
-        3478 or 3479 => "Звонки (STUN)",
-        5222 => "Мессенджер (XMPP)",
-        5223 => "Уведомления Apple",
-        5228 => "Уведомления Google",
-        1935 => "Трансляция (RTMP)",
-        3389 => "Удалённый стол",
-        8080 => "HTTP (прокси)",
+        993 or 143 => T._("Почта (IMAP)"),
+        995 or 110 => T._("Почта (POP3)"),
+        465 or 587 or 25 => T._("Почта (SMTP)"),
+        3478 or 3479 => T._("Звонки (STUN)"),
+        5222 => T._("Мессенджер (XMPP)"),
+        5223 => T._("Уведомления Apple"),
+        5228 => T._("Уведомления Google"),
+        1935 => T._("Трансляция (RTMP)"),
+        3389 => T._("Удалённый стол"),
+        8080 => T._("HTTP (прокси)"),
         8443 => "HTTPS",
         >= 27015 and <= 27050 => "Steam",
-        >= 6881 and <= 6889 => "Торрент",
-        _ => SuspiciousRemote.ContainsKey(port) ? UnusualPortText : "",
+        >= 6881 and <= 6889 => T._("Торрент"),
+        _ => SuspiciousRemote(port) is not null ? UnusualPortText : "",
     };
 
     /// <summary>Label of a connection to a port from <see cref="SuspiciousRemote"/> (the port alone proves nothing).</summary>
-    public const string UnusualPortText = "Необычный порт";
+    public static string UnusualPortText => T._("Необычный порт");
 
     /// <summary>
     /// Classifies a listening port: loopback-only is always safe; risky services on the network → Risky;
@@ -518,35 +515,31 @@ public static class NetworkRules
         var service = ServiceName(protocol, port);
         if (!isNetwork)
             return (PortKind.LocalOnly, service,
-                "Порт доступен только программам на этом компьютере — из сети к нему не подключиться. Это безопасно.");
+                T._("Порт доступен только программам на этом компьютере — из сети к нему не подключиться. Это безопасно."));
 
-        var risky = protocol == SocketProtocol.Tcp ? RiskyTcp : RiskyUdp;
-        if (risky.TryGetValue(port, out var info))
+        if (Risky(protocol, port) is { } info)
             return (PortKind.Risky, info.Service, info.Explanation ?? "");
 
         var windowsDynamic = owner.IsWindows && port >= 49152;
         if (IsWindowsDefaultPort(protocol, port) || windowsDynamic || owner.Pid == 4)
         {
             if (string.IsNullOrEmpty(service))
-                service = windowsDynamic ? "Динамический порт службы Windows" : "Служба Windows";
+                service = windowsDynamic ? T._("Динамический порт службы Windows") : T._("Служба Windows");
             return (PortKind.Windows, service,
-                $"{service}. Такие порты открыты почти на каждом компьютере с Windows — в домашней сети это нормально. " +
-                "Главное — не пробрасывайте их на роутере (проброс портов, DMZ) и не выключайте брандмауэр.");
+                T.F("{0}. Такие порты открыты почти на каждом компьютере с Windows — в домашней сети это нормально. Главное — не пробрасывайте их на роутере (проброс портов, DMZ) и не выключайте брандмауэр.", service));
         }
 
         return (PortKind.App, service, protocol == SocketProtocol.Udp
-            ? $"{owner.DisplayName} получает данные по UDP через этот порт. Обычно это нормально: так работают звонки, игры, " +
-              "трансляции, VPN и быстрые соединения браузеров (QUIC). Насторожиться стоит, если вы не знаете эту программу."
-            : $"{owner.DisplayName} принимает подключения из локальной сети. Обычно это нормально: так работают синхронизация, " +
-              "игры, мессенджеры и передача файлов. Насторожиться стоит, если вы не знаете эту программу.");
+            ? T.F("{0} получает данные по UDP через этот порт. Обычно это нормально: так работают звонки, игры, трансляции, VPN и быстрые соединения браузеров (QUIC). Насторожиться стоит, если вы не знаете эту программу.", owner.DisplayName)
+            : T.F("{0} принимает подключения из локальной сети. Обычно это нормально: так работают синхронизация, игры, мессенджеры и передача файлов. Насторожиться стоит, если вы не знаете эту программу.", owner.DisplayName));
     }
 
     public static string PortKindText(PortKind kind, ProcessIdentity owner) => kind switch
     {
-        PortKind.Risky => "Опасный",
-        PortKind.Windows => owner.IsWindows || owner.Pid == 4 ? "Windows" : "Стандартный",
-        PortKind.App => "Обычный",
-        _ => "Безопасный",
+        PortKind.Risky => T._("Опасный"),
+        PortKind.Windows => owner.IsWindows || owner.Pid == 4 ? "Windows" : T._("Стандартный"),
+        PortKind.App => T._("Обычный"),
+        _ => T._("Безопасный"),
     };
 
     public static NetTone PortKindTone(PortKind kind) => kind switch
@@ -578,12 +571,12 @@ public static class NetworkRules
 
     public static string StateText(TcpState state) => state switch
     {
-        TcpState.Established => "Установлено",
-        TcpState.SynSent => "Подключается",
-        TcpState.SynReceived => "Принимается",
-        TcpState.Listen => "Ждёт подключений",
-        TcpState.TimeWait => "Завершено",
-        TcpState.CloseWait or TcpState.FinWait1 or TcpState.FinWait2 or TcpState.Closing or TcpState.LastAck => "Закрывается",
+        TcpState.Established => T._("Установлено"),
+        TcpState.SynSent => T._("Подключается"),
+        TcpState.SynReceived => T._("Принимается"),
+        TcpState.Listen => T._("Ждёт подключений"),
+        TcpState.TimeWait => T._("Завершено"),
+        TcpState.CloseWait or TcpState.FinWait1 or TcpState.FinWait2 or TcpState.Closing or TcpState.LastAck => T._("Закрывается"),
         _ => "—",
     };
 
@@ -675,12 +668,12 @@ public static class NetworkRules
 
     public static (string Text, NetTone Tone) SignalQuality(int? percent) => percent switch
     {
-        null => ("нет данных", NetTone.Neutral),
-        >= 80 => ("Отличный сигнал", NetTone.Ok),
-        >= 60 => ("Хороший сигнал", NetTone.Ok),
-        >= WeakSignalPercent => ("Средний сигнал", NetTone.Info),
-        >= 30 => ("Слабый сигнал", NetTone.Warning),
-        _ => ("Очень слабый сигнал", NetTone.Danger),
+        null => (T._("нет данных"), NetTone.Neutral),
+        >= 80 => (T._("Отличный сигнал"), NetTone.Ok),
+        >= 60 => (T._("Хороший сигнал"), NetTone.Ok),
+        >= WeakSignalPercent => (T._("Средний сигнал"), NetTone.Info),
+        >= 30 => (T._("Слабый сигнал"), NetTone.Warning),
+        _ => (T._("Очень слабый сигнал"), NetTone.Danger),
     };
 
     /// <summary>"802.11ax" → "Wi-Fi 6 (802.11ax)".</summary>
@@ -703,9 +696,9 @@ public static class NetworkRules
     public static string BandText(double? ghz) => ghz switch
     {
         null => "—",
-        < 3 => "2,4 ГГц",
-        < 5.9 => "5 ГГц",
-        _ => "6 ГГц",
+        < 3 => T._("2,4 ГГц"),
+        < 5.9 => T._("5 ГГц"),
+        _ => T._("6 ГГц"),
     };
 
     /// <summary>Open network (no password) or obsolete WEP.</summary>
@@ -715,14 +708,18 @@ public static class NetworkRules
             return false;
         var a = authentication.Trim().ToLowerInvariant();
         var c = (cipher ?? "").Trim().ToLowerInvariant();
+        // l10n:data-begin — netsh prints the authentication in the Windows language; matched and never shown
         return IsOpenWifi(a) || a.Contains("wep") || a.StartsWith("shared") || a.StartsWith("общ") || c.Contains("wep");
+        // l10n:data-end
     }
 
     /// <summary>"Open" / "Открытая" / "Відкрита" / "Offen" (netsh translates the value too).</summary>
     private static bool IsOpenWifi(string? authentication)
     {
         var a = (authentication ?? "").Trim().ToLowerInvariant();
+        // l10n:data-begin — netsh prints the authentication in the Windows language; matched and never shown
         return a.StartsWith("open") || a.StartsWith("открыт") || a.StartsWith("відкрит") || a.StartsWith("offen");
+        // l10n:data-end
     }
 
     // ===================================================================== issues
@@ -731,7 +728,7 @@ public static class NetworkRules
     internal const string NetworkStatusUri = "ms-settings:network-status";
 
     /// <summary>Text of the dashboard button that clears the DNS cache.</summary>
-    internal const string FlushDnsFixLabel = "Сбросить кэш DNS";
+    internal static string FlushDnsFixLabel => T._("Сбросить кэш DNS");
 
     /// <summary>
     /// The issue of one finding. Dashboard extras depend on its kind: "Нет доступа в интернет" links to the network status
@@ -775,24 +772,26 @@ public static class NetworkRules
         var internetOk = latency?.InternetReachable ?? true;
         if (latency is not null && !latency.InternetReachable)
         {
-            var details = s.Adapters.Count == 0
-                ? "Компьютер не подключён ни к одной сети. "
-                : "Ни один из проверочных серверов (Cloudflare, Google, Яндекс, Microsoft) не ответил. ";
+            var parts = new List<string>
+            {
+                s.Adapters.Count == 0
+                    ? T._("Компьютер не подключён ни к одной сети.")
+                    : T._("Ни один из проверочных серверов (Cloudflare, Google, Яндекс, Microsoft) не ответил."),
+            };
             if (latency.CaptivePortal)
-                details += "Похоже, сеть просит войти (как в кафе или гостинице): откройте браузер — должна появиться страница входа. ";
-            details += "Что сделать: проверьте кабель или подключение к Wi-Fi; выключите роутер на 30 секунд и включите снова" +
-                       (vpn is not null ? $"; попробуйте отключить VPN ({vpn.Name})" : "") +
-                       ". Если не помогло — в разделе «Сеть» нажмите «Сбросить сетевые настройки».";
-            Add(FindingKind.NoInternet, "Нет доступа в интернет", details, IssueSeverity.High);
+                parts.Add(T._("Похоже, сеть просит войти (как в кафе или гостинице): откройте браузер — должна появиться страница входа."));
+            parts.Add(vpn is not null
+                ? T.F("Что сделать: проверьте кабель или подключение к Wi-Fi; выключите роутер на 30 секунд и включите снова; попробуйте отключить VPN ({0}). Если не помогло — в разделе «Сеть» нажмите «Сбросить сетевые настройки».", vpn.Name)
+                : T._("Что сделать: проверьте кабель или подключение к Wi-Fi; выключите роутер на 30 секунд и включите снова. Если не помогло — в разделе «Сеть» нажмите «Сбросить сетевые настройки»."));
+            Add(FindingKind.NoInternet, T._("Нет доступа в интернет"), string.Join(" ", parts), IssueSeverity.High);
         }
         else if (latency?.MedianMs is { } median && median > HighLatencyMs)
         {
-            var details = $"Ответ от серверов в интернете приходит за {LatencyMath.FormatMs(median)} — в играх и видеозвонках будут заметны задержки. ";
-            details += vpn is not null || latency.Intercepted
-                ? "Соединение идёт через VPN или прокси, а он добавляет задержку: выберите сервер VPN поближе или отключите VPN, когда он не нужен. " +
-                  "Также помогают подключение кабелем вместо Wi-Fi и перезагрузка роутера."
-                : "Что помогает: подключение кабелем вместо Wi-Fi, закрытие загрузок и торрентов, перезагрузка роутера.";
-            Add(FindingKind.HighLatency, "Высокая задержка", details, IssueSeverity.Low);
+            var details = T.F("Ответ от серверов в интернете приходит за {0} — в играх и видеозвонках будут заметны задержки.", LatencyMath.FormatMs(median)) + " " +
+                          (vpn is not null || latency.Intercepted
+                              ? T._("Соединение идёт через VPN или прокси, а он добавляет задержку: выберите сервер VPN поближе или отключите VPN, когда он не нужен. Также помогают подключение кабелем вместо Wi-Fi и перезагрузка роутера.")
+                              : T._("Что помогает: подключение кабелем вместо Wi-Fi, закрытие загрузок и торрентов, перезагрузка роутера."));
+            Add(FindingKind.HighLatency, T._("Высокая задержка"), details, IssueSeverity.Low);
         }
 
         // --- DNS
@@ -802,30 +801,25 @@ public static class NetworkRules
             {
                 // With a fix (the dashboard) the text describes the button; without one (the page) it points to the cache tool.
                 var advice = flushDns is not null
-                    ? "Кнопка «Сбросить кэш DNS» очистит кэш и проверит адреса ещё раз. Если это не поможет, нужно сменить " +
-                      "DNS-сервер: укажите 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера."
-                    : "Укажите DNS 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера, " +
-                      "затем очистите кэш DNS в разделе «Сеть».";
-                Add(FindingKind.DnsFailed, "DNS не отвечает — сайты не открываются",
-                    "Компьютер не смог узнать адреса сайтов (example.com, wikipedia.org…), хотя связь с интернетом есть. " + advice,
+                    ? T._("Кнопка «Сбросить кэш DNS» очистит кэш и проверит адреса ещё раз. Если это не поможет, нужно сменить DNS-сервер: укажите 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера.")
+                    : T._("Укажите DNS 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера, затем очистите кэш DNS в разделе «Сеть».");
+                Add(FindingKind.DnsFailed, T._("DNS не отвечает — сайты не открываются"),
+                    T._("Компьютер не смог узнать адреса сайтов (example.com, wikipedia.org…), хотя связь с интернетом есть.") + " " + advice,
                     IssueSeverity.High);
             }
             else if (dns.MedianMs is { } dnsMs && dnsMs > SlowDnsMs)
             {
-                Add(FindingKind.SlowDns, "Медленный DNS",
-                    $"DNS-сервер отвечает в среднем за {LatencyMath.FormatMs(dnsMs)}, поэтому каждый сайт начинает открываться с задержкой. " +
-                    "Укажите быстрый DNS — 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс): «Параметры» → «Сеть и Интернет» → " +
-                    "ваше подключение → «Назначение DNS-сервера» → «Изменить», либо в настройках роутера.", IssueSeverity.Low);
+                Add(FindingKind.SlowDns, T._("Медленный DNS"),
+                    T.F("DNS-сервер отвечает в среднем за {0}, поэтому каждый сайт начинает открываться с задержкой. Укажите быстрый DNS — 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс): «Параметры» → «Сеть и Интернет» → ваше подключение → «Назначение DNS-сервера» → «Изменить», либо в настройках роутера.", LatencyMath.FormatMs(dnsMs)),
+                    IssueSeverity.Low);
             }
         }
 
         // --- Adapters
         foreach (var a in s.Adapters.Where(IsSlowWiredLink))
         {
-            Add(FindingKind.SlowLink, $"Адаптер {a.Name} работает на {FormatLinkSpeed(a.SpeedBps)}",
-                $"Сетевая карта «{a.Description}» договорилась с роутером только о {FormatLinkSpeed(a.SpeedBps)}. Почти всегда виноват кабель: " +
-                "для 1 Гбит/с нужен кабель категории Cat5e или Cat6, в котором подключены все 8 жил (в дешёвых кабелях их бывает 4). " +
-                "Попробуйте другой кабель или другой порт роутера. Если ваш тариф медленнее 100 Мбит/с, на скорость интернета это не влияет.",
+            Add(FindingKind.SlowLink, T.F("Адаптер {0} работает на {1}", a.Name, FormatLinkSpeed(a.SpeedBps)),
+                T.F("Сетевая карта «{0}» договорилась с роутером только о {1}. Почти всегда виноват кабель: для 1 Гбит/с нужен кабель категории Cat5e или Cat6, в котором подключены все 8 жил (в дешёвых кабелях их бывает 4). Попробуйте другой кабель или другой порт роутера. Если ваш тариф медленнее 100 Мбит/с, на скорость интернета это не влияет.", a.Description, FormatLinkSpeed(a.SpeedBps)),
                 IssueSeverity.Low);
         }
 
@@ -835,38 +829,31 @@ public static class NetworkRules
             var ssid = string.IsNullOrWhiteSpace(wifi.Ssid) ? "Wi-Fi" : wifi.Ssid;
             if (wifi.SignalPercent is { } signal && signal < WeakSignalPercent)
             {
-                Add(FindingKind.WeakSignal, "Слабый сигнал Wi-Fi",
-                    $"Сигнал сети «{ssid}» — {signal}%. Из-за этого падает скорость и растут задержки. Поставьте роутер ближе и повыше " +
-                    "(не в шкаф и не на пол), подальше от толстых стен и микроволновки; рядом с роутером лучше подключаться к сети 5 ГГц, " +
-                    "а для компьютера, который стоит на месте, надёжнее всего кабель.", IssueSeverity.Low);
+                Add(FindingKind.WeakSignal, T._("Слабый сигнал Wi-Fi"),
+                    T.F("Сигнал сети «{0}» — {1}%. Из-за этого падает скорость и растут задержки. Поставьте роутер ближе и повыше (не в шкаф и не на пол), подальше от толстых стен и микроволновки; рядом с роутером лучше подключаться к сети 5 ГГц, а для компьютера, который стоит на месте, надёжнее всего кабель.", ssid, signal),
+                    IssueSeverity.Low);
             }
             if (IsWeakWifiSecurity(wifi.Authentication, wifi.Cipher))
             {
                 var open = IsOpenWifi(wifi.Authentication);
-                Add(FindingKind.WeakWifiSecurity, "Сеть Wi-Fi без надёжного пароля",
+                Add(FindingKind.WeakWifiSecurity, T._("Сеть Wi-Fi без надёжного пароля"),
                     open
-                        ? $"Сеть «{ssid}» не защищена паролем: всё, что передаётся без шифрования, могут увидеть другие. Если это ваш роутер — " +
-                          "включите в его настройках WPA2 или WPA3 с надёжным паролем. В общественных сетях не вводите пароли на сайтах без " +
-                          "значка замка и используйте VPN."
-                        : $"Сеть «{ssid}» защищена устаревшим способом WEP, который взламывается за несколько минут. В настройках роутера " +
-                          "выберите WPA2 или WPA3 и задайте надёжный пароль.",
+                        ? T.F("Сеть «{0}» не защищена паролем: всё, что передаётся без шифрования, могут увидеть другие. Если это ваш роутер — включите в его настройках WPA2 или WPA3 с надёжным паролем. В общественных сетях не вводите пароли на сайтах без значка замка и используйте VPN.", ssid)
+                        : T.F("Сеть «{0}» защищена устаревшим способом WEP, который взламывается за несколько минут. В настройках роутера выберите WPA2 или WPA3 и задайте надёжный пароль.", ssid),
                     IssueSeverity.Medium);
             }
             if (wifi.BandGhz is < 3)
             {
-                Add(FindingKind.Band24, "Wi-Fi работает в диапазоне 2,4 ГГц",
-                    "Диапазон 2,4 ГГц медленнее и сильнее загружен соседскими сетями. Если роутер поддерживает 5 ГГц (часто это сеть " +
-                    "с «5G» в названии), подключитесь к ней — скорость обычно выше в несколько раз. Далеко от роутера, через несколько " +
-                    "стен, 2,4 ГГц может работать стабильнее.", IssueSeverity.Info);
+                Add(FindingKind.Band24, T._("Wi-Fi работает в диапазоне 2,4 ГГц"),
+                    T._("Диапазон 2,4 ГГц медленнее и сильнее загружен соседскими сетями. Если роутер поддерживает 5 ГГц (часто это сеть с «5G» в названии), подключитесь к ней — скорость обычно выше в несколько раз. Далеко от роутера, через несколько стен, 2,4 ГГц может работать стабильнее."),
+                    IssueSeverity.Info);
             }
         }
 
         // --- Upload
         if (s.UploadBytesPerSecond is { } upload && upload > HighUploadBytesPerSecond)
         {
-            var details = $"Компьютер отправлял в сеть в среднем {LatencyMath.FormatRate(upload)}. Если вы сейчас ничего не загружаете в облако, " +
-                          "не ведёте трансляцию или видеозвонок и не раздаёте торренты — посмотрите в разделе «Сеть» на вкладке «Соединения», " +
-                          "какая программа обменивается данными.";
+            var details = T.F("Компьютер отправлял в сеть в среднем {0}. Если вы сейчас ничего не загружаете в облако, не ведёте трансляцию или видеозвонок и не раздаёте торренты — посмотрите в разделе «Сеть» на вкладке «Соединения», какая программа обменивается данными.", LatencyMath.FormatRate(upload));
             if (s.Sockets is { } sockets)
             {
                 var top = BuildConnections(sockets, includeLoopback: false)
@@ -877,9 +864,9 @@ public static class NetworkRules
                     .Select(g => $"{g.First().Process.Name} ({g.Count()})")
                     .ToList();
                 if (top.Count > 0)
-                    details += " Больше всего соединений у: " + string.Join(", ", top) + ".";
+                    details += " " + T.F("Больше всего соединений у: {0}.", string.Join(", ", top));
             }
-            Add(FindingKind.HighUpload, "Высокая исходящая активность", details, IssueSeverity.Medium);
+            Add(FindingKind.HighUpload, T._("Высокая исходящая активность"), details, IssueSeverity.Medium);
         }
 
         // --- Ports and connections
@@ -894,8 +881,8 @@ public static class NetworkRules
                 // Remote Desktop of Windows itself: the Security module reports the same setting ("Удалённый рабочий стол
                 // включён", Low), so the dashboard gets it once and both pages rate it the same.
                 var windowsRdp = p.Port == RdpPort && p.Process.IsWindows;
-                Add(FindingKind.RiskyPort, $"Открыт порт {p.Port} ({p.Process.Name})",
-                    $"{p.Service}. {p.Explanation}" + (windowsRdp ? " Об этом же сообщает раздел «Безопасность»." : ""),
+                Add(FindingKind.RiskyPort, T.F("Открыт порт {0} ({1})", p.Port, p.Process.Name),
+                    $"{p.Service}. {p.Explanation}" + (windowsRdp ? " " + T._("Об этом же сообщает раздел «Безопасность».") : ""),
                     windowsRdp ? IssueSeverity.Low : IssueSeverity.Medium, p.Port.ToString(), pageOnly: windowsRdp);
             }
 
@@ -912,10 +899,9 @@ public static class NetworkRules
                 if (unprotected.Count > 0)
                     AddFirewallOff(unprotected, list);
                 else
-                    Add(FindingKind.WindowsPorts, "Открыты стандартные порты Windows",
-                        $"Порты {list} принимают подключения из локальной сети — через них работают общий доступ к файлам и принтерам " +
-                        "и службы Windows. Это нормально. Только не пробрасывайте их на роутере (проброс портов, DMZ) и не выключайте " +
-                        "брандмауэр — из интернета они должны быть закрыты.", IssueSeverity.Info);
+                    Add(FindingKind.WindowsPorts, T._("Открыты стандартные порты Windows"),
+                        T.F("Порты {0} принимают подключения из локальной сети — через них работают общий доступ к файлам и принтерам и службы Windows. Это нормально. Только не пробрасывайте их на роутере (проброс портов, DMZ) и не выключайте брандмауэр — из интернета они должны быть закрыты.", list),
+                        IssueSeverity.Info);
             }
 
             foreach (var g in BuildConnections(snap, includeLoopback: false)
@@ -926,15 +912,16 @@ public static class NetworkRules
                 var others = g.Select(x => x.RemoteAddress).Distinct().Count() - 1;
                 var highRisk = g.Any(x => x.IsHighRisk);
                 var warning = g.Select(x => x.ProgramWarning).FirstOrDefault(w => w is not null);
-                Add(FindingKind.SuspiciousConnection, $"{c.Process.Name} подключён к {NetAddress.Endpoint(c.RemoteAddress, c.RemotePort)}",
-                    $"Порт {c.RemotePort} — {c.SuspiciousReason}." +
-                    (warning is not null ? $" Сама программа тоже вызывает вопросы: {warning}." : "") +
-                    (others > 0 ? $" Таких соединений у программы ещё {others}." : "") +
-                    (highRisk
-                        ? " Проверьте эту программу в разделе «Процессы» (VirusTotal, Защитник Windows)"
-                        : " Если это ваша игра или чат — всё в порядке. Если вы не знаете эту программу, проверьте её в разделе " +
-                          "«Процессы» (VirusTotal, Защитник Windows)") +
-                    ", а адрес — значком щита «Проверить IP» в строке соединения (или через меню правой кнопки мыши).",
+                var sentences = new List<string> { T.F("Порт {0} — {1}.", c.RemotePort, c.SuspiciousReason) };
+                if (warning is not null)
+                    sentences.Add(T.F("Сама программа тоже вызывает вопросы: {0}.", warning));
+                if (others > 0)
+                    sentences.Add(T.F("Таких соединений у программы ещё {0}.", others));
+                sentences.Add(highRisk
+                    ? T._("Проверьте эту программу в разделе «Процессы» (VirusTotal, Защитник Windows), а адрес — значком щита «Проверить IP» в строке соединения (или через меню правой кнопки мыши).")
+                    : T._("Если это ваша игра или чат — всё в порядке. Если вы не знаете эту программу, проверьте её в разделе «Процессы» (VirusTotal, Защитник Windows), а адрес — значком щита «Проверить IP» в строке соединения (или через меню правой кнопки мыши)."));
+                Add(FindingKind.SuspiciousConnection, T.F("{0} подключён к {1}", c.Process.Name, NetAddress.Endpoint(c.RemoteAddress, c.RemotePort)),
+                    string.Join(" ", sentences),
                     highRisk ? IssueSeverity.High : IssueSeverity.Medium, NetAddress.Text(c.RemoteAddress));
             }
         }
@@ -947,17 +934,17 @@ public static class NetworkRules
         {
             var first = networks[0];
             var profile = new FirewallProfileState(first.Profile, null);
-            var names = string.Join(", ", networks.Select(n => $"«{n.Name}»"));
+            var names = string.Join(", ", networks.Select(n => T.Quote(n.Name)));
             var onlyDomain = networks.All(n => n.Profile.Equals("Domain", StringComparison.OrdinalIgnoreCase));
+            var opening = networks.Count == 1
+                ? T.F("Windows считает сеть «{0}» {1}, а брандмауэр для таких сетей выключен.", first.Name, profile.Genitive)
+                : T.F("Брандмауэр выключен для сетей {0}.", names);
+            var closing = networks.Count == 1
+                ? T.F("Поэтому порты {0} (общий доступ к файлам и принтерам, службы Windows) открыты для любого устройства в этой сети — без брандмауэра так быть не должно. Включите брандмауэр в разделе «Безопасность» (или «Безопасность Windows» → «Брандмауэр и защита сети»).", ports)
+                : T.F("Поэтому порты {0} (общий доступ к файлам и принтерам, службы Windows) открыты для любого устройства в этих сетях — без брандмауэра так быть не должно. Включите брандмауэр в разделе «Безопасность» (или «Безопасность Windows» → «Брандмауэр и защита сети»).", ports);
             Add(FindingKind.FirewallOff,
-                networks.Count == 1 ? $"Брандмауэр выключен для сети «{first.Name}»" : "Брандмауэр выключен для подключённых сетей",
-                (networks.Count == 1
-                    ? $"Windows считает сеть «{first.Name}» {profile.Genitive}, а брандмауэр для таких сетей выключен. "
-                    : $"Брандмауэр выключен для сетей {names}. ") +
-                $"Поэтому порты {ports} (общий доступ к файлам и принтерам, службы Windows) открыты для любого устройства " +
-                (networks.Count == 1 ? "в этой сети" : "в этих сетях") +
-                " — без брандмауэра так быть не должно. Включите брандмауэр в разделе «Безопасность» (или «Безопасность " +
-                "Windows» → «Брандмауэр и защита сети»).",
+                networks.Count == 1 ? T.F("Брандмауэр выключен для сети «{0}»", first.Name) : T._("Брандмауэр выключен для подключённых сетей"),
+                opening + " " + closing,
                 // Same severity as the Security module's "Брандмауэр Windows выключен", which also puts it on the dashboard.
                 onlyDomain ? IssueSeverity.Low : IssueSeverity.High, pageOnly: true);
         }
@@ -988,8 +975,13 @@ public static class NetworkRules
     public static string ProgramWarningText(IEnumerable<string> reasons)
         => string.Join("; ", reasons.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => LowerFirst(r.Trim())));
 
+    /// <summary>
+    /// The first letter in lower case, because the reason follows a colon or a semicolon ("No digital signature" → "no digital signature",
+    /// "A downloader …" → "a downloader …"); except a reason that starts with the name of a program ("XMRig crypto miner …", "Babylon — …",
+    /// "Baidu programs …"): the table that made it says so (<see cref="KnownPups.StartsWithProductName"/>), nothing is guessed from the spelling.
+    /// </summary>
     private static string LowerFirst(string text)
-        => text.Length == 0 ? text : char.ToLower(text[0], Format.Ru) + text[1..];
+        => text.Length == 0 || KnownPups.StartsWithProductName(text) ? text : char.ToLower(text[0], T.Culture) + text[1..];
 
     // ===================================================================== firewall
 
@@ -1023,21 +1015,21 @@ public static class NetworkRules
     /// </summary>
     public static string SeverityText(IssueSeverity severity) => severity switch
     {
-        IssueSeverity.Critical => "Критично",
-        IssueSeverity.High => "Важно",
-        IssueSeverity.Medium => "Внимание",
-        IssueSeverity.Low => "Мелочь",
-        _ => "Совет",
+        IssueSeverity.Critical => T._("Критично"),
+        IssueSeverity.High => T._("Важно"),
+        IssueSeverity.Medium => T._("Внимание"),
+        IssueSeverity.Low => T._("Мелочь"),
+        _ => T._("Совет"),
     };
 
     /// <summary>What the badge means (tooltip).</summary>
     public static string SeverityToolTip(IssueSeverity severity) => severity switch
     {
-        IssueSeverity.Critical => "Угрожает безопасности или работе сети — исправьте в первую очередь.",
-        IssueSeverity.High => "Заметно мешает работе сети или защите компьютера.",
-        IssueSeverity.Medium => "Стоит посмотреть и исправить, когда будет минутка.",
-        IssueSeverity.Low => "Мелочь: исправление чуть-чуть улучшит работу сети.",
-        _ => "Полезная рекомендация — на ваше усмотрение.",
+        IssueSeverity.Critical => T._("Угрожает безопасности или работе сети — исправьте в первую очередь."),
+        IssueSeverity.High => T._("Заметно мешает работе сети или защите компьютера."),
+        IssueSeverity.Medium => T._("Стоит посмотреть и исправить, когда будет минутка."),
+        IssueSeverity.Low => T._("Мелочь: исправление чуть-чуть улучшит работу сети."),
+        _ => T._("Полезная рекомендация — на ваше усмотрение."),
     };
 
     /// <summary>Parses "866.7" / "866,7".</summary>

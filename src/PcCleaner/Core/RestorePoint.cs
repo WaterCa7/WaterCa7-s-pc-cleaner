@@ -1,4 +1,5 @@
 using System.Text;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
@@ -42,7 +43,7 @@ public static class RestorePoint
             return RestorePointResult.DisabledInSettings;
         if (!Admin.IsElevated)
         {
-            Log.Warn("Точка восстановления не создана: нужны права администратора");
+            Log.Warn(T._("Точка восстановления не создана: нужны права администратора"));
             return RestorePointResult.NotElevated;
         }
         if (!force && DateTime.Now - _lastCreated < TimeSpan.FromMinutes(30))
@@ -53,23 +54,21 @@ public static class RestorePoint
         {
             var result = await ProcessRunner.PowerShellAsync(script, TimeSpan.FromMinutes(3), ct);
             if (result.StdOut.Contains(ProtectionEnabledMarker))
-                Log.Action($"Включена защита системы для диска {SystemDrive} (нужна для точки восстановления: {description})");
+                Log.Action(T.F("Включена защита системы для диска {0} (нужна для точки восстановления: {1})", SystemDrive, description));
             if (result.StdOut.Contains("RESULT:CREATED"))
             {
                 _lastCreated = DateTime.Now;
-                Log.Action($"Создана точка восстановления: {description}");
+                Log.Action(T.F("Создана точка восстановления: {0}", description));
                 return RestorePointResult.Created;
             }
             if (result.StdOut.Contains("RESULT:SKIPPED"))
             {
-                Log.Info("Windows не создала новую точку восстановления: последняя создана меньше суток назад — она и защищает систему");
+                Log.Info(T._("Windows не создала новую точку восстановления: последняя создана меньше суток назад — она и защищает систему"));
                 return RestorePointResult.RecentPointExists;
             }
             Log.Warn(result.StdOut.Contains(ProtectionOffMarker)
-                ? $"Точка восстановления не создана: защита системы для диска {SystemDrive} выключена. Программа сама её не включает — " +
-                  "это можно сделать в «Настройки» → «Восстановление системы» (кнопка «Создать точку восстановления сейчас» " +
-                  "или «Настроить защиту»)"
-                : $"Точка восстановления не создана: {FirstLine(result.StdErr)}");
+                ? T.F("Точка восстановления не создана: защита системы для диска {0} выключена. Программа сама её не включает — это можно сделать в «Настройки» → «Восстановление системы» (кнопка «Создать точку восстановления сейчас» или «Настроить защиту»)", SystemDrive)
+                : T.F("Точка восстановления не создана: {0}", FirstLine(result.StdErr)));
         }
         catch (OperationCanceledException)
         {
@@ -77,7 +76,7 @@ public static class RestorePoint
         }
         catch (Exception ex)
         {
-            Log.Warn($"Точка восстановления не создана: {ErrorText.For(ex)}");
+            Log.Warn(T.F("Точка восстановления не создана: {0}", ErrorText.For(ex)));
         }
         return RestorePointResult.Failed;
     }
@@ -142,6 +141,6 @@ public static class RestorePoint
     private static string FirstLine(string s)
     {
         var line = s.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
-        return string.IsNullOrEmpty(line) ? "защита системы выключена или неизвестная ошибка" : line;
+        return string.IsNullOrEmpty(line) ? T._("защита системы выключена или неизвестная ошибка") : line;
     }
 }

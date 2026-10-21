@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Updates;
 
@@ -103,7 +104,7 @@ public sealed class UpdateStore
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Log.Warn($"Обновление: не удалось удалить {dir}: {ex.Message}");
+                Log.Warn(T.F("Обновление: не удалось удалить {0}: {1}", dir, ErrorText.For(ex)), ex);
             }
         }
         if (keep is null)

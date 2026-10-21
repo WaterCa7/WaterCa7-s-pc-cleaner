@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Startup"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              xmlns:controls="clr-namespace:PcCleaner.Core.Controls"
              x:Name="Root"
              mc:Ignorable="d"
@@ -195,7 +196,7 @@
         <UniformGrid x:Name="Cards" Rows="1" Columns="4" Margin="-5,0,-5,0">
             <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsEnabledFilter, Mode=OneWay}"
                       Command="{Binding SetStatusFilterCommand}" CommandParameter="Enabled"
-                      ToolTip="Показать только включённые записи (повторный щелчок — показать все)">
+                      ToolTip="{loc:T 'Показать только включённые записи (повторный щелчок — показать все)'}">
                 <DockPanel>
                     <Border Style="{StaticResource StatIcon}" Background="{StaticResource AccentSoftBrush}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE768;" Foreground="{StaticResource SuccessBrush}"
@@ -203,13 +204,13 @@
                     </Border>
                     <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
                         <TextBlock Style="{StaticResource StatNumber}" Text="{Binding EnabledCount}" />
-                        <TextBlock Style="{StaticResource StatCaption}" Text="Включено" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="{loc:T 'Включено'}" />
                     </StackPanel>
                 </DockPanel>
             </CheckBox>
             <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsDisabledFilter, Mode=OneWay}"
                       Command="{Binding SetStatusFilterCommand}" CommandParameter="Disabled"
-                      ToolTip="Показать только отключённые записи (повторный щелчок — показать все)">
+                      ToolTip="{loc:T 'Показать только отключённые записи (повторный щелчок — показать все)'}">
                 <DockPanel>
                     <Border Style="{StaticResource StatIcon}" Background="{StaticResource Surface3Brush}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE769;" Foreground="{StaticResource MutedBrush}"
@@ -217,13 +218,13 @@
                     </Border>
                     <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
                         <TextBlock Style="{StaticResource StatNumber}" Text="{Binding DisabledCount}" />
-                        <TextBlock Style="{StaticResource StatCaption}" Text="Отключено" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="{loc:T 'Отключено'}" />
                     </StackPanel>
                 </DockPanel>
             </CheckBox>
             <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsSuspiciousFilter, Mode=OneWay}"
                       Command="{Binding SetStatusFilterCommand}" CommandParameter="Suspicious"
-                      ToolTip="Показать записи, которые выглядят необычно (повторный щелчок — показать все)">
+                      ToolTip="{loc:T 'Показать записи, которые выглядят необычно (повторный щелчок — показать все)'}">
                 <DockPanel>
                     <Border Style="{StaticResource StatIcon}" Background="{StaticResource WarningSoftBrush}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" Foreground="{StaticResource WarningBrush}"
@@ -231,13 +232,13 @@
                     </Border>
                     <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
                         <TextBlock Style="{StaticResource StatNumber}" Text="{Binding SuspiciousCount}" />
-                        <TextBlock Style="{StaticResource StatCaption}" Text="Подозрительных" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="{loc:T 'Подозрительных'}" />
                     </StackPanel>
                 </DockPanel>
             </CheckBox>
             <CheckBox Style="{StaticResource StatCard}" Margin="5,0" IsChecked="{Binding IsBrokenFilter, Mode=OneWay}"
                       Command="{Binding SetStatusFilterCommand}" CommandParameter="Broken"
-                      ToolTip="Показать записи, файл которых не найден (повторный щелчок — показать все)">
+                      ToolTip="{loc:T 'Показать записи, файл которых не найден (повторный щелчок — показать все)'}">
                 <DockPanel>
                     <Border Style="{StaticResource StatIcon}" Background="{StaticResource DangerSoftBrush}">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE8E5;" Foreground="{StaticResource DangerBrush}"
@@ -245,7 +246,7 @@
                     </Border>
                     <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
                         <TextBlock Style="{StaticResource StatNumber}" Text="{Binding BrokenCount}" />
-                        <TextBlock Style="{StaticResource StatCaption}" Text="Битых записей" />
+                        <TextBlock Style="{StaticResource StatCaption}" Text="{loc:T 'Битых записей'}" />
                     </StackPanel>
                 </DockPanel>
             </CheckBox>
@@ -284,18 +285,18 @@
 
             <Grid Grid.Column="1" Margin="10,0" MinWidth="120" VerticalAlignment="Center">
                 <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="30,0,8,0" Height="34" VerticalContentAlignment="Center"
-                         ToolTip="Поиск по названию, издателю, команде или пути" />
+                         ToolTip="{loc:T 'Поиск по названию, издателю, команде или пути'}" />
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
                            Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
-                <TextBlock Text="Поиск…" Foreground="{StaticResource MutedBrush}" FontSize="12.5" Margin="31,0,0,0"
+                <TextBlock Text="{loc:T 'Поиск…'}" Foreground="{StaticResource MutedBrush}" FontSize="12.5" Margin="31,0,0,0"
                            VerticalAlignment="Center" IsHitTestVisible="False"
                            Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
             </Grid>
 
-            <Button Grid.Column="2" Command="{Binding RefreshCommand}" Padding="10,0" Height="34" VerticalAlignment="Center" ToolTip="Обновить список">
+            <Button Grid.Column="2" Command="{Binding RefreshCommand}" Padding="10,0" Height="34" VerticalAlignment="Center" ToolTip="{loc:T 'Обновить список'}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" />
-                    <TextBlock x:Name="RefreshText" Text="Обновить" Margin="7,0,0,0" />
+                    <TextBlock x:Name="RefreshText" Text="{loc:T 'Обновить'}" Margin="7,0,0,0" />
                 </StackPanel>
             </Button>
         </Grid>
@@ -305,7 +306,7 @@
             <Button DockPanel.Dock="Right" Style="{StaticResource DangerButton}" Padding="12,0" Height="32" VerticalAlignment="Center"
                     Command="{Binding DeleteBrokenCommand}"
                     Visibility="{Binding DeletableBrokenCount, Converter={StaticResource HasValueToVis}}"
-                    ToolTip="Удалить записи, файлы которых больше не существуют (с резервной копией)">
+                    ToolTip="{loc:T 'Удалить записи, файлы которых больше не существуют (с резервной копией)'}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
                     <TextBlock Text="{Binding DeleteBrokenText}" Margin="7,0,0,0" />
@@ -315,11 +316,11 @@
                        VerticalAlignment="Center" Margin="12,0" />
             <WrapPanel VerticalAlignment="Center">
                 <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ShowWindowsTasks}" Margin="0,3,18,3"
-                          ToolTip="Встроенные задания Windows (папка \Microsoft\ с подписью Microsoft). Обычно их трогать не нужно.">
+                          ToolTip="{loc:T 'Встроенные задания Windows (папка \\Microsoft\\ с подписью Microsoft). Обычно их трогать не нужно.'}">
                     <TextBlock Text="{Binding WindowsTasksText}" FontSize="12.5" />
                 </CheckBox>
                 <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ShowMicrosoftServices}" Margin="0,3,18,3"
-                          ToolTip="Системные службы Windows с подписью Microsoft. Программа их только показывает и не меняет.">
+                          ToolTip="{loc:T 'Системные службы Windows с подписью Microsoft. Программа их только показывает и не меняет.'}">
                     <TextBlock Text="{Binding MicrosoftServicesText}" FontSize="12.5" />
                 </CheckBox>
             </WrapPanel>
@@ -330,7 +331,7 @@
                 Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="6,2" Command="{Binding DismissMessageCommand}"
-                        ToolTip="Скрыть" VerticalAlignment="Center">
+                        ToolTip="{loc:T 'Скрыть'}" VerticalAlignment="Center">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="11" />
                 </Button>
                 <TextBlock DockPanel.Dock="Left" Margin="0,0,10,0">
@@ -371,13 +372,13 @@
                                             ClearCommand="{Binding ClearChecksCommand}">
                         <controls:BulkActionBar.ActionsContent>
                             <WrapPanel>
-                                <Button Padding="12,6" Margin="0,2,8,2" Content="Отключить" Command="{Binding DisableCheckedCommand}"
-                                        ToolTip="Отключить автозапуск отмеченных записей. Записи остаются в списке, включить их обратно можно в любой момент. Перед этим программа спросит подтверждение." />
-                                <Button Padding="12,6" Margin="0,2,8,2" Content="Включить" Command="{Binding EnableCheckedCommand}"
-                                        ToolTip="Снова включить автозапуск отмеченных записей. Перед этим программа спросит подтверждение." />
-                                <Button Style="{StaticResource DangerButton}" Padding="12,6" Margin="0,2,8,2" Content="Удалить"
+                                <Button Padding="12,6" Margin="0,2,8,2" Content="{loc:T 'Отключить'}" Command="{Binding DisableCheckedCommand}"
+                                        ToolTip="{loc:T 'Отключить автозапуск отмеченных записей. Записи остаются в списке, включить их обратно можно в любой момент. Перед этим программа спросит подтверждение.'}" />
+                                <Button Padding="12,6" Margin="0,2,8,2" Content="{loc:T 'Включить'}" Command="{Binding EnableCheckedCommand}"
+                                        ToolTip="{loc:T 'Снова включить автозапуск отмеченных записей. Перед этим программа спросит подтверждение.'}" />
+                                <Button Style="{StaticResource DangerButton}" Padding="12,6" Margin="0,2,8,2" Content="{loc:T 'Удалить'}"
                                         Command="{Binding DeleteCheckedCommand}"
-                                        ToolTip="Удалить отмеченные записи из автозагрузки (с резервной копией). Службы не удаляются. Перед этим программа спросит подтверждение." />
+                                        ToolTip="{loc:T 'Удалить отмеченные записи из автозагрузки (с резервной копией). Службы не удаляются. Перед этим программа спросит подтверждение.'}" />
                             </WrapPanel>
                         </controls:BulkActionBar.ActionsContent>
                     </controls:BulkActionBar>
@@ -397,20 +398,20 @@
 
                         <DataGrid.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="{Binding SelectedItem.ToggleActionText, FallbackValue=Отключить или включить}" Command="{Binding ToggleCommand}" />
-                                <MenuItem Header="Открыть расположение файла" Command="{Binding OpenLocationCommand}" />
-                                <MenuItem Header="Скопировать команду" Command="{Binding CopyCommandCommand}" />
+                                <MenuItem Header="{Binding SelectedItem.ToggleActionText, FallbackValue={loc:T 'Отключить или включить'}}" Command="{Binding ToggleCommand}" />
+                                <MenuItem Header="{loc:T 'Открыть расположение файла'}" Command="{Binding OpenLocationCommand}" />
+                                <MenuItem Header="{loc:T 'Скопировать команду'}" Command="{Binding CopyCommandCommand}" />
                                 <Separator />
-                                <MenuItem Header="Найти в интернете" Command="{Binding SearchWebCommand}" />
-                                <MenuItem Header="Проверить на VirusTotal" Command="{Binding VirusTotalCommand}" />
-                                <MenuItem Header="Проверить Защитником Windows" Command="{Binding DefenderCommand}" />
-                                <MenuItem Header="{Binding SelectedItem.TrustActionText, FallbackValue=Доверять}" Command="{Binding TrustCommand}" />
-                                <MenuItem Header="Открыть в планировщике заданий" Command="{Binding OpenTaskSchedulerCommand}"
+                                <MenuItem Header="{loc:T 'Найти в интернете'}" Command="{Binding SearchWebCommand}" />
+                                <MenuItem Header="{loc:T 'Проверить на VirusTotal'}" Command="{Binding VirusTotalCommand}" />
+                                <MenuItem Header="{loc:T 'Проверить Защитником Windows'}" Command="{Binding DefenderCommand}" />
+                                <MenuItem Header="{Binding SelectedItem.TrustActionText, FallbackValue={loc:T 'Доверять'}}" Command="{Binding TrustCommand}" />
+                                <MenuItem Header="{loc:T 'Открыть в планировщике заданий'}" Command="{Binding OpenTaskSchedulerCommand}"
                                           Visibility="{Binding SelectedItem.IsTask, Converter={StaticResource BoolToVis}}" />
-                                <MenuItem Header="Открыть список служб Windows" Command="{Binding OpenServicesCommand}"
+                                <MenuItem Header="{loc:T 'Открыть список служб Windows'}" Command="{Binding OpenServicesCommand}"
                                           Visibility="{Binding SelectedItem.IsService, Converter={StaticResource BoolToVis}}" />
                                 <Separator />
-                                <MenuItem Header="Удалить из автозагрузки…" Command="{Binding DeleteCommand}" />
+                                <MenuItem Header="{loc:T 'Удалить из автозагрузки…'}" Command="{Binding DeleteCommand}" />
                             </ContextMenu>
                         </DataGrid.ContextMenu>
 
@@ -424,7 +425,7 @@
                                     <CheckBox IsThreeState="True" Width="18"
                                               IsChecked="{Binding DataContext.AllVisibleChecked, ElementName=Root, Mode=OneWay}"
                                               Command="{Binding DataContext.ToggleAllVisibleCommand, ElementName=Root}"
-                                              ToolTip="Отметить все записи в списке (с учётом поиска и фильтров) или снять с них отметки" />
+                                              ToolTip="{loc:T 'Отметить все записи в списке (с учётом поиска и фильтров) или снять с них отметки'}" />
                                 </DataGridTemplateColumn.Header>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate DataType="{x:Type local:StartupItem}">
@@ -438,7 +439,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Вкл." Width="66" SortMemberPath="IsEnabled" CanUserResize="False">
+                            <DataGridTemplateColumn Header="{loc:T 'Вкл.'}" Width="66" SortMemberPath="IsEnabled" CanUserResize="False">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding IsEnabled, Mode=OneWay}"
@@ -449,7 +450,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Программа" Width="1.4*" MinWidth="140" SortMemberPath="DisplayName">
+                            <DataGridTemplateColumn Header="{loc:T 'Программа'}" Width="1.4*" MinWidth="140" SortMemberPath="DisplayName">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <DockPanel>
@@ -472,7 +473,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn x:Name="CommandColumn" Header="Команда" Width="1*" MinWidth="110" SortMemberPath="Command">
+                            <DataGridTemplateColumn x:Name="CommandColumn" Header="{loc:T 'Команда'}" Width="1*" MinWidth="110" SortMemberPath="Command">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding Command}" Style="{StaticResource Muted}" FontSize="12" TextWrapping="NoWrap"
@@ -481,7 +482,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn x:Name="SourceColumn" Header="Источник" Width="104" SortMemberPath="SourceShort">
+                            <DataGridTemplateColumn x:Name="SourceColumn" Header="{loc:T 'Источник'}" Width="104" SortMemberPath="SourceShort">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel VerticalAlignment="Center" ToolTip="{Binding SourceText}">
@@ -493,7 +494,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn x:Name="StateColumn" Header="Состояние" Width="122" SortMemberPath="StateSortKey">
+                            <DataGridTemplateColumn x:Name="StateColumn" Header="{loc:T 'Состояние'}" Width="122" SortMemberPath="StateSortKey">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource StateBadge}" ToolTip="{Binding StateTooltip}">
@@ -506,7 +507,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Риск" Width="124" SortMemberPath="RiskScore">
+                            <DataGridTemplateColumn Header="{loc:T 'Риск'}" Width="124" SortMemberPath="RiskScore">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource RiskBadge}" ToolTip="{Binding RiskTooltip}">
@@ -539,9 +540,9 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
                                   Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
                         <StackPanel Margin="16">
-                            <TextBlock Style="{StaticResource H3}" Text="Как навести порядок" />
+                            <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Как навести порядок'}" />
                             <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
-                                       Text="Выберите запись в списке, чтобы узнать, что это за программа и безопасно ли её отключать." />
+                                       Text="{loc:T 'Выберите запись в списке, чтобы узнать, что это за программа и безопасно ли её отключать.'}" />
 
                             <DockPanel Margin="0,14,0,0">
                                 <Border DockPanel.Dock="Left" Style="{StaticResource StatIcon}" Width="30" Height="30" CornerRadius="15"
@@ -550,9 +551,9 @@
                                                HorizontalAlignment="Center" />
                                 </Border>
                                 <StackPanel Margin="10,0,0,0">
-                                    <TextBlock Text="Отключать безопасно" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="{loc:T 'Отключать безопасно'}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
-                                               Text="Отключённая программа просто не стартует вместе с Windows. Её можно открыть вручную или снова включить здесь — как в Диспетчере задач." />
+                                               Text="{loc:T 'Отключённая программа просто не стартует вместе с Windows. Её можно открыть вручную или снова включить здесь — как в Диспетчере задач.'}" />
                                 </StackPanel>
                             </DockPanel>
 
@@ -563,9 +564,9 @@
                                                HorizontalAlignment="Center" />
                                 </Border>
                                 <StackPanel Margin="10,0,0,0">
-                                    <TextBlock Text="Удалять обычно не нужно" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="{loc:T 'Удалять обычно не нужно'}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
-                                               Text="Удаление пригодится для битых записей (файл не найден) и для того, что вы точно не устанавливали. Перед удалением создаётся резервная копия." />
+                                               Text="{loc:T 'Удаление пригодится для битых записей (файл не найден) и для того, что вы точно не устанавливали. Перед удалением создаётся резервная копия.'}" />
                                 </StackPanel>
                             </DockPanel>
 
@@ -576,9 +577,9 @@
                                                HorizontalAlignment="Center" />
                                 </Border>
                                 <StackPanel Margin="10,0,0,0">
-                                    <TextBlock Text="«Подозрительно» — ещё не вирус" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="{loc:T '«Подозрительно» — ещё не вирус'}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
-                                               Text="Так помечены записи, которые выглядят необычно. Проверьте файл на VirusTotal или Защитником Windows — кнопки есть в карточке записи." />
+                                               Text="{loc:T 'Так помечены записи, которые выглядят необычно. Проверьте файл на VirusTotal или Защитником Windows — кнопки есть в карточке записи.'}" />
                                 </StackPanel>
                             </DockPanel>
 
@@ -589,9 +590,9 @@
                                                HorizontalAlignment="Center" />
                                 </Border>
                                 <StackPanel Margin="10,0,0,0">
-                                    <TextBlock Text="Службы — аккуратно" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="{loc:T 'Службы — аккуратно'}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0"
-                                               Text="Службу можно только перевести в ручной режим: она запустится, когда понадобится программе. Службы Windows здесь не меняются." />
+                                               Text="{loc:T 'Службу можно только перевести в ручной режим: она запустится, когда понадобится программе. Службы Windows здесь не меняются.'}" />
                                 </StackPanel>
                             </DockPanel>
 
@@ -600,11 +601,11 @@
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE7EF;" FontSize="14" Foreground="{StaticResource WarningBrush}" />
-                                        <TextBlock Text="Ограниченный режим" FontWeight="SemiBold" Margin="8,0,0,0" />
+                                        <TextBlock Text="{loc:T 'Ограниченный режим'}" FontWeight="SemiBold" Margin="8,0,0,0" />
                                     </StackPanel>
                                     <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,8"
-                                               Text="Без прав администратора часть заданий планировщика может быть скрыта, а записи для всех пользователей и службы можно только просматривать." />
-                                    <Button Style="{StaticResource WrapLinkButton}" Content="Перезапустить от имени администратора"
+                                               Text="{loc:T 'Без прав администратора часть заданий планировщика может быть скрыта, а записи для всех пользователей и службы можно только просматривать.'}" />
+                                    <Button Style="{StaticResource WrapLinkButton}" Content="{loc:T 'Перезапустить от имени администратора'}"
                                             Command="{Binding RestartAsAdminCommand}" HorizontalAlignment="Left" />
                                 </StackPanel>
                             </Border>
@@ -653,7 +654,7 @@
                             <Border Style="{StaticResource InnerCard}" Margin="0,12,0,0" Background="{StaticResource WarningSoftBrush}"
                                     Visibility="{Binding HasReasons, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
-                                    <TextBlock Text="Что настораживает" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}" />
+                                    <TextBlock Text="{loc:T 'Что настораживает'}" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}" />
                                     <ItemsControl ItemsSource="{Binding Reasons}" Margin="0,6,0,0">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -688,123 +689,123 @@
 
                             <!-- Tools -->
                             <UniformGrid Columns="2" Margin="0,10,-6,0">
-                                <Button Style="{StaticResource ToolButton}" ToolTip="Открыть папку с файлом программы"
+                                <Button Style="{StaticResource ToolButton}" ToolTip="{loc:T 'Открыть папку с файлом программы'}"
                                         Command="{Binding DataContext.OpenLocationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <DockPanel HorizontalAlignment="Center">
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" />
-                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Папка" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="{loc:T 'Папка'}" />
                                     </DockPanel>
                                 </Button>
-                                <Button Style="{StaticResource ToolButton}" ToolTip="Найти в интернете, что это за программа"
+                                <Button Style="{StaticResource ToolButton}" ToolTip="{loc:T 'Найти в интернете, что это за программа'}"
                                         Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <DockPanel HorizontalAlignment="Center">
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" />
-                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Поиск" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="{loc:T 'Поиск'}" />
                                     </DockPanel>
                                 </Button>
                                 <Button Style="{StaticResource ToolButton}"
-                                        ToolTip="Открыть отчёт VirusTotal по контрольной сумме файла (сам файл не отправляется)"
+                                        ToolTip="{loc:T 'Открыть отчёт VirusTotal по контрольной сумме файла (сам файл не отправляется)'}"
                                         Command="{Binding DataContext.VirusTotalCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <DockPanel HorizontalAlignment="Center">
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" />
                                         <TextBlock Style="{StaticResource ToolLabel}" Text="VirusTotal" />
                                     </DockPanel>
                                 </Button>
-                                <Button Style="{StaticResource ToolButton}" ToolTip="Проверить файл Защитником Windows"
+                                <Button Style="{StaticResource ToolButton}" ToolTip="{loc:T 'Проверить файл Защитником Windows'}"
                                         Command="{Binding DataContext.DefenderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <DockPanel HorizontalAlignment="Center">
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" />
-                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Защитник" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="{loc:T 'Защитник'}" />
                                     </DockPanel>
                                 </Button>
                                 <Button Style="{StaticResource ToolButton}"
-                                        ToolTip="Доверенные записи не помечаются как подозрительные"
+                                        ToolTip="{loc:T 'Доверенные записи не помечаются как подозрительные'}"
                                         Command="{Binding DataContext.TrustCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <DockPanel HorizontalAlignment="Center">
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE8FB;" FontSize="13" />
                                         <TextBlock Style="{StaticResource ToolLabel}" Text="{Binding TrustActionText}" />
                                     </DockPanel>
                                 </Button>
-                                <Button Style="{StaticResource ToolButton}" ToolTip="Скопировать команду запуска"
+                                <Button Style="{StaticResource ToolButton}" ToolTip="{loc:T 'Скопировать команду запуска'}"
                                         Command="{Binding DataContext.CopyCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <DockPanel HorizontalAlignment="Center">
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE8C8;" FontSize="13" />
-                                        <TextBlock Style="{StaticResource ToolLabel}" Text="Копировать" />
+                                        <TextBlock Style="{StaticResource ToolLabel}" Text="{loc:T 'Копировать'}" />
                                     </DockPanel>
                                 </Button>
                             </UniformGrid>
                             <Button Style="{StaticResource ToolButton}" Margin="0,0,0,6"
-                                    ToolTip="Открыть «Планировщик заданий» (путь задания будет скопирован в буфер обмена)"
+                                    ToolTip="{loc:T 'Открыть «Планировщик заданий» (путь задания будет скопирован в буфер обмена)'}"
                                     Visibility="{Binding IsTask, Converter={StaticResource BoolToVis}}"
                                     Command="{Binding DataContext.OpenTaskSchedulerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                 <DockPanel HorizontalAlignment="Center">
                                     <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE787;" FontSize="13" />
-                                    <TextBlock Style="{StaticResource ToolLabel}" Text="Открыть в планировщике" />
+                                    <TextBlock Style="{StaticResource ToolLabel}" Text="{loc:T 'Открыть в планировщике'}" />
                                 </DockPanel>
                             </Button>
-                            <Button Style="{StaticResource ToolButton}" Margin="0,0,0,6" ToolTip="Открыть список служб Windows"
+                            <Button Style="{StaticResource ToolButton}" Margin="0,0,0,6" ToolTip="{loc:T 'Открыть список служб Windows'}"
                                     Visibility="{Binding IsService, Converter={StaticResource BoolToVis}}"
                                     Command="{Binding DataContext.OpenServicesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                 <DockPanel HorizontalAlignment="Center">
                                     <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE713;" FontSize="13" />
-                                    <TextBlock Style="{StaticResource ToolLabel}" Text="Открыть список служб" />
+                                    <TextBlock Style="{StaticResource ToolLabel}" Text="{loc:T 'Открыть список служб'}" />
                                 </DockPanel>
                             </Button>
 
                             <!-- Facts -->
-                            <TextBlock Style="{StaticResource H3}" Text="Подробности" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Подробности'}" Margin="0,10,0,0" />
 
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="Команда запуска" />
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Команда запуска'}" />
                             <TextBox Style="{StaticResource ValueText}" Text="{Binding Command, Mode=OneWay}" />
 
                             <StackPanel Visibility="{Binding TargetFile, Converter={StaticResource HasValueToVis}}">
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Файл" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Файл'}" />
                                 <TextBox Style="{StaticResource ValueText}" Text="{Binding TargetFile, Mode=OneWay}" />
                             </StackPanel>
 
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="Цифровая подпись" />
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Цифровая подпись'}" />
                             <TextBox Style="{StaticResource ValueText}" Text="{Binding SignatureText, Mode=OneWay}" />
 
                             <StackPanel Visibility="{Binding FileDescription, Converter={StaticResource HasValueToVis}}">
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Описание файла" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Описание файла'}" />
                                 <TextBox Style="{StaticResource ValueText}" Text="{Binding FileDescription, Mode=OneWay}" />
                             </StackPanel>
 
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="Где записано" />
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Где записано'}" />
                             <TextBox Style="{StaticResource ValueText}" Text="{Binding LocationText, Mode=OneWay}" />
 
                             <StackPanel Visibility="{Binding DisabledTimeText, Converter={StaticResource HasValueToVis}}">
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Отключено" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Отключено'}" />
                                 <TextBox Style="{StaticResource ValueText}" Text="{Binding DisabledTimeText, Mode=OneWay}" />
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding TaskAuthor, Converter={StaticResource HasValueToVis}}">
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Автор задания" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Автор задания'}" />
                                 <TextBox Style="{StaticResource ValueText}" Text="{Binding TaskAuthor, Mode=OneWay}" />
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding ServiceStatusText, Converter={StaticResource HasValueToVis}}">
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Служба сейчас" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Служба сейчас'}" />
                                 <TextBox Style="{StaticResource ValueText}" Text="{Binding ServiceStatusText, Mode=OneWay}" />
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding Description, Converter={StaticResource HasValueToVis}}">
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Описание" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Описание'}" />
                                 <TextBox Style="{StaticResource ValueText}" Text="{Binding Description, Mode=OneWay}" />
                             </StackPanel>
 
                             <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,12,0,0"
                                        Visibility="{Binding RequiresAdmin, Converter={StaticResource BoolToVis}}"
-                                       Text="Изменение этой записи затрагивает весь компьютер и может потребовать прав администратора." />
+                                       Text="{loc:T 'Изменение этой записи затрагивает весь компьютер и может потребовать прав администратора.'}" />
 
                             <!-- Destructive action -->
                             <Button Style="{StaticResource DangerButton}" Margin="0,14,0,0" HorizontalAlignment="Stretch"
                                     Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"
-                                    ToolTip="Удалить запись автозапуска (с резервной копией). Сама программа не удаляется.">
+                                    ToolTip="{loc:T 'Удалить запись автозапуска (с резервной копией). Сама программа не удаляется.'}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" Foreground="{StaticResource DangerBrush}" />
-                                    <TextBlock Text="Удалить из автозагрузки…" Margin="8,0,0,0" />
+                                    <TextBlock Text="{loc:T 'Удалить из автозагрузки…'}" Margin="8,0,0,0" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
