@@ -160,7 +160,7 @@
                                    LineHeight="19" />
                         <TextBlock Margin="0,7,0,0" FontSize="12.5" TextWrapping="Wrap"
                                    Visibility="{Binding HasCurrentValue, Converter={StaticResource BoolToVis}}">
-                            <Run Text="{loc:T 'Сейчас: '}" Foreground="{StaticResource MutedBrush}" /><Run Text="{Binding CurrentValue, Mode=OneWay}" FontWeight="SemiBold" />
+                            <Run Text="{loc:T 'Сейчас:'}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " Foreground="{StaticResource MutedBrush}" /><Run Text="{Binding CurrentValue, Mode=OneWay}" FontWeight="SemiBold" />
                         </TextBlock>
 
                         <WrapPanel Margin="0,10,0,0">

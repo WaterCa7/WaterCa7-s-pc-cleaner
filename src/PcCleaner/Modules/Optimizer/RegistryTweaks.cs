@@ -300,7 +300,7 @@ public sealed class RegistryTweakEngine
         var (hive, subKey, _) = Resolve(spec);
         using var root = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64);
         using var key = root.CreateSubKey(subKey, writable: true)
-                        ?? throw ErrorText.Own(new IOException(T.F("не удалось открыть раздел реестра {0}", spec.FullKey)));
+                        ?? throw ErrorText.Own(new IOException(T.F("не удалось открыть {0}", spec.FullKey)));
         key.SetValue(spec.ValueName, value, kind);
     }
 

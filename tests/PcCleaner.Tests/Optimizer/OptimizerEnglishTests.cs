@@ -377,7 +377,7 @@ public sealed class OptimizerEnglishTests
 
             var hint = OptimizerViewModel.AdminHint(elevated: false, adminFixes: true, GoodDesktop(), needsAdmin);
             Assert.NotNull(hint);
-            Assert.EndsWith("Also, without these rights Windows does not show the temperature.", hint);
+            Assert.EndsWith("Also, without these rights Windows does not show temperature.", hint);
             Assert.Null(OptimizerViewModel.AdminHint(elevated: true, adminFixes: true, GoodDesktop(), needsAdmin));
 
             Assert.Equal("A Windows restore point was created before the changes.", OptimizerViewModel.RestorePointText(RestorePointResult.Created));
@@ -420,6 +420,41 @@ public sealed class OptimizerEnglishTests
             Assert.Equal("VG27AQ monitor", monitor.SearchQuery);
             foreach (var card in cards)
                 AssertEnglish(card.Caption, card.Title, card.Primary, card.Badge, card.ToolTipText, string.Join("\n", card.Details));
+        }
+    }
+
+    [Fact]
+    public void TheChannelBadgeOfTheMemoryCard_IsTheSameDecision_InBothLanguages_ForTwoAndFourChannels()
+    {
+        static HardwareSnapshot Layout(params string[] locators)
+            => GoodDesktop() with { RamModules = locators.Select(l => Stick(8, 3200, 3200, l)).ToArray(), RamSlots = locators.Length };
+        var two = Layout("ChannelA-DIMM1", "ChannelB-DIMM1");
+        var four = Layout("ChannelA-DIMM1", "ChannelB-DIMM1", "ChannelC-DIMM1", "ChannelD-DIMM1");
+
+        static (string? Badge, string Title) Memory(HardwareSnapshot hw)
+        {
+            var settings = GoodSettings();
+            var items = Evaluate(hw, settings);
+            var fine = Assert.Single(items, r => r.Id == "Ok:RamChannels");
+            return (HardwareCardBuilder.Build(hw, settings, items, Now)[2].Badge, fine.Title);
+        }
+
+        // Russian: the badge follows the number of channels, and so does the title of the "fine" item the badge used to be read from.
+        var (twoRu, twoTitleRu) = Memory(two);
+        var (fourRu, fourTitleRu) = Memory(four);
+        Assert.Equal("Двухканальный режим", twoRu);
+        Assert.Equal("Многоканальный режим", fourRu);
+        Assert.Contains("двухканальном", twoTitleRu);
+        Assert.Contains("многоканальном", fourTitleRu);
+
+        using (TestLanguage.English())
+        {
+            var (twoEn, twoTitleEn) = Memory(two);
+            var (fourEn, fourTitleEn) = Memory(four);
+            Assert.Equal("Dual-channel mode", twoEn);
+            Assert.Equal("Multi-channel mode", fourEn);
+            Assert.Equal("The memory runs in dual-channel mode", twoTitleEn);
+            Assert.Equal("The memory runs in multi-channel mode", fourTitleEn);
         }
     }
 
