@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Processes;
@@ -41,7 +42,7 @@ internal sealed class NativeProcessSource : IProcessSource
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                Log.Warn($"Процессы: NtQuerySystemInformation недоступен ({ex.Message}), используется запасной способ");
+                Log.Warn(T.F("Процессы: NtQuerySystemInformation недоступен ({0}), используется запасной способ", ex.Message));
             }
             _nativeFailed = true;
         }
@@ -140,7 +141,7 @@ internal sealed class NativeProcessSource : IProcessSource
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: не удалось получить список процессов: {ex.Message}");
+            Log.Warn(T.F("Процессы: не удалось получить список процессов: {0}", ex.Message));
             return list;
         }
         foreach (var p in processes)

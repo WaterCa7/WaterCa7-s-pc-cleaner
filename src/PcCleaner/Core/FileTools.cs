@@ -5,6 +5,15 @@ using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core;
 
+/// <summary>
+/// The result of a Defender scan of one file: the text for the user (in the language of the UI) and, apart from the words,
+/// whether Defender reported a threat — callers decide from <see cref="ThreatFound"/>, never from the text.
+/// </summary>
+public sealed record DefenderScanResult(string Text, bool ThreatFound)
+{
+    public override string ToString() => Text;
+}
+
 public static class FileTools
 {
     public static async Task<string?> Sha256Async(string path, CancellationToken ct = default)
@@ -39,22 +48,25 @@ public static class FileTools
     public static void SearchWeb(string query)
         => ProcessRunner.ShellOpen("https://www.google.com/search?q=" + Uri.EscapeDataString(query));
 
-    /// <summary>Scans one file with Microsoft Defender (MpCmdRun). Returns a human-readable result.</summary>
-    public static async Task<string> ScanWithDefenderAsync(string path, CancellationToken ct = default)
+    /// <summary>Scans one file with Microsoft Defender (MpCmdRun). Returns a human-readable result and whether a threat was found.</summary>
+    public static async Task<DefenderScanResult> ScanWithDefenderAsync(string path, CancellationToken ct = default)
     {
         var mpCmd = FindMpCmdRun();
         if (mpCmd is null)
-            return T._("Microsoft Defender не найден на этом компьютере.");
+            return new DefenderScanResult(T._("Microsoft Defender не найден на этом компьютере."), ThreatFound: false);
         var result = await ProcessRunner.RunAsync(mpCmd, $"-Scan -ScanType 3 -File \"{path}\"",
             TimeSpan.FromMinutes(10), ct);
         Log.Info(T.F("Проверка Defender: {0} -> код {1}", path, result.ExitCode));
-        return result.ExitCode switch
-        {
-            0 => T._("Угроз не найдено."),
-            2 => T._("Defender обнаружил угрозу! Откройте «Безопасность Windows» → «Журнал защиты»."),
-            _ => T.F("Проверка завершилась с кодом {0}. {1}", result.ExitCode, result.StdOut.Trim()),
-        };
+        return DescribeDefenderScan(result.ExitCode, result.StdOut);
     }
+
+    /// <summary>MpCmdRun's exit code (0: clean, 2: threat found) as text for the user plus the language-independent verdict.</summary>
+    internal static DefenderScanResult DescribeDefenderScan(int exitCode, string output) => exitCode switch
+    {
+        0 => new DefenderScanResult(T._("Угроз не найдено."), ThreatFound: false),
+        2 => new DefenderScanResult(T._("Defender обнаружил угрозу! Откройте «Безопасность Windows» → «Журнал защиты»."), ThreatFound: true),
+        _ => new DefenderScanResult(T.F("Проверка завершилась с кодом {0}. {1}", exitCode, output.Trim()), ThreatFound: false),
+    };
 
     public static string? FindMpCmdRun()
     {

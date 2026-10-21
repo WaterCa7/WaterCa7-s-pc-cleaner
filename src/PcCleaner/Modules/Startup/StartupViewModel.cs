@@ -749,16 +749,17 @@ public sealed partial class StartupViewModel : PageViewModel
         await RunBusyAsync($"Защитник Windows проверяет {Path.GetFileName(target)}…", async ct =>
         {
             string message;
+            var threat = false; // Defender's own verdict, not a word of the text
             try
             {
-                message = await FileTools.ScanWithDefenderAsync(target, ct);
+                var scan = await FileTools.ScanWithDefenderAsync(target, ct);
+                (message, threat) = (scan.Text, scan.ThreatFound);
             }
             catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
             {
                 Log.Warn($"Автозагрузка: не удалось запустить проверку Защитником: {ex.Message}");
                 message = $"Не удалось запустить проверку: {ErrorText.For(ex)}.";
             }
-            var threat = message.Contains("обнаружил", StringComparison.OrdinalIgnoreCase);
             ShowMessage($"Защитник Windows: {message}", threat);
             Dialogs.Info("Защитник Windows", $"{item.DisplayName}\n{target}\n\n{message}");
         });

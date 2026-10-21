@@ -1,4 +1,5 @@
 using System.Text;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Processes;
@@ -34,11 +35,11 @@ public sealed partial class ProcessesViewModel
         if (plan.Victims.Count == 0)
         {
             if (plan.Skipped.Count > 0)
-                ShowInfo("Процесс защищён", "Отмеченные процессы теперь защищены, завершать их нельзя:\n" +
-                                            BulkText.BulletList(plan.Skipped.Select(ProcessLine)));
+                ShowInfo(T._("Процесс защищён"), T.F("Отмеченные процессы теперь защищены, завершать их нельзя:\n{0}",
+                    BulkText.BulletList(plan.Skipped.Select(ProcessLine))));
             return;
         }
-        var title = plan.Victims.Count > 1 ? "Завершить отмеченные процессы?" : "Завершить отмеченный процесс?";
+        var title = plan.Victims.Count > 1 ? T._("Завершить отмеченные процессы?") : T._("Завершить отмеченный процесс?");
         if (!Confirm(title, BuildCheckedKillMessage(plan)))
             return;
 
@@ -51,11 +52,11 @@ public sealed partial class ProcessesViewModel
 
         // BuildKillReport names the item only when there was a single process, which is then Victims[0].
         if (report.Done == 0 && report.AccessDenied && !IsElevated())
-            RequireElevation("Завершение отмеченных процессов");
+            RequireElevation(T._("Завершение отмеченных процессов"));
         else if (report.Failed.Count > 0)
-            Dialogs.Error("Не всё получилось", BuildKillReport(plan.Victims[0], report));
+            Dialogs.Error(T._("Не всё получилось"), BuildKillReport(plan.Victims[0], report));
         else
-            ShowInfo("Готово", BuildKillReport(plan.Victims[0], report));
+            ShowInfo(T._("Готово"), BuildKillReport(plan.Victims[0], report));
 
         await SafeRefreshAsync();
     }
@@ -122,7 +123,7 @@ public sealed partial class ProcessesViewModel
             return $"{name}, PID {rows[0].Pid}";
         var cut = !allPids && rows.Count > 15;
         var pids = string.Join(", ", rows.Take(cut ? 15 : rows.Count).Select(r => r.Pid)) + (cut ? ", …" : "");
-        return $"{name} — {Format.Count(rows.Count, "процесс", "процесса", "процессов")} (PID {pids})";
+        return T.F("{0} — {1} (PID {2})", name, Format.Count(rows.Count, "процесс", "процесса", "процессов"), pids);
     }
 
     private static string ProcessLine(ProcessRow row) => CheckedLine(row, new List<ProcessRow> { row }, allPids: true);
@@ -131,26 +132,26 @@ public sealed partial class ProcessesViewModel
     {
         var sb = new StringBuilder();
         var total = plan.Victims.Count == 1
-            ? "Будет принудительно завершён 1 процесс"
-            : $"Будут принудительно завершены {Format.Count(plan.Victims.Count, "процесс", "процесса", "процессов")}";
+            ? T._("Будет принудительно завершён 1 процесс")
+            : T.F("Будут принудительно завершены {0}", Format.Count(plan.Victims.Count, "процесс", "процесса", "процессов"));
         sb.AppendLine(BulkText.TargetList(total, plan.HiddenLines, plan.VisibleLines));
         if (plan.Skipped.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine("Эти отмеченные процессы теперь защищены и затронуты не будут:");
+            sb.AppendLine(T._("Эти отмеченные процессы теперь защищены и затронуты не будут:"));
             sb.AppendLine(BulkText.BulletList(plan.Skipped.Select(ProcessLine)));
         }
         sb.AppendLine();
-        sb.Append("Несохранённые данные в этих программах будут потеряны. Если программа отвечает, лучше закройте её обычным способом.");
+        sb.Append(T._("Несохранённые данные в этих программах будут потеряны. Если программа отвечает, лучше закройте её обычным способом."));
         if (plan.Victims.Any(v => v.HasKillWarning))
         {
             sb.AppendLine();
             sb.AppendLine();
-            sb.Append("Внимание: ").Append(ProcessGuard.ExplorerText);
+            sb.Append(T.F("Внимание: {0}", ProcessGuard.ExplorerText));
         }
         sb.AppendLine();
         sb.AppendLine();
-        sb.Append("Продолжить?");
+        sb.Append(T._("Продолжить?"));
         return sb.ToString();
     }
 }

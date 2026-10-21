@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using PcCleaner.Core.Localization;
 using PcCleaner.Core;
 
 namespace PcCleaner.Modules.Processes;
@@ -94,13 +95,13 @@ internal enum KillVerdict
 /// <summary>Never lets the user terminate processes Windows cannot live without (or the cleaner itself).</summary>
 internal static class ProcessGuard
 {
-    public const string CriticalText =
-        "Это важный системный процесс Windows. Завершать его нельзя: компьютер может зависнуть, перезагрузиться или остаться без защиты.";
+    public static string CriticalText =>
+        T._("Это важный системный процесс Windows. Завершать его нельзя: компьютер может зависнуть, перезагрузиться или остаться без защиты.");
 
-    public const string SelfText = "Это сам WaterCa7s PC Cleaner. Чтобы его закрыть, просто закройте окно программы.";
+    public static string SelfText => T._("Это сам WaterCa7s PC Cleaner. Чтобы его закрыть, просто закройте окно программы.");
 
-    public const string ExplorerText =
-        "Это Проводник Windows: рабочий стол и панель задач. Если его завершить, они на несколько секунд пропадут и запустятся снова, а открытые окна папок закроются.";
+    public static string ExplorerText =>
+        T._("Это Проводник Windows: рабочий стол и панель задач. Если его завершить, они на несколько секунд пропадут и запустятся снова, а открытые окна папок закроются.");
 
     private static readonly HashSet<string> CriticalNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -189,51 +190,51 @@ internal static class ProcessGuard
     }
 }
 
-/// <summary>Friendly Russian descriptions for Windows processes whose file can't be read without admin rights.</summary>
+/// <summary>Friendly descriptions (in the language of the UI) for Windows processes whose file can't be read without admin rights.</summary>
 internal static class KnownWindowsProcesses
 {
-    private static readonly Dictionary<string, string> Descriptions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, Func<string>> Descriptions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["System"] = "Ядро Windows",
-        ["Registry"] = "Реестр Windows",
-        ["Memory Compression"] = "Сжатие памяти Windows",
-        ["Secure System"] = "Защищённое ядро Windows",
-        ["smss"] = "Диспетчер сеансов Windows",
-        ["csrss"] = "Процесс исполнения клиент-сервер",
-        ["wininit"] = "Запуск Windows",
-        ["winlogon"] = "Вход в Windows",
-        ["services"] = "Диспетчер служб Windows",
-        ["lsass"] = "Локальная система безопасности (LSA)",
-        ["LsaIso"] = "Изолированная LSA (Credential Guard)",
-        ["svchost"] = "Хост-процесс для служб Windows",
-        ["dwm"] = "Диспетчер окон рабочего стола",
-        ["fontdrvhost"] = "Драйвер шрифтов Windows",
-        ["conhost"] = "Узел окна консоли",
-        ["MsMpEng"] = "Антивирус Microsoft Defender",
-        ["NisSrv"] = "Проверка сети Microsoft Defender",
-        ["MpDefenderCoreService"] = "Ядро Microsoft Defender",
-        ["SecurityHealthService"] = "Служба «Безопасность Windows»",
-        ["MsSense"] = "Microsoft Defender для конечных точек",
-        ["SearchIndexer"] = "Индексатор поиска Windows",
-        ["SearchProtocolHost"] = "Узел протокола поиска Windows",
-        ["SearchFilterHost"] = "Узел фильтров поиска Windows",
-        ["spoolsv"] = "Диспетчер печати",
-        ["WmiPrvSE"] = "Узел поставщика WMI",
-        ["WUDFHost"] = "Узел драйверов пользовательского режима",
-        ["dasHost"] = "Узел связи с устройствами",
-        ["vmmem"] = "Память виртуальных машин (WSL, Hyper-V)",
-        ["vmwp"] = "Рабочий процесс виртуальной машины",
-        ["vmcompute"] = "Служба вычислений Hyper-V",
-        ["AggregatorHost"] = "Узел сбора данных Windows",
-        ["audiodg"] = "Изоляция графов аудиоустройств Windows",
-        ["taskhostw"] = "Хост-процесс для задач Windows",
-        ["RuntimeBroker"] = "Брокер среды выполнения",
-        ["sihost"] = "Узел инфраструктуры оболочки",
-        ["ctfmon"] = "Загрузчик ввода текста (CTF)",
-        ["smartscreen"] = "Фильтр SmartScreen",
-        ["MoUsoCoreWorker"] = "Центр обновления Windows",
-        ["TrustedInstaller"] = "Установщик модулей Windows",
-        ["TiWorker"] = "Рабочий процесс установщика модулей Windows",
+        ["System"] = () => T._("Ядро Windows"),
+        ["Registry"] = () => T._("Реестр Windows"),
+        ["Memory Compression"] = () => T._("Сжатие памяти Windows"),
+        ["Secure System"] = () => T._("Защищённое ядро Windows"),
+        ["smss"] = () => T._("Диспетчер сеансов Windows"),
+        ["csrss"] = () => T._("Процесс исполнения клиент-сервер"),
+        ["wininit"] = () => T._("Запуск Windows"),
+        ["winlogon"] = () => T._("Вход в Windows"),
+        ["services"] = () => T._("Диспетчер служб Windows"),
+        ["lsass"] = () => T._("Локальная система безопасности (LSA)"),
+        ["LsaIso"] = () => T._("Изолированная LSA (Credential Guard)"),
+        ["svchost"] = () => T._("Хост-процесс для служб Windows"),
+        ["dwm"] = () => T._("Диспетчер окон рабочего стола"),
+        ["fontdrvhost"] = () => T._("Драйвер шрифтов Windows"),
+        ["conhost"] = () => T._("Узел окна консоли"),
+        ["MsMpEng"] = () => T._("Антивирус Microsoft Defender"),
+        ["NisSrv"] = () => T._("Проверка сети Microsoft Defender"),
+        ["MpDefenderCoreService"] = () => T._("Ядро Microsoft Defender"),
+        ["SecurityHealthService"] = () => T._("Служба «Безопасность Windows»"),
+        ["MsSense"] = () => T._("Microsoft Defender для конечных точек"),
+        ["SearchIndexer"] = () => T._("Индексатор поиска Windows"),
+        ["SearchProtocolHost"] = () => T._("Узел протокола поиска Windows"),
+        ["SearchFilterHost"] = () => T._("Узел фильтров поиска Windows"),
+        ["spoolsv"] = () => T._("Диспетчер печати"),
+        ["WmiPrvSE"] = () => T._("Узел поставщика WMI"),
+        ["WUDFHost"] = () => T._("Узел драйверов пользовательского режима"),
+        ["dasHost"] = () => T._("Узел связи с устройствами"),
+        ["vmmem"] = () => T._("Память виртуальных машин (WSL, Hyper-V)"),
+        ["vmwp"] = () => T._("Рабочий процесс виртуальной машины"),
+        ["vmcompute"] = () => T._("Служба вычислений Hyper-V"),
+        ["AggregatorHost"] = () => T._("Узел сбора данных Windows"),
+        ["audiodg"] = () => T._("Изоляция графов аудиоустройств Windows"),
+        ["taskhostw"] = () => T._("Хост-процесс для задач Windows"),
+        ["RuntimeBroker"] = () => T._("Брокер среды выполнения"),
+        ["sihost"] = () => T._("Узел инфраструктуры оболочки"),
+        ["ctfmon"] = () => T._("Загрузчик ввода текста (CTF)"),
+        ["smartscreen"] = () => T._("Фильтр SmartScreen"),
+        ["MoUsoCoreWorker"] = () => T._("Центр обновления Windows"),
+        ["TrustedInstaller"] = () => T._("Установщик модулей Windows"),
+        ["TiWorker"] = () => T._("Рабочий процесс установщика модулей Windows"),
     };
 
     /// <summary>Pseudo processes that never have a file.</summary>
@@ -242,7 +243,7 @@ internal static class KnownWindowsProcesses
         "System", "Registry", "Memory Compression", "Secure System", "Idle",
     };
 
-    public static string? Describe(string name) => Descriptions.TryGetValue(ProcessGuard.BaseName(name), out var d) ? d : null;
+    public static string? Describe(string name) => Descriptions.TryGetValue(ProcessGuard.BaseName(name), out var d) ? d() : null;
 
     public static bool IsKnown(string name) => Descriptions.ContainsKey(ProcessGuard.BaseName(name));
 
@@ -599,7 +600,7 @@ public enum ProcessOwnRole
 /// </summary>
 internal static class OwnProcesses
 {
-    public const string HelperLabel = "служебный процесс WaterCa7s PC Cleaner";
+    public static string HelperLabel => T._("служебный процесс WaterCa7s PC Cleaner");
 
     /// <summary>
     /// Console tools the cleaner runs in the background for its checks and fixes (ProcessRunner, RegistryBackup,
@@ -701,7 +702,7 @@ internal static class MinerHeuristic
 
     public const int Score = 35;
 
-    public const string Reason = "Очень высокая загрузка процессора — возможен скрытый майнер";
+    public static string Reason => T._("Очень высокая загрузка процессора — возможен скрытый майнер");
 
     public static bool IsCandidate(string? path, SignatureInfo? signature)
     {
@@ -718,9 +719,14 @@ internal static class MinerHeuristic
     /// <summary>Adds the miner reason when the load was sustained and the file is a candidate.</summary>
     public static SuspicionResult Apply(SuspicionResult result, bool sustainedHighCpu, string? path, SignatureInfo? signature)
     {
-        if (!sustainedHighCpu || !IsCandidate(path, signature) || result.Reasons.Contains(Reason))
+        if (!sustainedHighCpu || !IsCandidate(path, signature) || result.Flags.HasFlag(SuspicionFlags.SustainedCpu))
             return result;
-        return result with { Score = Math.Clamp(result.Score + Score, 0, 100), Reasons = result.Reasons.Append(Reason).ToList() };
+        return result with
+        {
+            Score = Math.Clamp(result.Score + Score, 0, 100),
+            Reasons = result.Reasons.Append(Reason).ToList(),
+            Flags = result.Flags | SuspicionFlags.SustainedCpu,
+        };
     }
 }
 
@@ -769,23 +775,23 @@ internal static class QuarantineRules
         bool trusted, string? selfPath = null, bool isOwnHelper = false)
     {
         if (path is null)
-            return "Нет доступа к файлу процесса.";
+            return T._("Нет доступа к файлу процесса.");
         if (Suspicion.IsUnder(path, WindowsDir))
-            return "Файлы из папки Windows нельзя помещать в карантин.";
+            return T._("Файлы из папки Windows нельзя помещать в карантин.");
         if (verdict == KillVerdict.Blocked)
-            return "Это защищённый процесс — его нельзя трогать.";
+            return T._("Это защищённый процесс — его нельзя трогать.");
         if (string.Equals(path, selfPath ?? Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
             return ProcessGuard.SelfText;
         if (isOwnHelper)
-            return "Это служебный процесс WaterCa7s PC Cleaner — он завершится сам, когда проверка закончится.";
+            return T._("Это служебный процесс WaterCa7s PC Cleaner — он завершится сам, когда проверка закончится.");
         if (signature is null)
-            return "Подождите: ещё проверяется цифровая подпись.";
+            return T._("Подождите: ещё проверяется цифровая подпись.");
         if (signature.IsMicrosoft)
-            return "Файл подписан Microsoft — это часть Windows или программа Microsoft.";
+            return T._("Файл подписан Microsoft — это часть Windows или программа Microsoft.");
         if (trusted)
-            return "Вы отметили эту программу как доверенную.";
+            return T._("Вы отметили эту программу как доверенную.");
         if (suspicion is null || suspicion.Level < SuspicionLevel.Medium)
-            return "Карантин доступен только для подозрительных файлов (оценка «Подозрительно» или «Высокий риск»).";
+            return T._("Карантин доступен только для подозрительных файлов (оценка «Подозрительно» или «Высокий риск»).");
         return null;
     }
 }

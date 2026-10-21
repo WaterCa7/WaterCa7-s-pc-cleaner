@@ -208,3 +208,27 @@ How the code treats them:
   `ErrorText.For/Sentence` then shows it as it is. An unmarked exception of an unknown type gets the general phrase in English.
 - A reason of suspicion is text for the user; what the program decides from it (score, level, unwanted program already found,
   kind of install folder) comes from `SuspicionFlags` / `RiskyLocation`, never from the words.
+
+## Processes
+
+| Русский | English |
+|---|---|
+| Завершить / Завершить дерево процессов / Завершить отмеченные | End / End process tree / End checked |
+| принудительно завершить | force-end |
+| Оценка (the column of the verdict on a process) | Rating |
+| Высокий риск / Подозрительно / Внимание / Доверенный | High risk / Suspicious / Warning / Trusted |
+| Служебный (process of the cleaner itself) | Helper |
+| Доверять / Не доверять | Trust / Stop trusting |
+| Открыть расположение файла | Open file location |
+| Найти в интернете | Search the web |
+| Проверить Защитником Windows | Check with Microsoft Defender |
+| Частный рабочий набор | Private working set |
+| родительский процесс | parent process |
+| копия (of a program) | copy / copies |
+
+Notes for the other pages:
+
+- The Russian «Готово» is both the status bar text and the title of a dialog after an action; one key has one English text, so it is “Ready”
+  everywhere (a test pins the status bar).
+- A decision the program makes after a Defender scan comes from `DefenderScanResult.ThreatFound` (`FileTools.ScanWithDefenderAsync`), never from the
+  words of the text; a decision about a process or an entry comes from its flags (`SuspicionFlags`, `SustainedCpu` for the miner heuristic).

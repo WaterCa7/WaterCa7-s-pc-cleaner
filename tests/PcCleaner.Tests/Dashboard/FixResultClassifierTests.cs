@@ -147,6 +147,7 @@ public class FixResultClassifierTests
         "Перезапустить как администратор", // a button label: "Restart as administrator" is the matcher of «от имени администратора»
         "Программы: не удалось запустить PowerShell: {0}", // log: contains "Could not start PowerShell: {0}."
         "Программы: не удалось прочитать название приложения: {0}", // log
+        "Процессы: не удалось проверить подпись {0}: {1}", // log: contains "Could not check {0}"
     };
 
     [Fact]

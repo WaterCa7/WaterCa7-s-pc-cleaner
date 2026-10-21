@@ -190,7 +190,7 @@ public sealed class ProcessesService : IHealthContributor
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: не удалось получить командные строки через WMI: {ex.Message}");
+            Log.Warn(T.F("Процессы: не удалось получить командные строки через WMI: {0}", ex.Message));
             processRows = Array.Empty<WmiProcessRow>();
             serviceRows = Array.Empty<WmiServiceRow>();
         }
@@ -284,7 +284,7 @@ public sealed class ProcessesService : IHealthContributor
         }
         catch (Exception ex)
         {
-            Log.Warn($"Процессы: не удалось проверить подпись {path}: {ex.Message}");
+            Log.Warn(T.F("Процессы: не удалось проверить подпись {0}: {1}", path, ex.Message));
             return new SignatureInfo(SignatureStatus.Error, null);
         }
         finally
@@ -350,7 +350,7 @@ public sealed class ProcessesService : IHealthContributor
             var (verdict, _) = ProcessGuard.Check(t.Pid, t.Name, t.Path);
             if (verdict == KillVerdict.Blocked)
             {
-                report.Failed.Add((t, "защищённый системный процесс"));
+                report.Failed.Add((t, T._("защищённый системный процесс")));
                 continue;
             }
 
@@ -372,7 +372,7 @@ public sealed class ProcessesService : IHealthContributor
                     // the kill itself succeeded; waiting is best effort
                 }
                 report.Killed.Add(t);
-                Log.Action($"Завершён процесс {t.Name} (PID {t.Pid})");
+                Log.Action(T.F("Завершён процесс {0} (PID {1})", t.Name, t.Pid));
             }
             catch (ArgumentException)
             {
@@ -385,13 +385,13 @@ public sealed class ProcessesService : IHealthContributor
             catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorAccessDenied)
             {
                 report.AccessDenied = true;
-                report.Failed.Add((t, "нет доступа"));
-                Log.Warn($"Не удалось завершить {t.Name} (PID {t.Pid}): нет доступа");
+                report.Failed.Add((t, T._("нет доступа")));
+                Log.Warn(T.F("Не удалось завершить {0} (PID {1}): нет доступа", t.Name, t.Pid));
             }
             catch (Exception ex) when (ex is Win32Exception or NotSupportedException or UnauthorizedAccessException)
             {
                 report.Failed.Add((t, ErrorText.For(ex)));
-                Log.Warn($"Не удалось завершить {t.Name} (PID {t.Pid}): {ex.Message}");
+                Log.Warn(T.F("Не удалось завершить {0} (PID {1}): {2}", t.Name, t.Pid, ex.Message));
             }
         }
         return report;
@@ -428,18 +428,18 @@ public sealed class ProcessesService : IHealthContributor
         var empty = new KillReport();
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         if (Suspicion.IsUnder(path, windows))
-            return new QuarantineOutcome(false, "Файлы из папки Windows нельзя помещать в карантин.", empty);
+            return new QuarantineOutcome(false, T._("Файлы из папки Windows нельзя помещать в карантин."), empty);
         var signature = await GetSignatureAsync(path).WaitAsync(ct).ConfigureAwait(false);
         if (signature.IsMicrosoft)
-            return new QuarantineOutcome(false, "Файл подписан Microsoft — он не будет помещён в карантин.", empty);
+            return new QuarantineOutcome(false, T._("Файл подписан Microsoft — он не будет помещён в карантин."), empty);
 
         // Check the rights first: never terminate the program and then fail to move its file (e.g. in Program Files).
         if (!await Task.Run(() => _canMoveFile(path), ct).ConfigureAwait(false))
         {
-            Log.Warn($"Карантин: нет прав на перемещение {path}");
+            Log.Warn(T.F("Карантин: нет прав на перемещение {0}", path));
             return Admin.IsElevated
-                ? new QuarantineOutcome(false, "Windows не разрешает перемещать этот файл. Ничего не изменено: процесс не завершён, файл на месте.", empty)
-                : new QuarantineOutcome(false, "Чтобы переместить этот файл, нужны права администратора. Ничего не изменено: процесс не завершён, файл на месте.",
+                ? new QuarantineOutcome(false, T._("Windows не разрешает перемещать этот файл. Ничего не изменено: процесс не завершён, файл на месте."), empty)
+                : new QuarantineOutcome(false, T._("Чтобы переместить этот файл, нужны права администратора. Ничего не изменено: процесс не завершён, файл на месте."),
                     empty, NeedsElevation: true);
         }
 
@@ -453,13 +453,13 @@ public sealed class ProcessesService : IHealthContributor
             try
             {
                 if (!File.Exists(path))
-                    return new QuarantineOutcome(false, "Файл уже удалён или перемещён.", report);
+                    return new QuarantineOutcome(false, T._("Файл уже удалён или перемещён."), report);
                 var item = _addToQuarantine(path, reason);
-                return new QuarantineOutcome(true, $"Файл перемещён в карантин: {item.StoredPath}", report);
+                return new QuarantineOutcome(true, T.F("Файл перемещён в карантин: {0}", item.StoredPath), report);
             }
             catch (FileNotFoundException)
             {
-                return new QuarantineOutcome(false, "Файл уже удалён или перемещён.", report);
+                return new QuarantineOutcome(false, T._("Файл уже удалён или перемещён."), report);
             }
             catch (IOException ex)
             {
@@ -470,7 +470,7 @@ public sealed class ProcessesService : IHealthContributor
                 }
                 catch (OperationCanceledException)
                 {
-                    Log.Warn($"Карантин отменён после завершения процессов: файл остался на месте ({path})");
+                    Log.Warn(T.F("Карантин отменён после завершения процессов: файл остался на месте ({0})", path));
                     return new QuarantineOutcome(false, CancelledAfterKillMessage(path, report), report, Cancelled: true);
                 }
             }
@@ -478,7 +478,7 @@ public sealed class ProcessesService : IHealthContributor
             {
                 // Quarantine.Add refuses to move the file when its list (index.json) cannot be read, and moves the file
                 // back when the list cannot be written: retrying would not help.
-                Log.Warn($"Не удалось поместить в карантин {path}: {ErrorText.For(ex)}");
+                Log.Warn(T.F("Не удалось поместить в карантин {0}: {1}", path, ErrorText.For(ex)));
                 return new QuarantineOutcome(false, QuarantineRefusedMessage(path, ex, report.Killed.Count > 0), report);
             }
             catch (UnauthorizedAccessException ex)
@@ -487,7 +487,7 @@ public sealed class ProcessesService : IHealthContributor
                 break;
             }
         }
-        Log.Warn($"Не удалось поместить в карантин {path}: {ErrorText.For(last)}");
+        Log.Warn(T.F("Не удалось поместить в карантин {0}: {1}", path, ErrorText.For(last)));
         return new QuarantineOutcome(false, MoveFailedMessage(path, last, Admin.IsElevated, report.Killed.Count > 0), report);
     }
 
@@ -498,10 +498,9 @@ public sealed class ProcessesService : IHealthContributor
     /// </summary>
     internal static string KillFailedMessage(KillReport report)
     {
-        var why = report.AccessDenied
-            ? "Windows не дала завершить процесс — нужны права администратора."
-            : $"Не удалось завершить процесс: {report.Failed[0].Error.Trim().TrimEnd('.')}.";
-        return why + " Файл оставлен на месте.";
+        return report.AccessDenied
+            ? T._("Windows не дала завершить процесс — нужны права администратора. Файл оставлен на месте.")
+            : T.F("Не удалось завершить процесс: {0}. Файл оставлен на месте.", report.Failed[0].Error.Trim().TrimEnd('.'));
     }
 
     /// <summary>
@@ -511,10 +510,12 @@ public sealed class ProcessesService : IHealthContributor
     internal static string MoveFailedMessage(string path, Exception? error, bool elevated, bool killed)
     {
         var hint = error is UnauthorizedAccessException && !elevated
-            ? "\n\nПерезапустите программу от имени администратора и повторите."
+            ? "\n\n" + T._("Перезапустите программу от имени администратора и повторите.")
             : "";
-        var what = killed ? "Программа завершена, но её файл не удалось" : "Файл не удалось";
-        return $"{what} переместить в карантин: {ErrorText.For(error)}. Файл остался на месте:\n{path}{hint}";
+        var message = killed
+            ? T.F("Программа завершена, но её файл не удалось переместить в карантин: {0}. Файл остался на месте:\n{1}", ErrorText.For(error), path)
+            : T.F("Файл не удалось переместить в карантин: {0}. Файл остался на месте:\n{1}", ErrorText.For(error), path);
+        return message + hint;
     }
 
     /// <summary>
@@ -524,20 +525,18 @@ public sealed class ProcessesService : IHealthContributor
     /// </summary>
     internal static string QuarantineRefusedMessage(string path, InvalidOperationException error, bool killed)
     {
-        var what = killed ? "Программа завершена, но её файл не помещён" : "Файл не помещён";
+        var what = killed ? T._("Программа завершена, но её файл не помещён в карантин:") : T._("Файл не помещён в карантин:");
         if (error.InnerException is null)
         {
             // Any other refusal (e.g. "Системные файлы Windows нельзя помещать в карантин."): the quarantine list is fine,
             // so there is nothing to check in «Настройки» — Core's own Russian reason says it all.
-            return $"{what} в карантин: {LowerFirst(ErrorText.For(error))}.\n\n{path}";
+            return $"{what} {LowerFirst(ErrorText.For(error))}.\n\n{path}";
         }
-        return $"{what} в карантин: не удалось прочитать или записать список карантина (файл index.json в папке карантина). " +
-               $"Файл оставлен на месте, иначе его нельзя было бы потом восстановить.\n\n{path}\n\n" +
-               "Откройте «Настройки» → «Карантин», чтобы проверить список карантина, и повторите. Подробности — в журнале.";
+        return $"{what} " + T.F("не удалось прочитать или записать список карантина (файл index.json в папке карантина). Файл оставлен на месте, иначе его нельзя было бы потом восстановить.\n\n{0}\n\nОткройте «Настройки» → «Карантин», чтобы проверить список карантина, и повторите. Подробности — в журнале.", path);
     }
 
     private static string LowerFirst(string text)
-        => text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1])
+        => !T.IsEnglish && text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1]) // English phrases of ErrorText are lower-case already
             ? char.ToLower(text[0], Format.Ru) + text[1..]
             : text;
 
@@ -545,11 +544,10 @@ public sealed class ProcessesService : IHealthContributor
     internal static string CancelledAfterKillMessage(string path, KillReport report)
     {
         var closed = report.Killed.Count > 0
-            ? $"Программа уже завершена ({Format.Count(report.Killed.Count, "процесс", "процесса", "процессов")}), но её файл " +
-              "не перемещён в карантин"
-            : "Файл не перемещён в карантин";
-        return $"Операция отменена. {closed} и остался на месте:\n{path}\n\n" +
-               "Если программа запустится снова, её можно будет поместить в карантин здесь же.";
+            ? T.F("Операция отменена. Программа уже завершена ({0}), но её файл не перемещён в карантин и остался на месте:\n{1}",
+                Format.Count(report.Killed.Count, "процесс", "процесса", "процессов"), path)
+            : T.F("Операция отменена. Файл не перемещён в карантин и остался на месте:\n{0}", path);
+        return closed + "\n\n" + T._("Если программа запустится снова, её можно будет поместить в карантин здесь же.");
     }
 
     /// <summary>Adds/removes a path from the user's trusted list (shared by all modules, thread-safe, logged by AppSettings).</summary>
@@ -626,7 +624,7 @@ internal static class ProcessIssues
     /// <summary>...holding more than this share of RAM together.</summary>
     public const double ManyCopiesShare = 0.20;
 
-    private const string Module = "Процессы";
+    private static string Module => T._("Процессы");
     private const string PageKey = "Processes";
 
     private static readonly HashSet<string> Browsers = new(StringComparer.OrdinalIgnoreCase)
@@ -660,13 +658,13 @@ internal static class ProcessIssues
             var total = program.Count();
             if (total > 1)
                 lines.Add(suspicious.Count == total
-                    ? $"Запущено процессов: {total}."
-                    : $"Подозрительных процессов: {suspicious.Count} из {total}.");
-            lines.Add("Это подсказка, а не приговор: в разделе «Процессы» файл можно проверить на VirusTotal или Защитником Windows.");
+                    ? T.F("Запущено процессов: {0}.", total)
+                    : T.F("Подозрительных процессов: {0} из {1}.", suspicious.Count, total));
+            lines.Add(T._("Это подсказка, а не приговор: в разделе «Процессы» файл можно проверить на VirusTotal или Защитником Windows."));
             issues.Add(new HealthIssue
             {
                 Module = Module,
-                Title = $"Подозрительный процесс: {info.FileName}",
+                Title = T.F("Подозрительный процесс: {0}", info.FileName),
                 Details = string.Join("\n", lines),
                 Severity = worst.Suspicion.Level == SuspicionLevel.High ? IssueSeverity.High : IssueSeverity.Medium,
                 TargetPageKey = PageKey,
@@ -687,11 +685,9 @@ internal static class ProcessIssues
             issues.Add(new HealthIssue
             {
                 Module = Module,
-                Title = "Мало свободной оперативной памяти",
-                Details = $"Занято {Format.Bytes(memory.UsedBytes)} из {Format.Bytes(memory.TotalBytes)} ({memory.LoadPercent}%). " +
-                          "Из-за этого Windows начинает использовать медленный файл подкачки.\nБольше всего памяти занимают:\n" +
-                          string.Join("\n", top) +
-                          "\nЗакройте ненужные программы и вкладки браузера.",
+                Title = T._("Мало свободной оперативной памяти"),
+                Details = T.F("Занято {0} из {1} ({2}%). Из-за этого Windows начинает использовать медленный файл подкачки.\nБольше всего памяти занимают:\n{3}\nЗакройте ненужные программы и вкладки браузера.",
+                    Format.Bytes(memory.UsedBytes), Format.Bytes(memory.TotalBytes), memory.LoadPercent, string.Join("\n", top)),
                 Severity = IssueSeverity.Medium,
                 TargetPageKey = PageKey,
             });
@@ -709,17 +705,15 @@ internal static class ProcessIssues
             var name = DisplayName(theirs);
             // System, Defender, svchost... can't be terminated from the Processes page: don't suggest it.
             var advice = IsProtected(theirs, selfPid)
-                ? "Это системный процесс Windows, завершать его нельзя. Обычно такая нагрузка спадает сама " +
-                  "(например, после проверки Защитником или установки обновлений); если она держится часами — перезагрузите компьютер."
-                : "Если сейчас не идёт игра, обработка видео или архивация — возможно, программа зависла " +
-                  "или без нужды работает в фоне. Её можно завершить в разделе «Процессы».";
+                ? T._("Это системный процесс Windows, завершать его нельзя. Обычно такая нагрузка спадает сама (например, после проверки Защитником или установки обновлений); если она держится часами — перезагрузите компьютер.")
+                : T._("Если сейчас не идёт игра, обработка видео или архивация — возможно, программа зависла или без нужды работает в фоне. Её можно завершить в разделе «Процессы».");
             var seconds = Math.Max(1, (int)Math.Round(cpuSeconds));
             issues.Add(new HealthIssue
             {
                 Module = Module,
-                Title = $"Высокая нагрузка на процессор: {name}",
-                Details = $"За {seconds} {Format.Plural(seconds, "секунду", "секунды", "секунд")} «{name}» " +
-                          $"в среднем занимал {Format.Percent(cpu)} мощности процессора. " + advice,
+                Title = T.F("Высокая нагрузка на процессор: {0}", name),
+                Details = T.F("За {0} {1} {2} в среднем занимал {3} мощности процессора.",
+                    seconds, Format.Plural(seconds, "секунду", "секунды", "секунд"), T.Quote(name), Format.Percent(cpu)) + " " + advice,
                 Severity = IssueSeverity.Low,
                 TargetPageKey = PageKey,
             });
@@ -753,12 +747,9 @@ internal static class ProcessIssues
         return new HealthIssue
         {
             Module = Module,
-            Title = $"{ShortName(program)} занимает {Format.Bytes(bytes)} памяти ({percent} от всей)",
-            Details = $"«{DisplayName(program)}»{copies} занимает {Format.Bytes(bytes)} из {Format.Bytes(memory.TotalBytes)} " +
-                      "оперативной памяти — другим программам остаётся меньше, и компьютер может начать тормозить.\n" +
-                      "• Если программа сейчас не нужна — закройте её.\n" +
-                      "• Если нужна, но занимает всё больше памяти, — перезапустите её: так она вернёт память, " +
-                      "которую со временем перестала освобождать.",
+            Title = T.F("{0} занимает {1} памяти ({2} от всей)", ShortName(program), Format.Bytes(bytes), percent),
+            Details = T.F("{0}{1} занимает {2} из {3} оперативной памяти — другим программам остаётся меньше, и компьютер может начать тормозить.\n• Если программа сейчас не нужна — закройте её.\n• Если нужна, но занимает всё больше памяти, — перезапустите её: так она вернёт память, которую со временем перестала освобождать.",
+                T.Quote(DisplayName(program)), copies, Format.Bytes(bytes), Format.Bytes(memory.TotalBytes)),
             Severity = IssueSeverity.Low,
             TargetPageKey = PageKey,
         };
@@ -769,24 +760,17 @@ internal static class ProcessIssues
         var n = program.Count;
         var fileName = program[0].Sample.Info.FileName;
         var isBrowser = Browsers.Contains(fileName);
-        var details = $"{Format.Count(n, "копия", "копии", "копий")} «{DisplayName(program)}» вместе " +
-                      $"{Format.Plural(n, "занимает", "занимают", "занимают")} {Format.Bytes(bytes)} " +
-                      $"из {Format.Bytes(memory.TotalBytes)} оперативной памяти ({PercentText(share)}).\n";
+        var details = T.F("{0} {1} вместе {2} {3} из {4} оперативной памяти ({5}).\n",
+            Format.Count(n, "копия", "копии", "копий"), T.Quote(DisplayName(program)), Format.Plural(n, "занимает", "занимают", "занимают"),
+            Format.Bytes(bytes), Format.Bytes(memory.TotalBytes), PercentText(share));
         details += isBrowser
-            ? "Браузер запускает отдельный процесс для каждой вкладки и расширения.\n" +
-              "• Закройте вкладки, которые сейчас не нужны.\n" +
-              "• Включите в настройках браузера экономию памяти (раздел «Производительность»): неактивные вкладки будут " +
-              "«засыпать» и отдавать память.\n" +
-              "• Отключите расширения, которыми не пользуетесь."
-            : "Многие программы (например, мессенджеры и лаунчеры игр на основе браузера) запускают отдельный процесс " +
-              "для каждого окна, вкладки или задачи.\n" +
-              "• Закройте лишние окна и вкладки этой программы.\n" +
-              "• Если она давно запущена — перезапустите её.";
+            ? T._("Браузер запускает отдельный процесс для каждой вкладки и расширения.\n• Закройте вкладки, которые сейчас не нужны.\n• Включите в настройках браузера экономию памяти (раздел «Производительность»): неактивные вкладки будут «засыпать» и отдавать память.\n• Отключите расширения, которыми не пользуетесь.")
+            : T._("Многие программы (например, мессенджеры и лаунчеры игр на основе браузера) запускают отдельный процесс для каждого окна, вкладки или задачи.\n• Закройте лишние окна и вкладки этой программы.\n• Если она давно запущена — перезапустите её.");
         return new HealthIssue
         {
             Module = Module,
-            Title = $"{Format.Count(n, "копия", "копии", "копий")} {fileName} {Format.Plural(n, "занимает", "занимают", "занимают")} " +
-                    Format.Bytes(bytes),
+            Title = T.F("{0} {1} {2} {3}", Format.Count(n, "копия", "копии", "копий"), fileName, Format.Plural(n, "занимает", "занимают", "занимают"),
+                Format.Bytes(bytes)),
             Details = details,
             Severity = IssueSeverity.Low,
             TargetPageKey = PageKey,

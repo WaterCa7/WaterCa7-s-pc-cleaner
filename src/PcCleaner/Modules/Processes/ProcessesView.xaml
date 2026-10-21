@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:PcCleaner.Modules.Processes"
+             xmlns:loc="clr-namespace:PcCleaner.Core.Localization"
              xmlns:controls="clr-namespace:PcCleaner.Core.Controls"
              x:Name="Root"
              mc:Ignorable="d"
@@ -206,14 +207,14 @@
 
             <!-- CPU -->
             <Border Style="{StaticResource Card}" Padding="14,12"
-                    ToolTip="Общая загрузка процессора всеми программами. Если она долго держится выше 80–90%, компьютер начинает тормозить.">
+                    ToolTip="{loc:T 'Общая загрузка процессора всеми программами. Если она долго держится выше 80–90%, компьютер начинает тормозить.'}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource CardLabel}" Text="Процессор" />
+                        <TextBlock Style="{StaticResource CardLabel}" Text="{loc:T 'Процессор'}" />
                         <TextBlock Style="{StaticResource CardNumber}" Text="{Binding CpuText}" />
                         <ProgressBar Margin="0,8,0,0" Height="4" Maximum="100" Value="{Binding CpuPercent, Mode=OneWay}"
                                      Foreground="{Binding CpuPercent, Converter={StaticResource PercentToBrush}}" />
@@ -227,14 +228,14 @@
 
             <!-- Memory -->
             <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,12"
-                    ToolTip="Сколько оперативной памяти занято сейчас. Когда её не хватает, Windows использует медленный файл подкачки.">
+                    ToolTip="{loc:T 'Сколько оперативной памяти занято сейчас. Когда её не хватает, Windows использует медленный файл подкачки.'}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource CardLabel}" Text="Память" />
+                        <TextBlock Style="{StaticResource CardLabel}" Text="{loc:T 'Память'}" />
                         <DockPanel>
                             <TextBlock Style="{StaticResource CardNumber}" Text="{Binding MemoryText}" />
                             <TextBlock Style="{StaticResource CardHint}" Text="{Binding MemoryDetails}" Margin="8,0,0,5"
@@ -252,14 +253,14 @@
 
             <!-- Process count -->
             <Border Grid.Column="4" Style="{StaticResource Card}" Padding="14,12"
-                    ToolTip="Одна программа часто запускает несколько процессов: например, у браузера — по процессу на вкладку.">
+                    ToolTip="{loc:T 'Одна программа часто запускает несколько процессов: например, у браузера — по процессу на вкладку.'}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource CardLabel}" Text="Процессы" />
+                        <TextBlock Style="{StaticResource CardLabel}" Text="{loc:T 'Процессы'}" />
                         <TextBlock Style="{StaticResource CardNumber}" Text="{Binding ProcessCountText}" />
                         <TextBlock Style="{StaticResource CardHint}" Text="{Binding ProgramCountText}" Margin="0,3,0,0" />
                     </StackPanel>
@@ -279,7 +280,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource CardLabel}" Text="Подозрительные" />
+                        <TextBlock Style="{StaticResource CardLabel}" Text="{loc:T 'Подозрительные'}" />
                         <!-- The link sits next to the number (like "18,1 из 47,9 ГБ" on the memory card): it fits even on narrow cards -->
                         <DockPanel>
                             <TextBlock Text="{Binding SuspiciousCountText}">
@@ -293,10 +294,10 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <Button Style="{StaticResource LinkButton}" Content="Показать" FontSize="11.5" Margin="10,0,0,6"
+                            <Button Style="{StaticResource LinkButton}" Content="{loc:T 'Показать'}" FontSize="11.5" Margin="10,0,0,6"
                                     VerticalAlignment="Bottom" HorizontalAlignment="Left"
                                     Command="{Binding ShowSuspiciousCommand}"
-                                    ToolTip="Показать в списке только подозрительные (фильтр «Только подозрительные»)"
+                                    ToolTip="{loc:T 'Показать в списке только подозрительные (фильтр «Только подозрительные»)'}"
                                     Visibility="{Binding HasSuspicious, Converter={StaticResource BoolToVis}}" />
                         </DockPanel>
                         <TextBlock Style="{StaticResource CardHint}" Text="{Binding SuspiciousHint}" Margin="0,3,0,0" />
@@ -337,26 +338,26 @@
             <Grid x:Name="SearchPanel" Width="228" Height="34" VerticalAlignment="Top">
                 <TextBox x:Name="SearchBox" Padding="30,0,28,0" Height="34" VerticalContentAlignment="Center"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
-                         ToolTip="Ищет по имени, описанию, издателю, пути к файлу, PID и названиям служб" />
+                         ToolTip="{loc:T 'Ищет по имени, описанию, издателю, пути к файлу, PID и названиям служб'}" />
                 <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource MutedBrush}"
                            Margin="11,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" />
-                <TextBlock Text="Поиск: имя, путь, PID" Foreground="{StaticResource MutedBrush}" FontSize="12.5"
+                <TextBlock Text="{loc:T 'Поиск: имя, путь, PID'}" Foreground="{StaticResource MutedBrush}" FontSize="12.5"
                            Margin="31,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False" TextTrimming="CharacterEllipsis"
                            Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}, ConverterParameter=Invert}" />
                 <Button Style="{StaticResource ChevronButton}" HorizontalAlignment="Right" Margin="0,0,6,0" Click="OnClearSearch"
-                        ToolTip="Очистить поиск"
+                        ToolTip="{loc:T 'Очистить поиск'}"
                         Visibility="{Binding SearchText, Converter={StaticResource HasValueToVis}}">
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="10" />
                 </Button>
             </Grid>
 
             <WrapPanel Grid.Column="1" Margin="16,0,4,0" VerticalAlignment="Top">
-                <CheckBox x:Name="GroupCheck" Content="Группировать по программам" IsChecked="{Binding GroupByProgram}" Margin="0,8,18,8"
-                          ToolTip="Объединяет все процессы одной программы (например, вкладки браузера) в одну строку. Стрелка слева раскрывает группу." />
-                <CheckBox x:Name="SuspiciousCheck" Content="Только подозрительные" IsChecked="{Binding SuspiciousOnly}" Margin="0,8,18,8"
-                          ToolTip="Показать только процессы с оценкой «Подозрительно» или «Высокий риск»." />
-                <CheckBox x:Name="HideMicrosoftCheck" Content="Скрыть системные процессы Microsoft" IsChecked="{Binding HideMicrosoft}" Margin="0,8,0,8"
-                          ToolTip="Скрыть системные процессы Microsoft: компоненты Windows с подписью Microsoft (svchost, службы, драйверы). Программы вроде Edge или OneDrive, а также всё подозрительное остаются в списке." />
+                <CheckBox x:Name="GroupCheck" Content="{loc:T 'Группировать по программам'}" IsChecked="{Binding GroupByProgram}" Margin="0,8,18,8"
+                          ToolTip="{loc:T 'Объединяет все процессы одной программы (например, вкладки браузера) в одну строку. Стрелка слева раскрывает группу.'}" />
+                <CheckBox x:Name="SuspiciousCheck" Content="{loc:T 'Только подозрительные'}" IsChecked="{Binding SuspiciousOnly}" Margin="0,8,18,8"
+                          ToolTip="{loc:T 'Показать только процессы с оценкой «Подозрительно» или «Высокий риск».'}" />
+                <CheckBox x:Name="HideMicrosoftCheck" Content="{loc:T 'Скрыть системные процессы Microsoft'}" IsChecked="{Binding HideMicrosoft}" Margin="0,8,0,8"
+                          ToolTip="{loc:T 'Скрыть системные процессы Microsoft: компоненты Windows с подписью Microsoft (svchost, службы, драйверы). Программы вроде Edge или OneDrive, а также всё подозрительное остаются в списке.'}" />
             </WrapPanel>
 
             <Button Grid.Column="2" Style="{StaticResource GhostButton}" VerticalAlignment="Top" Width="34" Height="34" Padding="0"
@@ -386,9 +387,9 @@
                     <controls:BulkActionBar Margin="6,6,6,0" CheckedCount="{Binding CheckedCount}"
                                             ClearCommand="{Binding ClearChecksCommand}">
                         <controls:BulkActionBar.ActionsContent>
-                            <Button Style="{StaticResource AccentButton}" Padding="12,6" Content="Завершить отмеченные"
+                            <Button Style="{StaticResource AccentButton}" Padding="12,6" Content="{loc:T 'Завершить отмеченные'}"
                                     Command="{Binding KillCheckedCommand}"
-                                    ToolTip="Принудительно завершить отмеченные процессы. Перед этим программа спросит подтверждение." />
+                                    ToolTip="{loc:T 'Принудительно завершить отмеченные процессы. Перед этим программа спросит подтверждение.'}" />
                         </controls:BulkActionBar.ActionsContent>
                     </controls:BulkActionBar>
 
@@ -410,7 +411,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE711;" Foreground="{StaticResource DangerBrush}" />
-                                            <TextBlock Text="Завершить" />
+                                            <TextBlock Text="{loc:T 'Завершить'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -418,7 +419,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE81E;" Foreground="{StaticResource DangerBrush}" />
-                                            <TextBlock Text="Завершить дерево процессов" />
+                                            <TextBlock Text="{loc:T 'Завершить дерево процессов'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -427,7 +428,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE838;" />
-                                            <TextBlock Text="Открыть расположение файла" />
+                                            <TextBlock Text="{loc:T 'Открыть расположение файла'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -435,7 +436,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8C8;" />
-                                            <TextBlock Text="Копировать путь" />
+                                            <TextBlock Text="{loc:T 'Копировать путь'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -443,7 +444,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE774;" />
-                                            <TextBlock Text="Найти в интернете" />
+                                            <TextBlock Text="{loc:T 'Найти в интернете'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -451,7 +452,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8A7;" />
-                                            <TextBlock Text="Проверить на VirusTotal" />
+                                            <TextBlock Text="{loc:T 'Проверить на VirusTotal'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -459,7 +460,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xEA18;" />
-                                            <TextBlock Text="Проверить Защитником Windows" />
+                                            <TextBlock Text="{loc:T 'Проверить Защитником Windows'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -468,7 +469,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE72E;" />
-                                            <TextBlock Text="В карантин" />
+                                            <TextBlock Text="{loc:T 'В карантин'}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -476,7 +477,7 @@
                                     <MenuItem.Header>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8FB;" />
-                                            <TextBlock Text="{Binding SelectedItem.TrustButtonText, FallbackValue=Доверять}" />
+                                            <TextBlock Text="{Binding SelectedItem.TrustButtonText, FallbackValue={loc:T 'Доверять'}}" />
                                         </StackPanel>
                                     </MenuItem.Header>
                                 </MenuItem>
@@ -493,7 +494,7 @@
                                     <CheckBox IsThreeState="True" Width="18"
                                               IsChecked="{Binding DataContext.AllVisibleChecked, ElementName=Root, Mode=OneWay}"
                                               Command="{Binding DataContext.ToggleAllVisibleCommand, ElementName=Root}"
-                                              ToolTip="Отметить все процессы в списке (с учётом поиска и фильтров) или снять с них отметки" />
+                                              ToolTip="{loc:T 'Отметить все процессы в списке (с учётом поиска и фильтров) или снять с них отметки'}" />
                                 </DataGridTemplateColumn.Header>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate DataType="{x:Type local:ProcessItem}">
@@ -509,7 +510,7 @@
 
                             <DataGridTemplateColumn SortMemberPath="Name" Width="*" MinWidth="140">
                                 <DataGridTemplateColumn.Header>
-                                    <TextBlock Text="Имя" />
+                                    <TextBlock Text="{loc:T 'Имя'}" />
                                 </DataGridTemplateColumn.Header>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate DataType="{x:Type local:ProcessItem}">
@@ -556,23 +557,23 @@
                             <DataGridTextColumn x:Name="CpuColumn" Binding="{Binding CpuText}" SortMemberPath="Cpu" Width="62"
                                                 ElementStyle="{StaticResource CellText}">
                                 <DataGridTextColumn.Header>
-                                    <TextBlock Text="ЦП" ToolTip="Доля всей мощности процессора за последние 2 секунды (как в Диспетчере задач)." />
+                                    <TextBlock Text="{loc:T 'ЦП'}" ToolTip="{loc:T 'Доля всей мощности процессора за последние 2 секунды (как в Диспетчере задач).'}" />
                                 </DataGridTextColumn.Header>
                             </DataGridTextColumn>
 
                             <DataGridTextColumn x:Name="MemoryColumn" Binding="{Binding MemoryText}" SortMemberPath="Memory" Width="84"
                                                 ElementStyle="{StaticResource CellText}">
                                 <DataGridTextColumn.Header>
-                                    <TextBlock Text="Память"
-                                               ToolTip="Частный рабочий набор — оперативная память, которую занимает только этот процесс (как в Диспетчере задач)." />
+                                    <TextBlock Text="{loc:T 'Память'}"
+                                               ToolTip="{loc:T 'Частный рабочий набор — оперативная память, которую занимает только этот процесс (как в Диспетчере задач).'}" />
                                 </DataGridTextColumn.Header>
                             </DataGridTextColumn>
 
                             <DataGridTextColumn x:Name="PublisherColumn" Binding="{Binding PublisherText}" SortMemberPath="Publisher" Width="0.42*" MinWidth="80"
                                                 ElementStyle="{StaticResource CellMuted}">
                                 <DataGridTextColumn.Header>
-                                    <TextBlock Text="Издатель"
-                                               ToolTip="Кто выпустил программу. Если у файла есть действительная цифровая подпись, показан её владелец." />
+                                    <TextBlock Text="{loc:T 'Издатель'}"
+                                               ToolTip="{loc:T 'Кто выпустил программу. Если у файла есть действительная цифровая подпись, показан её владелец.'}" />
                                 </DataGridTextColumn.Header>
                             </DataGridTextColumn>
 
@@ -581,11 +582,11 @@
                                                     CellTemplate="{StaticResource StatusBadge}">
                                 <DataGridTemplateColumn.Header>
                                     <Grid>
-                                        <TextBlock x:Name="StatusHeaderText" Text="Оценка"
-                                                   ToolTip="Проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор." />
+                                        <TextBlock x:Name="StatusHeaderText" Text="{loc:T 'Оценка'}"
+                                                   ToolTip="{loc:T 'Проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор.'}" />
                                         <TextBlock x:Name="StatusHeaderIcon" Style="{StaticResource Icon}" Text="&#xE730;" FontSize="13"
                                                    Background="Transparent" Visibility="Collapsed"
-                                                   ToolTip="Оценка — проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор." />
+                                                   ToolTip="{loc:T 'Оценка — проверка по признакам: цифровая подпись, расположение файла, командная строка, известные нежелательные программы. Это подсказка, а не приговор.'}" />
                                     </Grid>
                                 </DataGridTemplateColumn.Header>
                             </DataGridTemplateColumn>
@@ -602,7 +603,7 @@
                         <TextBlock Style="{StaticResource H3}" Text="{Binding EmptyTitle}" HorizontalAlignment="Center" Margin="0,12,0,4"
                                    TextAlignment="Center" TextWrapping="Wrap" />
                         <TextBlock Style="{StaticResource Muted}" Text="{Binding EmptyText}" TextAlignment="Center" />
-                        <Button Content="Сбросить фильтры" HorizontalAlignment="Center" Margin="0,12,0,0" Padding="12,6"
+                        <Button Content="{loc:T 'Сбросить фильтры'}" HorizontalAlignment="Center" Margin="0,12,0,0" Padding="12,6"
                                 Command="{Binding ResetFiltersCommand}"
                                 Visibility="{Binding ShowResetFilters, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
@@ -621,7 +622,7 @@
                             <TextBlock Grid.Column="1" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}">
                                 <Run Text="{Binding AdminHintText, Mode=OneWay}" />
                                 <Hyperlink Style="{StaticResource InlineLink}" Command="{Binding RestartAsAdminCommand}"
-                                           ToolTip="Программа перезапустится — Windows покажет окно контроля учётных записей">Перезапустить от имени администратора</Hyperlink>
+                                           ToolTip="{loc:T 'Программа перезапустится — Windows покажет окно контроля учётных записей'}"><Run Text="{loc:T 'Перезапустить от имени администратора'}" /></Hyperlink>
                             </TextBlock>
                         </Grid>
                     </Border>
@@ -638,9 +639,9 @@
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE9F5;" FontSize="24" Foreground="{StaticResource MutedBrush}"
                                        HorizontalAlignment="Center" />
                         </Border>
-                        <TextBlock Style="{StaticResource H3}" Text="Выберите процесс" HorizontalAlignment="Center" Margin="0,12,0,4" />
+                        <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Выберите процесс'}" HorizontalAlignment="Center" Margin="0,12,0,4" />
                         <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
-                                   Text="Нажмите на строку в списке — здесь появится, что это за программа, кто её выпустил и безопасна ли она." />
+                                   Text="{loc:T 'Нажмите на строку в списке — здесь появится, что это за программа, кто её выпустил и безопасна ли она.'}" />
                     </StackPanel>
 
                     <!-- Selected process / program -->
@@ -663,7 +664,7 @@
                                         <!-- DockPanel (not StackPanel) so the caption trims instead of being cut off on narrow windows -->
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="12" Margin="0,0,7,0" />
-                                            <TextBlock Text="Завершить" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{loc:T 'Завершить'}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
                                     <Button Grid.Column="1" Style="{StaticResource ActionDangerButton}"
@@ -671,44 +672,44 @@
                                             ToolTip="{Binding KillTreeToolTip}">
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE81E;" FontSize="12" Margin="0,0,7,0" />
-                                            <TextBlock Text="Завершить дерево" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{loc:T 'Завершить дерево'}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
                                 </Grid>
                                 <UniformGrid x:Name="SecondaryActions" Columns="3">
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.OpenLocationCommand, ElementName=Root}"
-                                            ToolTip="Открыть расположение файла: папка с программой откроется в Проводнике, файл будет выделен">
+                                            ToolTip="{loc:T 'Открыть расположение файла: папка с программой откроется в Проводнике, файл будет выделен'}">
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" Margin="0,0,6,0" />
-                                            <TextBlock Text="Папка" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{loc:T 'Папка'}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.SearchWebCommand, ElementName=Root}"
-                                            ToolTip="Найти в интернете, что это за программа (по имени файла и издателю)">
+                                            ToolTip="{loc:T 'Найти в интернете, что это за программа (по имени файла и издателю)'}">
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" Margin="0,0,6,0" />
-                                            <TextBlock Text="В сети" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{loc:T 'В сети'}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.VirusTotalCommand, ElementName=Root}"
-                                            ToolTip="Проверить на VirusTotal: откроется отчёт по отпечатку файла (SHA-256). Сам файл никуда не отправляется.">
+                                            ToolTip="{loc:T 'Проверить на VirusTotal: откроется отчёт по отпечатку файла (SHA-256). Сам файл никуда не отправляется.'}">
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="13" Margin="0,0,6,0" />
                                             <TextBlock Text="VirusTotal" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.DefenderCommand, ElementName=Root}"
-                                            ToolTip="Проверить Защитником Windows (Microsoft Defender). Если он найдёт угрозу, то обезвредит её сам.">
+                                            ToolTip="{loc:T 'Проверить Защитником Windows (Microsoft Defender). Если он найдёт угрозу, то обезвредит её сам.'}">
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xEA18;" FontSize="13" Margin="0,0,6,0" />
-                                            <TextBlock Text="Защитник" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{loc:T 'Защитник'}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.QuarantineCommand, ElementName=Root}"
                                             ToolTip="{Binding QuarantineToolTip}">
                                         <DockPanel>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" FontSize="13" Margin="0,0,6,0" />
-                                            <TextBlock Text="Карантин" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{loc:T 'Карантин'}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                     </Button>
                                     <Button Style="{StaticResource ActionButton}" Command="{Binding DataContext.TrustCommand, ElementName=Root}"
@@ -749,7 +750,7 @@
                                     </Border>
                                     <Border Style="{StaticResource Badge}" Background="{StaticResource InfoSoftBrush}" Margin="0,0,6,4"
                                             Visibility="{Binding IsProtected, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="Защищён" FontSize="11.5" Foreground="{StaticResource InfoBrush}" />
+                                        <TextBlock Text="{loc:T 'Защищён'}" FontSize="11.5" Foreground="{StaticResource InfoBrush}" />
                                     </Border>
                                 </WrapPanel>
 
@@ -780,7 +781,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="13" Margin="0,2,8,0"
                                                        VerticalAlignment="Top" />
-                                            <TextBlock Grid.Column="1" Text="Почему стоит обратить внимание" FontWeight="SemiBold"
+                                            <TextBlock Grid.Column="1" Text="{loc:T 'Почему стоит обратить внимание'}" FontWeight="SemiBold"
                                                        FontSize="12.5" TextWrapping="Wrap" />
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Reasons}" Margin="0,6,0,0" Focusable="False">
@@ -798,7 +799,7 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                         <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,6,0,0"
-                                                   Text="Это подсказка, а не приговор. Если сомневаетесь — проверьте файл на VirusTotal или Защитником Windows." />
+                                                   Text="{loc:T 'Это подсказка, а не приговор. Если сомневаетесь — проверьте файл на VirusTotal или Защитником Windows.'}" />
                                     </StackPanel>
                                 </Border>
 
@@ -850,70 +851,70 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE930;" FontSize="13" Foreground="{StaticResource SuccessBrush}"
                                                    Margin="0,1,8,0" VerticalAlignment="Top" />
-                                        <TextBlock Grid.Column="1" Text="Ничего подозрительного не найдено" FontSize="12.5" TextWrapping="Wrap"
+                                        <TextBlock Grid.Column="1" Text="{loc:T 'Ничего подозрительного не найдено'}" FontSize="12.5" TextWrapping="Wrap"
                                                    Foreground="{StaticResource SuccessBrush}" />
                                     </Grid>
                                 </Border>
                                 <Border Margin="0,10,0,0" Padding="11,8" CornerRadius="8" Background="{StaticResource AccentSoftBrush}"
                                         Visibility="{Binding IsTrusted, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Style="{StaticResource FieldValue}" FontSize="12" Foreground="{StaticResource AccentBrush}"
-                                               Text="Вы отметили программу как доверенную — предупреждения о ней не показываются." />
+                                               Text="{loc:T 'Вы отметили программу как доверенную — предупреждения о ней не показываются.'}" />
                                 </Border>
 
                                 <!-- Numbers -->
                                 <Border Style="{StaticResource InnerCard}" Margin="0,10,0,0" Padding="12,9">
                                     <UniformGrid Columns="3">
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="ЦП" />
+                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="{loc:T 'ЦП'}" />
                                             <TextBlock Text="{Binding CpuText}" FontSize="16" FontWeight="SemiBold" />
                                         </StackPanel>
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="Память" />
+                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="{loc:T 'Память'}" />
                                             <TextBlock Text="{Binding MemoryText}" FontSize="16" FontWeight="SemiBold" />
                                         </StackPanel>
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="Процессов" />
+                                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Text="{loc:T 'Процессов'}" />
                                             <TextBlock Text="{Binding InstanceCountText}" FontSize="16" FontWeight="SemiBold" />
                                         </StackPanel>
                                     </UniformGrid>
                                 </Border>
 
                                 <!-- Facts -->
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Расположение" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Расположение'}" />
                                 <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PathText}" />
 
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Издатель" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Издатель'}" />
                                 <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PublisherText}" />
 
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Цифровая подпись"
-                                           ToolTip="Подпись подтверждает, кто выпустил файл и что его никто не изменил." />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Цифровая подпись'}"
+                                           ToolTip="{loc:T 'Подпись подтверждает, кто выпустил файл и что его никто не изменил.'}" />
                                 <TextBlock Style="{StaticResource FieldValue}" Text="{Binding SignatureText}" />
 
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Описание" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Описание'}" />
                                 <TextBlock Style="{StaticResource FieldValue}" Text="{Binding DescriptionText}" />
 
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Запущен" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Запущен'}" />
                                 <TextBlock Style="{StaticResource FieldValue}" Text="{Binding StartTimeText}" />
 
                                 <StackPanel Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Процессы программы" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Процессы программы'}" />
                                     <TextBlock Style="{StaticResource FieldValue}" Text="{Binding InstancesText}" />
                                     <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,3,0,0"
-                                               Text="Раскройте группу в списке (стрелка слева от имени), чтобы увидеть каждый процесс отдельно." />
+                                               Text="{loc:T 'Раскройте группу в списке (стрелка слева от имени), чтобы увидеть каждый процесс отдельно.'}" />
                                 </StackPanel>
 
                                 <StackPanel Visibility="{Binding ShowInstanceDetails, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Родительский процесс"
-                                               ToolTip="Процесс, который запустил этот." />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Родительский процесс'}"
+                                               ToolTip="{loc:T 'Процесс, который запустил этот.'}" />
                                     <TextBlock Style="{StaticResource FieldValue}" Text="{Binding MainRow.ParentText}" />
 
                                     <StackPanel Visibility="{Binding MainRow.HasServices, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Службы внутри процесса" />
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Службы внутри процесса'}" />
                                         <TextBlock Style="{StaticResource FieldValue}" Text="{Binding MainRow.ServicesText}" />
                                     </StackPanel>
 
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Командная строка"
-                                               ToolTip="С какими параметрами запущена программа." />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Командная строка'}"
+                                               ToolTip="{loc:T 'С какими параметрами запущена программа.'}" />
                                     <Border Style="{StaticResource InnerCard}" Padding="9,7">
                                         <TextBlock Style="{StaticResource FieldValue}" Text="{Binding MainRow.CommandLineText}"
                                                    FontFamily="Cascadia Mono, Consolas" FontSize="11.5" />

@@ -328,7 +328,7 @@ public class SuspicionEnglishTests
         Assert.Equal(SuspicionFlags.Unsigned | SuspicionFlags.KnownPup, startup.Flags);
         Assert.Equal(SuspicionFlags.HiddenPowerShell | SuspicionFlags.KnownPup, process.Flags);
         Assert.Equal(SuspicionFlags.HiddenPowerShell | SuspicionFlags.Unsigned, combined.Flags);
-        Assert.Equal(SuspicionFlags.HiddenPowerShell, miner.Flags);
+        Assert.Equal(SuspicionFlags.HiddenPowerShell | SuspicionFlags.SustainedCpu, miner.Flags);
         Assert.Equal(55, startup.Score);
         Assert.Equal(new[] { "y", "pup" }, startup.Reasons);
     }

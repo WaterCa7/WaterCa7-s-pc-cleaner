@@ -35,6 +35,7 @@ public enum SuspicionFlags
     LookalikeName = 1 << 12,
     RiskyTool = 1 << 13,
     NoPublisher = 1 << 14,
+    SustainedCpu = 1 << 15,
 }
 
 /// <summary>Where a path lives when legitimate software rarely lives there (<see cref="Suspicion.ClassifyLocation"/>).</summary>
