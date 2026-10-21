@@ -13,29 +13,13 @@ namespace PcCleaner.Tests.Core;
 public class LocalizationCatalogTests
 {
     /// <summary>
-    /// Files and folders under src/PcCleaner that are fully translated: "/" separators, a folder ends with "/", e.g.
-    /// "Modules/Settings/" or "MainWindow.xaml". There, the words of Format.Plural/Format.Count need en.json entries too and
-    /// T._/T.F/T.Plural take only literals or consts (except the <see cref="PassThrough"/> files). Each translation task adds
-    /// the files it wraps. Wrapped texts (T._("…"), {loc:T '…'}) need their entry in every file, listed or not.
+    /// What is fully translated: all of src/PcCleaner ("/" is the whole tree; a list of files and folders — "Modules/Settings/",
+    /// "MainWindow.xaml" — would do for a partly translated tree). There, the words of Format.Plural/Format.Count need en.json
+    /// entries too, T._/T.F/T.Plural take only literals or consts (except the <see cref="PassThrough"/> files), no Cyrillic literal
+    /// stays outside T in C# and no Russian text outside {loc:T '…'} in XAML. Wrapped texts (T._("…"), {loc:T '…'}) need their
+    /// entry in every file, listed or not.
     /// </summary>
-    internal static readonly string[] Enforced =
-    {
-        "App.xaml.cs",
-        "Core/",
-        "MainViewModel.cs",
-        "MainWindow.xaml",
-        "MainWindow.xaml.cs",
-        "Modules/Cleaner/",
-        "Modules/Dashboard/",
-        "Modules/Disk/",
-        "Modules/Network/",
-        "Modules/Optimizer/",
-        "Modules/Processes/",
-        "Modules/Programs/",
-        "Modules/Security/",
-        "Modules/Settings/",
-        "Modules/Startup/",
-    };
+    internal static readonly string[] Enforced = { "/" };
 
     /// <summary>
     /// Files that pass the caller's text on (T._(Text), T.Plural(n, one, few, many), Format.Count(n, forms[0], …)): they
@@ -62,9 +46,13 @@ public class LocalizationCatalogTests
         foreach (var path in Enforced.Concat(PassThrough))
         {
             var full = Path.Combine(root, path.TrimEnd('/').Replace('/', Path.DirectorySeparatorChar));
-            Assert.True(path.EndsWith('/') ? Directory.Exists(full) : File.Exists(full), $"{path} is not in src/PcCleaner");
+            Assert.True(path.EndsWith('/') ? Directory.Exists(full) : File.Exists(full), $"{path} is not in src/PcCleaner"); // "/" is the root itself
         }
     }
+
+    [Fact]
+    public void TheWholeTree_IsEnforced()
+        => Assert.Equal(new[] { "/" }, Enforced);
 
     [Fact]
     public void ThePassThroughFiles_PassWhenTheirFoldersAreEnforced()
@@ -601,6 +589,43 @@ public class LocalizationCatalogTests
     }
 
     [Fact]
+    public void ACyrillicLiteral_AsAnotherArgumentOfAWrappingCall_IsReported()
+    {
+        var cs = """
+            var a = T.F("Найдено {0}", "файл");
+            var b = T.CtxF("units", "Найдено {0}", "файл");
+            var c = T.F("Найдено {0}", ok ? "да" : "нет");
+            var d = T.F("Найдено {0}", Name("файл"));
+            var e = T.F("Найдено {0}", new[] { "файл" });
+            """;
+
+        var problems = Unwrapped(cs);
+
+        Assert.Equal(6, problems.Count); // "да" and "нет" are two
+        Assert.All(new[] { 1, 2, 3, 3, 4, 5 }, line => Assert.Contains(problems, p => p.StartsWith($"Pages/A.cs:{line}:")));
+    }
+
+    [Fact]
+    public void ATextPositionOfAWrappingCall_IsFine_AndSoIsAWrappedLiteralInAnotherArgument()
+    {
+        var cs = """
+            var a = T.F("Найдено {0}", T._("файл"));
+            var b = T.CtxF("units", "Найдено {0}", T.Ctx("units", "файл"));
+            var c = T.Plural(n, "файл", "файла", "файлов");
+            var d = T.CtxPlural("units", n, "файл", "файла", "файлов");
+            var e = Format.Count(n, "файл", "файла", "файлов") + Format.Plural(n, "день", "дня", "дней");
+            var f = Dialogs.Confirm(T._("Заголовок"), T.F("Вопрос {0}?", Name(T._("файл"))));
+            var g = T.Ctx("status", "Готово");
+            """;
+
+        Assert.Empty(Unwrapped(cs));
+    }
+
+    [Fact]
+    public void ACyrillicLiteral_InAContextOfAWrappingCall_IsReported()
+        => Assert.Single(Unwrapped("var a = T.Ctx(\"статус\", \"Готово\");"));
+
+    [Fact]
     public void CommentsCharsTheLanguageNameAndNonCyrillicText_AreFine()
     {
         var cs = """
@@ -680,10 +705,70 @@ public class LocalizationCatalogTests
         => Assert.Empty(Unwrapped("public const string Status = \"Проверяем…\";", "Pages/A.cs", ("Other/B.cs", "var a = T._(A.Status);")));
 
     [Fact]
-    public void AFile_OutsideTheEnforcedList_AndXaml_AreNotChecked()
+    public void AFile_OutsideTheEnforcedList_IsNotChecked()
     {
         Assert.Empty(Unwrapped("var a = \"Привет\";", "Other/A.cs"));
-        Assert.Empty(Unwrapped("<TextBlock Text=\"Привет\" />", "Pages/A.xaml"));
+        Assert.Empty(Unwrapped("<TextBlock Text=\"Привет\" />", "Other/A.xaml"));
+    }
+
+    [Fact]
+    public void TheEnforcedRoot_CoversEveryFile()
+    {
+        var files = new[] { ("A.cs", "var a = \"Привет\";"), ("Deep/Er/B.cs", "var b = \"Пока\";"), ("Themes/T.xaml", "<TextBlock Text=\"Да\" />") };
+
+        Assert.Equal(3, LocalizationCatalog.UnwrappedCyrillic(files, new[] { "/" }).Count);
+        // and the words of Format.Count need their entries in any file, as in an enforced folder
+        var count = ("Deep/Er/B.cs", "Format.Count(n, \"день\", \"дня\", \"дней\");");
+        Assert.Equal(2, LocalizationCatalog.Check(new[] { count }, "{}", new[] { "/" }).Count);
+        Assert.Empty(LocalizationCatalog.Check(new[] { count }, "{}", new[] { "Other/" }));
+    }
+
+    // ----- the guard in XAML: a Russian text must be {loc:T '…'} -----
+
+    [Fact]
+    public void ARussianTextInXaml_OutsideLocT_IsReported_WithTheFileAndLine()
+    {
+        var xaml = """
+            <StackPanel>
+              <TextBlock Text="Привет" />
+              <Button Content="{Binding Name, StringFormat='Всего: {0}'}" ToolTip="Подсказка" />
+              <TextBlock>Текст внутри</TextBlock>
+            </StackPanel>
+            """;
+
+        var problems = Unwrapped(xaml, "Pages/A.xaml");
+
+        Assert.Equal(3, problems.Count);
+        Assert.Contains("Pages/A.xaml:2", problems[0]);
+        Assert.Contains("Pages/A.xaml:3", problems[1]);
+        Assert.Contains("Pages/A.xaml:4", problems[2]);
+    }
+
+    [Fact]
+    public void WrappedTexts_Comments_AndTheLanguageName_AreFineInXaml()
+    {
+        var xaml = """
+            <!-- «Привет» is the greeting
+                 and «Пока» the farewell -->
+            <StackPanel>
+              <TextBlock Text="{loc:T 'Привет'}" />
+              <Button Content="{loc:T 'Нажмите \'Да\'', Context=status}" ToolTip="{loc:T Text='Подсказка'}" />
+              <Button Content="{Binding Name, FallbackValue={loc:T 'Без имени'}}" />
+              <RadioButton ToolTip="Русский" AutomationProperties.Name="Русский" Content="Русский" />
+              <TextBlock Text="{loc:T 'Первая
+                строка'}" />
+            </StackPanel>
+            """;
+
+        Assert.Empty(Unwrapped(xaml, "Pages/A.xaml"));
+    }
+
+    [Fact]
+    public void ARussianTextInXaml_AfterAMultiLineComment_IsReportedOnItsOwnLine()
+    {
+        var xaml = "<!-- a\n b\n c -->\n<TextBlock Text=\"Привет\" />";
+
+        Assert.Contains("Pages/A.xaml:4", Assert.Single(Unwrapped(xaml, "Pages/A.xaml")));
     }
 
     // ----- the repository -----

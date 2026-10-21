@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows;
 using PcCleaner.Core.Localization;
 using PcCleaner.Core;
+using PcCleaner.Modules.Dashboard;
 
 namespace PcCleaner.Modules.Optimizer;
 
@@ -477,8 +478,9 @@ public static class HardwareCardBuilder
 
     private static HardwareCard Windows(HardwareSnapshot hw, SettingsSnapshot s, bool longUptime)
     {
+        var osCaption = SystemInfo.EnglishWindowsCaption(hw.OsCaption); // English UI: the edition of a Russian Windows in English
         // l10n:data-begin — Russian words that Windows gives, matched and never shown
-        var caption = hw.OsCaption?
+        var caption = osCaption?
             .Replace("Microsoft ", "", StringComparison.OrdinalIgnoreCase)
             .Replace("Майкрософт ", "", StringComparison.OrdinalIgnoreCase)
             .Trim() ?? "Windows";
@@ -510,7 +512,7 @@ public static class HardwareCardBuilder
             BadgeTone = tone,
             ToolTipText = string.Join("\n", new[]
             {
-                hw.OsCaption,
+                osCaption,
                 hw.OsVersion is null ? null : T.F("Версия ядра: {0}", hw.OsVersion),
                 hw.LastBoot is null ? null : T.F("Последняя загрузка: {0}", Format.DateTime(hw.LastBoot)),
             }.Where(x => !string.IsNullOrWhiteSpace(x))),

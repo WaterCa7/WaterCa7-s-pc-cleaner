@@ -136,6 +136,26 @@ public static class SystemInfo
     };
     // l10n:data-end
 
+    /// <summary>
+    /// The caption Windows gives in its own language ("Майкрософт Windows 11 Домашняя" on a Russian Windows) in English for the English
+    /// UI: "Microsoft Windows 11 Home". Any other caption, and every caption in the Russian UI, stays as Windows gave it.
+    /// </summary>
+    public static string? EnglishWindowsCaption(string? caption)
+    {
+        if (!T.IsEnglish || string.IsNullOrWhiteSpace(caption))
+            return caption;
+        // l10n:data-begin — the Russian words of a Windows caption, matched and never shown
+        var text = Regex.Replace(caption, @"\bМайкрософт\b", "Microsoft");
+        // l10n:data-end
+        foreach (var (en, ru) in Editions)
+        {
+            if (ru.All(c => c < 0x80))
+                continue; // "Pro" is "Pro" in both
+            text = Regex.Replace(text, $@"(?<!\w){Regex.Escape(ru)}(?!\w)", en, RegexOptions.IgnoreCase);
+        }
+        return text;
+    }
+
     private static string TranslateEdition(string name)
     {
         if (T.IsEnglish)

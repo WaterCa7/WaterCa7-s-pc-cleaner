@@ -64,8 +64,8 @@ internal static class LocalizationCatalog
     /// <param name="files">Source files: path relative to src/PcCleaner ("/" separators) and content.</param>
     /// <param name="catalogJson">The text of en.json.</param>
     /// <param name="enforced">
-    /// Files and folders (ending with "/") that are fully translated: Format.Plural/Format.Count words included, and only
-    /// literal or const text arguments.
+    /// Files and folders (ending with "/") that are fully translated, or "/" for the whole tree: Format.Plural/Format.Count words
+    /// included, and only literal or const text arguments.
     /// </param>
     /// <param name="passThrough">Files (or folders) that may pass a variable text on, even inside an enforced folder.</param>
     /// <returns>One line per problem; empty when en.json is complete.</returns>
@@ -127,15 +127,28 @@ internal static class LocalizationCatalog
         return problems;
     }
 
-    private static readonly string[] WrappingCalls = { "T._", "T.F", "T.Plural", "T.Ctx", "T.CtxF", "T.CtxPlural", "Format.Count", "Format.Plural" };
+    /// <summary>The wrapping calls and the positions of their arguments that hold a text (the others are a context, a number, other values).</summary>
+    private static readonly Dictionary<string, int[]> TextPositions = new(StringComparer.Ordinal)
+    {
+        ["T._"] = new[] { 0 },
+        ["T.F"] = new[] { 0 },
+        ["T.Ctx"] = new[] { 1 },
+        ["T.CtxF"] = new[] { 1 },
+        ["T.Plural"] = new[] { 1, 2, 3 },
+        ["Format.Count"] = new[] { 1, 2, 3 },
+        ["Format.Plural"] = new[] { 1, 2, 3 },
+        ["T.CtxPlural"] = new[] { 2, 3, 4 },
+    };
 
     private static readonly Regex CalleeName = new(@"[A-Za-z_@][\w.]*$", RegexOptions.Compiled);
 
     private static readonly Regex ConstDeclaration = new(@"\bconst\s+string\s+(?<name>\w+)\s*=\s*$", RegexOptions.Compiled);
 
     /// <summary>
-    /// Guard against a text that was forgotten: every string literal with Cyrillic letters in an enforced .cs file must be an
-    /// argument of T._ / T.F / T.Plural / T.Ctx / T.CtxF / T.CtxPlural / Format.Count / Format.Plural. Allowed besides that: comments, the name of the language
+    /// Guard against a text that was forgotten. In XAML (enforced files) Russian text must be a {loc:T '…'}. Every string literal
+    /// with Cyrillic letters in an enforced .cs file must be a
+    /// text argument of T._ / T.F / T.Plural / T.Ctx / T.CtxF / T.CtxPlural / Format.Count / Format.Plural (the other arguments of these
+    /// calls are checked like any other code: <c>T.F("Найдено {0}", "файл")</c> shows an untranslated word). Allowed besides that: comments, the name of the language
     /// "Русский" (it is never translated), a const string that the code passes through T._ / T.F by its name, the plural
     /// words inside an interpolated string (<c>$"{Format.Count(n, "файл", "файла", "файлов")} …"</c>) and a region of Russian
     /// words the program matches against and never shows, between the comment lines <c>// l10n:data-begin</c> and
@@ -148,11 +161,18 @@ internal static class LocalizationCatalog
         var problems = new List<string>();
         foreach (var (path, content) in sources)
         {
-            if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || !IsListed(path, enforced))
+            if (!IsListed(path, enforced))
+                continue;
+            if (path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
+            {
+                problems.AddRange(UnwrappedInXaml(path, content));
+                continue;
+            }
+            if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 continue;
             var code = WithoutCommentLines(content);
             var dataLines = DataRegionLines(content);
-            var open = new List<string>(); // for each open bracket: the name of the call for "(", else ""
+            var open = new List<(string Call, int Argument)>(); // for each open bracket: the name of the call for "(", else "", and the index of its current argument
             var i = 0;
             while (i < code.Length)
             {
@@ -160,7 +180,7 @@ internal static class LocalizationCatalog
                 if (TrySkip(code, ref i))
                 {
                     var token = code[start..i];
-                    if (token[0] is '/' or '\'' || open.Any(c => Array.IndexOf(WrappingCalls, c) >= 0))
+                    if (token[0] is '/' or '\'' || IsTextArgument(open))
                         continue;
                     if (!Cyrillic.IsMatch(token.StartsWith('$') || token.StartsWith("@$") ? WithoutPluralCalls(token) : token))
                         continue;
@@ -172,13 +192,47 @@ internal static class LocalizationCatalog
                 }
                 var c = code[i];
                 if (c is '(' or '[' or '{')
-                    open.Add(c == '(' ? CalleeName.Match(code[Math.Max(0, i - 80)..i].TrimEnd()).Value : "");
+                    open.Add((c == '(' ? CalleeName.Match(code[Math.Max(0, i - 80)..i].TrimEnd()).Value : "", 0));
                 else if ((c is ')' or ']' or '}') && open.Count > 0)
                     open.RemoveAt(open.Count - 1);
+                else if (c == ',' && open.Count > 0)
+                    open[^1] = (open[^1].Call, open[^1].Argument + 1);
                 i++;
             }
         }
         return problems;
+    }
+
+    /// <summary>The innermost open bracket is a wrapping call and the argument being read is one of its texts.</summary>
+    private static bool IsTextArgument(List<(string Call, int Argument)> open)
+        => open.Count > 0 && TextPositions.TryGetValue(open[^1].Call, out var positions) && Array.IndexOf(positions, open[^1].Argument) >= 0;
+
+    /// <summary>
+    /// The lines of a XAML file with Russian text that is not a {loc:T '…'}: in an attribute, in the content of an element or in
+    /// a StringFormat. Comments, the wrapped texts and the name of the language "Русский" are fine.
+    /// </summary>
+    private static IEnumerable<string> UnwrappedInXaml(string path, string content)
+    {
+        var xaml = XamlComment.Replace(content, m => new string('\n', m.Value.Count(c => c == '\n')));
+        var blank = xaml.ToCharArray();
+        foreach (Match start in LocStart.Matches(xaml))
+        {
+            var quoted = LocQuoted.Match(xaml, start.Index);
+            for (var i = quoted.Success ? quoted.Index : start.Index; quoted.Success && i < quoted.Index + quoted.Length; i++)
+            {
+                if (blank[i] != '\n')
+                    blank[i] = ' ';
+            }
+        }
+        var lines = new string(blank).Split('\n');
+        for (var n = 0; n < lines.Length; n++)
+        {
+            var line = WebUtility.HtmlDecode(lines[n]).Replace("\"Русский\"", "\"\"");
+            if (!Cyrillic.IsMatch(line))
+                continue;
+            var shown = line.Trim().Length > 70 ? line.Trim()[..70] + "…" : line.Trim();
+            yield return $"{path}:{n + 1}: {shown} has Russian text that is not a {{loc:T '…'}}";
+        }
     }
 
     /// <summary>
@@ -236,11 +290,11 @@ internal static class LocalizationCatalog
         return token;
     }
 
-    /// <summary>The path is one of the files or inside one of the folders (ending with "/") of the list.</summary>
+    /// <summary>The path is one of the files, inside one of the folders (ending with "/") of the list, or the list has the root "/".</summary>
     private static bool IsListed(string path, IReadOnlyCollection<string> list)
-        => list.Any(e => e.EndsWith('/')
+        => list.Any(e => e == "/" || (e.EndsWith('/')
             ? path.StartsWith(e, StringComparison.OrdinalIgnoreCase)
-            : string.Equals(path, e, StringComparison.OrdinalIgnoreCase));
+            : string.Equals(path, e, StringComparison.OrdinalIgnoreCase)));
 
     // ----- en.json -----
 

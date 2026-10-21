@@ -497,6 +497,31 @@ public sealed class OptimizerEnglishTests
         Assert.Contains(expectedRussian, russian.Details);
     }
 
+    [Theory]
+    [InlineData("Майкрософт Windows 11 Домашняя", "Windows 11 Home", "Microsoft Windows 11 Home")]
+    [InlineData("Майкрософт Windows 11 Домашняя для одного языка", "Windows 11 Home Single Language", "Microsoft Windows 11 Home Single Language")]
+    [InlineData("Майкрософт Windows 10 Корпоративная", "Windows 10 Enterprise", "Microsoft Windows 10 Enterprise")]
+    [InlineData("Майкрософт Windows 11 для образовательных учреждений", "Windows 11 Education", "Microsoft Windows 11 Education")]
+    [InlineData("Майкрософт Windows 11 Pro", "Windows 11 Pro", "Microsoft Windows 11 Pro")]
+    [InlineData("Microsoft Windows 11 Home", "Windows 11 Home", "Microsoft Windows 11 Home")]
+    public void TheEditionOfARussianWindows_IsInEnglish_InTheEnglishUi_AndAsWindowsGivesItInRussian(string caption, string title, string tooltipFirstLine)
+    {
+        var hw = GoodDesktop() with { OsCaption = caption };
+
+        using (TestLanguage.English())
+        {
+            var card = HardwareCardBuilder.Build(hw, GoodSettings(), Evaluate(hw, GoodSettings()), Now).Single(c => c.Caption == "System");
+
+            Assert.Equal(title, card.Title);
+            Assert.Equal(tooltipFirstLine, card.ToolTipText!.Split('\n')[0]);
+            AssertEnglish(card.Title, card.ToolTipText);
+        }
+
+        var russian = HardwareCardBuilder.Build(hw, GoodSettings(), Evaluate(hw, GoodSettings()), Now).Single(c => c.Caption == "Система");
+        Assert.Equal(caption.Replace("Майкрософт ", "").Replace("Microsoft ", ""), russian.Title); // as it always was
+        Assert.Equal(caption, russian.ToolTipText!.Split('\n')[0]);
+    }
+
     [Fact]
     public void TheCardOfThePowerPlan_ShowsTheNameOfWindows_AndOwnLabelsInEnglish()
     {
