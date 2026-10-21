@@ -286,22 +286,34 @@ public class SimpleModeDashboardTests
     [Fact]
     public async Task CheckAndFix_WhileTheDashboardIsBusy_DoesNothing()
     {
+        // IsScanning is already true when ScanCoreAsync only has queued the module on the thread pool (SmartScanner runs it with
+        // Task.Run), so the test waits for the module itself to be running — not for IsScanning, and not for a time.
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var hanging = new FakeContributor("Долгий", async ct =>
         {
+            running.TrySetResult();
             await Task.Delay(Timeout.Infinite, ct);
             return Array.Empty<HealthIssue>();
         });
         var vm = Create(new AppSettings { UiMode = UiMode.Simple }, hanging);
         vm.ModuleTimeout = TimeSpan.FromMinutes(5);
         var scan = vm.ScanCommand.ExecuteAsync();
-        await WaitUntilAsync(() => vm.IsScanning);
+        try
+        {
+            await running.Task.WaitAsync(TimeSpan.FromSeconds(10)); // only a guard against a hang, nothing depends on the time
+            Assert.True(vm.IsScanning);
 
-        var questions = await RunWithAnswerAsync(true, () => vm.CheckAndFixCommand.ExecuteAsync());
+            // Busy: the command returns at once. A second scan would never end here (the module hangs), hence the guard.
+            var questions = await RunWithAnswerAsync(true, () => vm.CheckAndFixCommand.ExecuteAsync().WaitAsync(TimeSpan.FromSeconds(10)));
 
-        Assert.Empty(questions);
-        Assert.Equal(1, hanging.Calls); // no second scan was started
-        vm.CancelCommand.Execute(null);
-        await scan;
+            Assert.Empty(questions);
+            Assert.Equal(1, hanging.Calls); // no second scan was started
+        }
+        finally
+        {
+            vm.CancelCommand.Execute(null);
+            await scan;
+        }
     }
 
     // ----- rows -----
