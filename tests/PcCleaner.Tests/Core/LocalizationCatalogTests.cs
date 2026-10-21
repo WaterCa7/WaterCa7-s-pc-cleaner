@@ -28,9 +28,11 @@ public class LocalizationCatalogTests
         "Modules/Cleaner/",
         "Modules/Dashboard/",
         "Modules/Disk/",
+        "Modules/Network/",
         "Modules/Optimizer/",
         "Modules/Processes/",
         "Modules/Programs/",
+        "Modules/Security/",
         "Modules/Settings/",
         "Modules/Startup/",
     };
@@ -43,7 +45,6 @@ public class LocalizationCatalogTests
     {
         "Core/Format.cs",
         "Core/Localization/LocExtension.cs",
-        "Modules/Network/NetworkUi.cs",
     };
 
     [Fact]
@@ -68,7 +69,7 @@ public class LocalizationCatalogTests
     [Fact]
     public void ThePassThroughFiles_PassWhenTheirFoldersAreEnforced()
     {
-        var enforced = new[] { "Core/Localization/", "Core/Format.cs", "Modules/Network/NetworkUi.cs" };
+        var enforced = new[] { "Core/Localization/", "Core/Format.cs" };
 
         var problems = LocalizationCatalog.Check(SourceFiles(), File.ReadAllText(EnJsonPath()), enforced, PassThrough);
 

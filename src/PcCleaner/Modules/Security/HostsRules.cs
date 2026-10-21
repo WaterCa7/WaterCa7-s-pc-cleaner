@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -29,12 +30,19 @@ public static class HostsRules
         Contains,
     }
 
-    private sealed record DomainRule(string Pattern, MatchKind Kind, DomainCategory Category, string Display, string? Owner = null);
+    /// <summary>The name of the site is made when asked, so that it follows the language.</summary>
+    private sealed record DomainRule(string Pattern, MatchKind Kind, DomainCategory Category, Func<string> Display, string? Owner = null)
+    {
+        public DomainRule(string pattern, MatchKind kind, DomainCategory category, string display, string? owner = null)
+            : this(pattern, kind, category, () => display, owner)
+        {
+        }
+    }
 
     private static readonly DomainRule[] Rules =
     {
         // Antivirus / security vendors and help sites
-        new("kaspersky", MatchKind.Contains, DomainCategory.Security, "Касперский"),
+        new("kaspersky", MatchKind.Contains, DomainCategory.Security, () => T._("Касперский")),
         new("drweb", MatchKind.Contains, DomainCategory.Security, "Dr.Web"),
         new("eset", MatchKind.LabelPrefix, DomainCategory.Security, "ESET"),
         new("avast", MatchKind.LabelPrefix, DomainCategory.Security, "Avast"),
@@ -56,37 +64,37 @@ public static class HostsRules
         new("360totalsecurity", MatchKind.Contains, DomainCategory.Security, "360 Total Security"),
         new("virusinfo.info", MatchKind.Suffix, DomainCategory.Security, "VirusInfo"),
         new("safezone.cc", MatchKind.Suffix, DomainCategory.Security, "SafeZone"),
-        new("wdcp.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Защитника Windows"),
-        new("wd.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Защитника Windows"),
-        new("definitionupdates.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "обновлений Защитника Windows"),
+        new("wdcp.microsoft.com", MatchKind.Suffix, DomainCategory.Security, () => T._("Защитника Windows")),
+        new("wd.microsoft.com", MatchKind.Suffix, DomainCategory.Security, () => T._("Защитника Windows")),
+        new("definitionupdates.microsoft.com", MatchKind.Suffix, DomainCategory.Security, () => T._("обновлений Защитника Windows")),
         new("smartscreen.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "SmartScreen"),
         new("smartscreen-prod.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "SmartScreen"),
-        new("security.microsoft.com", MatchKind.Suffix, DomainCategory.Security, "Защитника Windows"),
+        new("security.microsoft.com", MatchKind.Suffix, DomainCategory.Security, () => T._("Защитника Windows")),
 
         // Windows Update
-        new("windowsupdate", MatchKind.Contains, DomainCategory.Update, "Центр обновления Windows"),
-        new("update.microsoft.com", MatchKind.Suffix, DomainCategory.Update, "Центр обновления Windows"),
-        new("delivery.mp.microsoft.com", MatchKind.Suffix, DomainCategory.Update, "Центр обновления Windows"),
-        new("wustat.windows.com", MatchKind.Suffix, DomainCategory.Update, "Центр обновления Windows"),
+        new("windowsupdate", MatchKind.Contains, DomainCategory.Update, () => T._("Центр обновления Windows")),
+        new("update.microsoft.com", MatchKind.Suffix, DomainCategory.Update, () => T._("Центр обновления Windows")),
+        new("delivery.mp.microsoft.com", MatchKind.Suffix, DomainCategory.Update, () => T._("Центр обновления Windows")),
+        new("wustat.windows.com", MatchKind.Suffix, DomainCategory.Update, () => T._("Центр обновления Windows")),
 
         // Banks, payments, government services
-        new("sberbank.ru", MatchKind.Suffix, DomainCategory.Bank, "Сбербанк"),
-        new("sberbank.com", MatchKind.Suffix, DomainCategory.Bank, "Сбербанк"),
-        new("sber.ru", MatchKind.Suffix, DomainCategory.Bank, "Сбер"),
-        new("tinkoff.ru", MatchKind.Suffix, DomainCategory.Bank, "Т-Банк"),
-        new("tbank.ru", MatchKind.Suffix, DomainCategory.Bank, "Т-Банк"),
-        new("vtb.ru", MatchKind.Suffix, DomainCategory.Bank, "ВТБ"),
-        new("alfabank.ru", MatchKind.Suffix, DomainCategory.Bank, "Альфа-Банк"),
-        new("gazprombank.ru", MatchKind.Suffix, DomainCategory.Bank, "Газпромбанк"),
-        new("raiffeisen.ru", MatchKind.Suffix, DomainCategory.Bank, "Райффайзенбанк"),
-        new("pochtabank.ru", MatchKind.Suffix, DomainCategory.Bank, "Почта Банк"),
-        new("sovcombank.ru", MatchKind.Suffix, DomainCategory.Bank, "Совкомбанк"),
-        new("yoomoney.ru", MatchKind.Suffix, DomainCategory.Bank, "ЮMoney"),
+        new("sberbank.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Сбербанк")),
+        new("sberbank.com", MatchKind.Suffix, DomainCategory.Bank, () => T._("Сбербанк")),
+        new("sber.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Сбер")),
+        new("tinkoff.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Т-Банк")),
+        new("tbank.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Т-Банк")),
+        new("vtb.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("ВТБ")),
+        new("alfabank.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Альфа-Банк")),
+        new("gazprombank.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Газпромбанк")),
+        new("raiffeisen.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Райффайзенбанк")),
+        new("pochtabank.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Почта Банк")),
+        new("sovcombank.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Совкомбанк")),
+        new("yoomoney.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("ЮMoney")),
         new("qiwi.com", MatchKind.Suffix, DomainCategory.Bank, "QIWI"),
         new("paypal.com", MatchKind.Suffix, DomainCategory.Bank, "PayPal"),
-        new("gosuslugi.ru", MatchKind.Suffix, DomainCategory.Bank, "Госуслуги"),
-        new("nalog.ru", MatchKind.Suffix, DomainCategory.Bank, "ФНС"),
-        new("nalog.gov.ru", MatchKind.Suffix, DomainCategory.Bank, "ФНС"),
+        new("gosuslugi.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("Госуслуги")),
+        new("nalog.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("ФНС")),
+        new("nalog.gov.ru", MatchKind.Suffix, DomainCategory.Bank, () => T._("ФНС")),
         new("mos.ru", MatchKind.Suffix, DomainCategory.Bank, "mos.ru"),
 
         // Popular sites
@@ -96,20 +104,20 @@ public static class HostsRules
         new("ytimg.com", MatchKind.Suffix, DomainCategory.Popular, "YouTube", "Google"),
         new("ggpht.com", MatchKind.Suffix, DomainCategory.Popular, "Google", "Google"),
         new("gstatic.com", MatchKind.Suffix, DomainCategory.Popular, "Google", "Google"),
-        new("yandex", MatchKind.LabelPrefix, DomainCategory.Popular, "Яндекс"),
-        new("ya.ru", MatchKind.Suffix, DomainCategory.Popular, "Яндекс"),
-        new("dzen.ru", MatchKind.Suffix, DomainCategory.Popular, "Дзен"),
-        new("vk.com", MatchKind.Suffix, DomainCategory.Popular, "ВКонтакте"),
-        new("vk.ru", MatchKind.Suffix, DomainCategory.Popular, "ВКонтакте"),
-        new("vkontakte.ru", MatchKind.Suffix, DomainCategory.Popular, "ВКонтакте"),
+        new("yandex", MatchKind.LabelPrefix, DomainCategory.Popular, () => T._("Яндекс")),
+        new("ya.ru", MatchKind.Suffix, DomainCategory.Popular, () => T._("Яндекс")),
+        new("dzen.ru", MatchKind.Suffix, DomainCategory.Popular, () => T._("Дзен")),
+        new("vk.com", MatchKind.Suffix, DomainCategory.Popular, () => T._("ВКонтакте")),
+        new("vk.ru", MatchKind.Suffix, DomainCategory.Popular, () => T._("ВКонтакте")),
+        new("vkontakte.ru", MatchKind.Suffix, DomainCategory.Popular, () => T._("ВКонтакте")),
         new("mail.ru", MatchKind.Suffix, DomainCategory.Popular, "Mail.ru"),
-        new("ok.ru", MatchKind.Suffix, DomainCategory.Popular, "Одноклассники"),
-        new("odnoklassniki.ru", MatchKind.Suffix, DomainCategory.Popular, "Одноклассники"),
+        new("ok.ru", MatchKind.Suffix, DomainCategory.Popular, () => T._("Одноклассники")),
+        new("odnoklassniki.ru", MatchKind.Suffix, DomainCategory.Popular, () => T._("Одноклассники")),
         new("rutube.ru", MatchKind.Suffix, DomainCategory.Popular, "Rutube"),
         new("ozon.ru", MatchKind.Suffix, DomainCategory.Popular, "Ozon"),
         new("wildberries.ru", MatchKind.Suffix, DomainCategory.Popular, "Wildberries"),
         new("wb.ru", MatchKind.Suffix, DomainCategory.Popular, "Wildberries"),
-        new("avito.ru", MatchKind.Suffix, DomainCategory.Popular, "Авито"),
+        new("avito.ru", MatchKind.Suffix, DomainCategory.Popular, () => T._("Авито")),
         new("microsoft.com", MatchKind.Suffix, DomainCategory.Popular, "Microsoft"),
         new("live.com", MatchKind.Suffix, DomainCategory.Popular, "Microsoft (Outlook)"),
         new("outlook.com", MatchKind.Suffix, DomainCategory.Popular, "Outlook"),
@@ -137,7 +145,7 @@ public static class HostsRules
         new("discord.com", MatchKind.Suffix, DomainCategory.Popular, "Discord"),
         new("discord.gg", MatchKind.Suffix, DomainCategory.Popular, "Discord"),
         new("twitch.tv", MatchKind.Suffix, DomainCategory.Popular, "Twitch"),
-        new("wikipedia.org", MatchKind.Suffix, DomainCategory.Popular, "Википедия"),
+        new("wikipedia.org", MatchKind.Suffix, DomainCategory.Popular, () => T._("Википедия")),
         new("amazon.com", MatchKind.Suffix, DomainCategory.Popular, "Amazon"),
     };
 
@@ -183,7 +191,7 @@ public static class HostsRules
             if (match && (best is null || rule.Category > best.Category))
                 best = rule;
         }
-        return best is null ? null : (best.Category, best.Display, best.Owner);
+        return best is null ? null : (best.Category, best.Display(), best.Owner);
     }
 
     /// <summary>Returns the owner (Meta/Google/Telegram) of a public IPv4 address, if known.</summary>
@@ -228,9 +236,9 @@ public static class HostsRules
     public static (SecurityStatus Risk, string Reason) Evaluate(HostsEntry entry)
     {
         if (!HostsFile.TryParseAddress(entry.Address, out var ip) || ip is null)
-            return (SecurityStatus.Info, "Строка записана с ошибкой — Windows её не учитывает.");
+            return (SecurityStatus.Info, T._("Строка записана с ошибкой — Windows её не учитывает."));
         if (entry.Hostnames.Count == 0)
-            return (SecurityStatus.Info, "В строке нет имени сайта — Windows её не учитывает.");
+            return (SecurityStatus.Info, T._("В строке нет имени сайта — Windows её не учитывает."));
 
         var blocking = IsBlockingAddress(ip);
         var worst = (Risk: SecurityStatus.Ok, Reason: "");
@@ -247,15 +255,15 @@ public static class HostsRules
     {
         var h = host.ToLowerInvariant();
         if (h is "localhost" or "localhost.localdomain" or "local" or "broadcasthost" or "ip6-localhost" or "ip6-loopback")
-            return (SecurityStatus.Ok, "Стандартная запись: имя этого компьютера.");
+            return (SecurityStatus.Ok, T._("Стандартная запись: имя этого компьютера."));
 
         var cat = Categorize(host);
         if (cat is null)
         {
             return blocking
-                ? (SecurityStatus.Ok, "Блокировка сайта — так обычно отключают рекламу или слежку. Это безопасно.")
+                ? (SecurityStatus.Ok, T._("Блокировка сайта — так обычно отключают рекламу или слежку. Это безопасно."))
                 : (SecurityStatus.Info,
-                    $"Пользовательская запись: {host} → {ip}. Обычно её добавляют программы или администратор сети.");
+                    T.F("Пользовательская запись: {0} → {1}. Обычно её добавляют программы или администратор сети.", host, ip));
         }
 
         var (category, display, owner) = cat.Value;
@@ -264,10 +272,10 @@ public static class HostsRules
             return category switch
             {
                 DomainCategory.Security => (SecurityStatus.Warning,
-                    $"Заблокирован сайт {display} ({host}). Так вирусы мешают антивирусу обновляться и не дают скачать средства лечения."),
+                    T.F("Заблокирован сайт {0} ({1}). Так вирусы мешают антивирусу обновляться и не дают скачать средства лечения.", display, host)),
                 DomainCategory.Update => (SecurityStatus.Warning,
-                    $"Заблокирован {host} — Windows не сможет получать обновления безопасности."),
-                _ => (SecurityStatus.Info, $"Сайт {host} ({display}) заблокирован: он не будет открываться."),
+                    T.F("Заблокирован {0} — Windows не сможет получать обновления безопасности.", host)),
+                _ => (SecurityStatus.Info, T.F("Сайт {0} ({1}) заблокирован: он не будет открываться.", host, display)),
             };
         }
 
@@ -275,13 +283,11 @@ public static class HostsRules
         if (owner is not null && ipOwner == owner)
         {
             return (SecurityStatus.Warning,
-                $"{host} указывает на сервер самой компании {owner} ({ip}). Обычно такие строки добавляют вручную, " +
-                "чтобы обойти блокировку. Если вы этого не делали — удалите строку.");
+                T.F("{0} указывает на сервер самой компании {1} ({2}). Обычно такие строки добавляют вручную, чтобы обойти блокировку. Если вы этого не делали — удалите строку.", host, owner, ip));
         }
 
-        var extra = category == DomainCategory.Bank ? " Для банков и госуслуг это особенно опасно." : "";
+        var extra = category == DomainCategory.Bank ? " " + T._("Для банков и госуслуг это особенно опасно.") : "";
         return (SecurityStatus.Danger,
-            $"Перенаправление: сайт {display} ({host}) будет открываться с адреса {ip}. Так вирусы подсовывают " +
-            $"поддельные страницы, чтобы украсть пароли.{extra} Если вы не добавляли эту строку сами — удалите её.");
+            T.F("Перенаправление: сайт {0} ({1}) будет открываться с адреса {2}. Так вирусы подсовывают поддельные страницы, чтобы украсть пароли.{3} Если вы не добавляли эту строку сами — удалите её.", display, host, ip, extra));
     }
 }

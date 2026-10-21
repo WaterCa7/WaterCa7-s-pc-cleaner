@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Windows.Input;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Network;
 
@@ -22,25 +23,25 @@ public sealed class AdapterItem : ObservableObject
         Info = info;
         IsPrimary = isPrimary;
         var fields = new List<AdapterField>();
-        fields.Add(new AdapterField("IPv4-адрес", info.IPv4.Count == 0 ? "нет" : string.Join(", ", info.IPv4.Select(NetAddress.Text)),
-            "Адрес компьютера в сети. 192.168.x.x, 10.x.x.x и 172.16–31.x.x — внутренние адреса домашней сети."));
-        fields.Add(new AdapterField(info.IsVirtual ? "Шлюз" : "Шлюз (роутер)",
-            info.Gateways.Count == 0 ? "нет" : string.Join(", ", info.Gateways.Take(2).Select(NetAddress.Text)),
+        fields.Add(new AdapterField(T._("IPv4-адрес"), info.IPv4.Count == 0 ? T._("нет") : string.Join(", ", info.IPv4.Select(NetAddress.Text)),
+            T._("Адрес компьютера в сети. 192.168.x.x, 10.x.x.x и 172.16–31.x.x — внутренние адреса домашней сети.")));
+        fields.Add(new AdapterField(info.IsVirtual ? T._("Шлюз") : T._("Шлюз (роутер)"),
+            info.Gateways.Count == 0 ? T._("нет") : string.Join(", ", info.Gateways.Take(2).Select(NetAddress.Text)),
             info.IsVirtual
-                ? "Через этот адрес трафик уходит в VPN или виртуальную сеть."
-                : "Через этот адрес компьютер выходит в интернет — обычно это ваш роутер."));
+                ? T._("Через этот адрес трафик уходит в VPN или виртуальную сеть.")
+                : T._("Через этот адрес компьютер выходит в интернет — обычно это ваш роутер.")));
         var dns = info.DnsServers.Where(d => !NetworkRules.IsPlaceholderDns(d)).Select(NetAddress.Text).Distinct().Take(3).ToList();
-        fields.Add(new AdapterField("DNS", dns.Count == 0 ? "нет" : string.Join(", ", dns),
-            "Серверы, которые переводят адреса сайтов (ya.ru) в IP-адреса."));
+        fields.Add(new AdapterField("DNS", dns.Count == 0 ? T._("нет") : string.Join(", ", dns),
+            T._("Серверы, которые переводят адреса сайтов (ya.ru) в IP-адреса.")));
         if (info.Dhcp is { } dhcp && !info.IsVirtual)
-            fields.Add(new AdapterField("DHCP", dhcp ? "включён" : "выключен",
-                dhcp ? "Адрес выдаётся автоматически (роутером) — так настроено почти у всех."
-                     : "Адрес задан вручную (статический IP)."));
+            fields.Add(new AdapterField("DHCP", dhcp ? T._("включён") : T._("выключен"),
+                dhcp ? T._("Адрес выдаётся автоматически (роутером) — так настроено почти у всех.")
+                     : T._("Адрес задан вручную (статический IP).")));
         if (info.Mac is not null)
-            fields.Add(new AdapterField("MAC-адрес", info.Mac, "Физический адрес сетевой карты — уникальный номер устройства."));
+            fields.Add(new AdapterField(T._("MAC-адрес"), info.Mac, T._("Физический адрес сетевой карты — уникальный номер устройства.")));
         if (info.IPv6.Count > 0)
             fields.Add(new AdapterField("IPv6", string.Join(", ", info.IPv6.Take(2).Select(NetAddress.Text)),
-                "Адрес нового протокола IPv6. Если провайдер его не поддерживает, это поле пустое — это нормально."));
+                T._("Адрес нового протокола IPv6. Если провайдер его не поддерживает, это поле пустое — это нормально.")));
         Fields = fields;
     }
 
@@ -55,25 +56,24 @@ public sealed class AdapterItem : ObservableObject
 
     public string KindToolTip => Info.Kind switch
     {
-        AdapterKind.Ethernet => "Проводное подключение по кабелю",
-        AdapterKind.WiFi => "Беспроводное подключение",
-        AdapterKind.Vpn => "Виртуальный адаптер VPN или прокси: трафик программ идёт через него к серверу VPN",
-        AdapterKind.Virtual => "Виртуальный адаптер (Hyper-V, виртуальные машины, WSL) — не настоящая сетевая карта",
-        _ => "Другой тип подключения (Bluetooth, телефон в режиме модема и т. п.)",
+        AdapterKind.Ethernet => T._("Проводное подключение по кабелю"),
+        AdapterKind.WiFi => T._("Беспроводное подключение"),
+        AdapterKind.Vpn => T._("Виртуальный адаптер VPN или прокси: трафик программ идёт через него к серверу VPN"),
+        AdapterKind.Virtual => T._("Виртуальный адаптер (Hyper-V, виртуальные машины, WSL) — не настоящая сетевая карта"),
+        _ => T._("Другой тип подключения (Bluetooth, телефон в режиме модема и т. п.)"),
     };
 
     public bool HasSpeed => !Info.IsVirtual && Info.SpeedBps > 0;
     public string SpeedText => NetworkRules.FormatLinkSpeed(Info.SpeedBps);
 
     public string SpeedToolTip => Info.Kind == AdapterKind.WiFi
-        ? "Скорость связи с роутером по Wi-Fi (скорость интернета зависит ещё и от тарифа)"
-        : "Скорость связи сетевой карты с роутером (скорость интернета зависит ещё и от тарифа)";
+        ? T._("Скорость связи с роутером по Wi-Fi (скорость интернета зависит ещё и от тарифа)")
+        : T._("Скорость связи сетевой карты с роутером (скорость интернета зависит ещё и от тарифа)");
 
     public bool IsSlowLink => NetworkRules.IsSlowWiredLink(Info);
 
     public string SlowLinkText =>
-        $"Карта работает на {SpeedText}. Обычно это значит, что кабель плохой: для 1 Гбит/с нужен Cat5e или Cat6 со всеми 8 жилами. " +
-        "Попробуйте другой кабель или другой порт роутера.";
+        T.F("Карта работает на {0}. Обычно это значит, что кабель плохой: для 1 Гбит/с нужен Cat5e или Cat6 со всеми 8 жилами. Попробуйте другой кабель или другой порт роутера.", SpeedText);
 
     public IReadOnlyList<AdapterField> Fields { get; }
 
@@ -107,7 +107,7 @@ public sealed class AdapterItem : ObservableObject
             ReceiveRate = LatencyMath.FormatRate(_receiveBps);
             SendRate = LatencyMath.FormatRate(_sendBps);
         }
-        Totals = $"Всего: ↓ {Format.Bytes(current.Received)} · ↑ {Format.Bytes(current.Sent)}";
+        Totals = T.F("Всего: ↓ {0} · ↑ {1}", Format.Bytes(current.Received), Format.Bytes(current.Sent));
     }
 }
 
@@ -132,23 +132,23 @@ public sealed class LatencyItem
         IsPending = true,
         Tone = NetTone.Neutral,
         ValueText = "…",
-        ToolTip = "Проверяется…",
+        ToolTip = T._("Проверяется…"),
     };
 
     public static LatencyItem ForTarget(LatencyResult r)
     {
         var (tone, word) = LatencyMath.RateInternet(r.MedianMs);
-        var attempts = string.Join(", ", r.Attempts.Select(a => a is null ? "нет ответа" : LatencyMath.FormatMs(a)));
+        var attempts = string.Join(", ", r.Attempts.Select(a => a is null ? T._("нет ответа") : LatencyMath.FormatMs(a)));
         return new LatencyItem
         {
             Name = r.Target.Name,
             Host = r.Target.Host,
             Ms = r.MedianMs,
             Tone = tone,
-            ValueText = r.MedianMs is null ? "нет ответа" : LatencyMath.FormatMs(r.MedianMs),
+            ValueText = r.MedianMs is null ? T._("нет ответа") : LatencyMath.FormatMs(r.MedianMs),
             ToolTip = r.MedianMs is null
-                ? $"{r.Target.Host}: сервер не ответил за 2 секунды ни на одну из 3 попыток" + (r.Error is null ? "" : $" ({r.Error})")
-                : $"{r.Target.Host}: время установки соединения — {word}. Попытки: {attempts}",
+                ? T.F("{0}: сервер не ответил за 2 секунды ни на одну из 3 попыток", r.Target.Host) + (r.Error is null ? "" : $" ({r.Error})")
+                : T.F("{0}: время установки соединения — {1}. Попытки: {2}", r.Target.Host, word, attempts),
         };
     }
 
@@ -157,25 +157,25 @@ public sealed class LatencyItem
         var (tone, word) = LatencyMath.RateRouter(g.MedianMs);
         return new LatencyItem
         {
-            Name = "Роутер",
+            Name = T._("Роутер"),
             Host = NetAddress.Text(g.Address),
             Ms = g.MedianMs,
             Tone = tone,
-            ValueText = g.MedianMs is null ? "не отвечает" : LatencyMath.FormatMs(g.MedianMs),
+            ValueText = g.MedianMs is null ? T._("не отвечает") : LatencyMath.FormatMs(g.MedianMs),
             ToolTip = g.MedianMs is null
-                ? "Роутер не ответил на ping. Многие роутеры специально не отвечают на такие запросы — это не ошибка."
-                : $"Задержка до роутера по локальной сети — {word}. По кабелю обычно меньше 1 мс, по Wi-Fi — 1–5 мс.",
+                ? T._("Роутер не ответил на ping. Многие роутеры специально не отвечают на такие запросы — это не ошибка.")
+                : T.F("Задержка до роутера по локальной сети — {0}. По кабелю обычно меньше 1 мс, по Wi-Fi — 1–5 мс.", word),
         };
     }
 
     public static LatencyItem ForHttp(double? ms) => new()
     {
-        Name = "Проверка Windows",
+        Name = T._("Проверка Windows"),
         Host = "msftconnecttest.com",
         Ms = ms,
         Tone = LatencyMath.RateInternet(ms).Tone,
-        ValueText = ms is null ? "нет ответа" : LatencyMath.FormatMs(ms),
-        ToolTip = "Время ответа сервера, по которому Windows сама проверяет доступ в интернет (через VPN или прокси).",
+        ValueText = ms is null ? T._("нет ответа") : LatencyMath.FormatMs(ms),
+        ToolTip = T._("Время ответа сервера, по которому Windows сама проверяет доступ в интернет (через VPN или прокси)."),
     };
 }
 
@@ -195,11 +195,11 @@ public sealed class DnsServerItem
         };
         ToolTip = entry.Kind switch
         {
-            DnsKind.Known => $"{entry.Label} — известный публичный DNS-сервер.",
-            DnsKind.Router => "Адрес из домашней сети: запросы идут через роутер к DNS провайдера.",
-            DnsKind.Vpn => "DNS-сервер VPN: адреса сайтов определяет VPN-сервис.",
-            DnsKind.Local => "Запросы обрабатывает программа на этом компьютере (VPN, фильтр рекламы и т. п.).",
-            _ => "Обычно это DNS вашего интернет-провайдера.",
+            DnsKind.Known => T.F("{0} — известный публичный DNS-сервер.", entry.Label),
+            DnsKind.Router => T._("Адрес из домашней сети: запросы идут через роутер к DNS провайдера."),
+            DnsKind.Vpn => T._("DNS-сервер VPN: адреса сайтов определяет VPN-сервис."),
+            DnsKind.Local => T._("Запросы обрабатывает программа на этом компьютере (VPN, фильтр рекламы и т. п.)."),
+            _ => T._("Обычно это DNS вашего интернет-провайдера."),
         };
     }
 
@@ -263,13 +263,11 @@ public abstract class ConnectionListItem : ObservableObject
     public abstract bool IsHighRisk { get; }
 
     /// <summary>"Необычный порт" (the port alone proves nothing) or "Подозрительно" (a second sign agrees).</summary>
-    public string SuspiciousBadgeText => IsHighRisk ? "Подозрительно" : NetworkRules.UnusualPortText;
+    public string SuspiciousBadgeText => IsHighRisk ? T._("Подозрительно") : NetworkRules.UnusualPortText;
 
     public string SuspiciousBadgeToolTip => IsHighRisk
-        ? "Соединение с портом, который используют вирусы, майнеры и инструменты взлома, и есть ещё признаки — подробности " +
-          "в подсказке строки. Проверьте программу в разделе «Процессы»."
-        : "Соединение с портом, который часто используют вирусы, майнеры или Tor, но иногда и обычные игры и чаты. " +
-          "Если вы знаете эту программу — всё в порядке.";
+        ? T._("Соединение с портом, который используют вирусы, майнеры и инструменты взлома, и есть ещё признаки — подробности в подсказке строки. Проверьте программу в разделе «Процессы».")
+        : T._("Соединение с портом, который часто используют вирусы, майнеры или Tor, но иногда и обычные игры и чаты. Если вы знаете эту программу — всё в порядке.");
 
     public abstract string ToolTip { get; }
     public abstract string CopyText { get; }
@@ -289,21 +287,21 @@ public sealed class ConnectionGroupItem : ConnectionListItem
         HighRisk = children.Any(c => c.IsHighRisk);
         var established = children.Where(c => c.IsEstablished).Sum(c => c.Count);
         var opening = Count - established;
-        StateText = established > 0 ? "Установлено" : "Подключается";
+        StateText = established > 0 ? T._("Установлено") : T._("Подключается");
         StateToolTip = opening == 0
-            ? $"Установлено: {Format.Number(established)}"
-            : $"Установлено: {Format.Number(established)}, ещё подключаются: {Format.Number(opening)}";
+            ? T.F("Установлено: {0}", Format.Number(established))
+            : T.F("Установлено: {0}, ещё подключаются: {1}", Format.Number(established), Format.Number(opening));
         var services = children.Select(c => c.Service).Where(s => s.Length > 0).Distinct().ToList();
         Service = services.Count switch
         {
             0 => "",
             1 => services[0],
-            _ => "разные",
+            _ => T._("разные"),
         };
         var endpoints = children.Select(c => c.RemoteText).Distinct().ToList();
         HostText = endpoints.Count <= 2
             ? string.Join(", ", endpoints)
-            : $"{string.Join(", ", endpoints.Take(2))} и ещё {Format.Number(endpoints.Count - 2)}";
+            : T.F("{0} и ещё {1}", string.Join(", ", endpoints.Take(2)), Format.Number(endpoints.Count - 2));
     }
 
     public IReadOnlyList<ConnectionItem> Children { get; }
@@ -321,7 +319,7 @@ public sealed class ConnectionGroupItem : ConnectionListItem
     public override string StateText { get; }
     public override string StateToolTip { get; }
     public override string CountText => Format.Number(Count);
-    public override string CountToolTip => $"У программы {Format.Count(Count, "соединение", "соединения", "соединений")}";
+    public override string CountToolTip => T.F("У программы {0}", Format.Count(Count, "соединение", "соединения", "соединений"));
     public override bool HasCount => true;
     public override bool IsSuspicious => Suspicious;
     public override bool IsHighRisk => HighRisk;
@@ -345,7 +343,7 @@ public sealed class ConnectionGroupItem : ConnectionListItem
     public override string ToolTip =>
         $"{Process.DisplayName} ({Process.Name}, PID {Process.Pid})" + (Process.Path is null ? "" : $"\n{Process.Path}") +
         $"\n{Format.Count(Count, "соединение", "соединения", "соединений")}" +
-        (Suspicious ? "\n\nЕсть соединения с необычными портами — раскройте строку." : "");
+        (Suspicious ? "\n\n" + T._("Есть соединения с необычными портами — раскройте строку.") : "");
 
     public override string CopyText =>
         $"{Process.Name} (PID {Process.Pid}): {Format.Count(Count, "соединение", "соединения", "соединений")}\n" +
@@ -373,9 +371,9 @@ public sealed class ConnectionItem : ConnectionListItem
         _hostName = row.Scope switch
         {
             AddressScope.Public => PendingHost,
-            AddressScope.Loopback => "этот компьютер",
-            AddressScope.Cgnat => "сеть провайдера",
-            _ => "локальная сеть",
+            AddressScope.Loopback => T._("этот компьютер"),
+            AddressScope.Cgnat => T._("сеть провайдера"),
+            _ => T._("локальная сеть"),
         };
     }
 
@@ -388,7 +386,7 @@ public sealed class ConnectionItem : ConnectionListItem
     public override bool HasCount => Row.Count > 1;
     public override string CountText => $"×{Format.Number(Row.Count)}";
     public override string CountToolTip =>
-        $"{Format.Count(Row.Count, "одинаковое соединение", "одинаковых соединения", "одинаковых соединений")} с {RemoteText}";
+        T.F("{0} с {1}", Format.Count(Row.Count, "одинаковое соединение", "одинаковых соединения", "одинаковых соединений"), RemoteText);
     public string RemoteText { get; }
     public string RemoteIp { get; }
     public IPAddress RemoteAddress => Row.RemoteAddress;
@@ -407,24 +405,24 @@ public sealed class ConnectionItem : ConnectionListItem
     public string RemoteSortKey => string.Concat(Row.RemoteAddress.GetAddressBytes().Select(b => b.ToString("X2"))).PadLeft(32, '0') +
                                    Row.RemotePort.ToString("D5");
 
-    private bool HasHostName => IsPublic && HostName is not PendingHost and not NoHost;
+    private bool HasHostName => IsPublic && _hostName is not PendingHost and not NoHost;
 
     /// <summary>True while the reverse DNS name is not known yet.</summary>
-    public bool IsHostPending => IsPublic && HostName == PendingHost;
+    public bool IsHostPending => IsPublic && _hostName == PendingHost;
 
     public override string ToolTip =>
         $"{Row.Process.DisplayName} ({Row.Process.Name}, PID {Row.Process.Pid})\n" +
-        $"Удалённый адрес: {RemoteText}" + (HasHostName ? $" ({HostName})" : "") + "\n" +
+        T.F("Удалённый адрес: {0}", RemoteText) + (HasHostName ? $" ({HostName})" : "") + "\n" +
         (Row.Count > 1
             ? $"{Format.Count(Row.Count, "одинаковое соединение", "одинаковых соединения", "одинаковых соединений")} · {StateText}"
-            : $"Локальный порт: {Row.LocalPort} · {StateText}") +
-        (Row.SuspiciousReason is null ? "" : $"\n\nПорт {Row.RemotePort} — {Row.SuspiciousReason}.") +
-        (Row.ProgramWarning is null ? "" : $"\nСама программа: {Row.ProgramWarning}.");
+            : T.F("Локальный порт: {0} · {1}", Row.LocalPort, StateText)) +
+        (Row.SuspiciousReason is null ? "" : "\n\n" + T.F("Порт {0} — {1}.", Row.RemotePort, Row.SuspiciousReason)) +
+        (Row.ProgramWarning is null ? "" : "\n" + T.F("Сама программа: {0}.", Row.ProgramWarning));
 
     /// <summary>Reverse DNS name of the remote address (<see cref="PendingHost"/> while resolving, <see cref="NoHost"/> if it has none).</summary>
     public string HostName
     {
-        get => _hostName;
+        get => _hostName == PendingHost ? T._(PendingHost) : _hostName;
         set
         {
             if (Set(ref _hostName, value))
@@ -438,7 +436,7 @@ public sealed class ConnectionItem : ConnectionListItem
 
     public override string CopyText =>
         $"{Row.Process.Name} (PID {Row.Process.Pid}) → {RemoteText}" + (HasHostName ? $" ({HostName})" : "") + $", {StateText}" +
-        (Row.Count > 1 ? $", соединений: {Row.Count}" : "");
+        (Row.Count > 1 ? ", " + T.F("соединений: {0}", Row.Count) : "");
 
     /// <summary>What "Найти в интернете" looks for: the host name if known, otherwise the address.</summary>
     public string SearchText => HasHostName ? HostName : RemoteIp;
@@ -460,7 +458,7 @@ public sealed class PortItem
     {
         Row = row;
         AddressText = string.Join(", ", row.Addresses.Select(NetAddress.Text));
-        AccessText = row.IsNetwork ? "из сети" : "только этот ПК";
+        AccessText = row.IsNetwork ? T._("из сети") : T._("только этот ПК");
         KindText = NetworkRules.PortKindText(row.Kind, row.Process);
         Tone = NetworkRules.PortKindTone(row.Kind);
         ServiceText = string.IsNullOrEmpty(row.Service) ? "—" : row.Service;
@@ -484,10 +482,10 @@ public sealed class PortItem
     public string Explanation => Row.Explanation;
 
     public string AccessToolTip => Row.IsNetwork
-        ? $"Адрес {AddressText}: " + (Row.Addresses.Any(NetAddress.IsAny)
-            ? "0.0.0.0 и :: означают «на всех сетевых адаптерах» — к порту могут подключиться другие устройства в сети."
-            : "к порту могут подключиться другие устройства в сети.")
-        : $"Адрес {AddressText}: 127.0.0.1 и ::1 — это сам компьютер, из сети к порту не подключиться.";
+        ? Row.Addresses.Any(NetAddress.IsAny)
+            ? T.F("Адрес {0}: 0.0.0.0 и :: означают «на всех сетевых адаптерах» — к порту могут подключиться другие устройства в сети.", AddressText)
+            : T.F("Адрес {0}: к порту могут подключиться другие устройства в сети.", AddressText)
+        : T.F("Адрес {0}: 127.0.0.1 и ::1 — это сам компьютер, из сети к порту не подключиться.", AddressText);
 
     public string ToolTip => $"{Row.Process.DisplayName} ({Row.Process.Name}, PID {Row.Process.Pid})\n{ProtocolText} {AddressText} : {Port}\n\n{Explanation}";
 

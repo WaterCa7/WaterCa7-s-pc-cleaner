@@ -59,12 +59,12 @@ public sealed class NetworkViewModel : PageViewModel
 
     private bool _hasData;
     private bool _checked;
-    private string _statusTitle = "Проверяю сеть…";
-    private string _statusText = "Смотрю адаптеры, задержку, DNS, Wi-Fi, соединения и открытые порты. Ничего не меняется.";
+    private string _statusTitle = T._("Проверяю сеть…");
+    private string _statusText = T._("Смотрю адаптеры, задержку, DNS, Wi-Fi, соединения и открытые порты. Ничего не меняется.");
     private NetTone _statusTone = NetTone.Neutral;
     private string _lastCheckText = "";
     private string _internetValue = "…";
-    private string _internetHint = "проверяю…";
+    private string _internetHint = T._("проверяю…");
     private NetTone _internetTone = NetTone.Neutral;
     private string _connectionValue = "…";
     private string _connectionHint = "";
@@ -78,11 +78,11 @@ public sealed class NetworkViewModel : PageViewModel
     private string _socketsValue = "…";
     private string _socketsHint = "";
     private NetTone _socketsTone = NetTone.Neutral;
-    private string _latencyBadge = "проверяю…";
+    private string _latencyBadge = T._("проверяю…");
     private NetTone _latencyTone = NetTone.Neutral;
     private string? _latencyNote;
-    private string _dnsTimeText = "Время ответа: проверяю…";
-    private string _dnsBadge = "проверяю…";
+    private string _dnsTimeText = T._("Время ответа: проверяю…");
+    private string _dnsBadge = T._("проверяю…");
     private NetTone _dnsTone = NetTone.Neutral;
     private string? _dnsAdvice;
     private bool _hasWifi;
@@ -90,15 +90,15 @@ public sealed class NetworkViewModel : PageViewModel
     private string _wifiQuality = "";
     private string? _wifiNote;
     private IReadOnlyList<AdapterField> _wifiFields = Array.Empty<AdapterField>();
-    private string _wifiEmptyTitle = "Проверяю Wi-Fi…";
+    private string _wifiEmptyTitle = T._("Проверяю Wi-Fi…");
     private string _wifiEmptyText = "";
     private bool _wifiLocationBlocked;
     private string _searchText = "";
     private bool _showLocalConnections;
     private bool _onlyNetworkPorts = true;
     private int _socketsTab;
-    private string _connectionsTabHeader = "Соединения";
-    private string _portsTabHeader = "Открытые порты";
+    private string _connectionsTabHeader = T._("Соединения");
+    private string _portsTabHeader = T._("Открытые порты");
     private string _socketsUpdatedText = "";
     private int _visibleConnections;
     private int _visiblePorts;
@@ -336,9 +336,7 @@ public sealed class NetworkViewModel : PageViewModel
     }
 
     public string LatencyFootnote =>
-        "Проверка отправляет по 3 крошечных запроса на соединение к Cloudflare (1.1.1.1), Google (8.8.8.8), Яндексу (ya.ru) " +
-        "и Microsoft, ping роутеру и запрос к серверу, которым Windows сама проверяет интернет (msftconnecttest.com). " +
-        "Соединения сразу закрываются — никакие ваши данные не передаются.";
+        T._("Проверка отправляет по 3 крошечных запроса на соединение к Cloudflare (1.1.1.1), Google (8.8.8.8), Яндексу (ya.ru) и Microsoft, ping роутеру и запрос к серверу, которым Windows сама проверяет интернет (msftconnecttest.com). Соединения сразу закрываются — никакие ваши данные не передаются.");
 
     public string DnsTimeText
     {
@@ -485,20 +483,20 @@ public sealed class NetworkViewModel : PageViewModel
     }
 
     public string ConnectionsEmptyText => _sockets is null
-        ? (_socketsPending ? "Читаю таблицу соединений…" : _stopped ? StoppedSocketsText : "Не удалось прочитать таблицу соединений.")
+        ? (_socketsPending ? T._("Читаю таблицу соединений…") : _stopped ? T._(StoppedSocketsText) : T._("Не удалось прочитать таблицу соединений."))
         : !string.IsNullOrWhiteSpace(SearchText)
-            ? $"Ничего не найдено по запросу «{SearchText.Trim()}»."
-            : "Сейчас программы не обмениваются данными с другими компьютерами.";
+            ? T.F("Ничего не найдено по запросу «{0}».", SearchText.Trim())
+            : T._("Сейчас программы не обмениваются данными с другими компьютерами.");
 
     private const string StoppedSocketsText = "Проверка остановлена — нажмите «Обновить», чтобы прочитать список.";
 
     public string PortsEmptyText => _sockets is null
-        ? (_socketsPending ? "Читаю таблицу портов…" : _stopped ? StoppedSocketsText : "Не удалось прочитать таблицу портов.")
+        ? (_socketsPending ? T._("Читаю таблицу портов…") : _stopped ? T._(StoppedSocketsText) : T._("Не удалось прочитать таблицу портов."))
         : !string.IsNullOrWhiteSpace(SearchText)
-            ? $"Ничего не найдено по запросу «{SearchText.Trim()}»."
+            ? T.F("Ничего не найдено по запросу «{0}».", SearchText.Trim())
             : OnlyNetworkPorts
-                ? "Ни одна программа не принимает подключения из сети — к компьютеру нельзя подключиться снаружи."
-                : "Открытых портов нет.";
+                ? T._("Ни одна программа не принимает подключения из сети — к компьютеру нельзя подключиться снаружи.")
+                : T._("Открытых портов нет.");
 
     public string PortsHiddenNote
     {
@@ -556,7 +554,7 @@ public sealed class NetworkViewModel : PageViewModel
 
     // ================================================================ full check
 
-    private Task RunFullCheckAsync() => RunBusyAsync("Проверяю сеть…", async ct =>
+    private Task RunFullCheckAsync() => RunBusyAsync(T._("Проверяю сеть…"), async ct =>
     {
         try
         {
@@ -573,7 +571,7 @@ public sealed class NetworkViewModel : PageViewModel
     private async Task FullCheckAsync(CancellationToken ct)
     {
         _checked = false;
-        ReportProgress(3, "Читаю сетевые адаптеры…");
+        ReportProgress(3, T._("Читаю сетевые адаптеры…"));
         var adapters = await _service.GetAdaptersAsync(ct);
         ApplyAdapters(adapters);
         SetPending();
@@ -583,21 +581,21 @@ public sealed class NetworkViewModel : PageViewModel
         var done = 0;
         const int parts = 5;
 
-        async Task Part<T>(string what, Func<Task<T>> probe, Action<T?> apply) where T : class
+        async Task Part<TReport>(string what, Func<Task<TReport>> probe, Action<TReport?> apply) where TReport : class
         {
             var result = await NetworkService.Safe(what, probe, ct);
             ct.ThrowIfCancellationRequested();
             apply(result);
             done++;
-            ReportProgress(8 + done * 84.0 / parts, done < parts ? "Проверяю задержку, DNS и Wi-Fi…" : "Подвожу итоги…");
+            ReportProgress(8 + done * 84.0 / parts, done < parts ? T._("Проверяю задержку, DNS и Wi-Fi…") : T._("Подвожу итоги…"));
         }
 
         await Task.WhenAll(
-            Part("соединения", () => _service.ReadSocketsAsync(ct), ApplySockets),
+            Part(T._("соединения"), () => _service.ReadSocketsAsync(ct), ApplySockets),
             Part("Wi-Fi", () => _service.ReadWifiAsync(adapters, ct), ApplyWifi),
             Part("DNS", () => _service.MeasureDnsAsync(ct), ApplyDns),
-            Part("задержка", () => _service.MeasureLatencyAsync(adapters, ct), ApplyLatency),
-            Part("брандмауэр", () => _service.ReadFirewallAsync(ct), (FirewallReport? f) => _firewall = f));
+            Part(T._("задержка"), () => _service.MeasureLatencyAsync(adapters, ct), ApplyLatency),
+            Part(T._("брандмауэр"), () => _service.ReadFirewallAsync(ct), (FirewallReport? f) => _firewall = f));
 
         // Upload over at least 2 seconds (the checks above usually take longer).
         var remaining = UploadSample - started.Elapsed;
@@ -608,10 +606,10 @@ public sealed class NetworkViewModel : PageViewModel
 
         _checked = true;
         BuildFindings();
-        LastCheckText = $"Проверено в {DateTime.Now:HH:mm}";
+        LastCheckText = T.F("Проверено в {0:HH:mm}", DateTime.Now);
         Log.Info(Findings.Count == 0
-            ? "Сеть: проверка завершена, проблем не найдено"
-            : $"Сеть: проверка завершена — {Format.Count(Findings.Count, "замечание", "замечания", "замечаний")}");
+            ? T._("Сеть: проверка завершена, проблем не найдено")
+            : T.F("Сеть: проверка завершена — {0}", Format.Count(Findings.Count, "замечание", "замечания", "замечаний")));
     }
 
     /// <summary>
@@ -622,8 +620,8 @@ public sealed class NetworkViewModel : PageViewModel
     {
         if (!HasData)
         {
-            StatusTitle = "Проверка остановлена";
-            StatusText = "Нажмите «Проверить снова», чтобы проверить сеть.";
+            StatusTitle = T._("Проверка остановлена");
+            StatusText = T._("Нажмите «Проверить снова», чтобы проверить сеть.");
             StatusTone = NetTone.Neutral;
             return;
         }
@@ -636,17 +634,17 @@ public sealed class NetworkViewModel : PageViewModel
             OnPropertyChanged(nameof(IsLatencyRunning));
             LatencyItems.Clear();
             InternetValue = "—";
-            InternetHint = "не проверено";
+            InternetHint = T._("не проверено");
             InternetTone = NetTone.Neutral;
-            LatencyBadge = "не проверено";
+            LatencyBadge = T._("не проверено");
             LatencyTone = NetTone.Neutral;
             LatencyNote = null;
         }
         if (_dnsPending)
         {
             _dnsPending = false;
-            DnsTimeText = "Время ответа: не проверено";
-            DnsBadge = "не проверено";
+            DnsTimeText = T._("Время ответа: не проверено");
+            DnsBadge = T._("не проверено");
             DnsTone = NetTone.Neutral;
             DnsAdvice = null;
         }
@@ -658,10 +656,10 @@ public sealed class NetworkViewModel : PageViewModel
             WifiNote = null;
             WifiFields = Array.Empty<AdapterField>();
             WifiValue = "—";
-            WifiHint = "не проверено";
+            WifiHint = T._("не проверено");
             WifiTone = NetTone.Neutral;
-            WifiEmptyTitle = "Проверка остановлена";
-            WifiEmptyText = "Нажмите «Проверить снова», чтобы узнать уровень сигнала.";
+            WifiEmptyTitle = T._("Проверка остановлена");
+            WifiEmptyText = T._("Нажмите «Проверить снова», чтобы узнать уровень сигнала.");
         }
         if (_socketsPending)
         {
@@ -669,7 +667,7 @@ public sealed class NetworkViewModel : PageViewModel
             if (_sockets is null)
             {
                 SocketsValue = "—";
-                SocketsHint = "не проверено";
+                SocketsHint = T._("не проверено");
                 SocketsTone = NetTone.Neutral;
             }
             UpdateSocketCounts();
@@ -680,11 +678,11 @@ public sealed class NetworkViewModel : PageViewModel
             // Only the upload sample was missing.
             _checked = true;
             BuildFindings();
-            LastCheckText = $"Проверено в {DateTime.Now:HH:mm}";
+            LastCheckText = T.F("Проверено в {0:HH:mm}", DateTime.Now);
             return;
         }
-        StatusTitle = "Проверка остановлена";
-        StatusText = "Часть проверок не выполнена. Нажмите «Проверить снова», чтобы проверить сеть полностью.";
+        StatusTitle = T._("Проверка остановлена");
+        StatusText = T._("Часть проверок не выполнена. Нажмите «Проверить снова», чтобы проверить сеть полностью.");
         StatusTone = NetTone.Neutral;
     }
 
@@ -700,38 +698,38 @@ public sealed class NetworkViewModel : PageViewModel
         _wifi = null;
         _upload = null;
         _firewall = null;
-        StatusTitle = "Проверяю сеть…";
-        StatusText = "Смотрю задержку, DNS, Wi-Fi, соединения и открытые порты. Ничего не меняется.";
+        StatusTitle = T._("Проверяю сеть…");
+        StatusText = T._("Смотрю задержку, DNS, Wi-Fi, соединения и открытые порты. Ничего не меняется.");
         StatusTone = NetTone.Neutral;
         Findings.Clear();
         OnPropertyChanged(nameof(HasFindings));
 
         InternetValue = "…";
-        InternetHint = "проверяю…";
+        InternetHint = T._("проверяю…");
         InternetTone = NetTone.Neutral;
         LatencyItems.Clear();
         var router = NetworkRules.RouterAddress(_adapters);
         if (router is not null)
-            LatencyItems.Add(LatencyItem.Pending("Роутер", NetAddress.Text(router)));
+            LatencyItems.Add(LatencyItem.Pending(T._("Роутер"), NetAddress.Text(router)));
         foreach (var t in NetworkRules.LatencyTargets)
             LatencyItems.Add(LatencyItem.Pending(t.Name, t.Host));
-        LatencyBadge = "проверяю…";
+        LatencyBadge = T._("проверяю…");
         LatencyTone = NetTone.Neutral;
         LatencyNote = null;
 
-        DnsTimeText = "Время ответа: проверяю…";
-        DnsBadge = "проверяю…";
+        DnsTimeText = T._("Время ответа: проверяю…");
+        DnsBadge = T._("проверяю…");
         DnsTone = NetTone.Neutral;
         DnsAdvice = null;
 
         if (_adapters.Any(a => a.Kind == AdapterKind.WiFi))
         {
             WifiValue = "…";
-            WifiHint = "проверяю…";
+            WifiHint = T._("проверяю…");
             WifiTone = NetTone.Neutral;
             HasWifiPercent = false;
             HasWifi = false;
-            WifiEmptyTitle = "Проверяю Wi-Fi…";
+            WifiEmptyTitle = T._("Проверяю Wi-Fi…");
             WifiEmptyText = "";
         }
         else
@@ -742,7 +740,7 @@ public sealed class NetworkViewModel : PageViewModel
         if (_sockets is null)
         {
             SocketsValue = "…";
-            SocketsHint = "проверяю…";
+            SocketsHint = T._("проверяю…");
         }
     }
 
@@ -763,8 +761,8 @@ public sealed class NetworkViewModel : PageViewModel
 
         if (primary is null)
         {
-            ConnectionValue = "Нет";
-            ConnectionHint = "нет активных подключений";
+            ConnectionValue = T._("Нет");
+            ConnectionHint = T._("нет активных подключений");
             ConnectionGlyph = "";
             ConnectionTone = NetTone.Danger;
         }
@@ -811,7 +809,7 @@ public sealed class NetworkViewModel : PageViewModel
             if (!IsBusy && AdapterSetChanged(sample) && DateTime.Now - _lastAdapterReload > TimeSpan.FromSeconds(10))
             {
                 _lastAdapterReload = DateTime.Now;
-                Log.Info("Сеть: список подключений изменился — обновляю");
+                Log.Info(T._("Сеть: список подключений изменился — обновляю"));
                 ApplyAdapters(await _service.GetAdaptersAsync());
             }
         }
@@ -821,7 +819,7 @@ public sealed class NetworkViewModel : PageViewModel
             if (_lastTrafficError != ex.Message)
             {
                 _lastTrafficError = ex.Message;
-                Log.Warn($"Сеть: не удалось обновить скорость: {ex.Message}");
+                Log.Warn(T.F("Сеть: не удалось обновить скорость: {0}", ex.Message));
             }
         }
         finally
@@ -860,9 +858,9 @@ public sealed class NetworkViewModel : PageViewModel
         if (report is null)
         {
             InternetValue = "—";
-            InternetHint = "не удалось проверить";
+            InternetHint = T._("не удалось проверить");
             InternetTone = NetTone.Neutral;
-            LatencyBadge = "не проверено";
+            LatencyBadge = T._("не проверено");
             LatencyTone = NetTone.Neutral;
             return;
         }
@@ -873,9 +871,7 @@ public sealed class NetworkViewModel : PageViewModel
         if (report.Intercepted)
         {
             LatencyItems.Add(LatencyItem.ForHttp(report.HttpMedianMs));
-            LatencyNote = $"Соединения перехватывает VPN или прокси{(vpn is null ? "" : $" ({vpn.Name})")}: он отвечает на них сам, " +
-                          "поэтому задержку до Cloudflare, Google и Яндекса точно измерить нельзя. Показано время ответа сервера, " +
-                          "которым Windows проверяет интернет, — через VPN.";
+            LatencyNote = T.F("Соединения перехватывает VPN или прокси{0}: он отвечает на них сам, поэтому задержку до Cloudflare, Google и Яндекса точно измерить нельзя. Показано время ответа сервера, которым Windows проверяет интернет, — через VPN.", vpn is null ? "" : $" ({vpn.Name})");
         }
         else
         {
@@ -887,21 +883,21 @@ public sealed class NetworkViewModel : PageViewModel
         var median = report.MedianMs;
         if (!report.InternetReachable)
         {
-            InternetValue = "Нет";
-            InternetHint = report.CaptivePortal ? "сеть просит войти" : "серверы не отвечают";
+            InternetValue = T._("Нет");
+            InternetHint = report.CaptivePortal ? T._("сеть просит войти") : T._("серверы не отвечают");
             InternetTone = NetTone.Danger;
-            LatencyBadge = "нет ответа";
+            LatencyBadge = T._("нет ответа");
             LatencyTone = NetTone.Danger;
             return;
         }
 
         var (tone, word) = LatencyMath.RateInternet(median);
-        InternetValue = "Есть";
+        InternetValue = T._("Есть");
         InternetHint = median is null
-            ? "через VPN или прокси"
+            ? T._("через VPN или прокси")
             : report.Intercepted ? $"≈ {LatencyMath.FormatMs(median)} · VPN" : $"{LatencyMath.FormatMs(median)} · {word}";
         InternetTone = median is > NetworkRules.HighLatencyMs ? NetTone.Warning : NetTone.Ok;
-        LatencyBadge = median is null ? "есть связь" : $"{LatencyMath.FormatMs(median)} · {word}";
+        LatencyBadge = median is null ? T._("есть связь") : $"{LatencyMath.FormatMs(median)} · {word}";
         LatencyTone = median is null ? NetTone.Ok : tone;
     }
 
@@ -911,8 +907,8 @@ public sealed class NetworkViewModel : PageViewModel
         _dnsPending = false;
         if (report is null)
         {
-            DnsTimeText = "Время ответа: не удалось проверить";
-            DnsBadge = "не проверено";
+            DnsTimeText = T._("Время ответа: не удалось проверить");
+            DnsBadge = T._("не проверено");
             DnsTone = NetTone.Neutral;
             DnsAdvice = null;
             return;
@@ -923,19 +919,18 @@ public sealed class NetworkViewModel : PageViewModel
         DnsTone = tone;
         if (report.AllFailed)
         {
-            DnsBadge = "не отвечает";
-            DnsTimeText = "Ни один из 5 тестовых адресов (example.com, wikipedia.org…) не удалось найти.";
-            DnsAdvice = "Укажите DNS 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера.";
+            DnsBadge = T._("не отвечает");
+            DnsTimeText = T._("Ни один из 5 тестовых адресов (example.com, wikipedia.org…) не удалось найти.");
+            DnsAdvice = T._("Укажите DNS 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс) в настройках адаптера или роутера.");
             return;
         }
 
         DnsBadge = $"{LatencyMath.FormatMs(median)} · {word}";
         var failed = report.Lookups.Count(l => l.Ms is null);
-        DnsTimeText = $"Время ответа: {LatencyMath.FormatMs(median)} (медиана {Format.Count(report.Lookups.Count, "запроса", "запросов", "запросов")})" +
-                      (failed > 0 ? $", без ответа: {failed}" : "");
+        DnsTimeText = T.F("Время ответа: {0} (медиана {1})", LatencyMath.FormatMs(median), Format.Count(report.Lookups.Count, "запроса", "запросов", "запросов")) +
+                      (failed > 0 ? ", " + T.F("без ответа: {0}", failed) : "");
         DnsAdvice = median > NetworkRules.SlowDnsMs
-            ? "DNS отвечает медленно — сайты начинают открываться с задержкой. Попробуйте быстрый DNS: 1.1.1.1 (Cloudflare), " +
-              "8.8.8.8 (Google) или 77.88.8.8 (Яндекс)."
+            ? T._("DNS отвечает медленно — сайты начинают открываться с задержкой. Попробуйте быстрый DNS: 1.1.1.1 (Cloudflare), 8.8.8.8 (Google) или 77.88.8.8 (Яндекс).")
             : null;
     }
 
@@ -951,7 +946,7 @@ public sealed class NetworkViewModel : PageViewModel
         {
             var (quality, tone) = NetworkRules.SignalQuality(connected.SignalPercent);
             HasWifi = true;
-            WifiSsid = string.IsNullOrWhiteSpace(connected.Ssid) ? "Скрытая сеть" : connected.Ssid;
+            WifiSsid = string.IsNullOrWhiteSpace(connected.Ssid) ? T._("Скрытая сеть") : connected.Ssid;
             WifiQuality = quality;
             WifiTone = tone;
             WifiPercent = connected.SignalPercent.Value;
@@ -963,23 +958,23 @@ public sealed class NetworkViewModel : PageViewModel
                               ?? connected.Name;
             var rate = connected.ReceiveMbps is null && connected.TransmitMbps is null
                 ? "—"
-                : $"{FormatMbps(connected.ReceiveMbps)} / {FormatMbps(connected.TransmitMbps)} Мбит/с";
+                : T.F("{0} / {1} Мбит/с", FormatMbps(connected.ReceiveMbps), FormatMbps(connected.TransmitMbps));
             WifiFields = new List<AdapterField>
             {
-                new("Диапазон", NetworkRules.BandText(connected.BandGhz),
-                    "5 ГГц — быстрее и свободнее, 2,4 ГГц — дальше пробивает стены, но медленнее."),
-                new("Канал", connected.Channel?.ToString() ?? "—", "Номер радиоканала, на котором работает роутер."),
-                new("Стандарт", NetworkRules.RadioText(connected.RadioType, connected.BandGhz), "Поколение Wi-Fi: чем новее, тем быстрее."),
-                new("Скорость связи", rate, "Скорость приёма / передачи между компьютером и роутером, Мбит/с."),
-                new("Защита", connected.Authentication ?? "—", "WPA2 и WPA3 — надёжно; «Открытая» и WEP — нет."),
-                new("Адаптер", adapterName, connected.Description),
+                new(T._("Диапазон"), NetworkRules.BandText(connected.BandGhz),
+                    T._("5 ГГц — быстрее и свободнее, 2,4 ГГц — дальше пробивает стены, но медленнее.")),
+                new(T._("Канал"), connected.Channel?.ToString() ?? "—", T._("Номер радиоканала, на котором работает роутер.")),
+                new(T._("Стандарт"), NetworkRules.RadioText(connected.RadioType, connected.BandGhz), T._("Поколение Wi-Fi: чем новее, тем быстрее.")),
+                new(T._("Скорость связи"), rate, T._("Скорость приёма / передачи между компьютером и роутером, Мбит/с.")),
+                new(T._("Защита"), connected.Authentication ?? "—", T._("WPA2 и WPA3 — надёжно; «Открытая» и WEP — нет.")),
+                new(T._("Адаптер"), adapterName, connected.Description),
             };
             WifiNote = connected.SignalPercent < NetworkRules.WeakSignalPercent
-                ? "Сигнал слабый: поставьте роутер ближе и повыше или подключитесь кабелем."
+                ? T._("Сигнал слабый: поставьте роутер ближе и повыше или подключитесь кабелем.")
                 : connected.BandGhz is < 3
-                    ? "Сеть 2,4 ГГц. Если роутер поддерживает 5 ГГц, подключитесь к ней — будет быстрее."
+                    ? T._("Сеть 2,4 ГГц. Если роутер поддерживает 5 ГГц, подключитесь к ней — будет быстрее.")
                     : NetworkRules.IsWeakWifiSecurity(connected.Authentication, connected.Cipher)
-                        ? "Сеть без надёжного пароля — включите WPA2 или WPA3 в настройках роутера."
+                        ? T._("Сеть без надёжного пароля — включите WPA2 или WPA3 в настройках роутера.")
                         : null;
             return;
         }
@@ -991,34 +986,33 @@ public sealed class NetworkViewModel : PageViewModel
         if (WifiLocationBlocked)
         {
             WifiValue = "—";
-            WifiHint = "Windows скрывает данные";
+            WifiHint = T._("Windows скрывает данные");
             WifiTone = NetTone.Neutral;
-            WifiEmptyTitle = "Windows скрывает сведения о Wi-Fi";
-            WifiEmptyText = "В Windows 11 уровень сигнала и название сети доступны программам только при включённом доступе " +
-                            "к расположению. Его можно включить в «Параметры» → «Конфиденциальность» → «Расположение».";
+            WifiEmptyTitle = T._("Windows скрывает сведения о Wi-Fi");
+            WifiEmptyText = T._("В Windows 11 уровень сигнала и название сети доступны программам только при включённом доступе к расположению. Его можно включить в «Параметры» → «Конфиденциальность» → «Расположение».");
         }
         else if (hasWifiAdapter)
         {
             WifiValue = "—";
-            WifiHint = report?.Error is null ? "нет данных" : "не удалось прочитать";
+            WifiHint = report?.Error is null ? T._("нет данных") : T._("не удалось прочитать");
             WifiTone = NetTone.Neutral;
-            WifiEmptyTitle = "Не удалось прочитать сведения о Wi-Fi";
-            WifiEmptyText = report?.Error ?? "Команда netsh не вернула данных о подключении.";
+            WifiEmptyTitle = T._("Не удалось прочитать сведения о Wi-Fi");
+            WifiEmptyText = report?.Error ?? T._("Команда netsh не вернула данных о подключении.");
         }
         else
         {
             var wired = _adapters.Any(a => a.Kind == AdapterKind.Ethernet);
-            WifiValue = wired ? "Кабель" : "Нет";
-            WifiHint = "Wi-Fi не используется";
+            WifiValue = wired ? T._("Кабель") : T._("Нет");
+            WifiHint = T._("Wi-Fi не используется");
             WifiTone = NetTone.Neutral;
-            WifiEmptyTitle = wired ? "Подключение по кабелю" : "Wi-Fi не подключён";
+            WifiEmptyTitle = wired ? T._("Подключение по кабелю") : T._("Wi-Fi не подключён");
             WifiEmptyText = wired
-                ? "Компьютер подключён к сети кабелем — это самый быстрый и стабильный способ. Wi-Fi сейчас не используется."
-                : "Беспроводной адаптер не подключён к сети или отсутствует.";
+                ? T._("Компьютер подключён к сети кабелем — это самый быстрый и стабильный способ. Wi-Fi сейчас не используется.")
+                : T._("Беспроводной адаптер не подключён к сети или отсутствует.");
         }
     }
 
-    private static string FormatMbps(double? mbps) => mbps is null ? "—" : mbps.Value.ToString("0.#", Format.Ru);
+    private static string FormatMbps(double? mbps) => mbps is null ? "—" : mbps.Value.ToString("0.#", T.Culture);
 
     // ================================================================ connections and ports
 
@@ -1030,7 +1024,7 @@ public sealed class NetworkViewModel : PageViewModel
         RelayCommand.Refresh();
         try
         {
-            var snapshot = await NetworkService.Safe("соединения", () => _service.ReadSocketsAsync(), CancellationToken.None);
+            var snapshot = await NetworkService.Safe(T._("соединения"), () => _service.ReadSocketsAsync(), CancellationToken.None);
             if (snapshot is not null)
                 ApplySockets(snapshot);
             if (_checked)
@@ -1051,7 +1045,7 @@ public sealed class NetworkViewModel : PageViewModel
         if (_sockets is null)
         {
             SocketsValue = "—";
-            SocketsHint = "не удалось прочитать";
+            SocketsHint = T._("не удалось прочитать");
             SocketsTone = NetTone.Neutral;
             SocketsUpdatedText = "";
             UpdateSocketCounts();
@@ -1059,7 +1053,7 @@ public sealed class NetworkViewModel : PageViewModel
         }
         RebuildConnections();
         RebuildPorts();
-        SocketsUpdatedText = $"Обновлено в {_sockets.Time:HH:mm:ss}";
+        SocketsUpdatedText = T.F("Обновлено в {0:HH:mm:ss}", _sockets.Time);
     }
 
     private void RebuildConnections()
@@ -1169,11 +1163,11 @@ public sealed class NetworkViewModel : PageViewModel
     private void UpdateSocketCounts()
     {
         VisiblePorts = PortsView.Cast<object>().Count();
-        ConnectionsTabHeader = _sockets is null ? "Соединения" : $"Соединения · {Format.Number(VisibleConnections)}";
-        PortsTabHeader = _sockets is null ? "Открытые порты" : $"Открытые порты · {Format.Number(VisiblePorts)}";
+        ConnectionsTabHeader = _sockets is null ? T._("Соединения") : T.F("Соединения · {0}", Format.Number(VisibleConnections));
+        PortsTabHeader = _sockets is null ? T._("Открытые порты") : T.F("Открытые порты · {0}", Format.Number(VisiblePorts));
         var localOnly = _ports.Count(p => !p.IsNetwork);
         PortsHiddenNote = OnlyNetworkPorts && localOnly > 0
-            ? $"Скрыто {Format.Count(localOnly, "локальный порт", "локальных порта", "локальных портов")} — к ним могут подключиться только программы на этом компьютере."
+            ? T.F("Скрыто {0} — к ним могут подключиться только программы на этом компьютере.", Format.Count(localOnly, "локальный порт", "локальных порта", "локальных портов"))
             : "";
         OnPropertyChanged(nameof(ConnectionsEmptyText));
         OnPropertyChanged(nameof(PortsEmptyText));
@@ -1239,7 +1233,7 @@ public sealed class NetworkViewModel : PageViewModel
         catch (Exception ex)
         {
             // Background work: a failure must never reach the dispatcher.
-            Log.Warn($"Сеть: не удалось определить имя узла {ip}: {ex.Message}");
+            Log.Warn(T.F("Сеть: не удалось определить имя узла {0}: {1}", ip, ex.Message));
         }
     }
 
@@ -1298,11 +1292,11 @@ public sealed class NetworkViewModel : PageViewModel
         var noInternet = findings.Any(f => f.Kind == FindingKind.NoInternet);
         (StatusTitle, StatusTone) = worst switch
         {
-            _ when noInternet => ("Нет доступа в интернет", NetTone.Danger),
-            IssueSeverity.Critical or IssueSeverity.High => ("Найдены серьёзные проблемы", NetTone.Danger),
-            IssueSeverity.Medium => ("Есть проблемы, на которые стоит посмотреть", NetTone.Warning),
-            IssueSeverity.Low => ("Сеть работает, но кое-что можно улучшить", NetTone.Info),
-            _ => ("Сеть в порядке", NetTone.Ok),
+            _ when noInternet => (T._("Нет доступа в интернет"), NetTone.Danger),
+            IssueSeverity.Critical or IssueSeverity.High => (T._("Найдены серьёзные проблемы"), NetTone.Danger),
+            IssueSeverity.Medium => (T._("Есть проблемы, на которые стоит посмотреть"), NetTone.Warning),
+            IssueSeverity.Low => (T._("Сеть работает, но кое-что можно улучшить"), NetTone.Info),
+            _ => (T._("Сеть в порядке"), NetTone.Ok),
         };
         StatusText = DescribeState();
     }
@@ -1313,34 +1307,36 @@ public sealed class NetworkViewModel : PageViewModel
         if (_latency is { } l)
         {
             if (!l.InternetReachable)
-                parts.Add("проверочные серверы не отвечают");
+                parts.Add(T._("проверочные серверы не отвечают"));
             else
                 parts.Add(l.MedianMs is { } ms
-                    ? $"интернет работает, задержка {LatencyMath.FormatMs(ms)}{(l.Intercepted ? " через VPN" : "")}"
-                    : "интернет работает");
+                    ? l.Intercepted
+                        ? T.F("интернет работает, задержка {0} через VPN", LatencyMath.FormatMs(ms))
+                        : T.F("интернет работает, задержка {0}", LatencyMath.FormatMs(ms))
+                    : T._("интернет работает"));
         }
         if (_dns?.MedianMs is { } dns)
-            parts.Add($"DNS отвечает за {LatencyMath.FormatMs(dns)}");
+            parts.Add(T.F("DNS отвечает за {0}", LatencyMath.FormatMs(dns)));
         if (_wifi?.Connected?.SignalPercent is { } signal)
-            parts.Add($"сигнал Wi-Fi {signal}%");
+            parts.Add(T.F("сигнал Wi-Fi {0}%", signal));
         else if (_adapters.Any(a => a.Kind == AdapterKind.Ethernet && a.HasGateway))
-            parts.Add("подключение по кабелю");
+            parts.Add(T._("подключение по кабелю"));
         if (parts.Count == 0)
-            return "Не удалось проверить подключение.";
+            return T._("Не удалось проверить подключение.");
         var text = string.Join(", ", parts) + ".";
-        return char.ToUpper(text[0], Format.Ru) + text[1..];
+        return char.ToUpper(text[0], T.Culture) + text[1..];
     }
 
     private (string? Text, System.Windows.Input.ICommand? Command, object? Parameter) ActionFor(NetworkFinding f) => f.Kind switch
     {
-        FindingKind.NoInternet => ("Параметры сети", OpenNetworkSettingsCommand, null),
-        FindingKind.DnsFailed or FindingKind.SlowDns => ("Как сменить DNS", HowToChangeDnsCommand, null),
-        FindingKind.WeakWifiSecurity or FindingKind.WeakSignal or FindingKind.Band24 => ("Параметры Wi-Fi", OpenWifiSettingsCommand, null),
-        FindingKind.HighUpload => ("Показать соединения", ShowSocketsCommand, "connections:"),
-        FindingKind.RiskyPort => ("Показать порт", ShowSocketsCommand, "ports:" + f.Argument),
-        FindingKind.WindowsPorts => ("Показать порты", ShowSocketsCommand, "ports:"),
-        FindingKind.SuspiciousConnection => ("Показать соединение", ShowSocketsCommand, "connections:" + f.Argument),
-        FindingKind.FirewallOff => ("Открыть «Безопасность»", OpenSecurityCommand, null),
+        FindingKind.NoInternet => (T._("Параметры сети"), OpenNetworkSettingsCommand, null),
+        FindingKind.DnsFailed or FindingKind.SlowDns => (T._("Как сменить DNS"), HowToChangeDnsCommand, null),
+        FindingKind.WeakWifiSecurity or FindingKind.WeakSignal or FindingKind.Band24 => (T._("Параметры Wi-Fi"), OpenWifiSettingsCommand, null),
+        FindingKind.HighUpload => (T._("Показать соединения"), ShowSocketsCommand, "connections:"),
+        FindingKind.RiskyPort => (T._("Показать порт"), ShowSocketsCommand, "ports:" + f.Argument),
+        FindingKind.WindowsPorts => (T._("Показать порты"), ShowSocketsCommand, "ports:"),
+        FindingKind.SuspiciousConnection => (T._("Показать соединение"), ShowSocketsCommand, "connections:" + f.Argument),
+        FindingKind.FirewallOff => (T._("Открыть «Безопасность»"), OpenSecurityCommand, null),
         _ => (null, null, null),
     };
 
@@ -1373,8 +1369,8 @@ public sealed class NetworkViewModel : PageViewModel
             return;
         if (process.Exited)
         {
-            Dialogs.Info("Процесс уже завершился",
-                $"Программа, которой принадлежало это соединение (PID {process.Pid}), уже закрылась — в списке процессов её нет.");
+            Dialogs.Info(T._("Процесс уже завершился"),
+                T.F("Программа, которой принадлежало это соединение (PID {0}), уже закрылась — в списке процессов её нет.", process.Pid));
             return;
         }
         if (AppServices.Navigator is MainViewModel main &&
@@ -1394,7 +1390,7 @@ public sealed class NetworkViewModel : PageViewModel
             return;
         if (!c.IsPublic)
         {
-            Dialogs.Info("Проверить IP", $"{c.RemoteIp} — адрес из локальной сети, его не нужно проверять в базах злоумышленников.");
+            Dialogs.Info(T._("Проверить IP"), T.F("{0} — адрес из локальной сети, его не нужно проверять в базах злоумышленников.", c.RemoteIp));
             return;
         }
         ProcessRunner.ShellOpen("https://www.abuseipdb.com/check/" + Uri.EscapeDataString(c.RemoteIp));
@@ -1411,7 +1407,7 @@ public sealed class NetworkViewModel : PageViewModel
                 FileTools.SearchWeb(g.ProcessName);
                 break;
             case PortItem p:
-                FileTools.SearchWeb($"порт {p.Port} {p.ProtocolText} {p.ProcessName}");
+                FileTools.SearchWeb(T.F("порт {0} {1} {2}", p.Port, p.ProtocolText, p.ProcessName));
                 break;
         }
     }
@@ -1429,42 +1425,28 @@ public sealed class NetworkViewModel : PageViewModel
         try
         {
             Clipboard.SetText(text);
-            Log.Info($"Скопировано: {text}");
+            Log.Info(T.F("Скопировано: {0}", text));
         }
         catch (System.Runtime.InteropServices.ExternalException ex)
         {
-            Log.Warn($"Не удалось скопировать в буфер обмена: {ex.Message}");
+            Log.Warn(T.F("Не удалось скопировать в буфер обмена: {0}", ex.Message));
         }
     }
 
     private static void ShowHowToChangeDns()
     {
-        Dialogs.Info("Как сменить DNS",
-            "Быстрые и надёжные DNS-серверы:\n" +
-            "• Cloudflare — 1.1.1.1 и 1.0.0.1\n" +
-            "• Google — 8.8.8.8 и 8.8.4.4\n" +
-            "• Яндекс — 77.88.8.8 и 77.88.8.1\n\n" +
-            "Для этого компьютера (Windows 11):\n" +
-            "1. «Параметры» → «Сеть и Интернет» → Ethernet или Wi-Fi → свойства вашего подключения.\n" +
-            "2. «Назначение DNS-сервера» → «Изменить» → «Вручную» → включите IPv4.\n" +
-            "3. Впишите основной и дополнительный DNS и нажмите «Сохранить».\n\n" +
-            "В Windows 10: «Панель управления» → «Сетевые подключения» (ncpa.cpl) → свойства адаптера → " +
-            "«IP версии 4 (TCP/IPv4)» → «Использовать следующие адреса DNS-серверов».\n\n" +
-            "Для всех устройств дома — в настройках роутера (обычно раздел DHCP или «Интернет»).\n\n" +
-            "Вернуть как было: в том же окне выберите «Автоматически (DHCP)».");
+        Dialogs.Info(T._("Как сменить DNS"),
+            T._("Быстрые и надёжные DNS-серверы:\n• Cloudflare — 1.1.1.1 и 1.0.0.1\n• Google — 8.8.8.8 и 8.8.4.4\n• Яндекс — 77.88.8.8 и 77.88.8.1\n\nДля этого компьютера (Windows 11):\n1. «Параметры» → «Сеть и Интернет» → Ethernet или Wi-Fi → свойства вашего подключения.\n2. «Назначение DNS-сервера» → «Изменить» → «Вручную» → включите IPv4.\n3. Впишите основной и дополнительный DNS и нажмите «Сохранить».\n\nВ Windows 10: «Панель управления» → «Сетевые подключения» (ncpa.cpl) → свойства адаптера → «IP версии 4 (TCP/IPv4)» → «Использовать следующие адреса DNS-серверов».\n\nДля всех устройств дома — в настройках роутера (обычно раздел DHCP или «Интернет»).\n\nВернуть как было: в том же окне выберите «Автоматически (DHCP)»."));
     }
 
     // ================================================================ tools (change the system after confirmation)
 
     private async Task FlushDnsAsync()
     {
-        if (!Dialogs.Confirm("Очистить кэш DNS",
-                "Windows забудет сохранённые адреса сайтов и при следующем открытии заново спросит их у DNS-сервера " +
-                "(будет выполнена команда ipconfig /flushdns).\n\n" +
-                "Это безопасно: ничего не удаляется, сайты просто откроются на долю секунды дольше в первый раз. " +
-                "Отменять ничего не нужно — кэш заполнится сам.\n\nОчистить кэш DNS?"))
+        if (!Dialogs.Confirm(T._("Очистить кэш DNS"),
+                T._("Windows забудет сохранённые адреса сайтов и при следующем открытии заново спросит их у DNS-сервера (будет выполнена команда ipconfig /flushdns).\n\nЭто безопасно: ничего не удаляется, сайты просто откроются на долю секунды дольше в первый раз. Отменять ничего не нужно — кэш заполнится сам.\n\nОчистить кэш DNS?")))
             return;
-        await RunBusyAsync("Очищаю кэш DNS…", async ct =>
+        await RunBusyAsync(T._("Очищаю кэш DNS…"), async ct =>
         {
             var (ok, message) = await _service.FlushDnsAsync(ct);
             ShowMessage(message, ok ? NetTone.Ok : NetTone.Warning);
@@ -1473,33 +1455,25 @@ public sealed class NetworkViewModel : PageViewModel
 
     private async Task ResetNetworkAsync()
     {
-        if (!Admin.RequireElevation("Сброс сетевых настроек"))
+        if (!Admin.RequireElevation(T._("Сброс сетевых настроек")))
             return;
-        if (!Dialogs.Confirm("Сбросить сетевые настройки",
-                "Будут выполнены две команды Windows:\n" +
-                "• netsh winsock reset — сброс каталога Winsock (исправляет сетевые компоненты, испорченные VPN-программами, " +
-                "антивирусами или вирусами);\n" +
-                "• netsh int ip reset — возврат параметров TCP/IP к стандартным.\n\n" +
-                "После сброса нужно перезагрузить компьютер. Статический IP-адрес, свой DNS и настройки некоторых VPN-программ, " +
-                "возможно, придётся ввести заново.\n\n" +
-                "Перед сбросом создаётся точка восстановления (если она включена в настройках) — через неё можно вернуть " +
-                "прежнее состояние.\n\n" +
-                "Используйте сброс, только если интернет не работает, а перезагрузка роутера и компьютера не помогла. Сбросить?"))
+        if (!Dialogs.Confirm(T._("Сбросить сетевые настройки"),
+                T._("Будут выполнены две команды Windows:\n• netsh winsock reset — сброс каталога Winsock (исправляет сетевые компоненты, испорченные VPN-программами, антивирусами или вирусами);\n• netsh int ip reset — возврат параметров TCP/IP к стандартным.\n\nПосле сброса нужно перезагрузить компьютер. Статический IP-адрес, свой DNS и настройки некоторых VPN-программ, возможно, придётся ввести заново.\n\nПеред сбросом создаётся точка восстановления (если она включена в настройках) — через неё можно вернуть прежнее состояние.\n\nИспользуйте сброс, только если интернет не работает, а перезагрузка роутера и компьютера не помогла. Сбросить?")))
             return;
-        await RunBusyAsync("Сбрасываю сетевые настройки…", async ct =>
+        await RunBusyAsync(T._("Сбрасываю сетевые настройки…"), async ct =>
         {
-            ReportProgress(-1, "Создаю точку восстановления…");
-            var point = await RestorePoint.CreateAsync("Сброс сетевых настроек", ct);
-            ReportProgress(-1, "Сбрасываю сетевые настройки…");
+            ReportProgress(-1, T._("Создаю точку восстановления…"));
+            var point = await RestorePoint.CreateAsync(T._("Сброс сетевых настроек"), ct);
+            ReportProgress(-1, T._("Сбрасываю сетевые настройки…"));
             var (ok, message) = await _service.ResetNetworkAsync(ct);
             var pointText = point switch
             {
-                RestorePointResult.Created => "Точка восстановления создана. ",
-                RestorePointResult.RecentPointExists => "Систему защищает точка восстановления, созданная за последние сутки. ",
-                RestorePointResult.DisabledInSettings => "Точка восстановления не создавалась (выключено в настройках). ",
-                _ => "Точку восстановления создать не удалось. ",
+                RestorePointResult.Created => T._("Точка восстановления создана."),
+                RestorePointResult.RecentPointExists => T._("Систему защищает точка восстановления, созданная за последние сутки."),
+                RestorePointResult.DisabledInSettings => T._("Точка восстановления не создавалась (выключено в настройках)."),
+                _ => T._("Точку восстановления создать не удалось."),
             };
-            ShowMessage(pointText + message, ok ? NetTone.Ok : NetTone.Warning);
+            ShowMessage(pointText + " " + message, ok ? NetTone.Ok : NetTone.Warning);
         });
     }
 

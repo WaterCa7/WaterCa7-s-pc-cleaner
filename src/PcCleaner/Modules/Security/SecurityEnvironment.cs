@@ -1,6 +1,7 @@
 using System.IO;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -167,7 +168,7 @@ public sealed class SecurityEnvironment
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Нет доступа к {loc.FullPath}\\{name}: {ex.Message}");
+            Log.Warn(T.F("Нет доступа к {0}\\{1}: {2}", loc.FullPath, name, ex.Message));
             return (false, null);
         }
     }

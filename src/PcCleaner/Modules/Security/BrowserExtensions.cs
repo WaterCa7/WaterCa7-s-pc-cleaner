@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -41,17 +42,22 @@ public sealed class BrowserExtension
 
     public string StateText => Enabled switch
     {
-        true => "Включено",
-        false => "Отключено",
+        true => T._("Включено"),
+        false => T._("Отключено"),
         _ => "—",
     };
 
+    /// <summary>"Версия: 1.2.3" for the details panel (a text with a value cannot be a StringFormat of the XAML).</summary>
+    public string VersionLabel => T.F("Версия: {0}", Version);
+
+    public string SourceLabel => T.F("Источник: {0}", SourceText);
+
     public string SourceText => Source switch
     {
-        ExtensionSource.Store => "Магазин расширений",
-        ExtensionSource.OtherProgram => "Другая программа",
-        ExtensionSource.Policy => "Политика (принудительно)",
-        ExtensionSource.Unpacked => "Режим разработчика",
+        ExtensionSource.Store => T._("Магазин расширений"),
+        ExtensionSource.OtherProgram => T._("Другая программа"),
+        ExtensionSource.Policy => T._("Политика (принудительно)"),
+        ExtensionSource.Unpacked => T._("Режим разработчика"),
         _ => "—",
     };
 
@@ -104,7 +110,7 @@ public static class BrowserExtensionScanner
             new BrowserRoot("Chrome", System.IO.Path.Combine(local, @"Google\Chrome\User Data"), BrowserKind.Chromium,
                 BrowserProgram.Chrome),
             new BrowserRoot("Edge", System.IO.Path.Combine(local, @"Microsoft\Edge\User Data"), BrowserKind.Chromium, BrowserProgram.Edge),
-            new BrowserRoot("Яндекс Браузер", System.IO.Path.Combine(local, @"Yandex\YandexBrowser\User Data"), BrowserKind.Chromium,
+            new BrowserRoot(T._("Яндекс Браузер"), System.IO.Path.Combine(local, @"Yandex\YandexBrowser\User Data"), BrowserKind.Chromium,
                 BrowserProgram.Yandex),
             new BrowserRoot("Opera", System.IO.Path.Combine(roaming, @"Opera Software\Opera Stable"), BrowserKind.Chromium,
                 BrowserProgram.Opera),
@@ -138,7 +144,7 @@ public static class BrowserExtensionScanner
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
                                            or InvalidOperationException or JsonException)
             {
-                Log.Warn($"Не удалось прочитать расширения {root.Browser}: {ex.Message}");
+                Log.Warn(T.F("Не удалось прочитать расширения {0}: {1}", root.Browser, ex.Message));
             }
         }
         foreach (var ext in result)
@@ -174,7 +180,7 @@ public static class BrowserExtensionScanner
                 ? ""
                 : profileNames.TryGetValue(dirName, out var display) && !string.IsNullOrWhiteSpace(display)
                     ? display
-                    : dirName == "Default" ? "основной профиль" : dirName;
+                    : dirName == "Default" ? T._("основной профиль") : dirName;
             var prefs = ReadChromiumPrefs(profile);
 
             foreach (var extDir in SafeDirectories(System.IO.Path.Combine(profile, "Extensions")))
@@ -497,7 +503,7 @@ public static class BrowserExtensionScanner
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            Log.Warn($"Не удалось разобрать extensions.json ({browser}): {ex.Message}");
+            Log.Warn(T.F("Не удалось разобрать extensions.json ({0}): {1}", browser, ex.Message));
         }
         return list;
     }

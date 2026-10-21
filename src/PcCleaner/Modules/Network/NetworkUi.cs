@@ -117,7 +117,10 @@ public sealed class NetToneGlyphConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>Number → "12 соединений". ConverterParameter = "соединение|соединения|соединений".</summary>
+/// <summary>
+/// Number → "12 connections" / "12 соединений". ConverterParameter names the word ("connection", "port"): the Russian forms and their
+/// English entries live in <see cref="Words"/>, where the catalog finds them (a plural form cannot be written in XAML as a text).
+/// </summary>
 public sealed class PluralConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -128,9 +131,16 @@ public sealed class PluralConverter : IValueConverter
             long l => l,
             _ => 0,
         };
-        var forms = (parameter as string ?? "||").Split('|');
-        return forms.Length == 3 ? Format.Count(n, forms[0], forms[1], forms[2]) : Format.Number(n);
+        return Words(parameter as string, n);
     }
+
+    /// <summary>The number with its word in the UI language; a name that is not known gives the bare number.</summary>
+    public static string Words(string? word, long n) => word switch
+    {
+        "connection" => Format.Count(n, "соединение", "соединения", "соединений"),
+        "port" => Format.Count(n, "порт", "порта", "портов"),
+        _ => Format.Number(n),
+    };
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

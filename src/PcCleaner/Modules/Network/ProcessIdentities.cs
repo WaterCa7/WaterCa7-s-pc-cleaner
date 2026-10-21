@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Network;
 
@@ -22,19 +23,20 @@ public sealed class ProcessIdentities
     /// Windows' own service hosts. Without admin rights the path of some of them cannot be read, so the name is used
     /// (only for classifying their ports as "Windows"; the Processes page checks signatures and locations).
     /// </summary>
-    private static readonly Dictionary<string, string> SystemProcesses = new(StringComparer.OrdinalIgnoreCase)
+    private static string? SystemProcessName(string stem) => stem.ToLowerInvariant() switch
     {
-        ["svchost"] = "Хост-процесс служб Windows",
-        ["services"] = "Диспетчер служб Windows",
-        ["lsass"] = "Служба проверки подлинности Windows",
-        ["wininit"] = "Запуск Windows",
-        ["spoolsv"] = "Диспетчер печати",
-        ["dashost"] = "Узел связи с устройствами",
-        ["csrss"] = "Среда выполнения Windows",
-        ["winlogon"] = "Вход в Windows",
-        ["lsaiso"] = "Изолированная проверка подлинности",
-        ["searchindexer"] = "Индексатор поиска Windows",
-        ["msmpeng"] = "Защитник Windows",
+        "svchost" => T._("Хост-процесс служб Windows"),
+        "services" => T._("Диспетчер служб Windows"),
+        "lsass" => T._("Служба проверки подлинности Windows"),
+        "wininit" => T._("Запуск Windows"),
+        "spoolsv" => T._("Диспетчер печати"),
+        "dashost" => T._("Узел связи с устройствами"),
+        "csrss" => T._("Среда выполнения Windows"),
+        "winlogon" => T._("Вход в Windows"),
+        "lsaiso" => T._("Изолированная проверка подлинности"),
+        "searchindexer" => T._("Индексатор поиска Windows"),
+        "msmpeng" => T._("Защитник Windows"),
+        _ => null,
     };
 
     public ProcessIdentity Get(int pid)
@@ -66,9 +68,9 @@ public sealed class ProcessIdentities
         switch (pid)
         {
             case 0:
-                return new ProcessIdentity(0, "Система", null, "Система (без владельца)", true);
+                return new ProcessIdentity(0, T._("Система"), null, T._("Система (без владельца)"), true);
             case 4:
-                return new ProcessIdentity(4, "System", null, "Ядро Windows (System)", true);
+                return new ProcessIdentity(4, "System", null, T._("Ядро Windows (System)"), true);
         }
 
         string? name = null;
@@ -88,12 +90,13 @@ public sealed class ProcessIdentities
 
         var path = QueryPath(pid);
         if (name is null && path is null)
-            return new ProcessIdentity(pid, $"PID {pid}", null, "Процесс уже завершился", false, Exited: true);
+            return new ProcessIdentity(pid, $"PID {pid}", null, T._("Процесс уже завершился"), false, Exited: true);
 
         var exe = path is not null ? Path.GetFileName(path) : name + ".exe";
         var stem = Path.GetFileNameWithoutExtension(exe);
-        var known = SystemProcesses.TryGetValue(stem, out var friendly);
-        var display = Describe(path) ?? (known ? friendly! : stem);
+        var friendly = SystemProcessName(stem);
+        var known = friendly is not null;
+        var display = Describe(path) ?? friendly ?? stem;
         var isWindows = path is not null ? IsWindowsPath(path) : known;
         return new ProcessIdentity(pid, exe, path, display, isWindows);
     }

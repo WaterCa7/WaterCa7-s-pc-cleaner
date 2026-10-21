@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Modules.Security;
 
@@ -25,10 +26,10 @@ public static partial class SecurityRules
     /// <summary>0 → "сегодня", 1 → "вчера", 5 → "5 дней назад", null → "ни разу".</summary>
     public static string AgoText(int? days) => days switch
     {
-        null => "ни разу",
-        <= 0 => "сегодня",
-        1 => "вчера",
-        _ => $"{days} {Format.Plural(days.Value, "день", "дня", "дней")} назад",
+        null => T._("ни разу"),
+        <= 0 => T._("сегодня"),
+        1 => T._("вчера"),
+        _ => T.F("{0} назад", Days(days.Value)),
     };
 
     public static string Days(int days) => $"{days} {Format.Plural(days, "день", "дня", "дней")}";
@@ -41,7 +42,12 @@ public static partial class SecurityRules
             parts.Add(Format.Count(problems, "проблема", "проблемы", "проблем"));
         if (tips > 0)
             parts.Add(Format.Count(tips, "совет", "совета", "советов"));
-        return parts.Count == 0 ? "проблем нет" : string.Join(" и ", parts);
+        return parts.Count switch
+        {
+            0 => T._("проблем нет"),
+            1 => parts[0],
+            _ => T.F("{0} и {1}", parts[0], parts[1]),
+        };
     }
 
     // ===================== Antivirus =====================
@@ -54,36 +60,38 @@ public static partial class SecurityRules
 
     public static string ThreatStatusText(int statusId) => statusId switch
     {
-        1 => "Обнаружена",
-        2 => "Вылечена",
-        3 => "В карантине",
-        4 => "Удалена",
-        5 => "Разрешена пользователем",
-        6 => "Заблокирована",
-        102 => "Ошибка помещения в карантин",
-        103 => "Не удалось удалить",
-        104 => "Ошибка разрешения",
-        105 => "Действие прервано",
-        107 => "Не удалось заблокировать",
-        _ => "Неизвестно",
+        1 => T._("Обнаружена"),
+        2 => T._("Вылечена"),
+        3 => T._("В карантине"),
+        4 => T._("Удалена"),
+        5 => T._("Разрешена пользователем"),
+        6 => T._("Заблокирована"),
+        102 => T._("Ошибка помещения в карантин"),
+        103 => T._("Не удалось удалить"),
+        104 => T._("Ошибка разрешения"),
+        105 => T._("Действие прервано"),
+        107 => T._("Не удалось заблокировать"),
+        _ => T._("Неизвестно"),
     };
 
     public static string ThreatSeverityText(int severityId) => severityId switch
     {
-        1 => "Низкий",
-        2 => "Средний",
-        4 => "Высокий",
-        5 => "Критический",
-        _ => "Неизвестный",
+        1 => T._("Низкий"),
+        2 => T._("Средний"),
+        4 => T._("Высокий"),
+        5 => T._("Критический"),
+        _ => T._("Неизвестный"),
     };
 
     /// <summary>
     /// Microsoft's own products in Security Center ("Windows Defender", "Microsoft Defender Antivirus", …).
     /// Whole words only: "Bitdefender" is a third-party antivirus, not Microsoft Defender.
     /// </summary>
+    // l10n:data-begin — product names that Windows Security Center gives in its language, matched and never shown
     private static readonly Regex MicrosoftProductName = new(
         @"\bMicrosoft\b|\bWindows\s+(Defender|Firewall|Security)\b|Защитник\s+Windows|Брандмауэр\s+(Защитника\s+)?Windows|Безопасность\s+Windows",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    // l10n:data-end
 
     public static bool IsMicrosoftProduct(string? name)
         => !string.IsNullOrWhiteSpace(name) && MicrosoftProductName.IsMatch(name);
@@ -104,7 +112,7 @@ public static partial class SecurityRules
         if (inactive.Count == 0)
             return null;
         var p = inactive[0];
-        return $"{p.Name} установлен, но его защита не работает ({AvProductState.Decode(p.ProductState).StateText})";
+        return T.F("{0} установлен, но его защита не работает ({1})", p.Name, AvProductState.Decode(p.ProductState).StateText);
     }
 
     /// <summary>Defender exclusions that cover too much (whole drives, user folders, temp, executable types).</summary>
@@ -143,6 +151,8 @@ public static partial class SecurityRules
         var lines = new List<string>();
         SecurityStatus status;
         string state;
+        // True when Defender works and its databases are fresh: too broad exclusions then turn the state into a warning.
+        var healthy = false;
 
         var third = products.Where(p => !p.IsMicrosoft && p.Enabled).ToList();
         var inactiveThird = InactiveThirdPartyText(products);
@@ -154,20 +164,19 @@ public static partial class SecurityRules
             var names = string.Join(", ", third.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase));
             var outdated = third.Where(p => !p.UpToDate).ToList();
             status = outdated.Count == 0 ? SecurityStatus.Ok : SecurityStatus.Warning;
-            state = outdated.Count == 0 ? $"Защищает {names}" : $"{outdated[0].Name}: базы устарели";
+            state = outdated.Count == 0 ? T.F("Защищает {0}", names) : T.F("{0}: базы устарели", outdated[0].Name);
             if (active.Count >= 2)
             {
                 status = SecurityStatus.Warning;
                 if (outdated.Count == 0)
-                    state = "Работают сразу несколько антивирусов";
-                lines.Add($"Одновременно включены: {string.Join(", ", active)}. Антивирусы мешают друг другу и замедляют " +
-                          "компьютер — оставьте один, а лишние удалите в разделе «Программы».");
+                    state = T._("Работают сразу несколько антивирусов");
+                lines.Add(T.F("Одновременно включены: {0}. Антивирусы мешают друг другу и замедляют компьютер — оставьте один, а лишние удалите в разделе «Программы».", string.Join(", ", active)));
             }
             else
             {
                 lines.Add(d is null || !d.RealTimeEnabled
-                    ? "Защитник Windows работает в пассивном режиме — так и должно быть, когда установлен другой антивирус."
-                    : "Защитник Windows тоже включён.");
+                    ? T._("Защитник Windows работает в пассивном режиме — так и должно быть, когда установлен другой антивирус.")
+                    : T._("Защитник Windows тоже включён."));
             }
         }
         else if (d is null)
@@ -176,15 +185,14 @@ public static partial class SecurityRules
             if (disabled.Count > 0)
             {
                 status = SecurityStatus.Danger;
-                state = "Антивирус выключен";
-                lines.Add($"Установлен {string.Join(", ", disabled.Select(p => p.Name).Distinct())}, но защита не работает. " +
-                          "Включите её в настройках антивируса или в «Безопасности Windows».");
+                state = T._("Антивирус выключен");
+                lines.Add(T.F("Установлен {0}, но защита не работает. Включите её в настройках антивируса или в «Безопасности Windows».", string.Join(", ", disabled.Select(p => p.Name).Distinct())));
             }
             else
             {
                 status = SecurityStatus.Unknown;
-                state = "Не удалось узнать состояние антивируса";
-                lines.Add("Служба Защитника Windows не ответила. Откройте «Безопасность Windows», чтобы проверить защиту.");
+                state = T._("Не удалось узнать состояние антивируса");
+                lines.Add(T._("Служба Защитника Windows не ответила. Откройте «Безопасность Windows», чтобы проверить защиту."));
             }
         }
         else
@@ -192,51 +200,52 @@ public static partial class SecurityRules
             if (d.PolicyDisablesAntivirus)
             {
                 status = SecurityStatus.Danger;
-                state = "Защитник Windows отключён групповой политикой";
-                lines.Add("Так часто делают «активаторы» и вирусы. Если компьютер не рабочий, политику стоит удалить.");
+                state = T._("Защитник Windows отключён групповой политикой");
+                lines.Add(T._("Так часто делают «активаторы» и вирусы. Если компьютер не рабочий, политику стоит удалить."));
             }
             else if (!d.ServiceEnabled || !d.AntivirusEnabled)
             {
                 status = SecurityStatus.Danger;
-                state = "Защитник Windows выключен";
+                state = T._("Защитник Windows выключен");
                 lines.Add(inactiveThird is null
-                    ? "Другого антивируса не найдено — компьютер не защищён от вирусов."
-                    : inactiveThird + " — компьютер не защищён от вирусов.");
+                    ? T._("Другого антивируса не найдено — компьютер не защищён от вирусов.")
+                    : T.F("{0} — компьютер не защищён от вирусов.", inactiveThird));
             }
             else if (!d.RealTimeEnabled)
             {
                 status = SecurityStatus.Danger;
-                state = "Защита в реальном времени выключена";
+                state = T._("Защита в реальном времени выключена");
                 lines.Add(d.PolicyDisablesRealtime
-                    ? "Отключена групповой политикой — частый признак «активатора» или вируса."
-                    : "Файлы не проверяются при запуске. Включите защиту — это безопасно.");
+                    ? T._("Отключена групповой политикой — частый признак «активатора» или вируса.")
+                    : T._("Файлы не проверяются при запуске. Включите защиту — это безопасно."));
                 if (inactiveThird is not null)
                     lines.Add(inactiveThird + ".");
             }
             else if (d.SignatureAgeDays is > SignatureMaxAgeDays)
             {
                 status = SecurityStatus.Warning;
-                state = $"Антивирусные базы устарели ({Days(d.SignatureAgeDays.Value)})";
-                lines.Add("Старые базы не знают новых вирусов. Обновите их — это займёт пару минут.");
+                state = T.F("Антивирусные базы устарели ({0})", Days(d.SignatureAgeDays.Value));
+                lines.Add(T._("Старые базы не знают новых вирусов. Обновите их — это займёт пару минут."));
             }
             else
             {
                 status = SecurityStatus.Ok;
-                state = "Защитник Windows включён, базы актуальны";
+                state = T._("Защитник Windows включён, базы актуальны");
+                healthy = true;
             }
 
             var facts = new List<string>
             {
-                "Защита в реальном времени: " + (d.RealTimeEnabled ? "вкл." : "выкл."),
+                T.F("Защита в реальном времени: {0}", d.RealTimeEnabled ? T._("вкл.") : T._("выкл.")),
             };
             if (d.TamperProtected is not null)
-                facts.Add("Защита от подделки: " + (d.TamperProtected.Value ? "вкл." : "выкл."));
+                facts.Add(T.F("Защита от подделки: {0}", d.TamperProtected.Value ? T._("вкл.") : T._("выкл.")));
             lines.Add(string.Join(" · ", facts));
             var dates = new List<string>
             {
-                "Базы: " + (d.SignatureUpdated is { } su ? Format.Date(su) : AgoText(d.SignatureAgeDays)),
-                "Быстрая проверка: " + AgoText(d.QuickScanAgeDays),
-                "Полная: " + AgoText(d.FullScanAgeDays),
+                T.F("Базы: {0}", d.SignatureUpdated is { } su ? Format.Date(su) : AgoText(d.SignatureAgeDays)),
+                T.F("Быстрая проверка: {0}", AgoText(d.QuickScanAgeDays)),
+                T.F("Полная: {0}", AgoText(d.FullScanAgeDays)),
             };
             lines.Add(string.Join(" · ", dates));
 
@@ -244,32 +253,32 @@ public static partial class SecurityRules
             if (badExclusions.Count > 0)
             {
                 status = status.Worst(SecurityStatus.Warning);
-                if (status == SecurityStatus.Warning && state.EndsWith("актуальны", StringComparison.Ordinal))
-                    state = "Слишком широкие исключения антивируса";
-                lines.Add($"Защитник Windows не проверяет: {string.Join(", ", badExclusions.Take(3))}. " +
-                          "Майнеры и вирусы добавляют себе такие исключения.");
+                if (status == SecurityStatus.Warning && healthy)
+                    state = T._("Слишком широкие исключения антивируса");
+                lines.Add(T.F("Защитник Windows не проверяет: {0}. Майнеры и вирусы добавляют себе такие исключения.", string.Join(", ", badExclusions.Take(3))));
             }
             else if (d.ExclusionsHidden && !Admin.IsElevated)
             {
-                lines.Add("Список исключений антивируса виден только администратору.");
+                lines.Add(T._("Список исключений антивируса виден только администратору."));
             }
         }
 
         if (activeThreats.Count > 0)
         {
             status = SecurityStatus.Danger;
-            state = $"Есть необезвреженные угрозы: {activeThreats.Count}";
-            lines.Insert(0, $"Последняя: {activeThreats[0].Name}. " +
+            state = T.F("Есть необезвреженные угрозы: {0}", activeThreats.Count);
+            lines.Insert(0, T.F("Последняя: {0}.", activeThreats[0].Name) + " " +
                             (CanRemoveThreats(d, threats)
-                                ? "Нажмите «Обезвредить угрозы» или выберите действие в «Безопасность Windows» → «Журнал защиты»."
-                                : "Откройте «Безопасность Windows» → «Журнал защиты» и выберите действие."));
+                                ? T._("Нажмите «Обезвредить угрозы» или выберите действие в «Безопасность Windows» → «Журнал защиты».")
+                                : T._("Откройте «Безопасность Windows» → «Журнал защиты» и выберите действие.")));
         }
         else
         {
             var allowed = threats.Where(t => t.IsAllowed).ToList();
             if (allowed.Count > 0)
-                lines.Add($"Вы разрешили в Защитнике Windows: {allowed[0].Name}" + (allowed.Count > 1 ? $" и ещё {allowed.Count - 1}" : "") +
-                          ". Если не уверены в этом файле, отмените разрешение в «Безопасность Windows» → «Журнал защиты».");
+                lines.Add(allowed.Count > 1
+                    ? T.F("Вы разрешили в Защитнике Windows: {0} и ещё {1}. Если не уверены в этом файле, отмените разрешение в «Безопасность Windows» → «Журнал защиты».", allowed[0].Name, allowed.Count - 1)
+                    : T.F("Вы разрешили в Защитнике Windows: {0}. Если не уверены в этом файле, отмените разрешение в «Безопасность Windows» → «Журнал защиты».", allowed[0].Name));
         }
 
         return new SecurityCheckResult(SecurityCheckIds.Antivirus, status, state, string.Join("\n", lines));
@@ -313,50 +322,51 @@ public static partial class SecurityRules
     public static SecurityCheckResult EvaluateFirewall(IReadOnlyList<FirewallProfileState> profiles,
         IReadOnlyList<SecurityProduct> firewalls)
     {
-        const string why = "Без брандмауэра компьютер открыт для атак из сети — особенно в общественном Wi-Fi.";
+        var why = T._("Без брандмауэра компьютер открыт для атак из сети — особенно в общественном Wi-Fi.");
         var third = firewalls.Where(f => !f.IsMicrosoft && f.Enabled).ToList();
         if (third.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Ok,
-                $"Работает {string.Join(", ", third.Select(f => f.Name).Distinct())}",
-                "Сеть защищает сторонний брандмауэр. Брандмауэр Windows при этом может быть выключен — это нормально.");
+                T.F("Работает {0}", string.Join(", ", third.Select(f => f.Name).Distinct())),
+                T._("Сеть защищает сторонний брандмауэр. Брандмауэр Windows при этом может быть выключен — это нормально."));
         }
         if (profiles.Count == 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Unknown,
-                "Не удалось узнать состояние брандмауэра",
-                "Служба брандмауэра не ответила. Проверьте его в «Безопасности Windows» → «Брандмауэр и защита сети».");
+                T._("Не удалось узнать состояние брандмауэра"),
+                T._("Служба брандмауэра не ответила. Проверьте его в «Безопасности Windows» → «Брандмауэр и защита сети»."));
         }
 
         var off = profiles.Where(p => p.Enabled == false).ToList();
         var summary = string.Join(" · ", profiles.Select(p =>
-            $"{Capitalize(p.ShortName)}: {(p.Enabled == false ? "выкл." : p.Enabled == true ? "вкл." : "?")}" +
-            (p.ByPolicy ? " (политика)" : "")));
+        {
+            var state = p.Enabled == false ? T._("выкл.") : p.Enabled == true ? T._("вкл.") : "?";
+            return $"{Capitalize(p.ShortName)}: {state}" + (p.ByPolicy ? " " + T._("(политика)") : "");
+        }));
         var policyNote = off.Any(p => p.ByPolicy)
-            ? "\nВыключение задано групповой политикой: на рабочем компьютере так настраивает администратор, на домашнем — " +
-              "«активаторы» и вирусы. Включить брандмауэр поверх политики нельзя."
+            ? "\n" + T._("Выключение задано групповой политикой: на рабочем компьютере так настраивает администратор, на домашнем — «активаторы» и вирусы. Включить брандмауэр поверх политики нельзя.")
             : "";
         if (off.Any(p => !p.Name.Equals("Domain", StringComparison.OrdinalIgnoreCase)))
         {
             var state = off.Count >= 3 || off.Count == profiles.Count
-                ? "Выключен для всех сетей"
+                ? T._("Выключен для всех сетей")
                 : off.Count == 1
-                    ? $"Выключен для {off[0].Genitive} сети"
-                    : $"Выключен для {string.Join(", ", off.Take(off.Count - 1).Select(p => p.Genitive))} и {off[^1].Genitive} сетей";
+                    ? T.F("Выключен для {0} сети", off[0].Genitive)
+                    : T.F("Выключен для {0} и {1} сетей", string.Join(", ", off.Take(off.Count - 1).Select(p => p.Genitive)), off[^1].Genitive);
             return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Danger, state,
                 summary + "\n" + why + policyNote);
         }
         if (off.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Warning,
-                "Выключен для доменной сети",
-                summary + "\nДоменный профиль работает только в корпоративных сетях, но лучше держать его включённым." + policyNote);
+                T._("Выключен для доменной сети"),
+                summary + "\n" + T._("Доменный профиль работает только в корпоративных сетях, но лучше держать его включённым.") + policyNote);
         }
         return new SecurityCheckResult(SecurityCheckIds.Firewall, SecurityStatus.Ok,
-            "Включён для всех типов сетей", summary + "\nЧужие подключения из сети блокируются.");
+            T._("Включён для всех типов сетей"), summary + "\n" + T._("Чужие подключения из сети блокируются."));
     }
 
-    private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpper(s[0], Format.Ru) + s[1..];
+    private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpper(s[0], T.Culture) + s[1..];
 
     // ===================== UAC =====================
 
@@ -365,45 +375,45 @@ public static partial class SecurityRules
         if (!uac.Readable)
         {
             return new SecurityCheckResult(SecurityCheckIds.Uac, SecurityStatus.Unknown,
-                "Не удалось прочитать настройки UAC", "Нет доступа к разделу реестра с настройками.");
+                T._("Не удалось прочитать настройки UAC"), T._("Нет доступа к разделу реестра с настройками."));
         }
         if (uac.EnableLua == 0)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Uac, SecurityStatus.Danger, "UAC отключён",
-                "Любая программа получает права администратора без вашего ведома. После включения нужна перезагрузка.");
+            return new SecurityCheckResult(SecurityCheckIds.Uac, SecurityStatus.Danger, T._("UAC отключён"),
+                T._("Любая программа получает права администратора без вашего ведома. После включения нужна перезагрузка."));
         }
         if (uac.ConsentPromptBehaviorAdmin == 0)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Uac, SecurityStatus.Warning, "Запросы UAC отключены",
-                "Программы получают права администратора молча, без окна подтверждения. Рекомендуем вернуть запросы.");
+            return new SecurityCheckResult(SecurityCheckIds.Uac, SecurityStatus.Warning, T._("Запросы UAC отключены"),
+                T._("Программы получают права администратора молча, без окна подтверждения. Рекомендуем вернуть запросы."));
         }
-        var details = "Перед изменением системы Windows спрашивает разрешение.";
+        var details = T._("Перед изменением системы Windows спрашивает разрешение.");
         if (uac.PromptOnSecureDesktop == 0)
-            details += " Запрос показывается без затемнения экрана — это немного менее надёжно.";
-        return new SecurityCheckResult(SecurityCheckIds.Uac, SecurityStatus.Ok, "UAC включён", details);
+            details += " " + T._("Запрос показывается без затемнения экрана — это немного менее надёжно.");
+        return new SecurityCheckResult(SecurityCheckIds.Uac, SecurityStatus.Ok, T._("UAC включён"), details);
     }
 
     // ===================== Hosts =====================
 
     /// <summary>"Удалена 1 строка", "Удалены 3 строки", "Удалено 5 строк".</summary>
     public static string LinesRemovedText(int n)
-        => $"{Format.Plural(n, "Удалена", "Удалены", "Удалено")} {Format.Count(n, "строка", "строки", "строк")}";
+        => string.Format(T.Culture, Format.Plural(n, "Удалена {0}", "Удалены {0}", "Удалено {0}"), Format.Count(n, "строка", "строки", "строк"));
 
     /// <summary>"будет удалена 1 строка", "будут удалены 3 строки", "будут удалены 5 строк".</summary>
     public static string LinesToRemoveText(int n)
-        => $"{Format.Plural(n, "будет удалена", "будут удалены", "будут удалены")} {Format.Count(n, "строка", "строки", "строк")}";
+        => string.Format(T.Culture, Format.Plural(n, "будет удалена {0}", "будут удалены {0}", "будут удалены {0}"), Format.Count(n, "строка", "строки", "строк"));
 
     public static SecurityCheckResult EvaluateHosts(HostsReport hosts)
     {
         if (hosts.Error is not null)
         {
             return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Unknown,
-                "Не удалось прочитать файл hosts", hosts.Error);
+                T._("Не удалось прочитать файл hosts"), hosts.Error);
         }
         if (!hosts.Exists)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Ok, "Файла hosts нет",
-                "Без файла hosts Windows спрашивает адреса сайтов у DNS — это нормально.");
+            return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Ok, T._("Файла hosts нет"),
+                T._("Без файла hosts Windows спрашивает адреса сайтов у DNS — это нормально."));
         }
         var entries = hosts.Entries;
         var dangers = entries.Where(e => e.Risk == SecurityStatus.Danger).ToList();
@@ -412,23 +422,23 @@ public static partial class SecurityRules
         {
             var sites = dangers.SelectMany(e => e.Hostnames).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Danger,
-                $"Подменены адреса сайтов: {sites.Count}",
-                $"Например, {sites[0]}. Так вирусы уводят на поддельные страницы. Проверьте строки в списке ниже.");
+                T.F("Подменены адреса сайтов: {0}", sites.Count),
+                T.F("Например, {0}. Так вирусы уводят на поддельные страницы. Проверьте строки в списке ниже.", sites[0]));
         }
         if (warnings.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Warning,
-                $"{Format.Count(warnings.Count, "запись требует", "записи требуют", "записей требуют")} внимания",
+                T.F("{0} внимания", Format.Count(warnings.Count, "запись требует", "записи требуют", "записей требуют")),
                 warnings[0].Reason);
         }
         if (entries.Count == 0)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Ok, "Файл чистый",
-                "Активных записей нет — сайты открываются по настоящим адресам.");
+            return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Ok, T._("Файл чистый"),
+                T._("Активных записей нет — сайты открываются по настоящим адресам."));
         }
         return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Ok,
-            $"{Format.Count(entries.Count, "запись", "записи", "записей")}, опасных нет",
-            "Только обычные записи — например, блокировка рекламы.");
+            T.F("{0}, опасных нет", Format.Count(entries.Count, "запись", "записи", "записей")),
+            T._("Только обычные записи — например, блокировка рекламы."));
     }
 
     // ===================== Winlogon =====================
@@ -476,26 +486,26 @@ public static partial class SecurityRules
         if (!w.Readable)
         {
             return new SecurityCheckResult(SecurityCheckIds.Winlogon, SecurityStatus.Unknown,
-                "Не удалось прочитать параметры входа", "Нет доступа к разделу Winlogon в реестре.");
+                T._("Не удалось прочитать параметры входа"), T._("Нет доступа к разделу Winlogon в реестре."));
         }
         var problems = new List<string>();
         if (!IsShellDefault(w.Shell, windowsDir))
-            problems.Add($"Shell = «{Show(w.Shell)}» (должно быть explorer.exe)");
+            problems.Add(T.F("Shell = «{0}» (должно быть explorer.exe)", Show(w.Shell)));
         if (!IsUserinitDefault(w.Userinit, windowsDir))
-            problems.Add($"Userinit = «{Show(w.Userinit)}» (должно быть {DefaultUserinit(windowsDir)})");
+            problems.Add(T.F("Userinit = «{0}» (должно быть {1})", Show(w.Userinit), DefaultUserinit(windowsDir)));
         if (!string.IsNullOrWhiteSpace(w.UserShell) && !IsShellDefault(w.UserShell, windowsDir))
-            problems.Add($"для вашей учётной записи Shell = «{w.UserShell}»");
+            problems.Add(T.F("для вашей учётной записи Shell = «{0}»", w.UserShell));
         if (problems.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Winlogon, SecurityStatus.Danger,
-                "Подменён запуск при входе в Windows",
-                string.Join("\n", problems) + "\nТак вирусы запускаются вместе с рабочим столом.");
+                T._("Подменён запуск при входе в Windows"),
+                string.Join("\n", problems) + "\n" + T._("Так вирусы запускаются вместе с рабочим столом."));
         }
-        return new SecurityCheckResult(SecurityCheckIds.Winlogon, SecurityStatus.Ok, "Параметры входа стандартные",
-            "Shell и Userinit указывают на программы Windows — посторонних программ при входе нет.");
+        return new SecurityCheckResult(SecurityCheckIds.Winlogon, SecurityStatus.Ok, T._("Параметры входа стандартные"),
+            T._("Shell и Userinit указывают на программы Windows — посторонних программ при входе нет."));
     }
 
-    private static string Show(string? s) => string.IsNullOrWhiteSpace(s) ? "пусто" : s.Trim();
+    private static string Show(string? s) => string.IsNullOrWhiteSpace(s) ? T._("пусто") : s.Trim();
 
     // ===================== IFEO =====================
 
@@ -541,20 +551,20 @@ public static partial class SecurityRules
             (dbgLower.Contains("procexp") || dbgLower.Contains("processhacker") || dbgLower.Contains("systeminformer")))
         {
             return (SecurityStatus.Warning,
-                $"Диспетчер задач заменён на {dbgFile}. Так бывает, если вы сами включили замену в Process Explorer или Process Hacker.");
+                T.F("Диспетчер задач заменён на {0}. Так бывает, если вы сами включили замену в Process Explorer или Process Hacker.", dbgFile));
         }
         if (dbgLower.Contains("vsjitdebugger"))
         {
             return (SecurityStatus.Warning,
-                "При запуске программы открывается отладчик Visual Studio. Так бывает у разработчиков; если вы не программист — удалите перехват.");
+                T._("При запуске программы открывается отладчик Visual Studio. Так бывает у разработчиков; если вы не программист — удалите перехват."));
         }
         if (IsSecuritySensitiveImage(imageName))
         {
             return (SecurityStatus.Danger,
-                $"Запуск {imageName} подменён на «{dbg}». Так вирусы не дают запустить антивирус, Диспетчер задач и средства восстановления.");
+                T.F("Запуск {0} подменён на «{1}». Так вирусы не дают запустить антивирус, Диспетчер задач и средства восстановления.", imageName, dbg));
         }
         return (SecurityStatus.Warning,
-            $"Вместо {imageName} запускается «{dbg}». Если вы не настраивали это сами — удалите перехват.");
+            T.F("Вместо {0} запускается «{1}». Если вы не настраивали это сами — удалите перехват.", imageName, dbg));
     }
 
     private static string CommandLineHead(string cmd)
@@ -574,54 +584,53 @@ public static partial class SecurityRules
 
     public static SecurityCheckResult EvaluateIfeo(IReadOnlyList<IfeoEntry> entries, bool partial, bool readable)
     {
-        const string why = "Вирусы через этот раздел реестра блокируют запуск антивирусов и Диспетчера задач.";
+        var why = T._("Вирусы через этот раздел реестра блокируют запуск антивирусов и Диспетчера задач.");
         if (!readable)
         {
             return new SecurityCheckResult(SecurityCheckIds.Ifeo, SecurityStatus.Unknown,
-                "Не удалось прочитать раздел IFEO", "Нет доступа к реестру. " + why);
+                T._("Не удалось прочитать раздел IFEO"), T._("Нет доступа к реестру.") + " " + why);
         }
         var dangers = entries.Where(e => e.Risk == SecurityStatus.Danger).ToList();
         var warnings = entries.Where(e => e.Risk == SecurityStatus.Warning).ToList();
-        var hint = partial ? " Часть разделов видна только администратору." : "";
+        var hint = partial ? " " + T._("Часть разделов видна только администратору.") : "";
         if (dangers.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Ifeo, SecurityStatus.Danger,
-                "Перехвачен запуск: " + string.Join(", ", dangers.Select(e => e.ImageName).Distinct().Take(3)),
+                T.F("Перехвачен запуск: {0}", string.Join(", ", dangers.Select(e => e.ImageName).Distinct().Take(3))),
                 dangers[0].Reason + hint);
         }
         if (warnings.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Ifeo, SecurityStatus.Warning,
-                $"Найден перехват: {string.Join(", ", warnings.Select(e => e.ImageName).Distinct().Take(3))}",
+                T.F("Найден перехват: {0}", string.Join(", ", warnings.Select(e => e.ImageName).Distinct().Take(3))),
                 warnings[0].Reason + hint);
         }
-        return new SecurityCheckResult(SecurityCheckIds.Ifeo, SecurityStatus.Ok, "Перехватов нет", why + hint);
+        return new SecurityCheckResult(SecurityCheckIds.Ifeo, SecurityStatus.Ok, T._("Перехватов нет"), why + hint);
     }
 
     // ===================== Proxy =====================
 
     public static SecurityCheckResult EvaluateProxy(ProxyState p)
     {
-        const string why = "Рекламные программы подменяют прокси, чтобы встраивать рекламу и следить за сайтами. " +
-                           "Если прокси включили вы сами (VPN, работа, обход блокировок) — всё в порядке.";
+        var why = T._("Рекламные программы подменяют прокси, чтобы встраивать рекламу и следить за сайтами. Если прокси включили вы сами (VPN, работа, обход блокировок) — всё в порядке.");
         if (!p.Readable)
         {
             return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Unknown,
-                "Не удалось прочитать настройки прокси", "Нет доступа к настройкам интернета в реестре.");
+                T._("Не удалось прочитать настройки прокси"), T._("Нет доступа к настройкам интернета в реестре."));
         }
         if (!string.IsNullOrWhiteSpace(p.AutoConfigUrl))
         {
             return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Warning,
-                "Используется скрипт настройки прокси", $"Адрес скрипта: {p.AutoConfigUrl}\n{why}");
+                T._("Используется скрипт настройки прокси"), T.F("Адрес скрипта: {0}", p.AutoConfigUrl) + "\n" + why);
         }
         if (p.Enabled && !string.IsNullOrWhiteSpace(p.Server))
         {
             return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Warning,
-                $"Включён прокси {p.Server}",
-                (IsLocalProxy(p) ? "Прокси работает на этом компьютере — обычно это VPN или программа обхода блокировок.\n" : "") + why);
+                T.F("Включён прокси {0}", p.Server),
+                (IsLocalProxy(p) ? T._("Прокси работает на этом компьютере — обычно это VPN или программа обхода блокировок.") + "\n" : "") + why);
         }
-        return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Ok, "Прокси не используется",
-            "Браузеры подключаются к сайтам напрямую, без посредников.");
+        return new SecurityCheckResult(SecurityCheckIds.Proxy, SecurityStatus.Ok, T._("Прокси не используется"),
+            T._("Браузеры подключаются к сайтам напрямую, без посредников."));
     }
 
     /// <summary>
@@ -699,59 +708,59 @@ public static partial class SecurityRules
 
     // ===================== DNS =====================
 
-    private static readonly Dictionary<string, string> KnownDns = BuildKnownDns();
+    private static readonly Dictionary<string, Func<string>> KnownDns = BuildKnownDns();
 
-    private static Dictionary<string, string> BuildKnownDns()
+    private static Dictionary<string, Func<string>> BuildKnownDns()
     {
-        var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        void Add(string label, params string[] ips)
+        var d = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase);
+        void Add(Func<string> label, params string[] ips)
         {
             foreach (var ip in ips)
                 d[IPAddress.Parse(ip).ToString()] = label;
         }
 
-        Add("Google Public DNS", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
-        Add("Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
-        Add("Cloudflare (защита от вредоносных сайтов)", "1.1.1.2", "1.0.0.2");
-        Add("Cloudflare (семейный)", "1.1.1.3", "1.0.0.3");
-        Add("Quad9", "9.9.9.9", "149.112.112.112", "9.9.9.10", "9.9.9.11", "149.112.112.11", "2620:fe::fe", "2620:fe::9");
-        Add("Яндекс DNS", "77.88.8.8", "77.88.8.1", "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff");
-        Add("Яндекс DNS (безопасный)", "77.88.8.88", "77.88.8.2");
-        Add("Яндекс DNS (семейный)", "77.88.8.7", "77.88.8.3");
-        Add("AdGuard DNS", "94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
-        Add("AdGuard DNS (семейный)", "94.140.14.15", "94.140.15.16");
-        Add("AdGuard DNS (без фильтрации)", "94.140.14.140", "94.140.14.141");
-        Add("OpenDNS", "208.67.222.222", "208.67.220.220", "2620:119:35::35", "2620:119:53::53");
-        Add("OpenDNS FamilyShield", "208.67.222.123", "208.67.220.123");
-        Add("CleanBrowsing", "185.228.168.9", "185.228.169.9");
-        Add("Control D", "76.76.2.0", "76.76.10.0");
-        Add("Comodo Secure DNS", "8.26.56.26", "8.20.247.20");
+        Add(() => "Google Public DNS", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
+        Add(() => "Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
+        Add(() => T._("Cloudflare (защита от вредоносных сайтов)"), "1.1.1.2", "1.0.0.2");
+        Add(() => T._("Cloudflare (семейный)"), "1.1.1.3", "1.0.0.3");
+        Add(() => "Quad9", "9.9.9.9", "149.112.112.112", "9.9.9.10", "9.9.9.11", "149.112.112.11", "2620:fe::fe", "2620:fe::9");
+        Add(() => T._("Яндекс DNS"), "77.88.8.8", "77.88.8.1", "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff");
+        Add(() => T._("Яндекс DNS (безопасный)"), "77.88.8.88", "77.88.8.2");
+        Add(() => T._("Яндекс DNS (семейный)"), "77.88.8.7", "77.88.8.3");
+        Add(() => "AdGuard DNS", "94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
+        Add(() => T._("AdGuard DNS (семейный)"), "94.140.14.15", "94.140.15.16");
+        Add(() => T._("AdGuard DNS (без фильтрации)"), "94.140.14.140", "94.140.14.141");
+        Add(() => "OpenDNS", "208.67.222.222", "208.67.220.220", "2620:119:35::35", "2620:119:53::53");
+        Add(() => "OpenDNS FamilyShield", "208.67.222.123", "208.67.220.123");
+        Add(() => "CleanBrowsing", "185.228.168.9", "185.228.169.9");
+        Add(() => "Control D", "76.76.2.0", "76.76.10.0");
+        Add(() => "Comodo Secure DNS", "8.26.56.26", "8.20.247.20");
         return d;
     }
 
     public static (string Label, DnsKind Kind) LabelDns(string address)
     {
         if (!IPAddress.TryParse(address.Trim(), out var ip))
-            return ("Некорректный адрес", DnsKind.Unknown);
+            return (T._("Некорректный адрес"), DnsKind.Unknown);
         if (KnownDns.TryGetValue(ip.ToString(), out var label))
-            return (label, DnsKind.Known);
+            return (label(), DnsKind.Known);
         if (IPAddress.IsLoopback(ip))
-            return ("Этот компьютер (локальная программа)", DnsKind.Private);
+            return (T._("Этот компьютер (локальная программа)"), DnsKind.Private);
         if (ip.AddressFamily == AddressFamily.InterNetwork)
         {
             if (HostsRules.InCidr(ip, "10.0.0.0/8") || HostsRules.InCidr(ip, "172.16.0.0/12") ||
                 HostsRules.InCidr(ip, "192.168.0.0/16"))
-                return ("Роутер или локальная сеть", DnsKind.Private);
+                return (T._("Роутер или локальная сеть"), DnsKind.Private);
             if (HostsRules.InCidr(ip, "100.64.0.0/10"))
-                return ("Сеть провайдера", DnsKind.Private);
+                return (T._("Сеть провайдера"), DnsKind.Private);
             if (HostsRules.InCidr(ip, "169.254.0.0/16"))
-                return ("Локальный адрес (нет связи с роутером)", DnsKind.Private);
+                return (T._("Локальный адрес (нет связи с роутером)"), DnsKind.Private);
         }
         else if (ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6UniqueLocal)
         {
-            return ("Роутер или локальная сеть", DnsKind.Private);
+            return (T._("Роутер или локальная сеть"), DnsKind.Private);
         }
-        return ("Неизвестный DNS (возможно, провайдера)", DnsKind.Unknown);
+        return (T._("Неизвестный DNS (возможно, провайдера)"), DnsKind.Unknown);
     }
 
     public static SecurityCheckResult EvaluateDns(IReadOnlyList<DnsServerInfo> servers, bool readable)
@@ -759,23 +768,23 @@ public static partial class SecurityRules
         if (!readable)
         {
             return new SecurityCheckResult(SecurityCheckIds.Dns, SecurityStatus.Unknown,
-                "Не удалось получить настройки сети", "Служба WMI не ответила.");
+                T._("Не удалось получить настройки сети"), T._("Служба WMI не ответила."));
         }
         if (servers.Count == 0)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Dns, SecurityStatus.Ok, "DNS не задан",
-                "Нет активных подключений с DNS-серверами — возможно, компьютер не в сети.");
+            return new SecurityCheckResult(SecurityCheckIds.Dns, SecurityStatus.Ok, T._("DNS не задан"),
+                T._("Нет активных подключений с DNS-серверами — возможно, компьютер не в сети."));
         }
         var labels = servers.Select(s => s.Label).Distinct().ToList();
         var unknown = servers.Where(s => s.Kind == DnsKind.Unknown).ToList();
         if (unknown.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Dns, SecurityStatus.Info,
-                "Неизвестный DNS: " + string.Join(", ", unknown.Select(s => s.Address).Distinct().Take(2)),
-                "Обычно это DNS вашего интернет-провайдера — это нормально. Если провайдер ни при чём, DNS мог подменить вирус.");
+                T.F("Неизвестный DNS: {0}", string.Join(", ", unknown.Select(s => s.Address).Distinct().Take(2))),
+                T._("Обычно это DNS вашего интернет-провайдера — это нормально. Если провайдер ни при чём, DNS мог подменить вирус."));
         }
         return new SecurityCheckResult(SecurityCheckIds.Dns, SecurityStatus.Ok, string.Join(", ", labels.Take(2)),
-            "Адреса сайтов определяют известные DNS-серверы или ваш роутер — признаков подмены нет.");
+            T._("Адреса сайтов определяют известные DNS-серверы или ваш роутер — признаков подмены нет."));
     }
 
     // ===================== Windows Update =====================
@@ -810,28 +819,28 @@ public static partial class SecurityRules
 
     public static SecurityCheckResult EvaluateUpdates(UpdatesState u, DateTime now)
     {
-        var count = u.Count > 0 ? $" Установлено обновлений: {Format.Number(u.Count)}." : "";
+        var count = u.Count > 0 ? " " + T.F("Установлено обновлений: {0}.", Format.Number(u.Count)) : "";
         if (u.ServiceDisabled == true)
         {
             return new SecurityCheckResult(SecurityCheckIds.Updates, SecurityStatus.Warning,
-                "Служба обновлений отключена",
-                "Windows не получает исправления безопасности. Так часто делают «твикеры» и сборки Windows." + count);
+                T._("Служба обновлений отключена"),
+                T._("Windows не получает исправления безопасности. Так часто делают «твикеры» и сборки Windows.") + count);
         }
         if (u.LastInstalled is null)
         {
             return new SecurityCheckResult(SecurityCheckIds.Updates, SecurityStatus.Unknown,
-                "Не удалось узнать дату обновления", "Откройте Центр обновления, чтобы проверить состояние." + count);
+                T._("Не удалось узнать дату обновления"), T._("Откройте Центр обновления, чтобы проверить состояние.") + count);
         }
         var days = (int)Math.Floor((now.Date - u.LastInstalled.Value.Date).TotalDays);
         if (days > UpdatesMaxAgeDays)
         {
             return new SecurityCheckResult(SecurityCheckIds.Updates, SecurityStatus.Warning,
-                $"Обновлений не было {Days(days)}",
-                $"Последнее обновление установлено {Format.Date(u.LastInstalled)}. Обновления закрывают дыры, через которые заражают компьютеры." + count);
+                T.F("Обновлений не было {0}", Days(days)),
+                T.F("Последнее обновление установлено {0}. Обновления закрывают дыры, через которые заражают компьютеры.", Format.Date(u.LastInstalled)) + count);
         }
         return new SecurityCheckResult(SecurityCheckIds.Updates, SecurityStatus.Ok,
-            $"Последнее обновление: {AgoText(Math.Max(0, days))}",
-            $"Установлено {Format.Date(u.LastInstalled)}" + (u.LastHotFix is null ? "" : $" ({u.LastHotFix})") + "." + count);
+            T.F("Последнее обновление: {0}", AgoText(Math.Max(0, days))),
+            T.F("Установлено {0}", Format.Date(u.LastInstalled)) + (u.LastHotFix is null ? "" : $" ({u.LastHotFix})") + "." + count);
     }
 
     // ===================== SmartScreen / RDP =====================
@@ -841,31 +850,32 @@ public static partial class SecurityRules
         if (s.PolicyValue == 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.SmartScreen, SecurityStatus.Warning,
-                "SmartScreen отключён политикой",
-                "Windows не предупреждает о подозрительных скачанных программах. Политику мог установить «твикер» или вирус.");
+                T._("SmartScreen отключён политикой"),
+                T._("Windows не предупреждает о подозрительных скачанных программах. Политику мог установить «твикер» или вирус."));
         }
         if (string.Equals(s.ExplorerValue, "Off", StringComparison.OrdinalIgnoreCase))
         {
-            return new SecurityCheckResult(SecurityCheckIds.SmartScreen, SecurityStatus.Warning, "SmartScreen выключен",
-                "Windows не предупреждает перед запуском скачанных программ с плохой репутацией. Рекомендуем включить.");
+            return new SecurityCheckResult(SecurityCheckIds.SmartScreen, SecurityStatus.Warning, T._("SmartScreen выключен"),
+                T._("Windows не предупреждает перед запуском скачанных программ с плохой репутацией. Рекомендуем включить."));
         }
-        return new SecurityCheckResult(SecurityCheckIds.SmartScreen, SecurityStatus.Ok, "SmartScreen включён",
-            "Перед запуском незнакомых скачанных программ Windows покажет предупреждение.");
+        return new SecurityCheckResult(SecurityCheckIds.SmartScreen, SecurityStatus.Ok, T._("SmartScreen включён"),
+            T._("Перед запуском незнакомых скачанных программ Windows покажет предупреждение."));
     }
 
     public static SecurityCheckResult EvaluateRdp(RdpState r)
     {
         if (r.DenyConnections == 0)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Rdp, SecurityStatus.Warning, "Удалённый рабочий стол включён",
-                "К компьютеру можно подключиться по сети. Если вы этим не пользуетесь — отключите: злоумышленники подбирают пароли к RDP.");
+            return new SecurityCheckResult(SecurityCheckIds.Rdp, SecurityStatus.Warning, T._("Удалённый рабочий стол включён"),
+                T._("К компьютеру можно подключиться по сети. Если вы этим не пользуетесь — отключите: злоумышленники подбирают пароли к RDP."));
         }
-        return new SecurityCheckResult(SecurityCheckIds.Rdp, SecurityStatus.Ok, "Удалённый рабочий стол выключен",
-            "Подключиться к компьютеру по RDP нельзя — так безопаснее.");
+        return new SecurityCheckResult(SecurityCheckIds.Rdp, SecurityStatus.Ok, T._("Удалённый рабочий стол выключен"),
+            T._("Подключиться к компьютеру по RDP нельзя — так безопаснее."));
     }
 
     // ===================== Browser extensions =====================
 
+    // l10n:data-begin — words of extension names (Russian and English store names) that the check looks for, never shown
     private static readonly string[] AdwareKeywords =
     {
         "search", "coupon", "shopping", "deals", "discount", "cashback", "price compar", "new tab", "newtab",
@@ -874,18 +884,21 @@ public static partial class SecurityRules
         "web companion", "safe search", "secure search", "quick search", "my search",
         "поиск", "купон", "скидк", "кешбэк", "кэшбэк", "покупк", "сравнение цен", "новая вкладка", "стартовая",
         "домашняя страница", "погода", "конвертер", "скачать видео",
+    // l10n:data-end
     };
 
-    /// <summary>Extensions that are commonly bundled with other software ("в нагрузку").</summary>
-    private static readonly (string Pattern, string Reason)[] KnownBundledExtensions =
+    // l10n:data-begin — the Russian store names of extensions, matched and never shown
+    /// <summary>Extensions that are commonly bundled with other software ("в нагрузку"): a part of the name and why it matters.</summary>
+    private static readonly (string Pattern, Func<string> Reason)[] KnownBundledExtensions =
     {
-        ("советник", "«Советник» показывает рекламу товаров поверх сайтов магазинов и часто ставится «в нагрузку» к другим программам."),
-        ("sovetnik", "«Советник» показывает рекламу товаров поверх сайтов магазинов и часто ставится «в нагрузку» к другим программам."),
-        ("визуальные закладки", "Заменяет новую вкладку на страницу Яндекса и часто ставится «в нагрузку» к другим программам."),
-        ("visual bookmarks", "Заменяет новую вкладку и часто ставится «в нагрузку» к другим программам."),
-        ("mail.ru", "Расширения Mail.ru часто ставятся «в нагрузку» и меняют поиск и стартовую страницу."),
-        ("search manager", "Меняет поисковую систему браузера — типичное поведение рекламных программ."),
+        ("советник", () => T._("«Советник» показывает рекламу товаров поверх сайтов магазинов и часто ставится «в нагрузку» к другим программам.")),
+        ("sovetnik", () => T._("«Советник» показывает рекламу товаров поверх сайтов магазинов и часто ставится «в нагрузку» к другим программам.")),
+        ("визуальные закладки", () => T._("Заменяет новую вкладку на страницу Яндекса и часто ставится «в нагрузку» к другим программам.")),
+        ("visual bookmarks", () => T._("Заменяет новую вкладку и часто ставится «в нагрузку» к другим программам.")),
+        ("mail.ru", () => T._("Расширения Mail.ru часто ставятся «в нагрузку» и меняют поиск и стартовую страницу.")),
+        ("search manager", () => T._("Меняет поисковую систему браузера — типичное поведение рекламных программ.")),
     };
+    // l10n:data-end
 
     /// <summary>Returns a reason if the extension name looks like adware/PUP, otherwise null.</summary>
     public static string? SuspiciousExtensionReason(string? name)
@@ -898,13 +911,13 @@ public static partial class SecurityRules
         foreach (var (pattern, reason) in KnownBundledExtensions)
         {
             if (name.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-                return reason;
+                return reason();
         }
         var lower = name.ToLowerInvariant();
         var kw = AdwareKeywords.FirstOrDefault(k => lower.Contains(k, StringComparison.Ordinal));
         return kw is null
             ? null
-            : $"Название похоже на рекламное расширение («{kw}»): такие часто подменяют поиск и стартовую страницу.";
+            : T.F("Название похоже на рекламное расширение («{0}»): такие часто подменяют поиск и стартовую страницу.", kw);
     }
 
     public static void ClassifyExtension(BrowserExtension ext)
@@ -913,65 +926,64 @@ public static partial class SecurityRules
         if (reason is not null)
         {
             ext.Risk = ext.Enabled == false ? SecurityStatus.Info : SecurityStatus.Warning;
-            ext.Reason = ext.Enabled == false ? reason + " Сейчас оно отключено, но лучше удалить." : reason;
+            ext.Reason = ext.Enabled == false ? reason + " " + T._("Сейчас оно отключено, но лучше удалить.") : reason;
             if (ext.Source == ExtensionSource.OtherProgram)
-                ext.Reason += " Установлено другой программой, а не вами.";
+                ext.Reason += " " + T._("Установлено другой программой, а не вами.");
             return;
         }
         switch (ext.Source)
         {
             case ExtensionSource.Policy:
                 ext.Risk = SecurityStatus.Warning;
-                ext.Reason = "Установлено принудительно через политику — удалить его можно только вместе с политикой. " +
-                             "На домашнем компьютере это частый признак рекламной программы.";
+                ext.Reason = T._("Установлено принудительно через политику — удалить его можно только вместе с политикой. На домашнем компьютере это частый признак рекламной программы.");
                 break;
             case ExtensionSource.OtherProgram:
                 ext.Risk = SecurityStatus.Info;
-                ext.Reason = "Установлено другой программой, а не вами из магазина расширений.";
+                ext.Reason = T._("Установлено другой программой, а не вами из магазина расширений.");
                 break;
             case ExtensionSource.Unpacked:
                 ext.Risk = SecurityStatus.Info;
-                ext.Reason = "Распакованное расширение (режим разработчика).";
+                ext.Reason = T._("Распакованное расширение (режим разработчика).");
                 break;
             case ExtensionSource.Store:
                 ext.Risk = SecurityStatus.Ok;
-                ext.Reason = "Установлено из магазина расширений.";
+                ext.Reason = T._("Установлено из магазина расширений.");
                 break;
             default:
                 ext.Risk = SecurityStatus.Ok;
-                ext.Reason = "Признаков рекламного расширения нет.";
+                ext.Reason = T._("Признаков рекламного расширения нет.");
                 break;
         }
     }
 
     public static SecurityCheckResult EvaluateExtensions(IReadOnlyList<BrowserExtension> list, int browsers)
     {
-        const string why = "Удаляются расширения в самом браузере — нажмите «Как удалить».";
+        var why = T._("Удаляются расширения в самом браузере — нажмите «Как удалить».");
         if (browsers < 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Unknown,
-                "Не удалось прочитать расширения", "Папки профилей браузеров недоступны. Проверьте расширения в самом браузере.");
+                T._("Не удалось прочитать расширения"), T._("Папки профилей браузеров недоступны. Проверьте расширения в самом браузере."));
         }
         if (browsers == 0)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Ok, "Браузеры не найдены",
-                "Поддерживаются Chrome, Edge, Яндекс Браузер, Opera, Brave, Vivaldi и Firefox.");
+            return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Ok, T._("Браузеры не найдены"),
+                T._("Поддерживаются Chrome, Edge, Яндекс Браузер, Opera, Brave, Vivaldi и Firefox."));
         }
         var bad = list.Where(e => e.Risk == SecurityStatus.Warning).ToList();
         if (bad.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Warning,
-                $"Подозрительных: {bad.Count} из {list.Count}",
-                $"Например, «{bad[0].Name}» ({bad[0].Browser}). " + why);
+                T.F("Подозрительных: {0} из {1}", bad.Count, list.Count),
+                T.F("Например, «{0}» ({1}).", bad[0].Name, bad[0].Browser) + " " + why);
         }
         if (list.Count == 0)
         {
-            return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Ok, "Расширений нет",
-                "В браузерах не установлено ни одного расширения.");
+            return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Ok, T._("Расширений нет"),
+                T._("В браузерах не установлено ни одного расширения."));
         }
         return new SecurityCheckResult(SecurityCheckIds.Extensions, SecurityStatus.Ok,
-            $"{Format.Count(list.Count, "расширение", "расширения", "расширений")}, подозрительных нет",
-            "Расширения видят открытые страницы — ставьте только те, которым доверяете.");
+            T.F("{0}, подозрительных нет", Format.Count(list.Count, "расширение", "расширения", "расширений")),
+            T._("Расширения видят открытые страницы — ставьте только те, которым доверяете."));
     }
 
     // ===================== Overall score =====================

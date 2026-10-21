@@ -121,10 +121,13 @@ public static class ErrorText
     private static bool IsEnglishText(string text)
         => !string.IsNullOrWhiteSpace(text) && text.All(c => !char.IsLetter(c) || c < 0x80);
 
-    private static readonly string[] ProperNouns = { "Windows", "Microsoft", "PowerShell", "BitLocker", "Defender", "Explorer", "Shell" };
+    private static readonly string[] ProperNouns =
+    {
+        "Windows", "Microsoft", "PowerShell", "BitLocker", "Defender", "Explorer", "Shell", "Radmin", "Ammyy", "Mimikatz",
+    };
 
     /// <summary>"The file exists" → "the file exists" (it follows a colon or a dash); "Windows …", "SQL …", "C:\x …" stay.</summary>
-    private static string LowerFirstWord(string text)
+    internal static string LowerFirstWord(string text)
     {
         var space = text.IndexOf(' ');
         var word = space < 0 ? text : text[..space];

@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Localization;
 using PcCleaner.Modules.Security;
 
 namespace PcCleaner.Modules.Network;
@@ -59,7 +60,7 @@ public static class NetworkProbes
         }
         catch (NetworkInformationException ex)
         {
-            Log.Warn($"Сеть: не удалось получить список адаптеров: {ex.Message}");
+            Log.Warn(T.F("Сеть: не удалось получить список адаптеров: {0}", ex.Message));
             return list;
         }
 
@@ -75,7 +76,7 @@ public static class NetworkProbes
             }
             catch (Exception ex) when (ex is NetworkInformationException or PlatformNotSupportedException or InvalidOperationException)
             {
-                Log.Warn($"Сеть: не удалось прочитать адаптер {nic.Name}: {ex.Message}");
+                Log.Warn(T.F("Сеть: не удалось прочитать адаптер {0}: {1}", nic.Name, ex.Message));
             }
         }
         // The live traffic samples now read exactly these adapters (the page compares both lists to notice changes).
@@ -206,7 +207,7 @@ public static class NetworkProbes
         }
         catch (NetworkInformationException ex)
         {
-            Log.Warn($"Сеть: не удалось прочитать счётчики трафика: {ex.Message}");
+            Log.Warn(T.F("Сеть: не удалось прочитать счётчики трафика: {0}", ex.Message));
         }
         return new TrafficSample(counters, Stopwatch.GetTimestamp()) { AdapterIds = ids };
     }
@@ -282,7 +283,7 @@ public static class NetworkProbes
         {
             address = await ResolveAsync(target.Host, TimeSpan.FromSeconds(2), ct).ConfigureAwait(false);
             if (address is null)
-                return new LatencyResult(target, new double?[] { null, null, null }, "не удалось найти адрес сервера");
+                return new LatencyResult(target, new double?[] { null, null, null }, T._("не удалось найти адрес сервера"));
         }
 
         var attempts = new List<double?>();
@@ -396,7 +397,7 @@ public static class NetworkProbes
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or NotSupportedException)
         {
-            Log.Warn($"Сеть: проверка доступа в интернет через HTTP не удалась: {ex.Message}");
+            Log.Warn(T.F("Сеть: проверка доступа в интернет через HTTP не удалась: {0}", ex.Message));
         }
         return (LatencyMath.Median(times), captive);
     }
@@ -463,15 +464,15 @@ public static class NetworkProbes
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
-            Log.Warn($"Сеть: не удалось запустить netsh: {ex.Message}");
-            return new WifiReport { Error = $"Не удалось запустить netsh: {ErrorText.For(ex)}." };
+            Log.Warn(T.F("Сеть: не удалось запустить netsh: {0}", ex.Message));
+            return new WifiReport { Error = T.F("Не удалось запустить netsh: {0}.", ErrorText.For(ex)) };
         }
         var stdout = DecodeConsoleOutput(Encoding.Latin1.GetBytes(result.StdOut));
         var stderr = DecodeConsoleOutput(Encoding.Latin1.GetBytes(result.StdErr));
         var interfaces = WlanParser.Parse(stdout);
         var blocked = interfaces.All(i => i.SignalPercent is null) && WlanParser.IsLocationBlocked(stdout + "\n" + stderr);
         if (result.TimedOut)
-            Log.Warn("Сеть: netsh wlan не ответил вовремя");
+            Log.Warn(T._("Сеть: netsh wlan не ответил вовремя"));
         return new WifiReport
         {
             Interfaces = interfaces,
@@ -532,7 +533,7 @@ public static class NetworkProbes
         catch (AggregateException ex)
         {
             // Unknown state: nothing is reported about the firewall (the Security page checks it as well).
-            Log.Warn($"Сеть: не удалось узнать состояние брандмауэра: {ex.InnerException?.Message ?? ex.Message}");
+            Log.Warn(T.F("Сеть: не удалось узнать состояние брандмауэра: {0}", ex.InnerException?.Message ?? ex.Message));
             return new FirewallReport();
         }
 
@@ -545,10 +546,10 @@ public static class NetworkProbes
         var networks = networksQ.Result
             .Select(r => (Name: r.Str("Name"), Profile: NetworkRules.ProfileOfCategory(r.Long("NetworkCategory"))))
             .Where(n => n.Profile is not null)
-            .Select(n => new ConnectedNetwork(string.IsNullOrWhiteSpace(n.Name) ? "Сеть" : n.Name, n.Profile!))
+            .Select(n => new ConnectedNetwork(string.IsNullOrWhiteSpace(n.Name) ? T._("Сеть") : n.Name, n.Profile!))
             .ToList();
         var thirdParty = productsQ.Result
-            .Select(r => SecurityRules.MakeProduct(r.Str("displayName") ?? "Брандмауэр", r.Long("productState") ?? 0))
+            .Select(r => SecurityRules.MakeProduct(r.Str("displayName") ?? T._("Брандмауэр"), r.Long("productState") ?? 0))
             .FirstOrDefault(p => !p.IsMicrosoft && p.Enabled);
         return new FirewallReport { Profiles = profiles, Networks = networks, ThirdPartyFirewall = thirdParty?.Name };
     }
@@ -568,7 +569,7 @@ public static class NetworkProbes
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {
-            Log.Warn($"Сеть: не удалось прочитать политику брандмауэра: {ex.Message}");
+            Log.Warn(T.F("Сеть: не удалось прочитать политику брандмауэра: {0}", ex.Message));
         }
         return result;
     }

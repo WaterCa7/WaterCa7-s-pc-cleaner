@@ -132,8 +132,10 @@ public class FixResultClassifierTests
         "Автозагрузка: не удалось запустить проверку Защитником: {0}", // log: contains "Could not start the scan: {0}."
         "Автозагрузка: не удалось прочитать ярлык {0}: {1}", // log: contains "Could not read {0}: {1}"
         "Автозагрузка: не удалось удалить {0}: {1}", // log: contains "Could not delete {0}: {1}"
+        "Безопасность: проверка «{0}» не удалась: {1}: {2}", // log of the Security scan: contains "check failed"
         "Главная: не удалось восстановить состояние после ошибки проверки: {0}", // log: contains "Could not restore {0}: {1}"
         "Главная: не удалось запустить удаление «{0}»: {1}", // log: contains "Could not start the uninstall of “{0}”."
+        "Главная: не удалось исправить «{0}» ({1}): {2}", // log: contains "Could not fix" (the prefix of a failed Security fix)
         "Главная: не удалось открыть {0}: {1}", // log
         "Главная: не удалось прочитать результат прошлой проверки: {0}", // log: contains "Could not read {0}: {1}"
         "Главная: не удалось прочитать сведения о компьютере: {0}", // log
@@ -156,6 +158,13 @@ public class FixResultClassifierTests
         "Программы: не удалось запустить PowerShell: {0}", // log: contains "Could not start PowerShell: {0}."
         "Программы: не удалось прочитать название приложения: {0}", // log
         "Процессы: не удалось проверить подпись {0}: {1}", // log: contains "Could not check {0}"
+        "Сеть: не удалось запустить netsh: {0}", // log: contains "Could not start netsh: {0}."
+        "Сеть: не удалось очистить кэш DNS: {0}", // log: contains "Could not clear the DNS cache: {0}"
+        "Сеть: не удалось прочитать адаптер {0}: {1}", // log: contains "Could not read {0}: {1}"
+        "Сеть: не удалось прочитать политику брандмауэра: {0}", // log: contains "Could not read {0}: {1}"
+        "Сеть: не удалось прочитать счётчики трафика: {0}", // log: contains "Could not read {0}: {1}"
+        "Сеть: не удалось разобрать таблицу соединений: {0}", // log: contains "Could not read {0}: {1}"
+        "Сеть: проверка «{0}» не удалась: {1}", // log: contains "check failed"
         "Ускорение: не удалось вернуть «{0}»: {1}", // log: contains "Could not revert “{0}”: {1}"
         "Ускорение: не удалось вернуть план «{0}»: {1}", // log: contains "Could not restore the plan “{0}” …"
         "Ускорение: не удалось запустить powercfg {0}: {1}", // log: contains "Could not start {0}: {1}"

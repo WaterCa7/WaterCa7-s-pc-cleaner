@@ -292,3 +292,64 @@ Notes for the other pages:
 - «Не удалось удалить ({0}):» is shared by Programs and Startup, so it says “Could not remove ({0}):”.
 - A decision the program makes after a Defender scan comes from `DefenderScanResult.ThreatFound` (`FileTools.ScanWithDefenderAsync`), never from the
   words of the text; a decision about a process or an entry comes from its flags (`SuspicionFlags`, `SustainedCpu` for the miner heuristic).
+
+## Network
+
+| Русский | English |
+|---|---|
+| соединение (of a program) / открытый порт | connection / open port |
+| Задержка (пинг) | Latency (ping) |
+| Основное (the adapter that carries the traffic) | Main |
+| Роутер / шлюз | Router / gateway |
+| Параметры сети / Параметры Wi-Fi / Параметры адаптера | Network settings / Wi-Fi settings / Adapter settings |
+| Очистить кэш DNS / Сбросить сетевые настройки | Clear DNS cache / Reset network settings |
+| Как сменить DNS | How to change DNS |
+| Проверить IP (AbuseIPDB) | Check IP (AbuseIPDB) |
+| Необычный порт / Подозрительно (badge of a connection) | Unusual port / Suspicious |
+| Опасный / Стандартный / Обычный / Безопасный (kind of a port) | Risky / Standard / Ordinary / Safe |
+| из сети / только этот ПК (access of a port) | from the network / this PC only |
+| Установлено / Подключается / Ждёт подключений | Established / Connecting / Listening |
+| 100 Мбит/с, 2,4 ГГц, 12 мс, 1,2 МБ/с | 100 Mbps, 2.4 GHz, 12 ms, 1.2 MB/s |
+| отлично / нормально / высокая / очень высокая (latency) | excellent / fine / high / very high |
+| Нет доступа в интернет | No internet access |
+
+Notes:
+
+- The names of the services behind a port (“HTTPS — веб-сервер”), the reasons of a remote port (“порт майнинг-пулов …”) and the friendly names
+  of Windows processes are tables of texts in `NetworkRules` / `ProcessIdentities`; they are read when asked (`switch`), never kept in a static
+  table, so a language change shows at once.
+- The plural words of a XAML `ConverterParameter` cannot be a text: `PluralConverter` takes the *name* of a word set (`"connection"`, `"port"`),
+  the Russian forms and their English entries live in `PluralConverter.Words`.
+- A reason of suspicion starts with a lower-case letter inside a sentence in Russian; in English only a plain word does (`ErrorText.LowerFirstWord`):
+  “XMRig …”, “AnyDesk …”, “T-Rex …”, “Mimikatz …” keep their capitals.
+- The words of `netsh` output (any Windows language) are data (`WlanParser`, the authentication words), never shown.
+
+## Security
+
+| Русский | English |
+|---|---|
+| В порядке / К сведению / Внимание / Опасно / Нет данных (status of a check) | Fine / For information / Warning / Dangerous / No data |
+| Антивирус / Брандмауэр / Файл hosts | Antivirus / Firewall / Hosts file |
+| Запуск рабочего стола (Winlogon) | Desktop startup |
+| Перехват запуска программ (IFEO) | Program launch hijacking |
+| Прокси-сервер | Proxy server |
+| Изоляция ядра / Целостность памяти | Core isolation / Memory integrity |
+| Шифрование диска / Шифрование устройства | Disk encryption / Device encryption |
+| Журнал защиты | Protection history |
+| Обезвредить угрозы | Neutralize threats |
+| Защита в реальном времени / Защита от подделки | Real-time protection / Tamper protection |
+| активатор (a cracking tool) | “activator” |
+| групповая политика | Group Policy |
+| доменная / частная / общедоступная сеть | domain / private / public network |
+| Убрать подмену (hosts) / Убрать перехват / Выключить прокси / Восстановить | Remove the replacement / Remove the hijack / Turn off proxy / Restore |
+
+Notes:
+
+- The title of the “Windows Update service is off” issue comes from `UpdatesState.ServiceDisabled`, and the “too broad exclusions” state of the
+  antivirus card from the state of Defender, never from the words of a card.
+- A failed action whose text already opens with the failure sentence is made with `SecurityActionResult.Failed(…)` (`OpensWithFailure`);
+  `SecurityService.DashboardText` does not put its “Не удалось исправить.” / “Could not fix.” in front of it again. A Russian result built
+  with plain `Fail(…)` and starting with «Не удалось» is still recognised (a Russian-only rule inside a data region).
+- A side note about a restore point that is added to a successful result does not use a failure phrase in English: “No restore point was created
+  (system protection may be off).”, not “Could not create a restore point.”.
+- The exception texts of the hosts file (`HostsChangedException`) and of `Shell.Application` are marked `ErrorText.Own(…)`.
