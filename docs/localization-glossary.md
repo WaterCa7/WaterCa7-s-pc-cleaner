@@ -320,8 +320,11 @@ Notes:
   table, so a language change shows at once.
 - The plural words of a XAML `ConverterParameter` cannot be a text: `PluralConverter` takes the *name* of a word set (`"connection"`, `"port"`),
   the Russian forms and their English entries live in `PluralConverter.Words`.
-- A reason of suspicion starts with a lower-case letter inside a sentence in Russian; in English only a plain word does (`ErrorText.LowerFirstWord`):
-  “XMRig …”, “AnyDesk …”, “T-Rex …”, “Mimikatz …” keep their capitals.
+- A reason of suspicion gets a lower-case first letter inside a sentence (“… raises questions: no digital signature; a downloader …”) except
+  a reason that starts with the name of a program: `KnownPups` marks each row for the language where the name comes first (`ReasonStart`:
+  “Babylon — …”, “Baidu programs …”, “XMRig crypto miner …” keep their capitals; “Программы Baidu …” does not start with it) and
+  `NetworkRules.ProgramWarningText` asks `KnownPups.StartsWithProductName`. Nothing is guessed from how a word is spelled; a new row whose reason
+  starts with a name must be marked (a test lists the ordinary first words).
 - The words of `netsh` output (any Windows language) are data (`WlanParser`, the authentication words), never shown.
 
 ## Security

@@ -377,6 +377,46 @@ public sealed class SecurityEnglishTests
         AssertEnglish(broad.Details, ok.Details, old.Details);
     }
 
+    [Fact]
+    public void TheHostsCard_SaysHowManyEntriesNeedAttention_InAWholeSentence_InBothLanguages()
+    {
+        Assert.Equal("1 запись требует внимания", SecurityRules.EntriesNeedAttention(1));
+        Assert.Equal("3 записи требуют внимания", SecurityRules.EntriesNeedAttention(3));
+        Assert.Equal("5 записей требуют внимания", SecurityRules.EntriesNeedAttention(5));
+        Assert.Equal("21 запись требует внимания", SecurityRules.EntriesNeedAttention(21));
+        static string State() => SecurityRules.EvaluateHosts(new HostsReport { Entries = Warned("0.0.0.0 avast.test", "0.0.0.0 kaspersky.test", "0.0.0.0 eset.test") }).State;
+        Assert.Equal("3 записи требуют внимания", State());
+
+        using var language = TestLanguage.English();
+
+        Assert.Equal("1 entry needs attention", SecurityRules.EntriesNeedAttention(1));
+        Assert.Equal("3 entries need attention", SecurityRules.EntriesNeedAttention(3));
+        Assert.Equal("1,200 entries need attention", SecurityRules.EntriesNeedAttention(1200));
+        Assert.Equal("3 entries need attention", State());
+    }
+
+    private static List<HostsEntry> Warned(params string[] lines)
+    {
+        var entries = HostsFile.Parse(string.Join("\r\n", lines)).ToList();
+        entries.ForEach(HostsRules.Classify);
+        Assert.All(entries, e => Assert.Equal(SecurityStatus.Warning, e.Risk));
+        return entries;
+    }
+
+    [Fact]
+    public void TheRealTimeProtectionFailedByPolicy_ReadsOnceAsAFailure_InEnglish()
+    {
+        using var language = TestLanguage.English();
+
+        var text = SecurityService.DashboardText(SecurityActionResult.Fail(
+            T._("Защиту не удалось включить: она отключена групповой политикой. Если компьютер не рабочий, политику оставил «активатор» или вирус.")));
+
+        Assert.Equal("Could not fix. The protection is turned off by a Group Policy, so it cannot be turned on. " +
+                     "If this is not a work computer, an “activator” or a virus left the policy.", text);
+        Assert.DoesNotContain("Could not fix. Could not", text);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+    }
+
     // ================================================================ cards and words
 
     [Fact]

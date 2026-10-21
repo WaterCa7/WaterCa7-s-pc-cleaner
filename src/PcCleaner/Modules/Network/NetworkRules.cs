@@ -976,11 +976,12 @@ public static class NetworkRules
         => string.Join("; ", reasons.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => LowerFirst(r.Trim())));
 
     /// <summary>
-    /// Russian: the first letter in lower case. English: only a plain word ("No digital signature" → "no digital signature"); a product
-    /// name ("XMRig crypto miner", "AnyDesk remote access program", "Mimikatz …") keeps its capitals (see <see cref="ErrorText.LowerFirstWord"/>).
+    /// The first letter in lower case, because the reason follows a colon or a semicolon ("No digital signature" → "no digital signature",
+    /// "A downloader …" → "a downloader …"); except a reason that starts with the name of a program ("XMRig crypto miner …", "Babylon — …",
+    /// "Baidu programs …"): the table that made it says so (<see cref="KnownPups.StartsWithProductName"/>), nothing is guessed from the spelling.
     /// </summary>
     private static string LowerFirst(string text)
-        => text.Length == 0 ? text : T.IsEnglish ? ErrorText.LowerFirstWord(text) : char.ToLower(text[0], Format.Ru) + text[1..];
+        => text.Length == 0 || KnownPups.StartsWithProductName(text) ? text : char.ToLower(text[0], T.Culture) + text[1..];
 
     // ===================================================================== firewall
 

@@ -179,10 +179,10 @@ public static partial class SecurityRules
                 present = ParseYesNo(value);
             }
             else if (version is null && (key.Contains("tpm version") || key.Contains("версия tpm")))
-            // l10n:data-end
             {
                 version = NormalizeTpmVersion(value);
             }
+            // l10n:data-end
         }
         return new TpmState(present, null, null, version);
     }

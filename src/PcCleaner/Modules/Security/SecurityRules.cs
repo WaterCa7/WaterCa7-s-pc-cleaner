@@ -403,6 +403,10 @@ public static partial class SecurityRules
     public static string LinesToRemoveText(int n)
         => string.Format(T.Culture, Format.Plural(n, "будет удалена {0}", "будут удалены {0}", "будут удалены {0}"), Format.Count(n, "строка", "строки", "строк"));
 
+    /// <summary>"1 запись требует внимания", "3 записи требуют внимания", "5 записей требуют внимания": one sentence for each form.</summary>
+    public static string EntriesNeedAttention(int n)
+        => string.Format(T.Culture, Format.Plural(n, "{0} запись требует внимания", "{0} записи требуют внимания", "{0} записей требуют внимания"), Format.Number(n));
+
     public static SecurityCheckResult EvaluateHosts(HostsReport hosts)
     {
         if (hosts.Error is not null)
@@ -428,7 +432,7 @@ public static partial class SecurityRules
         if (warnings.Count > 0)
         {
             return new SecurityCheckResult(SecurityCheckIds.Hosts, SecurityStatus.Warning,
-                T.F("{0} внимания", Format.Count(warnings.Count, "запись требует", "записи требуют", "записей требуют")),
+                EntriesNeedAttention(warnings.Count),
                 warnings[0].Reason);
         }
         if (entries.Count == 0)

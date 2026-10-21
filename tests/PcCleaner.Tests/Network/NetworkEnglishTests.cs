@@ -136,16 +136,21 @@ public sealed class NetworkEnglishTests
     [Fact]
     public async Task TheNetworkReset_WithoutAdministratorRights_IsAdminOnlyInEnglish()
     {
-        if (Admin.IsElevated)
-            return; // the message below is what a non-elevated run gets
-
         using var _ = TestLanguage.English();
-        var (ok, message) = await new NetworkService().ResetNetworkAsync(CancellationToken.None);
 
-        Assert.False(ok);
-        Assert.Equal("Resetting the network settings needs administrator rights — nothing was changed.", message);
-        Assert.True(HealthScoring.LooksLikeFailure(message));
-        Assert.True(HealthScoring.LooksLikeAdminRequired(message));
+        // The text itself is checked on every run, elevated or not.
+        var text = NetworkService.ResetNeedsAdminText;
+        Assert.Equal("Resetting the network settings needs administrator rights — nothing was changed.", text);
+        Assert.True(HealthScoring.LooksLikeFailure(text));
+        Assert.True(HealthScoring.LooksLikeAdminRequired(text));
+
+        // The service answers with it when the program has no administrator rights; an elevated run would start the real netsh, so it stops here.
+        if (!Admin.IsElevated)
+        {
+            var (ok, message) = await new NetworkService().ResetNetworkAsync(CancellationToken.None);
+            Assert.False(ok);
+            Assert.Equal(text, message);
+        }
     }
 
     [Fact]
@@ -308,6 +313,95 @@ public sealed class NetworkEnglishTests
 
         Assert.StartsWith(name, text); // not "xMRig", "anyDesk", "radmin"…
         Assert.Contains("; no digital signature; hidden or encoded PowerShell launch; ", text); // plain words are lower-cased
+    }
+
+    // The English names that start a reason of KnownPups (rows of the unwanted programs and of the risky tools): none may be lower-cased.
+    private static readonly string[] NamesThatStartAnEnglishReason =
+    {
+        "Babylon", "Baidu", "Tencent", "Conduit", "Mindspark", "Mobogenie", "Lavasoft", "Reimage", "Restoro", "Wave Browser", "Shift Browser",
+        "Ask Toolbar", "Search Protect", "Shield Search", "Advanced SystemCare", "Driver Booster", "Smart Game Booster", "Optimizer Pro",
+        "OneLaunch", "WebDiscover", "Segurazo", "ByteFence", "PC Accelerate", "DriverPack", "WinZip Driver", "Ad-Aware", "Hao123", "360 Total Security",
+        "MyWebSearch", "SlimCleaner", "MyPC Backup", "Guard@Mail.ru", "Sputnik@Mail.ru", "Mail.ru updater", "Opera",
+        "XMRig", "NiceHash", "T-Rex", "Mimikatz", "AnyDesk", "TeamViewer", "RustDesk", "Ammyy", "Radmin", "PsExec",
+    };
+
+    // What an ordinary reason may start with: an article, an adverb, a noun that is no name, a quotation mark.
+    private static readonly string[] OrdinaryEnglishStarts = { "The", "A", "An", "Often", "Crypto", "“" };
+
+    private static readonly string[] OrdinaryRussianStarts =
+    {
+        "Браузер", "Служба", "Устаревшая", "Загрузчик", "Программы", "Часто", "Фоновый", "Ускоритель", "Платный", "Оптимизатор", "Угонщик",
+        "Активатор", "Криптомайнер", "Майнер", "Инструмент", "Программа", "Туннель", "«",
+    };
+
+    [Fact]
+    public void EveryKnownPupsReason_GoesThroughTheJoin_NamesKeepTheirCapitals_AndOrdinaryStartsAreLowerCased_InBothLanguages()
+    {
+        var russian = KnownPups.AllReasons().ToList();
+        Assert.True(russian.Count > 60, "all the rows should be there");
+        CheckTheJoin(russian, OrdinaryRussianStarts, new[]
+        {
+            "Babylon", "Conduit", "Mindspark", "Mobogenie", "Lavasoft", "Reimage", "Restoro", "Wave Browser", "Shift Browser", "Ask Toolbar",
+            "Search Protect", "Shield Search", "Advanced SystemCare", "Driver Booster", "Smart Game Booster", "Optimizer Pro", "Спутник@Mail.ru", "PsExec",
+        });
+        // Russian reasons that start with an ordinary word in front of the name are lower-cased as before.
+        Assert.Equal("программы Baidu часто ставятся «в нагрузку»; браузер Амиго часто устанавливается «в нагрузку» к другим программам",
+            NetworkRules.ProgramWarningText(new[] { "Программы Baidu часто ставятся «в нагрузку»", "Браузер Амиго часто устанавливается «в нагрузку» к другим программам" }));
+
+        using var _ = TestLanguage.English();
+        var english = KnownPups.AllReasons().ToList();
+        Assert.Equal(russian.Count, english.Count);
+        CheckTheJoin(english, OrdinaryEnglishStarts, Array.Empty<string>());
+
+        foreach (var name in NamesThatStartAnEnglishReason)
+        {
+            var reason = english.First(r => r.Reason.StartsWith(name, StringComparison.Ordinal)).Reason;
+            Assert.True(KnownPups.StartsWithProductName(reason), reason);
+            Assert.StartsWith(name, NetworkRules.ProgramWarningText(new[] { reason }));
+        }
+
+        // The articles are lower-cased, the names inside the reason stay.
+        Assert.Equal("a search hijacker", NetworkRules.ProgramWarningText(new[] { "A search hijacker" }));
+        Assert.Equal("a downloader that often contains advertising modules", NetworkRules.ProgramWarningText(new[] { "A downloader that often contains advertising modules" }));
+        Assert.Equal("a Windows activator — a common carrier of viruses", NetworkRules.ProgramWarningText(new[] { "A Windows activator — a common carrier of viruses" }));
+        Assert.Equal("the Amigo browser often gets installed along with other programs",
+            NetworkRules.ProgramWarningText(new[] { "The Amigo browser often gets installed along with other programs" }));
+        Assert.Equal("potentially unwanted program: Babylon — a search hijacker; Babylon — a search hijacker",
+            NetworkRules.ProgramWarningText(new[] { KnownPups.Match("Babylon Toolbar", null)!, "Babylon — a search hijacker" }));
+    }
+
+    private static void CheckTheJoin(List<(string Reason, bool StartsWithName)> reasons, string[] ordinaryStarts, string[] firstNames)
+    {
+        foreach (var (reason, startsWithName) in reasons)
+        {
+            var joined = NetworkRules.ProgramWarningText(new[] { reason });
+            if (startsWithName)
+            {
+                Assert.Equal(reason, joined); // a name keeps its capital
+                Assert.True(KnownPups.StartsWithProductName(reason));
+            }
+            else
+            {
+                // An ordinary start is told by its first word: a name that nobody marked would not be on the list of ordinary words.
+                Assert.True(ordinaryStarts.Any(s => reason.StartsWith(s, StringComparison.Ordinal)), $"{reason} starts with something that is not an ordinary word: mark it in KnownPups");
+                Assert.Equal(char.ToLower(reason[0], T.Culture) + reason[1..], joined);
+                Assert.False(KnownPups.StartsWithProductName(reason));
+            }
+        }
+        foreach (var name in firstNames)
+            Assert.Contains(reasons, r => r.StartsWithName && r.Reason.StartsWith(name, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AReasonOfARiskyTool_ThatReachesTheSentenceFromTheAnalysis_KeepsTheName()
+    {
+        using var _ = TestLanguage.English();
+        var suspicion = Suspicion.Analyze(@"C:\Users\Test\AppData\Local\Temp\xmrig.exe", null);
+
+        var text = NetworkRules.ProgramWarningText(suspicion.Reasons);
+
+        Assert.Contains("XMRig crypto miner", text);
+        Assert.DoesNotContain("xMRig", text);
     }
 
     [Fact]

@@ -187,6 +187,9 @@ public sealed class NetworkService : IHealthContributor
         return failures.Count > 0 ? string.Join(" ", failures) : lines.LastOrDefault();
     }
 
+    /// <summary>What the reset answers without administrator rights.</summary>
+    internal static string ResetNeedsAdminText => T._("Для сброса сетевых настроек нужны права администратора — ничего не изменено.");
+
     /// <summary>
     /// netsh winsock reset + netsh int ip reset (admin only; the page creates a restore point first).
     /// Returns a result message; nothing is changed without admin rights.
@@ -194,7 +197,7 @@ public sealed class NetworkService : IHealthContributor
     public async Task<(bool Ok, string Message)> ResetNetworkAsync(CancellationToken ct)
     {
         if (!Admin.IsElevated)
-            return (false, T._("Для сброса сетевых настроек нужны права администратора — ничего не изменено."));
+            return (false, ResetNeedsAdminText);
 
         var netsh = Path.Combine(Environment.SystemDirectory, "netsh.exe");
         return await ResetStepsAsync((args, token) => RunTool(netsh, args, ResetStepTimeout, token), ct).ConfigureAwait(false);

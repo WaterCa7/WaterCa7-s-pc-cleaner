@@ -92,8 +92,8 @@ public static class WlanParser
             return Field.Receive;
         if (key.StartsWith("Transmit rate", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("Скорость передач", StringComparison.OrdinalIgnoreCase))
-        // l10n:data-end
             return Field.Transmit;
+        // l10n:data-end
         return null;
     }
 
