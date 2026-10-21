@@ -71,14 +71,39 @@ public static class T
     public static string F(string ru, params object?[] args) => string.Format(Culture, _(ru), args);
 
     /// <summary>
+    /// The text in the UI language where one Russian text needs different English ones (gettext's msgctxt): «Готово» is "Ready"
+    /// in the status bar (context "status") and "Done" in a dialog (no context). The en.json key of such an entry is the context,
+    /// <see cref="ContextSeparator"/> and the Russian text; without an entry for the context the plain entry of the text counts,
+    /// then the Russian text itself. A context is a short Latin name (letters, digits, space, "_", ".", "-"), a literal or a const.
+    /// </summary>
+    public static string Ctx(string context, string ru)
+    {
+        if (!IsEnglish)
+            return ru;
+        return EnglishTexts.TryGetValue(Key(context, ru), out var english) && !string.IsNullOrWhiteSpace(english) ? english : _(ru);
+    }
+
+    /// <summary><see cref="Ctx"/> with its {0}, {1}… filled in (numbers and dates in <see cref="Culture"/>).</summary>
+    public static string CtxF(string context, string ru, params object?[] args) => string.Format(Culture, Ctx(context, ru), args);
+
+    /// <summary>
+    /// The word for <paramref name="n"/> like <see cref="Plural"/>, with the English entries of <paramref name="one"/> and
+    /// <paramref name="many"/> taken from <paramref name="context"/> (so a word like «монитор» can read "monitor" here without
+    /// changing the plain entry of the same word elsewhere).
+    /// </summary>
+    public static string CtxPlural(string context, long n, string one, string few, string many)
+        => IsEnglish ? (Math.Abs(n) == 1 ? Ctx(context, one) : Ctx(context, many)) : RussianPlural(n, one, few, many);
+
+    /// <summary>
     /// The word for <paramref name="n"/>: Russian rules (1 файл, 2 файла, 5 файлов, 21 файл); English uses the entries of
     /// <paramref name="one"/> (n = 1) and <paramref name="many"/> (everything else).
     /// </summary>
     public static string Plural(long n, string one, string few, string many)
+        => IsEnglish ? (Math.Abs(n) == 1 ? _(one) : _(many)) : RussianPlural(n, one, few, many);
+
+    private static string RussianPlural(long n, string one, string few, string many)
     {
         n = Math.Abs(n);
-        if (IsEnglish)
-            return n == 1 ? _(one) : _(many);
         var mod100 = n % 100;
         var mod10 = n % 10;
         if (mod100 is >= 11 and <= 14)
@@ -89,6 +114,26 @@ public static class T
             2 or 3 or 4 => few,
             _ => many,
         };
+    }
+
+    /// <summary>Between the context and the Russian text in a key of en.json (gettext's EOT, "\u0004").</summary>
+    public const char ContextSeparator = '\u0004';
+
+    /// <summary>The key of en.json for a text with a context.</summary>
+    internal static string Key(string context, string ru) => context + ContextSeparator + ru;
+
+    /// <summary>The context of a key of en.json (up to the first <see cref="ContextSeparator"/>); null for a plain text.</summary>
+    internal static string? ContextOf(string key)
+    {
+        var at = key.IndexOf(ContextSeparator);
+        return at < 0 ? null : key[..at];
+    }
+
+    /// <summary>The Russian text of a key of en.json: after the first <see cref="ContextSeparator"/>, or the whole key.</summary>
+    internal static string TextOf(string key)
+    {
+        var at = key.IndexOf(ContextSeparator);
+        return at < 0 ? key : key[(at + 1)..];
     }
 
     /// <summary>The text of the embedded en.json, or null when it is missing from the build.</summary>

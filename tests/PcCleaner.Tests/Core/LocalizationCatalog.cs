@@ -9,7 +9,8 @@ namespace PcCleaner.Tests.Core;
 /// <summary>
 /// Reads the texts of the UI from the source and checks en.json against them (see LocalizationCatalogTests).
 /// Wrapped texts — in C# T._("…"), T.F("…", …), T.Plural(n, "one", "few", "many"), in XAML {loc:T '…'} — need an en.json
-/// entry in every file. In the enforced files also the words of Format.Plural/Format.Count (they go through T.Plural), and
+/// entry in every file. A text with a context — T.Ctx("context", "…"), T.CtxF, T.CtxPlural("context", n, "one", "few", "many"),
+/// {loc:T '…', Context=name} — needs the entry "context\u0004text" (the plain entry of the text is another one). In the enforced files also the words of Format.Plural/Format.Count (they go through T.Plural), and
 /// every text argument of T and Format must be a string literal or a const string, except in the pass-through files.
 /// "few" is Russian only. en.json: one JSON object of strings, keys sorted (ordinal) without repeats, English values
 /// (no Cyrillic) with the same {0} placeholders as the key, and no entry that no text of the source uses.
@@ -17,8 +18,13 @@ namespace PcCleaner.Tests.Core;
 /// </summary>
 internal static class LocalizationCatalog
 {
+    /// <param name="Context">The context of T.Ctx / T.CtxF / T.CtxPlural / {loc:T '…', Context=…}; null for a plain text.</param>
     /// <param name="IsImplicit">A word of Format.Plural/Format.Count: needs its entry only in an enforced file.</param>
-    private sealed record SourceText(string File, int Line, string Text, bool IsFormat, bool IsImplicit);
+    private sealed record SourceText(string File, int Line, string Text, string? Context, bool IsFormat, bool IsImplicit)
+    {
+        /// <summary>The key of en.json.</summary>
+        public string Key => Context is null ? Text : Context + '\u0004' + Text;
+    }
 
     /// <summary>Where a problem of the source counts.</summary>
     private enum Rule
@@ -34,7 +40,10 @@ internal static class LocalizationCatalog
     }
 
     private static readonly Regex Call = new(
-        @"\b(?:T\s*\.\s*(?<method>_|F|Plural)|Format\s*\.\s*(?<method>Plural|Count))\s*\(", RegexOptions.Compiled);
+        @"\b(?:T\s*\.\s*(?<method>_|F|Plural|CtxPlural|CtxF|Ctx)|Format\s*\.\s*(?<method>Plural|Count))\s*\(", RegexOptions.Compiled);
+
+    /// <summary>A context: a short Latin name. It sits in the key in front of the Russian text, so no braces, no Cyrillic, no separator.</summary>
+    private static readonly Regex ValidContext = new(@"^[A-Za-z][A-Za-z0-9 _.\-]*$", RegexOptions.Compiled);
 
     private static readonly Regex ConstString = new(
         @"\bconst\s+string\s+(?<name>\w+)\s*=\s*(?<value>""(?:[^""\\\r\n]|\\.)*""|@""(?:[^""]|"""")*"")\s*;", RegexOptions.Compiled);
@@ -46,7 +55,7 @@ internal static class LocalizationCatalog
     private static readonly Regex LocStart = new(@"\{\s*loc:(?:T|Loc)(?=[\s}])", RegexOptions.Compiled);
 
     private static readonly Regex LocQuoted = new(
-        @"\G\{\s*loc:(?:T|Loc)\s+(?:Text\s*=\s*)?'(?<text>(?:[^'\\]|\\.)*)'\s*\}", RegexOptions.Compiled);
+        @"\G\{\s*loc:(?:T|Loc)\s+(?:Text\s*=\s*)?'(?<text>(?:[^'\\]|\\.)*)'(?:\s*,\s*Context\s*=\s*(?<context>[A-Za-z0-9_.\-]+))?\s*\}", RegexOptions.Compiled);
 
     private static readonly Regex Placeholder = new(@"\{(?<index>\d+)[^{}]*\}", RegexOptions.Compiled);
 
@@ -78,9 +87,11 @@ internal static class LocalizationCatalog
                 : FromCSharp(path, content, consts, fileProblems);
             foreach (var text in texts)
             {
-                used.Add(text.Text);
+                used.Add(text.Key);
                 if (text.IsFormat)
-                    formats.Add(text.Text);
+                    formats.Add(text.Key);
+                if (text.Context is { } context && !ValidContext.IsMatch(context))
+                    fileProblems.Add((Rule.Always, $"{text.File}:{text.Line}: the context «{context}» of «{text.Text}» must be a short Latin name (letters, digits, space, _ . -)"));
             }
 
             var isEnforced = IsListed(path, enforced);
@@ -92,26 +103,31 @@ internal static class LocalizationCatalog
             }
             foreach (var text in texts.Where(t => !t.IsImplicit || isEnforced))
             {
+                var shown = text.Context is null ? $"«{text.Text}»" : $"«{text.Text}» (context “{text.Context}”)";
                 if (text.IsFormat && !IsValidFormat(text.Text, ArgumentCount(text.Text)))
-                    problems.Add($"{text.File}:{text.Line}: «{text.Text}» is not a valid format string");
-                else if (!catalog.ContainsKey(text.Text))
-                    problems.Add($"{text.File}:{text.Line}: «{text.Text}» has no entry in en.json");
+                    problems.Add($"{text.File}:{text.Line}: {shown} is not a valid format string");
+                else if (!catalog.ContainsKey(text.Key))
+                    problems.Add($"{text.File}:{text.Line}: {shown} has no entry in en.json");
             }
         }
 
         foreach (var (key, value) in catalog)
         {
+            var (context, ru) = SplitKey(key);
+            var shown = context is null ? $"«{ru}»" : $"«{ru}» (context “{context}”)";
+            if (context is not null && !ValidContext.IsMatch(context))
+                problems.Add($"en.json: the context «{context}» of {shown} must be a short Latin name (letters, digits, space, _ . -)");
             if (!used.Contains(key))
-                problems.Add($"en.json: «{key}» is used nowhere in the source (stale entry)");
-            else if (!Placeholders(key).SetEquals(Placeholders(value)))
-                problems.Add($"en.json: «{key}» → «{value}»: the {{0}} placeholders differ");
-            else if (formats.Contains(key) && !IsValidFormat(value, ArgumentCount(key)))
-                problems.Add($"en.json: «{value}» (for «{key}») is not a valid format string");
+                problems.Add($"en.json: {shown} is used nowhere in the source (stale entry)");
+            else if (!Placeholders(ru).SetEquals(Placeholders(value)))
+                problems.Add($"en.json: {shown} → «{value}»: the {{0}} placeholders differ");
+            else if (formats.Contains(key) && !IsValidFormat(value, ArgumentCount(ru)))
+                problems.Add($"en.json: «{value}» (for {shown}) is not a valid format string");
         }
         return problems;
     }
 
-    private static readonly string[] WrappingCalls = { "T._", "T.F", "T.Plural", "Format.Count", "Format.Plural" };
+    private static readonly string[] WrappingCalls = { "T._", "T.F", "T.Plural", "T.Ctx", "T.CtxF", "T.CtxPlural", "Format.Count", "Format.Plural" };
 
     private static readonly Regex CalleeName = new(@"[A-Za-z_@][\w.]*$", RegexOptions.Compiled);
 
@@ -119,7 +135,7 @@ internal static class LocalizationCatalog
 
     /// <summary>
     /// Guard against a text that was forgotten: every string literal with Cyrillic letters in an enforced .cs file must be an
-    /// argument of T._ / T.F / T.Plural / Format.Count / Format.Plural. Allowed besides that: comments, the name of the language
+    /// argument of T._ / T.F / T.Plural / T.Ctx / T.CtxF / T.CtxPlural / Format.Count / Format.Plural. Allowed besides that: comments, the name of the language
     /// "Русский" (it is never translated), a const string that the code passes through T._ / T.F by its name, the plural
     /// words inside an interpolated string (<c>$"{Format.Count(n, "файл", "файла", "файлов")} …"</c>) and a region of Russian
     /// words the program matches against and never shows, between the comment lines <c>// l10n:data-begin</c> and
@@ -165,17 +181,21 @@ internal static class LocalizationCatalog
         return problems;
     }
 
-    /// <summary>The literal at <paramref name="start"/> is the value of "const string Name =" and some file calls T._(Name) or T.F(Name, …).</summary>
+    /// <summary>
+    /// The literal at <paramref name="start"/> is the value of "const string Name =" and some file calls T._(Name) or T.F(Name, …)
+    /// (or T.Ctx("context", Name) / T.CtxF("context", Name, …)).
+    /// </summary>
     private static bool IsPassedThroughT(string code, int start, IReadOnlyList<(string Path, string Content)> sources)
     {
         var declaration = ConstDeclaration.Match(code[Math.Max(0, start - 200)..start]);
         if (!declaration.Success)
             return false;
-        var use = new Regex(@"\bT\s*\.\s*(?:_|F)\s*\(\s*(?:[\w.]*\.)?" + declaration.Groups["name"].Value + @"\s*[,)]");
+        var name = declaration.Groups["name"].Value;
+        var use = new Regex(@"\bT\s*\.\s*(?:(?:_|F)\s*\(\s*|(?:Ctx|CtxF)\s*\([^,()]*,\s*)(?:[\w.]*\.)?" + name + @"\s*[,)]");
         return sources.Any(s => s.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) && use.IsMatch(WithoutCommentLines(s.Content)));
     }
 
-    private static readonly Regex PluralCall = new(@"(?:Format\s*\.\s*(?:Count|Plural)|T\s*\.\s*Plural)\s*\(", RegexOptions.Compiled);
+    private static readonly Regex PluralCall = new(@"(?:Format\s*\.\s*(?:Count|Plural)|T\s*\.\s*(?:Ctx)?Plural)\s*\(", RegexOptions.Compiled);
 
     /// <summary>The numbers of the lines from "// l10n:data-begin" to "// l10n:data-end" (the marker lines included).</summary>
     private static HashSet<int> DataRegionLines(string content)
@@ -197,7 +217,7 @@ internal static class LocalizationCatalog
         return lines;
     }
 
-    /// <summary>An interpolated string without its Format.Count(…) / Format.Plural(…) / T.Plural(…) calls.</summary>
+    /// <summary>An interpolated string without its Format.Count(…) / Format.Plural(…) / T.Plural(…) / T.CtxPlural(…) calls.</summary>
     private static string WithoutPluralCalls(string token)
     {
         while (PluralCall.Match(token) is { Success: true } m)
@@ -267,6 +287,13 @@ internal static class LocalizationCatalog
         return catalog;
     }
 
+    /// <summary>A key of en.json: the context (null for a plain text) and the Russian text.</summary>
+    private static (string? Context, string Text) SplitKey(string key)
+    {
+        var at = key.IndexOf('\u0004');
+        return at < 0 ? (null, key) : (key[..at], key[(at + 1)..]);
+    }
+
     private static SortedSet<int> Placeholders(string text)
     {
         var indexes = new SortedSet<int>();
@@ -312,14 +339,32 @@ internal static class LocalizationCatalog
                 continue;
             }
             var method = call.Groups["method"].Value;
-            foreach (var position in method is "_" or "F" ? new[] { 0 } : new[] { 1, 3 }) // a plural: one and many
+            string? context = null;
+            if (method.StartsWith("Ctx", StringComparison.Ordinal))
+            {
+                var contextArg = args.Count > 0 ? args[0] : "";
+                context = Literal(contextArg) ?? Const(contextArg, consts);
+                if (context is null)
+                    problems.Add((Rule.Literal, $"{file}:{line}: {name} needs a string literal or a const string as its context, not «{contextArg}»"));
+            }
+            // T._(text) T.F(text, …) T.Ctx(context, text) T.CtxF(context, text, …); a plural: one and many (after the context)
+            var positions = method switch
+            {
+                "_" or "F" => new[] { 0 },
+                "Ctx" or "CtxF" => new[] { 1 },
+                "CtxPlural" => new[] { 2, 4 },
+                _ => new[] { 1, 3 },
+            };
+            foreach (var position in positions)
             {
                 var arg = position < args.Count ? args[position] : "";
                 var text = Literal(arg) ?? Const(arg, consts);
                 if (text is null)
                     problems.Add((Rule.Literal, $"{file}:{line}: {name} needs a string literal or a const string, not «{arg}»"));
+                else if (method.StartsWith("Ctx", StringComparison.Ordinal) && context is null)
+                    continue; // reported above: without the context the key is unknown
                 else
-                    texts.Add(new SourceText(file, line, text, IsFormat: method == "F", IsImplicit: isImplicit));
+                    texts.Add(new SourceText(file, line, text, context, IsFormat: method is "F" or "CtxF", IsImplicit: isImplicit));
             }
         }
         return texts;
@@ -590,10 +635,11 @@ internal static class LocalizationCatalog
             var quoted = LocQuoted.Match(xaml, start.Index);
             if (!quoted.Success)
             {
-                problems.Add((Rule.Always, $"{file}:{line}: write {{loc:T '…'}} with the text in quotes"));
+                problems.Add((Rule.Always, $"{file}:{line}: write {{loc:T '…'}} (or {{loc:T '…', Context=name}}) with the text in quotes"));
                 continue;
             }
-            texts.Add(new SourceText(file, line, Regex.Replace(quoted.Groups["text"].Value, @"\\(.)", "$1"), IsFormat: false, IsImplicit: false));
+            var context = quoted.Groups["context"].Success ? quoted.Groups["context"].Value : null;
+            texts.Add(new SourceText(file, line, Regex.Replace(quoted.Groups["text"].Value, @"\\(.)", "$1"), context, IsFormat: false, IsImplicit: false));
         }
         return texts;
     }

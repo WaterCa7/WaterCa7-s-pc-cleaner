@@ -99,8 +99,10 @@ public static class FixResultClassifier
         var admin = new List<Regex>();
         var skipped = new List<string>();
         var built = new Dictionary<string, Regex>(StringComparer.Ordinal);
-        foreach (var (russian, english) in catalog)
+        foreach (var (key, english) in catalog)
         {
+            // An entry with a context (T.Ctx: "context\u0004Russian text") is judged by its Russian text; the key stays as it is in Skipped.
+            var russian = T.TextOf(key);
             if (string.IsNullOrWhiteSpace(english) || SideNoteKeys.Contains(russian))
                 continue; // no translation: T shows the Russian text, and the Russian rules judge it; or a side note (see SideNoteKeys)
             var sample = WithSampleArguments(russian);
@@ -111,7 +113,7 @@ public static class FixResultClassifier
             var pattern = PatternOf(english);
             if (pattern is null)
             {
-                skipped.Add(russian);
+                skipped.Add(key);
                 continue;
             }
             if (!built.TryGetValue(pattern, out var matcher))

@@ -388,6 +388,175 @@ public class LocalizationCatalogTests
     public void AGoodCatalog_WithTheSameTexts_IsFine()
         => Assert.Empty(Check("""{ "А": "A", "Б": "B" }""", ("Pages/A.cs", "T._(\"А\");\nT._(\"Б\");")));
 
+    // ----- texts with a context: T.Ctx / T.CtxF / T.CtxPlural / {loc:T '…', Context=…} -----
+
+    [Fact]
+    public void ATextWithAContext_NeedsTheEntryOfThatContext_NotThePlainOne()
+    {
+        var cs = "var a = T.Ctx(\"status\", \"Готово\");";
+
+        var problem = Assert.Single(Check("""{ "Готово": "Done" }""", ("Pages/A.cs", cs), ("Pages/B.cs", "T._(\"Готово\");")));
+
+        Assert.Contains("Pages/A.cs:1", problem);
+        Assert.Contains("«Готово»", problem);
+        Assert.Contains("status", problem);
+        Assert.Empty(Check("{ \"status\\u0004Готово\": \"Ready\", \"Готово\": \"Done\" }", ("Pages/A.cs", cs), ("Pages/B.cs", "T._(\"Готово\");")));
+    }
+
+    [Fact]
+    public void EachKindOfTextWithAContext_IsChecked()
+    {
+        var cs = """
+            T.Ctx("status", "Один");
+            T.CtxF("status", "Два {0}", x);
+            T.CtxPlural("units", n, "три", "трёх", "трёх-много");
+            """;
+
+        var problems = Check("{}", ("Pages/A.cs", cs), ("Pages/B.xaml", "<TextBlock Text=\"{loc:T 'Шесть', Context=status}\" />"));
+
+        foreach (var text in new[] { "Один", "Два {0}", "три", "трёх-много", "Шесть" })
+            Assert.Contains(problems, p => p.Contains($"«{text}»"));
+        Assert.DoesNotContain(problems, p => p.Contains("«трёх»")); // "few" is Russian only
+        Assert.Equal(5, problems.Count);
+    }
+
+    [Fact]
+    public void TextsWithAContext_AreChecked_InEveryFile()
+    {
+        var problems = Check("{}", ("Other/A.cs", "T.Ctx(\"status\", \"Один\");\nT.CtxF(\"status\", \"Два {0}\", x);\nT.CtxPlural(\"u\", n, \"три\", \"трёх\", \"много\");"));
+
+        Assert.Equal(4, problems.Count);
+    }
+
+    [Fact]
+    public void AllTranslatedWithContexts_IsFine()
+    {
+        const string catalog = """
+            {
+              "monitors\u0004монитор": "monitor",
+              "monitors\u0004мониторов": "monitors",
+              "status\u0004Готово": "Ready",
+              "uninstall\u0004Удалено: {0} из {1}.": "Uninstalled {0} of {1}.",
+              "Удалено: {0} из {1}.": "Deleted: {0} of {1}."
+            }
+            """;
+        var cs = """
+            var a = T.Ctx("status", "Готово");
+            var b = T.CtxF("uninstall", "Удалено: {0} из {1}.", a, b);
+            var c = T.F("Удалено: {0} из {1}.", a, b);
+            var d = T.CtxPlural("monitors", n, "монитор", "монитора", "мониторов");
+            """;
+
+        Assert.Empty(Check(catalog, ("Pages/A.cs", cs)));
+    }
+
+    [Fact]
+    public void AContextEntry_UsedNowhere_IsStale_AndSoIsAPlainEntryUsedOnlyWithContexts()
+    {
+        const string catalog = """{ "other\u0004Готово": "Finished", "status\u0004Готово": "Ready", "Готово": "Done" }""";
+
+        var problems = Check(catalog, ("Pages/A.cs", "T.Ctx(\"status\", \"Готово\");"));
+
+        Assert.Equal(2, problems.Count);
+        Assert.Contains(problems, p => p.Contains("stale") && p.Contains("other") && p.Contains("Готово"));
+        Assert.Contains(problems, p => p.Contains("stale") && p.Contains("«Готово»") && !p.Contains("other") && !p.Contains("status"));
+    }
+
+    [Theory]
+    [InlineData("""{ "uninstall\u0004Удалено: {0} из {1}.": "Uninstalled {0}" }""")]
+    [InlineData("""{ "uninstall\u0004Удалено: {0} из {1}.": "Uninstalled {0} of {2}" }""")]
+    public void DifferentPlaceholders_OfAContextEntry_AreReported(string catalog)
+    {
+        var problem = Assert.Single(Check(catalog, ("Pages/A.cs", "T.CtxF(\"uninstall\", \"Удалено: {0} из {1}.\", a, b);")));
+
+        Assert.Contains("placeholder", problem);
+    }
+
+    [Fact]
+    public void ABrokenFormatString_OfAContextText_IsReported()
+    {
+        Assert.Contains("format", Assert.Single(Check("{}", ("Other/A.cs", "T.CtxF(\"c\", \"Найдено {0\", n);"))));
+        Assert.Contains("format", Assert.Single(Check("""{ "c\u0004Найдено {0}": "Found {0} {" }""", ("Pages/A.cs", "T.CtxF(\"c\", \"Найдено {0}\", a);"))));
+    }
+
+    [Fact]
+    public void AContextText_InTheEnforcedFiles_MustBeALiteralOrAConst_AndSoMustTheContext()
+    {
+        var problems = Check("{}", ("Pages/A.cs", "T.Ctx(\"status\", name);\nT.CtxF(context, \"Один\", x);\nT.CtxPlural(\"u\", n, one, \"а\", many);"));
+
+        Assert.Equal(4, problems.Count); // the text; the context; one and many
+        Assert.All(problems, p => Assert.Contains("literal", p));
+    }
+
+    [Fact]
+    public void AConstContext_AndAConstText_AreResolved()
+    {
+        var files = new[]
+        {
+            ("Pages/A.cs", "T.Ctx(Contexts.Status, Texts.Ready);"),
+            ("Other/B.cs", "public const string Status = \"status\";\npublic const string Ready = \"Готово\";"),
+        };
+
+        Assert.Empty(LocalizationCatalog.Check(files, """{ "status\u0004Готово": "Ready" }""", new[] { "Pages/" }));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("{0}")]
+    [InlineData("статус")]
+    [InlineData("a\u0004b")]
+    [InlineData("status:")]
+    public void AnInvalidContext_IsReported_InEveryFile(string context)
+    {
+        var escaped = context.Replace("\u0004", "\\u0004");
+        var problems = LocalizationCatalog.Check(new[] { ("Other/A.cs", $"T.Ctx(\"{escaped}\", \"Готово\");") }, "{}", Array.Empty<string>());
+
+        Assert.Contains(problems, p => p.Contains("context"));
+    }
+
+    [Fact]
+    public void AnInvalidContext_InAKeyOfEnJson_IsReported()
+    {
+        var problems = Check("""{ "status:\u0004Пока": "Bye", "{0}\u0004Готово": "Ready" }""", ("Pages/A.cs", "var a = 1;"));
+
+        Assert.Equal(2, problems.Count(p => p.StartsWith("en.json: the context") && p.Contains("short Latin name")));
+    }
+
+    [Fact]
+    public void AValidContext_MayHaveWordsDigitsAndSeparators()
+        => Assert.Empty(Check("""{ "main-window.title 2\u0004Готово": "Ready" }""", ("Pages/A.cs", "T.Ctx(\"main-window.title 2\", \"Готово\");")));
+
+    [Fact]
+    public void XamlLocT_WithAContext_IsFound_InEveryFile()
+    {
+        var xaml = "<TextBlock Text=\"{loc:T 'Готово', Context=status}\" ToolTip=\"{loc:T Text='Пока', Context=status}\" Tag=\"{loc:T 'Нажмите \\'Да\\'',Context = status }\" />";
+
+        var problems = Check("{}", ("Other/A.xaml", xaml));
+
+        Assert.Equal(3, problems.Count);
+        Assert.Contains(problems, p => p.Contains("«Готово»") && p.Contains("status"));
+        Assert.Contains(problems, p => p.Contains("«Пока»"));
+        Assert.Contains(problems, p => p.Contains("«Нажмите 'Да'»"));
+        Assert.Empty(Check("{ \"status\\u0004Готово\": \"Ready\", \"status\\u0004Нажмите 'Да'\": \"Press 'Yes'\", \"status\\u0004Пока\": \"Bye\", \"Готово\": \"Done\" }",
+            ("Pages/A.xaml", xaml), ("Pages/B.cs", "T._(\"Готово\");")));
+    }
+
+    [Fact]
+    public void XamlLocT_WithAnotherNamedProperty_IsReported()
+        => Assert.Contains("{loc:T '", Assert.Single(Check("{}", ("Other/A.xaml", "<TextBlock Text=\"{loc:T 'Готово', Other=status}\" />"))));
+
+    [Fact]
+    public void XamlLocT_WithAContext_InsideAnotherMarkupExtension_IsFound()
+    {
+        var problem = Assert.Single(Check("{}", ("Pages/A.xaml", "<TextBlock Text=\"{Binding Name, FallbackValue={loc:T 'Без имени', Context=name}}\" />")));
+
+        Assert.Contains("«Без имени»", problem);
+    }
+
+    [Fact]
+    public void ACtxCall_InAComment_IsNotAText()
+        => Assert.Empty(Check("{}", ("Pages/A.cs", "// T.Ctx(\"status\", \"Готово\");\n/// <summary>T.CtxF(\"c\", \"Один {0}\", x)</summary>")));
+
     // ----- the guard against a forgotten text -----
 
     private static List<string> Unwrapped(string cs, string path = "Pages/A.cs", params (string Path, string Content)[] more)

@@ -393,7 +393,7 @@ public sealed partial class ProgramsViewModel
         if (run.Error is null && run.Interrupted is { } interrupted)
             (StillListed(interrupted) ? mayContinue : removed).Add(interrupted.DisplayName);
 
-        var sections = new List<string> { T.F("Удалено: {0} из {1}.", removed.Count, run.Targets.Count) };
+        var sections = new List<string> { T.CtxF("uninstall", "Удалено: {0} из {1}.", removed.Count, run.Targets.Count) };
         if (run.Error is { } error)
             sections.Add(run.ErrorOn is { } on
                 ? T.F("Остановлено из-за ошибки на «{0}»: {1}.", on.DisplayName, ErrorText.For(error))
@@ -544,7 +544,7 @@ public sealed partial class ProgramsViewModel
             sections.Add(run.ErrorOn is { } on
                 ? T.F("Остановлено из-за ошибки на «{0}»: {1}.", on.DisplayName, ErrorText.For(error))
                 : T.F("Остановлено из-за ошибки: {0}.", ErrorText.For(error)));
-        AddSection(sections, T.F("Не удалось удалить ({0}):", run.Failed.Count), run.Failed.Select(f => $"{f.App.DisplayName} — {f.Error}").ToList());
+        AddSection(sections, T.CtxF("uninstall", "Не удалось удалить ({0}):", run.Failed.Count), run.Failed.Select(f => $"{f.App.DisplayName} — {f.Error}").ToList());
         AddSection(sections, run.Error is null
             ? T.F("Не удалены из-за отмены ({0}):", stopped.Count)
             : T.F("Не удалены из-за ошибки ({0}):", stopped.Count), stopped);

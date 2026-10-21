@@ -334,11 +334,33 @@ public sealed class ProgramsEnglishTests : IDisposable
 
             var (infoTitle, summary) = Assert.Single(_infos);
             Assert.Equal("Uninstalling checked programs", infoTitle);
-            Assert.StartsWith("Deleted: 2 of 2.", summary);
+            Assert.StartsWith("Uninstalled 2 of 2.", summary);
             Assert.Contains("Uninstalled (2):", summary);
             Assert.DoesNotMatch(Cyrillic, summary);
             Assert.Equal(new[] { "restore:Uninstall checked programs (2)", "uninstall:Contoso Editor:quiet", "uninstall:Fabrikam Viewer:normal" }, _calls);
         }
+    });
+
+    [Fact]
+    public void TheStoreAppsSummary_SaysUninstalled_AndNamesWhatCouldNotBeUninstalled() => UiThread.Run(async () =>
+    {
+        const string bingWeather = "Microsoft.BingWeather_1.0.0.0_x64__8wekyb3d8bbwe";
+        var service = CreateService(store: new[] { Record(BingNews), Record(bingWeather) },
+            remove: app => app.PackageFullName == BingNews ? (false, "Windows refused.") : (true, "ok"));
+
+        using var _ = TestLanguage.English();
+        var vm = await LoadAsync(service);
+        foreach (var app in vm.StoreApps)
+            app.IsChecked = true;
+
+        await vm.RemoveCheckedStoreAppsCommand.ExecuteAsync(null);
+
+        var (title, summary) = Assert.Single(_infos);
+        Assert.Equal("Uninstalling checked apps", title);
+        Assert.StartsWith("Uninstalled 1 app out of 2.", summary);
+        Assert.Contains("Could not uninstall (1):", summary);
+        Assert.Contains("• News — Windows refused.", summary);
+        Assert.DoesNotMatch(Cyrillic, summary);
     });
 
     [Fact]

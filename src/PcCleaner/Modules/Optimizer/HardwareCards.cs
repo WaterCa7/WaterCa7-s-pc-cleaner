@@ -321,8 +321,11 @@ public static class HardwareCardBuilder
         details.Add(!hzKnown ? T._("Частота обновления не сообщается") :
             atMax ? T._("Работает на максимальной частоте") : T.F("Поддерживает до {0} Гц", d.MaxHzAtCurrentResolution));
         if (hw.Displays.Count > 1)
-            // English reads "1 more monitor" / "2 more monitors": its entries for the plural words carry the "more".
-            details.Add(T.F("Ещё {0}", Format.Count(hw.Displays.Count - 1, "монитор", "монитора", "мониторов")));
+        {
+            // "Ещё 2 монитора" / "1 more monitor", "2 more monitors": the context keeps these plain words apart from other uses.
+            var more = hw.Displays.Count - 1;
+            details.Add(T.CtxF("monitors", "Ещё {0} {1}", Format.Number(more), T.CtxPlural("monitors", more, "монитор", "монитора", "мониторов")));
+        }
         string? badge;
         Tone tone;
         if (!hzKnown)

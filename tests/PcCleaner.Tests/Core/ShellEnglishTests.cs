@@ -70,6 +70,9 @@ public class ShellEnglishTests
 
             Assert.Equal("Ready", main.StatusText);
             Assert.Equal(Admin.IsElevated ? "Administrator rights" : "Limited mode", main.AdminText);
+            // The same Russian word is the title of a finished action (dialogs of Disks, Speed up and Processes): "Done", not "Ready".
+            Assert.Equal("Done", T._("Готово"));
+            Assert.Equal("Ready", T.Ctx("status", "Готово"));
         }
 
         Assert.Equal("Готово", new MainViewModel(new[] { new FakePage("Dashboard") }, () => new AppSettings(), _ => { }).StatusText);

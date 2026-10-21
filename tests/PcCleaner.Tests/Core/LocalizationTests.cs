@@ -210,6 +210,146 @@ public class LocalizationSwitchTests
         }
     }
 
+    // ----- the context lookup: en.json key = context + "\u0004" + Russian text (the gettext msgctxt convention) -----
+
+    private static readonly Dictionary<string, string> ContextTexts = new()
+    {
+        ["Готово"] = "Done",
+        ["status\u0004Готово"] = "Ready",
+        ["Удалено: {0} из {1}."] = "Deleted: {0} of {1}.",
+        ["uninstall\u0004Удалено: {0} из {1}."] = "Uninstalled {0} of {1}.",
+        ["Пока"] = "Bye",
+        ["monitors\u0004монитор"] = "monitor",
+        ["monitors\u0004мониторов"] = "monitors",
+        ["Пусто"] = "Empty",
+        ["blank\u0004Пусто"] = "  ",
+    };
+
+    [Fact]
+    public void Ctx_InEnglish_TakesTheEntryOfThatContext_AndThePlainOneWithoutIt()
+    {
+        using (TestLanguage.English(ContextTexts))
+        {
+            Assert.Equal("Ready", T.Ctx("status", "Готово"));
+            Assert.Equal("Done", T._("Готово"));
+        }
+    }
+
+    [Fact]
+    public void Ctx_WithoutAnEntryOfThatContext_FallsBackToThePlainEntry_ThenToRussian()
+    {
+        using (TestLanguage.English(ContextTexts))
+        {
+            Assert.Equal("Done", T.Ctx("dialog", "Готово"));      // no entry for this context: the plain one
+            Assert.Equal("Bye", T.Ctx("status", "Пока"));
+            Assert.Equal("Нет такого", T.Ctx("status", "Нет такого")); // no entry at all: Russian
+            Assert.Equal("Empty", T.Ctx("blank", "Пусто"));          // a blank entry is no translation: the plain entry
+        }
+    }
+
+    [Fact]
+    public void Ctx_InRussian_ReturnsTheKeyItself_WhateverTheContext()
+    {
+        Assert.Equal("Готово", T.Ctx("status", "Готово"));
+        Assert.Equal("Готово", T.Ctx("", "Готово"));
+        using (TestLanguage.English(ContextTexts))
+            Assert.Equal("Ready", T.Ctx("status", "Готово"));
+        Assert.Equal("Готово", T.Ctx("status", "Готово")); // back in Russian
+    }
+
+    [Fact]
+    public void CtxF_FormatsTheEntryOfThatContext_WithTheLanguageCulture()
+    {
+        using (TestLanguage.English(ContextTexts))
+        {
+            Assert.Equal("Uninstalled 3 of 1.5.", T.CtxF("uninstall", "Удалено: {0} из {1}.", 3, 1.5));
+            Assert.Equal("Deleted: 3 of 1.5.", T.CtxF("other", "Удалено: {0} из {1}.", 3, 1.5));
+            Assert.Equal("Осталось 2.5", T.CtxF("uninstall", "Осталось {0}", 2.5)); // no entry: Russian, still formatted
+        }
+        Assert.Equal("Удалено: 3 из 1,5.", T.CtxF("uninstall", "Удалено: {0} из {1}.", 3, 1.5));
+    }
+
+    [Theory]
+    [InlineData(1, "monitor")]
+    [InlineData(0, "monitors")]
+    [InlineData(2, "monitors")]
+    [InlineData(5, "monitors")]
+    [InlineData(21, "monitors")]
+    public void CtxPlural_InEnglish_IsOneOrOther_FromTheEntriesOfThatContext(long n, string expected)
+    {
+        using (TestLanguage.English(ContextTexts))
+            Assert.Equal(expected, T.CtxPlural("monitors", n, "монитор", "монитора", "мониторов"));
+    }
+
+    [Theory]
+    [InlineData(1, "монитор")]
+    [InlineData(2, "монитора")]
+    [InlineData(5, "мониторов")]
+    [InlineData(11, "мониторов")]
+    [InlineData(21, "монитор")]
+    public void CtxPlural_InRussian_UsesTheRussianRules(long n, string expected)
+        => Assert.Equal(expected, T.CtxPlural("monitors", n, "монитор", "монитора", "мониторов"));
+
+    [Fact]
+    public void CtxPlural_InEnglish_WithoutEntries_ShowsTheRussianOneOrMany()
+    {
+        using (TestLanguage.English(new Dictionary<string, string>()))
+        {
+            Assert.Equal("монитор", T.CtxPlural("monitors", 1, "монитор", "монитора", "мониторов"));
+            Assert.Equal("мониторов", T.CtxPlural("monitors", 3, "монитор", "монитора", "мониторов"));
+        }
+    }
+
+    [Fact]
+    public void ThePlainPluralWords_AreNotTakenFromAContext()
+    {
+        using (TestLanguage.English(ContextTexts))
+            Assert.Equal("мониторов", T.Plural(3, "монитор", "монитора", "мониторов")); // "monitors\u0004мониторов" is another key
+    }
+
+    [Theory]
+    [InlineData("status\u0004Готово", "status", "Готово")]
+    [InlineData("Готово", null, "Готово")]
+    [InlineData("a\u0004b\u0004c", "a", "b\u0004c")]
+    [InlineData("\u0004Готово", "", "Готово")]
+    public void AKey_SplitsAtTheFirstSeparator_IntoContextAndText(string key, string? context, string text)
+    {
+        Assert.Equal(context, T.ContextOf(key));
+        Assert.Equal(text, T.TextOf(key));
+    }
+
+    [Fact]
+    public void LocExtension_WithAContext_ProvidesTheEntryOfThatContext()
+    {
+        using (TestLanguage.English(ContextTexts))
+        {
+            Assert.Equal("Ready", new LocExtension("Готово") { Context = "status" }.ProvideValue(null!));
+            Assert.Equal("Ready", new TExtension("Готово") { Context = "status" }.ProvideValue(null!));
+            Assert.Equal("Done", new LocExtension("Готово").ProvideValue(null!));
+        }
+        Assert.Equal("Готово", new LocExtension("Готово") { Context = "status" }.ProvideValue(null!));
+    }
+
+    [Fact]
+    public void Xaml_LocT_WithAContext_GivesTheEntryOfThatContext()
+    {
+        const string xaml = "<TextBlock xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' " +
+                            "xmlns:loc='clr-namespace:PcCleaner.Core.Localization;assembly=WaterCa7sPcCleaner' " +
+                            "Text=\"{loc:T 'Готово', Context=status}\" />";
+        string? russian = null, english = null;
+
+        UiThread.Run(() =>
+        {
+            russian = ((TextBlock)XamlReader.Parse(xaml)).Text;
+            using (TestLanguage.English(ContextTexts))
+                english = ((TextBlock)XamlReader.Parse(xaml)).Text;
+            return Task.CompletedTask;
+        });
+
+        Assert.Equal("Готово", russian);
+        Assert.Equal("Ready", english);
+    }
+
     [Fact]
     public void LocExtension_ProvidesTheTextInTheUiLanguage()
     {

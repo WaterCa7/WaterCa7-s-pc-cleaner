@@ -21,7 +21,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
     private readonly Action<AppSettings> _save;
     private PageViewModel? _selectedPage;
     private UiMode _shownMode;
-    private string _statusText = T._("Готово");
+    private string _statusText = T.Ctx("status", "Готово"); // "Ready"; the plain «Готово» is "Done" (titles of finished actions)
     private bool _updateBannerDismissed;
 
     public MainViewModel()

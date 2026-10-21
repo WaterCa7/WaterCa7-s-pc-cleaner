@@ -68,10 +68,10 @@ public class FixResultClassifierTests
         var checkedAdmin = 0;
         foreach (var (russianKey, englishValue) in catalog)
         {
-            var russian = Sample(russianKey, T.Russian);
+            var russian = Sample(T.TextOf(russianKey), T.Russian); // an entry with a context is judged by its Russian text
             var failure = FixResultClassifier.IsFailure(russian, T.Russian, null);
             var admin = FixResultClassifier.NeedsAdmin(russian, T.Russian, null);
-            if ((!failure && !admin) || ExpectedSkipped.Contains(russianKey) || FixResultClassifier.SideNoteKeys.Contains(russianKey))
+            if ((!failure && !admin) || ExpectedSkipped.Contains(russianKey) || FixResultClassifier.SideNoteKeys.Contains(T.TextOf(russianKey)))
                 continue;
             var english = Sample(englishValue, T.English);
             var englishFailure = FixResultClassifier.IsFailure(english, T.English, catalog);
@@ -180,7 +180,7 @@ public class FixResultClassifierTests
         var found = new List<string>();
         foreach (var (russianKey, englishValue) in catalog)
         {
-            var russian = Sample(russianKey, T.Russian);
+            var russian = Sample(T.TextOf(russianKey), T.Russian); // an entry with a context is judged by its Russian text
             if (FixResultClassifier.IsFailure(russian, T.Russian, null) || FixResultClassifier.NeedsAdmin(russian, T.Russian, null))
                 continue;
             var english = Sample(englishValue, T.English);
@@ -261,6 +261,43 @@ public class FixResultClassifierTests
         Assert.True(FixResultClassifier.IsFailure("could not repair  the disk (code 1)", T.English, catalog)); // case, spaces, no period
         Assert.False(FixResultClassifier.IsFailure("Could not repair the disk code 1.", T.English, catalog)); // "(" is a bracket, not a group
         Assert.False(FixResultClassifier.IsFailure("Could not repaint the disk (code 1).", T.English, catalog));
+    }
+
+    [Fact]
+    public void AnEntryWithAContext_IsJudgedByItsRussianText_NotByTheKeyWithTheContext()
+    {
+        var catalog = new Dictionary<string, string>
+        {
+            ["uninstall\u0004Не удалось удалить ({0}):"] = "Could not uninstall ({0}):",
+            ["status\u0004Готово"] = "Ready",
+            ["admin\u0004Нужны права администратора для {0}."] = "Administrator rights are needed for {0}.",
+        };
+
+        var matchers = FixResultClassifier.MatchersFor(catalog);
+
+        Assert.Equal(2, matchers.Failure.Count); // the failure and the admin text; «Готово» is neither
+        Assert.Single(matchers.AdminRequired);
+        Assert.Empty(matchers.Skipped);
+        Assert.True(FixResultClassifier.IsFailure("Done. Could not uninstall (2): Chrome.", T.English, catalog));
+        Assert.True(FixResultClassifier.NeedsAdmin("Administrator rights are needed for the firewall.", T.English, catalog));
+        Assert.False(FixResultClassifier.IsFailure("Ready", T.English, catalog));
+    }
+
+    [Fact]
+    public void ASideNote_WithAContext_GivesNoMatcherEither()
+    {
+        var catalog = new Dictionary<string, string> { ["cleanup\u0004Не удалось очистить: {0}."] = "Could not clean up: {0}." };
+
+        Assert.Empty(FixResultClassifier.MatchersFor(catalog).Failure);
+        Assert.False(FixResultClassifier.IsFailure("Deleted 3 MB. Could not clean up: Windows logs.", T.English, catalog));
+    }
+
+    [Fact]
+    public void AShortEntryWithAContext_IsListedAsSkipped_WithItsContext()
+    {
+        var catalog = new Dictionary<string, string> { ["status\u0004Ошибка"] = "Error" };
+
+        Assert.Equal(new[] { "status\u0004Ошибка" }, FixResultClassifier.MatchersFor(catalog).Skipped);
     }
 
     [Fact]

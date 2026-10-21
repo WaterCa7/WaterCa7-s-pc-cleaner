@@ -476,6 +476,27 @@ public sealed class OptimizerEnglishTests
         Assert.Null(russian.SearchQuery);
     }
 
+    [Theory]
+    [InlineData(2, "Ещё 1 монитор", "1 more monitor")]
+    [InlineData(3, "Ещё 2 монитора", "2 more monitors")]
+    [InlineData(6, "Ещё 5 мониторов", "5 more monitors")]
+    public void TheCountOfTheOtherMonitors_ReadsAsAMoreCount_InBothLanguages(int monitors, string expectedRussian, string expectedEnglish)
+    {
+        var displays = new List<DisplayInfo> { Display(60, 60) };
+        for (var i = 1; i < monitors; i++)
+            displays.Add(Display(60, 60, primary: false, device: $@"\\.\DISPLAY{i + 1}"));
+        var hw = GoodDesktop() with { Displays = displays };
+
+        using (TestLanguage.English())
+        {
+            var card = HardwareCardBuilder.Build(hw, GoodSettings(), Evaluate(hw, GoodSettings()), Now).Single(c => c.Caption == "Main monitor");
+            Assert.Contains(expectedEnglish, card.Details);
+        }
+
+        var russian = HardwareCardBuilder.Build(hw, GoodSettings(), Evaluate(hw, GoodSettings()), Now).Single(c => c.Caption == "Основной монитор");
+        Assert.Contains(expectedRussian, russian.Details);
+    }
+
     [Fact]
     public void TheCardOfThePowerPlan_ShowsTheNameOfWindows_AndOwnLabelsInEnglish()
     {
