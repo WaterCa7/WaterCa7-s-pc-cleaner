@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PcCleaner.Core;
+using PcCleaner.Core.Updates;
 
 namespace PcCleaner.Tests.Updates;
 
@@ -16,7 +17,7 @@ internal sealed class UpdateTestKit : IDisposable
 
     public byte[] Sign(byte[] data) => _key.SignData(data, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
 
-    public static string Url(string version, string name = "WaterCa7sPcCleaner.exe")
+    public static string Url(string version, string name = UpdateEnvironment.SetupName)
         => $"{AppInfo.RepoUrl}/releases/download/v{version}/{name}";
 
     public static byte[] ManifestJson(string version, long size, string sha256, string? url = null, string notes = "Что нового")
@@ -27,7 +28,7 @@ internal sealed class UpdateTestKit : IDisposable
             notes,
             files = new Dictionary<string, object>
             {
-                ["win-x64"] = new { name = "WaterCa7sPcCleaner.exe", url = url ?? Url(version), size, sha256 },
+                ["win-x64-setup"] = new { name = UpdateEnvironment.SetupName, url = url ?? Url(version), size, sha256 },
             },
         });
 

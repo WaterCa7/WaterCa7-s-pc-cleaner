@@ -3,7 +3,7 @@
 # Needs PowerShell 7 (.NET ECDsa PEM import).
 param(
     [Parameter(Mandatory)] [string]$Version,
-    [Parameter(Mandatory)] [string]$Exe,
+    [Parameter(Mandatory)] [string]$Setup,
     [Parameter(Mandatory)] [string]$NotesFile,
     [Parameter(Mandatory)] [string]$OutDir,
     [string]$PublicKeyPem
@@ -14,18 +14,18 @@ if (-not $env:UPDATE_SIGNING_KEY) { throw 'UPDATE_SIGNING_KEY is not set' }
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Bad version: $Version" }
 if (-not $PublicKeyPem) { $PublicKeyPem = Get-Content -Raw (Join-Path $PSScriptRoot 'update-signing-public.pem') }
 
-$name = Split-Path $Exe -Leaf
-$size = (Get-Item $Exe).Length
+$name = Split-Path $Setup -Leaf
+$size = (Get-Item $Setup).Length
 $manifest = [ordered]@{
     version   = $Version
     published = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     notes     = (Get-Content -Raw -Encoding utf8 $NotesFile).Trim()
     files     = [ordered]@{
-        'win-x64' = [ordered]@{
+        'win-x64-setup' = [ordered]@{
             name   = $name
             url    = "https://github.com/WaterCa7/WaterCa7-s-pc-cleaner/releases/download/v$Version/$name"
             size   = $size
-            sha256 = (Get-FileHash -Algorithm SHA256 $Exe).Hash.ToLowerInvariant()
+            sha256 = (Get-FileHash -Algorithm SHA256 $Setup).Hash.ToLowerInvariant()
         }
     }
 }

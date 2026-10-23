@@ -35,8 +35,8 @@ public class UpdateClientTests
     public async Task Download_WritesTheFileWhenSizeAndHashMatch()
     {
         var exe = UpdateTestKit.FakeExe(7);
-        var file = new UpdateFile("WaterCa7sPcCleaner.exe", UpdateTestKit.Url("1.2.0"), exe.Length, UpdateTestKit.Sha256(exe));
-        var target = Path.Combine(TestEnvironment.NewTempDir("upd-client"), "WaterCa7sPcCleaner.exe");
+        var file = new UpdateFile(UpdateEnvironment.SetupName, UpdateTestKit.Url("1.2.0"), exe.Length, UpdateTestKit.Sha256(exe));
+        var target = Path.Combine(TestEnvironment.NewTempDir("upd-client"), UpdateEnvironment.SetupName);
         var reported = new List<double>();
         using var client = new UpdateClient(new FakeHttp().Add(file.Url, exe));
 
@@ -60,8 +60,8 @@ public class UpdateClientTests
             "short" => exe[..^10],
             _ => UpdateTestKit.FakeExe(7, extra: 10),
         };
-        var file = new UpdateFile("WaterCa7sPcCleaner.exe", UpdateTestKit.Url("1.2.0"), exe.Length, UpdateTestKit.Sha256(exe));
-        var target = Path.Combine(TestEnvironment.NewTempDir("upd-client"), "WaterCa7sPcCleaner.exe");
+        var file = new UpdateFile(UpdateEnvironment.SetupName, UpdateTestKit.Url("1.2.0"), exe.Length, UpdateTestKit.Sha256(exe));
+        var target = Path.Combine(TestEnvironment.NewTempDir("upd-client"), UpdateEnvironment.SetupName);
         using var client = new UpdateClient(new FakeHttp().Add(file.Url, served));
 
         await Assert.ThrowsAsync<UpdateException>(() => client.DownloadAsync(file, target, null, CancellationToken.None));

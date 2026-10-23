@@ -17,17 +17,17 @@ public class UpdateManifestTests
         Assert.NotNull(m);
         Assert.Equal(new Version(1, 2, 0), m!.Version);
         Assert.Equal("Новая иконка", m.Notes);
-        Assert.Equal("WaterCa7sPcCleaner.exe", m.Download.Name);
+        Assert.Equal(UpdateEnvironment.SetupName, m.Download.Name);
         Assert.Equal(UpdateTestKit.Url("1.2.0"), m.Download.Url);
         Assert.Equal(66_617_845, m.Download.Size);
         Assert.Equal(Sha, m.Download.Sha256);
     }
 
     [Theory]
-    [InlineData("https://github.com/Evil/WaterCa7-s-pc-cleaner/releases/download/v1.2.0/WaterCa7sPcCleaner.exe")]
-    [InlineData("https://github.com/WaterCa7/WaterCa7-s-pc-cleaner/releases/download/v1.1.0/WaterCa7sPcCleaner.exe")]
-    [InlineData("http://github.com/WaterCa7/WaterCa7-s-pc-cleaner/releases/download/v1.2.0/WaterCa7sPcCleaner.exe")]
-    [InlineData("https://example.com/WaterCa7sPcCleaner.exe")]
+    [InlineData("https://github.com/Evil/WaterCa7-s-pc-cleaner/releases/download/v1.2.0/WaterCa7sPcCleaner-Setup.exe")]
+    [InlineData("https://github.com/WaterCa7/WaterCa7-s-pc-cleaner/releases/download/v1.1.0/WaterCa7sPcCleaner-Setup.exe")]
+    [InlineData("http://github.com/WaterCa7/WaterCa7-s-pc-cleaner/releases/download/v1.2.0/WaterCa7sPcCleaner-Setup.exe")]
+    [InlineData("https://example.com/WaterCa7sPcCleaner-Setup.exe")]
     public void Parse_RejectsALinkThatIsNotThisVersionOfThisRepository(string url)
     {
         Assert.Null(UpdateManifest.Parse(UpdateTestKit.ManifestJson("1.2.0", 66_617_845, Sha, url), out var problem));
@@ -65,7 +65,7 @@ public class UpdateManifestTests
         Assert.Null(UpdateManifest.Parse(Encoding.UTF8.GetBytes("{not json"), out var p1));
         Assert.Contains("повреждён", p1);
         Assert.Null(UpdateManifest.Parse(Encoding.UTF8.GetBytes("{\"version\":\"1.2.0\",\"files\":{}}"), out var p2));
-        Assert.Contains("win-x64", p2);
+        Assert.Contains("win-x64-setup", p2);
     }
 
     [Theory]

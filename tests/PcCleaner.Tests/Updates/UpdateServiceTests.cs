@@ -27,6 +27,7 @@ public sealed class UpdateServiceTests : IDisposable
         _appDir = TestEnvironment.NewTempDir("upd-app");
         _updatesDir = TestEnvironment.NewTempDir("upd-data");
         File.WriteAllBytes(ExePath, _oldExe);
+        File.WriteAllText(Path.Combine(_appDir, UpdateEnvironment.InstalledMarkerName), "");
     }
 
     private string ExePath => Path.Combine(_appDir, UpdateEnvironment.ExeName);
@@ -156,7 +157,7 @@ public sealed class UpdateServiceTests : IDisposable
     public async Task DevelopmentBuild_NeverChecksOrInstalls()
     {
         Publish("1.2.0");
-        File.WriteAllBytes(Path.Combine(_appDir, "WaterCa7sPcCleaner.dll"), new byte[] { 1 });
+        File.Delete(Path.Combine(_appDir, UpdateEnvironment.InstalledMarkerName));
         var service = Service();
 
         await service.CheckAsync(manual: false, CancellationToken.None);

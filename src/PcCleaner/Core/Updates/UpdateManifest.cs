@@ -10,12 +10,12 @@ public sealed record UpdateFile(string Name, string Url, long Size, string Sha25
 
 /// <summary>
 /// update.json of a release (docs/superpowers/specs/2026-10-17-auto-update-design.md). <see cref="Parse"/> accepts only a
-/// Windows file that is a download of this very version from this repository's releases; the signature is checked
+/// Windows setup that is a download of this very version from this repository's releases; the signature is checked
 /// separately (<see cref="UpdateSignature"/>).
 /// </summary>
 public sealed record UpdateManifest(Version Version, DateTimeOffset Published, string Notes, UpdateFile Download)
 {
-    public const string Platform = "win-x64";
+    public const string Platform = "win-x64-setup";
     public const string DownloadPrefix = AppInfo.RepoUrl + "/releases/download/";
     public const long MinSize = 1L << 20;
     public const long MaxSize = 500L << 20;

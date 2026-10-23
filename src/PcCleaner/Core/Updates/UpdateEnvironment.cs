@@ -11,6 +11,12 @@ public sealed class UpdateEnvironment
 {
     public const string ExeName = "WaterCa7sPcCleaner.exe";
 
+    /// <summary>Written next to the exe by the setup only: this copy is the installed one and updates itself.</summary>
+    public const string InstalledMarkerName = "WaterCa7sPcCleaner.installed";
+
+    /// <summary>The file of the setup in a release and in update.json.</summary>
+    public const string SetupName = "WaterCa7sPcCleaner-Setup.exe";
+
     public required string ExePath { get; init; }
 
     public required string UpdatesDir { get; init; }
@@ -31,14 +37,23 @@ public sealed class UpdateEnvironment
     /// <summary>Saves settings.json (tests keep the shared test settings file untouched).</summary>
     public Action<AppSettings> SaveSettings { get; init; } = settings => settings.Save();
 
+    /// <summary>Whether this process runs as administrator: only such a copy may start the setup (tests replace it).</summary>
+    public Func<bool> IsElevated { get; init; } = () => Admin.IsElevated;
+
     /// <summary>
-    /// Only the published single-file exe updates itself. A development build (WaterCa7sPcCleaner.dll next to the exe,
-    /// or a renamed exe) never does — an update would replace it with a release build.
+    /// &lt;program folder&gt;\Updates: the verified copy of the setup is started from here. Under Program Files only an administrator
+    /// can write to it, so nothing can swap the file between the check and the start.
+    /// </summary>
+    public string SetupDir => Path.Combine(Path.GetDirectoryName(ExePath) ?? "", "Updates");
+
+    /// <summary>
+    /// Only the copy the setup installed updates itself (<see cref="InstalledMarkerName"/> next to the exe). A development build or
+    /// a renamed exe never does — an update would replace it with a release build.
     /// </summary>
     public bool IsInstalledBuild
         => string.Equals(Path.GetFileName(ExePath), ExeName, StringComparison.OrdinalIgnoreCase) &&
            File.Exists(ExePath) &&
-           !File.Exists(Path.Combine(Path.GetDirectoryName(ExePath)!, Path.GetFileNameWithoutExtension(ExeName) + ".dll"));
+           File.Exists(Path.Combine(Path.GetDirectoryName(ExePath)!, InstalledMarkerName));
 
     public static UpdateEnvironment ForCurrentProcess() => new()
     {

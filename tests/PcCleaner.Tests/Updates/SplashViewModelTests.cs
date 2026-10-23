@@ -36,6 +36,7 @@ public sealed class SplashViewModelTests : IDisposable
         _appDir = TestEnvironment.NewTempDir("splash-app");
         _updatesDir = TestEnvironment.NewTempDir("splash-data");
         File.WriteAllBytes(ExePath, _oldExe);
+        File.WriteAllText(Path.Combine(_appDir, UpdateEnvironment.InstalledMarkerName), "");
     }
 
     private string ExePath => Path.Combine(_appDir, UpdateEnvironment.ExeName);
@@ -298,7 +299,7 @@ public sealed class SplashViewModelTests : IDisposable
     [Fact]
     public async Task DevelopmentBuild_ClosesOnlyAfterTheMinimumTime_WithoutAnyRequest()
     {
-        File.WriteAllBytes(Path.Combine(_appDir, "WaterCa7sPcCleaner.dll"), new byte[] { 1 });
+        File.Delete(Path.Combine(_appDir, UpdateEnvironment.InstalledMarkerName));
         _delay.HoldMinimum();
         var updates = Service();
         var splash = Splash(updates);
