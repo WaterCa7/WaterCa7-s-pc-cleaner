@@ -129,6 +129,8 @@ try {
     Check (-not (TaskExists)) 'the task is removed'
     Check (Test-Path (Join-Path $dataDir 'settings.json')) 'the settings stay after a silent uninstall'
     Check ((@(Get-ChildItem $env:TEMP -Filter 'Setup Log*.txt' -ErrorAction SilentlyContinue)).Count -ge 1) 'the setup left a log in %TEMP%'
+    # The last native command (schtasks, looking for the removed task) left exit code 1, and the CI shell would report it as the script's.
+    $global:LASTEXITCODE = 0
     'installer test passed'
 }
 catch {
