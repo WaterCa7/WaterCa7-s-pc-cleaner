@@ -46,8 +46,10 @@ function StopProgram {
     return ((InstalledProcesses).Count -eq 0)
 }
 
-function RunSetup([string[]]$extra) {
-    $setupArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$setupLog`"") + $extra
+# The first runs pass /LOG; the update run does not, as the program's own update does not: SetupLogging=yes must leave the log in %TEMP%.
+function RunSetup([string[]]$extra, [switch]$NoLog) {
+    $setupArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') + $extra
+    if (-not $NoLog) { $setupArgs += "/LOG=`"$setupLog`"" }
     # No -Wait: it would also wait for the program the setup starts after an update.
     $p = Start-Process $Setup -ArgumentList $setupArgs -PassThru
     Check ($p.WaitForExit(600000)) 'the setup finished in 10 minutes'
@@ -108,7 +110,7 @@ try {
     Check (TaskExists) 'the task is still there after the reinstall'
 
     # An update: the program is started again by the setup.
-    RunSetup @('/UPDATEDFROM=1.0.0')
+    RunSetup @('/UPDATEDFROM=1.0.0') -NoLog
     Check (Test-Path $exe) 'the exe is still there after the update'
     Check (WaitForProgram 30) 'the update started the installed program'
     Check (StopProgram) 'the program started by the update is stopped'
