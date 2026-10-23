@@ -84,11 +84,11 @@ try {
     Check (Test-Path $exe) 'the exe is installed'
     Check (Test-Path (Join-Path $app 'WaterCa7sPcCleaner.installed')) 'the marker is installed'
     Check (Test-Path $uninstallKey) 'Programs and Features entry'
-    Check ((Get-ItemProperty $uninstallKey).DisplayVersion -match '^\d+\.\d+\.\d+$') 'its version'
+    Check ((Get-ItemProperty $uninstallKey).DisplayVersion -eq $version) "its version is $version"
     Check (Test-Path (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\WaterCa7s PC Cleaner.lnk')) 'Start menu shortcut'
     Check (Test-Path (Join-Path $env:PUBLIC 'Desktop\WaterCa7s PC Cleaner.lnk')) 'desktop shortcut'
     Check ((WritableByUsers $app).Count -eq 0) 'ordinary users cannot write to the program folder'
-    Check ((Get-Item $exe).VersionInfo.FileVersion.StartsWith($version)) "the exe file version starts with $version (was $((Get-Item $exe).VersionInfo.FileVersion))"
+    Check ((Get-Item $exe).VersionInfo.FileVersion.StartsWith("$version.")) "the exe file version starts with $version. (was $((Get-Item $exe).VersionInfo.FileVersion))"
     Check (TaskExists) "task $task"
     $xml = [xml](schtasks.exe /query /tn $task /xml | Out-String)
     Check ($xml.Task.Actions.Exec.Command -eq $exe) 'the task runs the installed exe'
@@ -109,11 +109,15 @@ try {
     Check (Test-Path $exe) 'the exe is still there after the reinstall'
     Check (TaskExists) 'the task is still there after the reinstall'
 
-    # An update: the program is started again by the setup.
+    # An update: the program is started again by the setup. Old setup logs must not satisfy the SetupLogging check below.
+    Get-ChildItem $env:TEMP -Filter 'Setup Log*.txt' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    Check ((InstalledProcesses).Count -eq 0) 'no installed program is running before the update'
     RunSetup @('/UPDATEDFROM=1.0.0') -NoLog
     Check (Test-Path $exe) 'the exe is still there after the update'
     Check (WaitForProgram 30) 'the update started the installed program'
     Check (StopProgram) 'the program started by the update is stopped'
+    Check (TaskExists) 'the task is still there after the update'
+    Check ((@(Get-ChildItem $env:TEMP -Filter 'Setup Log*.txt' -ErrorAction SilentlyContinue)).Count -ge 1) 'the update (run without /LOG) left a setup log in %TEMP%'
 
     New-Item -ItemType Directory -Force $dataDir | Out-Null
     Set-Content (Join-Path $dataDir 'settings.json') '{}'
