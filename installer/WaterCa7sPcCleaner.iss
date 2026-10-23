@@ -136,9 +136,9 @@ begin
     UpdateInstalled := True;
 end;
 
-// DeinitializeSetup also runs when InitializeSetup returned False (the docs: "called even if the user exits Setup before
-// anything is installed"); UpdateRunStarted is set only past that point, so the program is never started twice next to a copy
-// that did not close.
+// The docs only say DeinitializeSetup runs "even if the user exits Setup before anything is installed", not whether it runs after
+// InitializeSetup returned False. UpdateRunStarted is set only once InitializeSetup lets the update go on, so either way the
+// program is never started next to a copy that did not close.
 procedure DeinitializeSetup;
 var
   AppDir: String;
