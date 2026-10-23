@@ -24,10 +24,10 @@ public class UpdateInstallerTests
         var setup = UpdateTestKit.FakeExe(7);
         var setupDir = Path.Combine(TestEnvironment.NewTempDir("inst-app"), "Updates");
 
-        var path = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
+        using var prepared = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
 
-        Assert.Equal(Path.Combine(setupDir, UpdateEnvironment.SetupName), path);
-        Assert.Equal(setup, File.ReadAllBytes(path));
+        Assert.Equal(Path.Combine(setupDir, UpdateEnvironment.SetupName), prepared.Path);
+        Assert.Equal(setup, File.ReadAllBytes(prepared.Path));
     }
 
     [Fact]
@@ -48,9 +48,48 @@ public class UpdateInstallerTests
         File.WriteAllBytes(Path.Combine(setupDir, UpdateEnvironment.SetupName), new byte[] { 1, 2, 3 });
         var setup = UpdateTestKit.FakeExe(9);
 
-        var path = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
+        using var prepared = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
 
-        Assert.Equal(setup, File.ReadAllBytes(path));
+        Assert.Equal(setup, File.ReadAllBytes(prepared.Path));
+    }
+
+    [Fact]
+    public void PrepareSetup_KeepsTheCopyLockedAgainstWritesAndDeletes_UntilTheLeaseIsDisposed()
+    {
+        var setup = UpdateTestKit.FakeExe(4);
+        var setupDir = Path.Combine(TestEnvironment.NewTempDir("inst-app"), "Updates");
+        var prepared = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
+        try
+        {
+            // the copy cannot be swapped before the setup has started, even in a folder the user can write to
+            Assert.True(Refuses(() => File.WriteAllBytes(prepared.Path, new byte[] { 9 })));
+            Assert.True(Refuses(() => File.Delete(prepared.Path)));
+            Assert.True(Refuses(() => File.Move(prepared.Path, prepared.Path + ".old")));
+            // ... while a process can still be created from it (it only needs to read the file)
+            using var reader = new FileStream(prepared.Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            Assert.Equal(setup.Length, reader.Length);
+        }
+        finally
+        {
+            prepared.Dispose();
+        }
+
+        File.WriteAllBytes(prepared.Path, new byte[] { 9 });
+        File.Delete(prepared.Path);
+        Assert.False(File.Exists(prepared.Path));
+    }
+
+    private static bool Refuses(Action action)
+    {
+        try
+        {
+            action();
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
     }
 
     [Fact]
@@ -66,15 +105,22 @@ public class UpdateInstallerTests
         var file = Path.Combine(setupDir, UpdateEnvironment.SetupName);
         File.WriteAllBytes(file, new byte[] { 1 });
         var running = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read); // the setup is still running
-        _ = Task.Run(async () =>
+        try
         {
-            await Task.Delay(700);
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(700);
+                running.Dispose();
+            });
+
+            await UpdateInstaller.CleanupSetupAsync(setupDir, TimeSpan.FromSeconds(10));
+
+            Assert.False(Directory.Exists(setupDir));
+        }
+        finally
+        {
             running.Dispose();
-        });
-
-        await UpdateInstaller.CleanupSetupAsync(setupDir, TimeSpan.FromSeconds(10));
-
-        Assert.False(Directory.Exists(setupDir));
+        }
     }
 
     [Fact]

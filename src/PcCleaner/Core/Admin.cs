@@ -76,9 +76,10 @@ public static class Admin
     /// <summary>
     /// Restarts the app with a UAC prompt. Returns false if the user declined.
     /// Restarting closes the program, so it first asks when any page is still busy, and on a standard account
-    /// explains that the program will run under the administrator's account.
+    /// explains that the program will run under the administrator's account. <paramref name="extraArgs"/> (start markers for that
+    /// one start, e.g. <see cref="UpdateService.InstallUpdateArg"/>) follow <see cref="SingleInstance.RestartArg"/>.
     /// </summary>
-    public static bool RestartElevated() => RestartElevated(standardUserNoteShown: false);
+    public static bool RestartElevated(IEnumerable<string>? extraArgs = null) => RestartElevated(standardUserNoteShown: false, extraArgs);
 
     /// <summary>
     /// Starts <paramref name="exe"/> (with <paramref name="args"/>) through the shell with the "runas" verb, which makes
@@ -110,7 +111,7 @@ public static class Admin
         return false;
     }
 
-    private static bool RestartElevated(bool standardUserNoteShown)
+    private static bool RestartElevated(bool standardUserNoteShown, IEnumerable<string>? extraArgs = null)
     {
         var pages = AppServices.Navigator?.Pages ?? Enumerable.Empty<PageViewModel>();
         if (!ConfirmRestart(pages, IsStandardUser && !standardUserNoteShown))
@@ -121,7 +122,7 @@ public static class Admin
             return false;
         try
         {
-            Process.Start(ElevatedStartInfo(exe, new[] { SingleInstance.RestartArg })); // it waits until this copy has closed
+            Process.Start(ElevatedStartInfo(exe, new[] { SingleInstance.RestartArg }.Concat(extraArgs ?? Enumerable.Empty<string>()))); // it waits until this copy has closed
             // Shutdown() only queues the closing of the windows: code that asked for the restart goes on running for a moment, and
             // must be able to tell "the program is closing" from "the user said no" (RequireElevation returns false for both).
             RestartStarted = true;

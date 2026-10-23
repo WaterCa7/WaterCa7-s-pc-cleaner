@@ -41,8 +41,9 @@ public sealed class UpdateEnvironment
     public Func<bool> IsElevated { get; init; } = () => Admin.IsElevated;
 
     /// <summary>
-    /// &lt;program folder&gt;\Updates: the verified copy of the setup is started from here. Under Program Files only an administrator
-    /// can write to it, so nothing can swap the file between the check and the start.
+    /// &lt;program folder&gt;\Updates: the verified copy of the setup is started from here. The copy is held open with writes and
+    /// deletes denied from its verification until the setup has started (<see cref="UpdateInstaller.PrepareSetup"/>), so it cannot
+    /// be swapped even in a folder the user can write to; under Program Files only an administrator can write to the folder at all.
     /// </summary>
     public string SetupDir => Path.Combine(Path.GetDirectoryName(ExePath) ?? "", "Updates");
 

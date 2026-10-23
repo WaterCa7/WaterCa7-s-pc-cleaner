@@ -25,6 +25,12 @@ public sealed class UpdateService : ObservableObject
 {
     public const string UpdatedFromArg = "--updated-from";
 
+    /// <summary>
+    /// Belongs to one start: the restart with rights from the banner («Перезапустить с правами и установить») adds it, and that copy
+    /// installs the staged update whatever the AutoUpdate setting says (the user asked for it). See <see cref="TryInstallAtStart"/>.
+    /// </summary>
+    public const string InstallUpdateArg = "--install-update";
+
     private readonly UpdateEnvironment _env;
     private readonly Func<AppSettings> _settings;
     private readonly UpdateStore _store;
@@ -88,6 +94,14 @@ public sealed class UpdateService : ObservableObject
     /// </summary>
     public bool TryInstallStaged(IReadOnlyList<string> args)
         => CanUpdate && _settings().AutoUpdate && Install(_store.FindStaged(_env.CurrentVersion, _env.PublicKeyPem));
+
+    /// <summary>
+    /// What the start of the program does about a staged update: with <see cref="InstallUpdateArg"/> (the user asked for it in the
+    /// banner) <see cref="InstallNow"/>, otherwise <see cref="TryInstallStaged"/> (only when automatic updates are on).
+    /// True = the setup is starting and this process must exit now.
+    /// </summary>
+    public bool TryInstallAtStart(IReadOnlyList<string> args)
+        => args.Any(a => string.Equals(a, InstallUpdateArg, StringComparison.OrdinalIgnoreCase)) ? InstallNow(args) : TryInstallStaged(args);
 
     /// <summary>
     /// «Перезапустить сейчас»: starts the setup of the staged update whatever the setting says (the user asked for it).
@@ -170,7 +184,17 @@ public sealed class UpdateService : ObservableObject
                 Log.Info(T.F("Обновления: скачана версия {0}, установится при следующем запуске", manifest.Version));
             }
             State = UpdateState.Ready;
-            StatusText = T.F("Версия {0} скачана — установится при следующем запуске.", manifest.Version);
+            if (_env.IsElevated())
+            {
+                NeedsElevation = false;
+                StatusText = T.F("Версия {0} скачана — установится при следующем запуске.", manifest.Version);
+            }
+            else
+            {
+                // Only an elevated copy may start the setup: let the banner offer the restart with rights right away.
+                NeedsElevation = true;
+                StatusText = T.F("Версия {0} скачана — для установки нужны права администратора.", manifest.Version);
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or
                                        UnauthorizedAccessException or UpdateException)
@@ -188,7 +212,8 @@ public sealed class UpdateService : ObservableObject
 
     /// <summary>
     /// The arguments of this start without the ones that belong to this very start: <c>--updated-from &lt;version&gt;</c> and
-    /// <c>--elevated-restart</c> (only the restart at startup uses it, and only for the copy it starts) and
+    /// <c>--elevated-restart</c> (only the restart at startup uses it, and only for the copy it starts),
+    /// <see cref="InstallUpdateArg"/> (the same: one start only) and
     /// <see cref="SingleInstance.RestartArg"/> (each restart adds its own). Every restart builds
     /// the arguments of the next copy from this list.
     /// </summary>
@@ -203,6 +228,7 @@ public sealed class UpdateService : ObservableObject
                 continue;
             }
             if (string.Equals(args[i], StartupElevation.ElevatedRestartArg, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(args[i], InstallUpdateArg, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(args[i], SingleInstance.RestartArg, StringComparison.OrdinalIgnoreCase))
                 continue;
             result.Add(args[i]);
@@ -230,10 +256,10 @@ public sealed class UpdateService : ObservableObject
             StatusText = T.F("Версия {0} скачана — для установки нужны права администратора.", version);
             return false;
         }
-        string setup;
+        PreparedSetup prepared;
         try
         {
-            setup = UpdateInstaller.PrepareSetup(staged, _env.SetupDir);
+            prepared = UpdateInstaller.PrepareSetup(staged, _env.SetupDir);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -249,12 +275,16 @@ public sealed class UpdateService : ObservableObject
             StatusText = T.F("Не удалось установить версию {0}: {1}. Попробуем при следующем запуске.", version, ErrorText.For(ex));
             return false;
         }
-        if (!_env.StartProcess(setup, UpdateInstaller.SetupArgs(CurrentVersion)))
+        // The copy stays locked against writes and deletes until the process has been created from it.
+        using (prepared)
         {
-            _store.RecordFailure(version);
-            State = UpdateState.Failed;
-            StatusText = T.F("Установщик версии {0} не запустился. Попробуем при следующем запуске.", version);
-            return false;
+            if (!_env.StartProcess(prepared.Path, UpdateInstaller.SetupArgs(CurrentVersion)))
+            {
+                _store.RecordFailure(version);
+                State = UpdateState.Failed;
+                StatusText = T.F("Установщик версии {0} не запустился. Попробуем при следующем запуске.", version);
+                return false;
+            }
         }
         Log.Action(T.F("Обновление: запущена установка версии {0}", version));
         return true;

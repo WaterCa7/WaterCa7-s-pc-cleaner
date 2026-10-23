@@ -98,7 +98,7 @@ public partial class App : Application
         }
 
         // Install an already downloaded update before any window appears; the new version starts and this one exits.
-        if (ScreenshotDir is null && UpdatedFrom is null && AppServices.Updates.TryInstallStaged(e.Args))
+        if (ScreenshotDir is null && UpdatedFrom is null && AppServices.Updates.TryInstallAtStart(e.Args))
         {
             Shutdown();
             return;
@@ -272,6 +272,8 @@ public partial class App : Application
                     break; // our own restart with rights: only StartupElevation.ShouldElevate looks at it
                 case SingleInstance.RestartArg:
                     break; // our own restart: only SingleInstance.WaitsForPrevious looks at it
+                case UpdateService.InstallUpdateArg:
+                    break; // the banner's restart with rights: only UpdateService.TryInstallAtStart looks at it
                 case "--lang" when i + 1 < args.Length:
                     var language = args[++i].Trim().ToLowerInvariant();
                     LanguageArg = T.IsSupported(language) ? language : null;

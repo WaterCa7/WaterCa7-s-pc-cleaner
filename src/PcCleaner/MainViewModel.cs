@@ -244,8 +244,8 @@ public sealed class MainViewModel : ObservableObject, INavigator
             case UpdateState.Ready:
                 if (Updates.NeedsElevation)
                 {
-                    // The elevated copy installs the staged setup at its start (UpdateService.TryInstallStaged).
-                    Admin.RestartElevated();
+                    // The elevated copy installs the staged setup at its start, whatever AutoUpdate says (UpdateService.TryInstallAtStart).
+                    Admin.RestartElevated(new[] { UpdateService.InstallUpdateArg });
                     break;
                 }
                 var busy = Pages.Where(p => p.IsBusy).Select(p => p.Title).ToList();

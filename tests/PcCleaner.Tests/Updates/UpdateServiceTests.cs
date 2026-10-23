@@ -21,6 +21,8 @@ public sealed class UpdateServiceTests : IDisposable
     private readonly AppSettings _settings = new();
     private readonly List<(string Exe, IReadOnlyList<string> Args)> _started = new();
     private bool _elevated = true;
+    private bool _setupStarts = true;
+    private Action<string>? _whileStarting;
 
     public UpdateServiceTests()
     {
@@ -46,8 +48,9 @@ public sealed class UpdateServiceTests : IDisposable
         IsElevated = () => _elevated,
         StartProcess = (exe, args) =>
         {
+            _whileStarting?.Invoke(exe);
             _started.Add((exe, args));
-            return true;
+            return _setupStarts;
         },
         SaveSettings = _ => { },
     }, () => _settings);
@@ -235,6 +238,114 @@ public sealed class UpdateServiceTests : IDisposable
         Assert.False(File.Exists(SetupCopy));
         Assert.Equal(0, new UpdateStore(_updatesDir).FailuresFor(new Version(1, 2, 0))); // not a failed install
     }
+
+    [Fact]
+    public async Task TheSetupCopyIsLockedWhileItStarts_AndFreeAfterwards()
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        var locked = false;
+        _whileStarting = exe =>
+        {
+            try
+            {
+                File.WriteAllBytes(exe, new byte[] { 9 });
+            }
+            catch (IOException)
+            {
+                locked = true;
+            }
+        };
+
+        Assert.True(Service().TryInstallStaged(Array.Empty<string>()));
+
+        Assert.True(locked); // nothing can swap the verified bytes between the check and the start
+        Assert.Equal(_newExe, File.ReadAllBytes(SetupCopy));
+        File.Delete(SetupCopy); // the lease is gone once the setup has started
+    }
+
+    [Fact]
+    public async Task SetupThatDoesNotStart_IsARecordedFailure()
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        _setupStarts = false;
+        var service = Service();
+
+        Assert.False(service.TryInstallStaged(Array.Empty<string>()));
+
+        Assert.Equal(UpdateState.Failed, service.State);
+        Assert.Contains("1.2.0", service.StatusText);
+        Assert.Equal(1, new UpdateStore(_updatesDir).FailuresFor(new Version(1, 2, 0)));
+        File.Delete(SetupCopy); // the lease is released on this path too
+    }
+
+    [Fact]
+    public async Task InstallNow_WithoutTheRights_StartsNothing_AndAsksForThem()
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        _elevated = false;
+        var service = Service();
+
+        Assert.False(service.InstallNow(Array.Empty<string>()));
+
+        Assert.True(service.NeedsElevation);
+        Assert.Equal(UpdateState.Ready, service.State);
+        Assert.Empty(_started);
+        Assert.False(File.Exists(SetupCopy));
+    }
+
+    [Fact]
+    public async Task CheckThatStagesAnUpdate_WithoutTheRights_AsksForThemAtOnce()
+    {
+        Publish("1.2.0");
+        _elevated = false;
+        var service = Service();
+
+        await service.CheckAsync(manual: false, CancellationToken.None);
+
+        Assert.Equal(UpdateState.Ready, service.State);
+        Assert.True(service.NeedsElevation);
+        Assert.Contains("1.2.0", service.StatusText);
+        Assert.Contains("администратора", service.StatusText);
+        Assert.Empty(_started);
+    }
+
+    [Fact]
+    public async Task CheckThatStagesAnUpdate_WithTheRights_DoesNotAsk()
+    {
+        Publish("1.2.0");
+        var service = Service();
+
+        await service.CheckAsync(manual: false, CancellationToken.None);
+
+        Assert.Equal(UpdateState.Ready, service.State);
+        Assert.False(service.NeedsElevation);
+        Assert.DoesNotContain("администратора", service.StatusText);
+    }
+
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, false)] // automatic updates are off: nothing installs by itself
+    [InlineData(false, true, true)]   // ... but the restart with rights from the banner asked for it
+    public async Task TheStartInstallsTheStagedUpdate_WhenAutoUpdateIsOn_OrTheBannerRestartAsked(bool autoUpdate, bool marker, bool installs)
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: true, CancellationToken.None);
+        _settings.AutoUpdate = autoUpdate;
+        var args = marker ? new[] { "--restarted", UpdateService.InstallUpdateArg } : new[] { "--restarted" };
+
+        Assert.Equal(installs, Service().TryInstallAtStart(args));
+
+        Assert.Equal(installs ? 1 : 0, _started.Count);
+    }
+
+    [Fact]
+    public void TheInstallMarker_BelongsToOneStart_AndIsNotPassedOn()
+        => Assert.Equal(new[] { "--page", "Cleaner" },
+            UpdateService.WithoutStartMarkers(new[] { UpdateService.InstallUpdateArg, "--page", "Cleaner", "--INSTALL-UPDATE" }));
 
     [Fact]
     public void Settings_AutoUpdateIsOnByDefault_AndSurvivesSaving()
