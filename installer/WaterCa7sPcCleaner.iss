@@ -82,6 +82,12 @@ Filename: "{app}\{#ExeName}"; Parameters: "--unregister-tasks"; Flags: runhidden
 Type: filesandordirs; Name: "{app}\Updates"
 
 [Code]
+var
+  // An update run that got past InitializeSetup: if it ends without installing, DeinitializeSetup starts the program again.
+  UpdateRunStarted: Boolean;
+  // Set at ssPostInstall: the files are in place and the [Run] entry has started the new version.
+  UpdateInstalled: Boolean;
+
 function IsUpdate: Boolean;
 begin
   Result := ExpandConstant('{param:UPDATEDFROM|}') <> '';
@@ -101,6 +107,15 @@ begin
       Sleep(500);
       Waited := Waited + 1;
     end;
+    if CheckForMutexes('{#InstanceMutex}') then
+    begin
+      // The program did not close: replacing its files now would fail halfway. Exit without touching anything; the program
+      // counted this start as a failed install (UpdateService), so its next start tries again and gives up after two.
+      Log('The program still runs after 30 s; the update exits without installing.');
+      Result := False;
+      Exit;
+    end;
+    UpdateRunStarted := True;
     Exit;
   end;
   while CheckForMutexes('{#InstanceMutex}') do
@@ -109,6 +124,34 @@ begin
       Result := False;
       Exit;
     end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    UpdateInstalled := True;
+end;
+
+// DeinitializeSetup also runs when InitializeSetup returned False (the docs: "called even if the user exits Setup before
+// anything is installed"); UpdateRunStarted is set only past that point, so the program is never started twice next to a copy
+// that did not close.
+procedure DeinitializeSetup;
+var
+  AppDir: String;
+  ResultCode: Integer;
+begin
+  if not IsUpdate or not UpdateRunStarted or UpdateInstalled then
+    Exit;
+  // The update failed after the program had closed (files in use, the antivirus, the disk) and was rolled back: start the old
+  // version again, so the user is not left without the program. It counted this start as a failed install.
+  try
+    AppDir := ExpandConstant('{app}');
+  except
+    AppDir := ExpandConstant('{autopf}\{#AppName}');
+  end;
+  Log('The update did not complete; starting the program again: ' + AddBackslash(AppDir) + '{#ExeName}');
+  if not Exec(AddBackslash(AppDir) + '{#ExeName}', '', AppDir, SW_SHOWNORMAL, ewNoWait, ResultCode) then
+    Log('Could not start the program: ' + SysErrorMessage(ResultCode));
 end;
 
 function InitializeUninstall: Boolean;

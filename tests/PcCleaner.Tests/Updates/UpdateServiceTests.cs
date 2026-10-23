@@ -285,6 +285,39 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ASetupThatStartsButNeverCompletes_CountsAsAFailure_AndTheThirdStartOpensTheProgram()
+    {
+        // The silent setup started, then failed (files in use, the antivirus, the disk): it rolled back and the new version never
+        // ran CompleteUpdateAsync. Without counting that, every start would launch the setup again and close before its window.
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+
+        Assert.True(Service().TryInstallStaged(Array.Empty<string>()));
+        Assert.Equal(1, new UpdateStore(_updatesDir).FailuresFor(new Version(1, 2, 0)));
+        Assert.True(Service().TryInstallStaged(Array.Empty<string>()));
+        Assert.Equal(2, new UpdateStore(_updatesDir).FailuresFor(new Version(1, 2, 0)));
+        _started.Clear();
+        var third = Service();
+
+        Assert.False(third.TryInstallStaged(Array.Empty<string>())); // the program opens
+
+        Assert.Equal(UpdateState.ManualRequired, third.State);
+        Assert.Empty(_started);
+    }
+
+    [Fact]
+    public async Task ASetupThatCompletes_LeavesNoFailureBehind()
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        Assert.True(Service().TryInstallStaged(Array.Empty<string>()));
+
+        await Service("1.2.0").CompleteUpdateAsync("1.1.0");
+
+        Assert.Equal(0, new UpdateStore(_updatesDir).FailuresFor(new Version(1, 2, 0)));
+    }
+
+    [Fact]
     public async Task SetupThatDoesNotStart_IsARecordedFailure()
     {
         Publish("1.2.0");

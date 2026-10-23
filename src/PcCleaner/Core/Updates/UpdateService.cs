@@ -282,12 +282,15 @@ public sealed class UpdateService : ObservableObject
             StatusText = T.F("Не удалось установить версию {0}: {1}. Попробуем при следующем запуске.", version, ErrorText.For(ex));
             return false;
         }
+        // Counted before the start: a setup that starts and then fails (files in use, the antivirus, the disk) rolls back and nothing
+        // tells this program. Only the new version clears the count (CompleteUpdateAsync removes state.json), so after
+        // MaxInstallFailures such starts the program opens and asks for a manual download instead of starting the setup forever.
+        _store.RecordFailure(version);
         // The copy stays locked against writes and deletes until the process has been created from it.
         using (prepared)
         {
             if (!_env.StartProcess(prepared.Path, UpdateInstaller.SetupArgs(CurrentVersion)))
             {
-                _store.RecordFailure(version);
                 State = UpdateState.Failed;
                 StatusText = T.F("Установщик версии {0} не запустился. Попробуем при следующем запуске.", version);
                 return false;
