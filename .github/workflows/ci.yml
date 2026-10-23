@@ -11,22 +11,32 @@ jobs:
           dotnet-version: "8.0.x"
       - run: dotnet build WaterCa7sPcCleaner.sln -c Release
       - run: dotnet test WaterCa7sPcCleaner.sln -c Release --no-build
-      - name: Publish single-file exe
-        run: dotnet publish src/PcCleaner/PcCleaner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --version 6.7.3 -y --no-progress
+          }
+      - name: Build the setup
+        shell: pwsh
+        run: ./tools/build-installer.ps1
+      - name: Install, update and uninstall it
+        shell: pwsh
+        run: ./tools/test-installer.ps1 -Setup publish/WaterCa7sPcCleaner-Setup.exe
       - name: Update manifest dry run (throwaway key)
         shell: pwsh
         run: |
           $key = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
           $env:UPDATE_SIGNING_KEY = $key.ExportECPrivateKeyPem()
           $public = $key.ExportSubjectPublicKeyInfoPem()
-          ./tools/make-update-manifest.ps1 -Version 9.9.9 -Exe publish/WaterCa7sPcCleaner.exe -NotesFile docs/release-notes/1.1.0.md -OutDir dryrun -PublicKeyPem $public
+          ./tools/make-update-manifest.ps1 -Version 9.9.9 -Setup publish/WaterCa7sPcCleaner-Setup.exe -NotesFile docs/release-notes/1.1.0.md -OutDir dryrun -PublicKeyPem $public
           Set-Content dryrun/public.pem $public
           $env:UPDATE_MANIFEST_DIR = (Resolve-Path dryrun).Path
           dotnet test tests/PcCleaner.Tests -c Release --no-build --filter "FullyQualifiedName~ScriptManifest_IsAcceptedByTheApp"
       - uses: actions/upload-artifact@v4
         with:
-          name: WaterCa7sPcCleaner-win-x64
-          path: publish/WaterCa7sPcCleaner.exe
+          name: WaterCa7sPcCleaner-Setup
+          path: publish/WaterCa7sPcCleaner-Setup.exe
 
   python-cli:
     name: Console version (Python)
