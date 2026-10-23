@@ -23,8 +23,8 @@
   без single-file): запуск быстрее, не нужно распаковывать себя при каждом старте.
 - Рядом с exe — файл-метка `WaterCa7sPcCleaner.installed` (его пишет только установщик). По нему программа узнаёт, что
   она установлена (раздел 3).
-- `AppId` — постоянный GUID; `AppMutex=WaterCa7sPcCleaner.Instance` (имя из `SingleInstance`): при ручной установке
-  поверх открытой программы установщик просит её закрыть.
+- `AppId` — постоянный GUID. Открытую программу установщик узнаёт по mutex `WaterCa7sPcCleaner.Instance` (имя из
+  `SingleInstance`, проверка в `[Code]`): при ручной установке и при удалении просит её закрыть, при тихом обновлении ждёт.
 - Файл установщика — `WaterCa7sPcCleaner-Setup.exe`. Скрипт — `installer/WaterCa7sPcCleaner.iss`; русские и английские
   тексты установщика — из стандартных `Russian.isl` / `Default.isl` плюс свои строки в `[CustomMessages]`.
 
