@@ -140,7 +140,7 @@ public sealed class SingleInstance : IDisposable
         using (activate)
         {
             // This start was a click of the user, so it may hand the right to come to the front over to the running copy.
-            AllowSetForegroundWindow(AsfwAny);
+            AllowAnyProcessToComeToTheFront();
             activate.Set();
         }
     }
@@ -166,6 +166,12 @@ public sealed class SingleInstance : IDisposable
         security.AddAccessRule(new EventWaitHandleAccessRule(CurrentUser(), EventWaitHandleRights.FullControl, AccessControlType.Allow));
         return security;
     }
+
+    /// <summary>
+    /// Hands this process's right to bring a window to the front over to any process (ASFW_ANY): the running copy asked to show
+    /// itself, or the version the update setup starts. Windows ignores it when this process has no such right itself.
+    /// </summary>
+    internal static void AllowAnyProcessToComeToTheFront() => AllowSetForegroundWindow(AsfwAny);
 
     private const int AsfwAny = -1;
 

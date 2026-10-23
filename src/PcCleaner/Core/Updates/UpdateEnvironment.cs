@@ -41,6 +41,12 @@ public sealed class UpdateEnvironment
     public Func<bool> IsElevated { get; init; } = () => Admin.IsElevated;
 
     /// <summary>
+    /// A standard (not administrator) account (tests replace it). Its copy is never offered the restart with rights: the elevated
+    /// copy would run under the administrator's profile and find no update staged there.
+    /// </summary>
+    public Func<bool> IsStandardUser { get; init; } = () => Admin.IsStandardUser;
+
+    /// <summary>
     /// &lt;program folder&gt;\Updates: the verified copy of the setup is started from here. The copy is held open against changes
     /// until the process has been created from it (<see cref="UpdateInstaller.PrepareSetup"/>); the real protection is that this
     /// is done only for a program in Program Files (<see cref="IsInProgramFiles"/>), where only administrators can change the folder.

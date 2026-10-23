@@ -4662,6 +4662,7 @@
   "трафик": "traffic",
   "у программы не указан деинсталлятор": "the program has no uninstaller specified",
   "у этого диска нет корзины (флешка или сетевой диск), поэтому файл не тронут": "this drive has no Recycle Bin (a flash drive or a network drive), so the file was left alone",
+  "у этой учётной записи нет прав администратора": "this account has no administrator rights",
   "удаление {0} из автозагрузки": "deleting {0} from startup",
   "удаление битых записей автозагрузки для всех пользователей": "deleting broken startup entries for all users",
   "удалено {0}": "deleted {0}",

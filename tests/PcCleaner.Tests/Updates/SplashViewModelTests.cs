@@ -50,6 +50,7 @@ public sealed class SplashViewModelTests : IDisposable
         ManifestUrl = ManifestUrl,
         HttpHandler = _http,
         IsElevated = () => true,
+        IsStandardUser = () => false,
         ProgramFiles = Path.GetDirectoryName(_appDir)!, // the test program counts as installed under Program Files
         StartProcess = (exe, args) =>
         {

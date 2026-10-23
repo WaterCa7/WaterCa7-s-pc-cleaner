@@ -28,7 +28,8 @@ public sealed class UpdateService : ObservableObject
     /// <summary>
     /// Belongs to one start: the restart with rights from the banner («Перезапустить с правами и установить») adds it, and that copy
     /// installs the staged update whatever the AutoUpdate setting says (the user asked for it). See <see cref="TryInstallAtStart"/>.
-    /// On a standard account the elevated copy runs under the administrator's profile, finds nothing staged and does nothing.
+    /// A standard account is never offered it (<see cref="ManualOnlyReason"/>): the elevated copy would run under the
+    /// administrator's profile and find nothing staged.
     /// </summary>
     public const string InstallUpdateArg = "--install-update";
 
@@ -99,8 +100,7 @@ public sealed class UpdateService : ObservableObject
     /// <summary>
     /// What the start of the program does about a staged update: with <see cref="InstallUpdateArg"/> (the user asked for it in the
     /// banner) <see cref="InstallNow"/>, otherwise <see cref="TryInstallStaged"/> (only when automatic updates are on).
-    /// True = the setup is starting and this process must exit now. (On a standard account the elevated copy runs under the
-    /// administrator's profile, finds nothing staged there and does nothing.)
+    /// True = the setup is starting and this process must exit now.
     /// </summary>
     public bool TryInstallAtStart(IReadOnlyList<string> args)
         => args.Any(a => string.Equals(a, InstallUpdateArg, StringComparison.OrdinalIgnoreCase)) ? InstallNow(args) : TryInstallStaged(args);
@@ -175,6 +175,12 @@ public sealed class UpdateService : ObservableObject
                 RequireManual(manifest, T._("автоматическая установка уже дважды не удалась"));
                 return;
             }
+            if (ManualOnlyReason() is { } reason)
+            {
+                // Nothing is downloaded that this copy could never install, and no restart with rights is offered that would not help.
+                RequireManual(manifest, reason);
+                return;
+            }
             if (_store.FindStaged(_env.CurrentVersion, _env.PublicKeyPem)?.Manifest.Version != manifest.Version)
             {
                 State = UpdateState.Downloading;
@@ -187,7 +193,8 @@ public sealed class UpdateService : ObservableObject
                     ? T.F("Обновления: скачана версия {0}, установится при следующем запуске", manifest.Version)
                     : T.F("Обновления: скачана версия {0}, для установки нужны права администратора", manifest.Version));
             }
-            // NeedsElevation first, so the banner never shows the wrong button for a moment.
+            // NeedsElevation first, so the banner never shows the wrong button for a moment. Only a copy in Program Files on an
+            // administrator account gets here, so the restart with rights does install it.
             NeedsElevation = !_env.IsElevated();
             State = UpdateState.Ready;
             // Only an elevated copy may start the setup: the banner offers the restart with rights right away.
@@ -248,6 +255,12 @@ public sealed class UpdateService : ObservableObject
             RequireManual(staged.Manifest, T._("автоматическая установка уже дважды не удалась"));
             return false;
         }
+        // Before the rights: a restart with rights would end in the same manual download.
+        if (ManualOnlyReason() is { } reason)
+        {
+            RequireManual(staged.Manifest, reason);
+            return false;
+        }
         if (!_env.IsElevated())
         {
             // The setup runs as administrator: a copy without the rights cannot put it into the protected program folder first,
@@ -255,12 +268,6 @@ public sealed class UpdateService : ObservableObject
             NeedsElevation = true;
             State = UpdateState.Ready;
             StatusText = T.F("Версия {0} скачана — для установки нужны права администратора.", version);
-            return false;
-        }
-        if (!_env.IsInProgramFiles)
-        {
-            // The setup runs as administrator: from a folder the user can write to it could be swapped after the check.
-            RequireManual(staged.Manifest, T._("программа установлена не в папку Program Files"));
             return false;
         }
         PreparedSetup prepared;
@@ -286,6 +293,9 @@ public sealed class UpdateService : ObservableObject
         // tells this program. Only the new version clears the count (CompleteUpdateAsync removes state.json), so after
         // MaxInstallFailures such starts the program opens and asks for a manual download instead of starting the setup forever.
         _store.RecordFailure(version);
+        // This start was a click of the user (or the start of the program): the new version, which the setup starts, may come
+        // to the front.
+        SingleInstance.AllowAnyProcessToComeToTheFront();
         // The copy stays locked against writes and deletes until the process has been created from it.
         using (prepared)
         {
@@ -298,6 +308,20 @@ public sealed class UpdateService : ObservableObject
         }
         Log.Action(T.F("Обновление: запущена установка версии {0}", version));
         return true;
+    }
+
+    /// <summary>
+    /// Why this copy can never start the setup, so the user downloads it by hand; null when it can (perhaps after the restart with
+    /// rights). Outside Program Files: the setup runs as administrator, and from a folder the user can write to it could be swapped
+    /// after the check. A standard account: the elevated copy runs under the administrator's profile and finds nothing staged there.
+    /// </summary>
+    private string? ManualOnlyReason()
+    {
+        if (!_env.IsInProgramFiles)
+            return T._("программа установлена не в папку Program Files");
+        if (!_env.IsElevated() && _env.IsStandardUser())
+            return T._("у этой учётной записи нет прав администратора");
+        return null;
     }
 
     private void RequireManual(UpdateManifest manifest, string reason)

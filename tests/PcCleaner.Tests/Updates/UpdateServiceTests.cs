@@ -21,6 +21,7 @@ public sealed class UpdateServiceTests : IDisposable
     private readonly AppSettings _settings = new();
     private readonly List<(string Exe, IReadOnlyList<string> Args)> _started = new();
     private bool _elevated = true;
+    private bool _standardUser;
     private bool _setupStarts = true;
     private string? _programFiles;
     private Action<string>? _whileStarting;
@@ -47,6 +48,7 @@ public sealed class UpdateServiceTests : IDisposable
         ManifestUrl = ManifestUrl,
         HttpHandler = _http,
         IsElevated = () => _elevated,
+        IsStandardUser = () => _standardUser,
         ProgramFiles = _programFiles ?? Path.GetDirectoryName(_appDir)!, // by default the test program counts as installed under Program Files
         StartProcess = (exe, args) =>
         {
@@ -363,6 +365,76 @@ public sealed class UpdateServiceTests : IDisposable
         Assert.Contains("1.2.0", service.StatusText);
         Assert.Contains("администратора", service.StatusText);
         Assert.Empty(_started);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CheckOutsideProgramFiles_AsksForAManualDownload_NeverForTheRights(bool elevated)
+    {
+        // The setup is never started from there, so a restart with rights would not help.
+        Publish("1.2.0");
+        _elevated = elevated;
+        _programFiles = TestEnvironment.NewTempDir("upd-pf");
+        var service = Service();
+
+        await service.CheckAsync(manual: false, CancellationToken.None);
+
+        Assert.Equal(UpdateState.ManualRequired, service.State);
+        Assert.False(service.NeedsElevation);
+        Assert.Contains("Program Files", service.StatusText);
+        Assert.DoesNotContain(UpdateTestKit.Url("1.2.0"), _http.Requests); // nothing downloaded that could never be installed
+    }
+
+    [Fact]
+    public async Task CheckOnAStandardAccount_AsksForAManualDownload_NeverForTheRights()
+    {
+        // The elevated copy would run under the administrator's profile and find nothing staged there.
+        Publish("1.2.0");
+        _elevated = false;
+        _standardUser = true;
+        var service = Service();
+
+        await service.CheckAsync(manual: false, CancellationToken.None);
+
+        Assert.Equal(UpdateState.ManualRequired, service.State);
+        Assert.False(service.NeedsElevation);
+        Assert.Contains("прав администратора", service.StatusText);
+        Assert.Equal("Скачать вручную", UpdateBanner.For(service.State, service.Manifest, service.CurrentVersion, service.NeedsElevation)!.Action);
+        Assert.DoesNotContain(UpdateTestKit.Url("1.2.0"), _http.Requests);
+    }
+
+    [Fact]
+    public async Task InstallOnAStandardAccount_AsksForAManualDownload_NeverForTheRights()
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        _elevated = false;
+        _standardUser = true;
+        var service = Service();
+
+        Assert.False(service.InstallNow(Array.Empty<string>()));
+
+        Assert.Equal(UpdateState.ManualRequired, service.State);
+        Assert.False(service.NeedsElevation);
+        Assert.Empty(_started);
+    }
+
+    [Fact]
+    public async Task InstallOutsideProgramFiles_WithoutTheRights_AsksForAManualDownload_NotForTheRights()
+    {
+        // The Program Files gate comes before the rights: a restart with rights would end in the same manual download.
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        _elevated = false;
+        _programFiles = TestEnvironment.NewTempDir("upd-pf");
+        var service = Service();
+
+        Assert.False(service.InstallNow(Array.Empty<string>()));
+
+        Assert.Equal(UpdateState.ManualRequired, service.State);
+        Assert.False(service.NeedsElevation);
+        Assert.Contains("Program Files", service.StatusText);
     }
 
     [Fact]
