@@ -148,7 +148,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
     /// </summary>
     public WelcomeViewModel Welcome { get; }
 
-    private UpdateBanner? Banner => _updateBannerDismissed ? null : UpdateBanner.For(Updates.State, Updates.Manifest, Updates.CurrentVersion);
+    private UpdateBanner? Banner => _updateBannerDismissed ? null : UpdateBanner.For(Updates.State, Updates.Manifest, Updates.CurrentVersion, Updates.NeedsElevation);
 
     public bool ShowUpdateBanner => Banner is not null;
 
@@ -242,6 +242,12 @@ public sealed class MainViewModel : ObservableObject, INavigator
         switch (Updates.State)
         {
             case UpdateState.Ready:
+                if (Updates.NeedsElevation)
+                {
+                    // The elevated copy installs the staged setup at its start (UpdateService.TryInstallStaged).
+                    Admin.RestartElevated();
+                    break;
+                }
                 var busy = Pages.Where(p => p.IsBusy).Select(p => p.Title).ToList();
                 if (busy.Count > 0 && !Dialogs.Confirm(T._("Установка обновления"), UpdateBanner.BusyWarning(busy)))
                     return;

@@ -1,90 +1,83 @@
-using System.Diagnostics;
 using System.IO;
 using PcCleaner.Core.Updates;
 using Xunit;
 
 namespace PcCleaner.Tests.Updates;
 
+/// <summary>The verified copy of the downloaded setup and the folder it is started from (temp folders only).</summary>
 public class UpdateInstallerTests
 {
     public UpdateInstallerTests() => TestEnvironment.Init();
 
-    private static (string Exe, StagedUpdate Staged, byte[] NewBytes) Setup(UpdateTestKit kit, byte[]? oldBytes = null)
+    private static StagedUpdate Staged(byte[] served, byte[] promised)
     {
-        var app = TestEnvironment.NewTempDir("upd-app");
-        var exe = Path.Combine(app, "WaterCa7sPcCleaner.exe");
-        File.WriteAllBytes(exe, oldBytes ?? UpdateTestKit.FakeExe(1));
-        var store = new UpdateStore(TestEnvironment.NewTempDir("upd-store"));
-        var newBytes = UpdateTestKit.FakeExe(2);
-        var manifest = UpdateStoreTests.Stage(store, kit, "1.2.0", newBytes);
-        return (exe, new StagedUpdate(manifest, store.ExePathFor(manifest)), newBytes);
+        var dir = TestEnvironment.NewTempDir("inst-staged");
+        var path = Path.Combine(dir, UpdateEnvironment.SetupName);
+        File.WriteAllBytes(path, served);
+        var manifest = UpdateManifest.Parse(UpdateTestKit.ManifestJson("1.2.0", promised.Length, UpdateTestKit.Sha256(promised)), out _)!;
+        return new StagedUpdate(manifest, path);
     }
 
     [Fact]
-    public async Task Install_SwapsTheExe_AndCleanupRemovesTheOldOne()
+    public void PrepareSetup_CopiesTheVerifiedBytesIntoTheSetupFolder()
     {
-        using var kit = new UpdateTestKit();
-        var (exe, staged, newBytes) = Setup(kit);
+        var setup = UpdateTestKit.FakeExe(7);
+        var setupDir = Path.Combine(TestEnvironment.NewTempDir("inst-app"), "Updates");
 
-        UpdateInstaller.Install(staged, exe);
+        var path = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
 
-        Assert.Equal(newBytes, File.ReadAllBytes(exe));
-        Assert.True(File.Exists(exe + UpdateInstaller.OldSuffix));
-        Assert.False(File.Exists(exe + UpdateInstaller.NewSuffix));
-
-        await UpdateInstaller.CleanupAsync(exe, TimeSpan.FromSeconds(5));
-        Assert.False(File.Exists(exe + UpdateInstaller.OldSuffix));
-        Assert.True(File.Exists(exe));
+        Assert.Equal(Path.Combine(setupDir, UpdateEnvironment.SetupName), path);
+        Assert.Equal(setup, File.ReadAllBytes(path));
     }
 
     [Fact]
-    public void Install_RefusesAStagedFileChangedAfterTheCheck_AndKeepsTheOldExe()
+    public void PrepareSetup_RefusesAFileThatDiffersFromUpdateJson_AndLeavesNothing()
     {
-        using var kit = new UpdateTestKit();
-        var old = UpdateTestKit.FakeExe(1);
-        var (exe, staged, _) = Setup(kit, old);
-        File.WriteAllBytes(staged.ExePath, UpdateTestKit.FakeExe(9)); // same size, other bytes
+        var setupDir = Path.Combine(TestEnvironment.NewTempDir("inst-app"), "Updates");
 
-        Assert.Throws<UpdateException>(() => UpdateInstaller.Install(staged, exe));
+        Assert.Throws<UpdateException>(() => UpdateInstaller.PrepareSetup(Staged(UpdateTestKit.FakeExe(8), UpdateTestKit.FakeExe(7)), setupDir));
 
-        Assert.Equal(old, File.ReadAllBytes(exe));
-        Assert.False(File.Exists(exe + UpdateInstaller.NewSuffix));
-        Assert.False(File.Exists(exe + UpdateInstaller.OldSuffix));
+        Assert.Empty(Directory.EnumerateFiles(setupDir));
     }
 
     [Fact]
-    public void Install_WhenTheExeCannotBeMoved_LeavesEverythingAsItWas()
+    public void PrepareSetup_ReplacesAnOlderCopy()
     {
-        using var kit = new UpdateTestKit();
-        var old = UpdateTestKit.FakeExe(1);
-        var (exe, staged, _) = Setup(kit, old);
-        using (new FileStream(exe, FileMode.Open, FileAccess.Read, FileShare.Read)) // no FILE_SHARE_DELETE: rename fails
-            Assert.ThrowsAny<IOException>(() => UpdateInstaller.Install(staged, exe));
+        var setupDir = Path.Combine(TestEnvironment.NewTempDir("inst-app"), "Updates");
+        Directory.CreateDirectory(setupDir);
+        File.WriteAllBytes(Path.Combine(setupDir, UpdateEnvironment.SetupName), new byte[] { 1, 2, 3 });
+        var setup = UpdateTestKit.FakeExe(9);
 
-        Assert.Equal(old, File.ReadAllBytes(exe));
-        Assert.False(File.Exists(exe + UpdateInstaller.NewSuffix));
-        Assert.False(File.Exists(exe + UpdateInstaller.OldSuffix));
+        var path = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
+
+        Assert.Equal(setup, File.ReadAllBytes(path));
     }
 
     [Fact]
-    public async Task Install_ReplacesARunningExe()
+    public void SetupArgs_AreSilentAndNameTheVersionWeCameFrom()
+        => Assert.Equal(new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATEDFROM=1.3.1" },
+            UpdateInstaller.SetupArgs(new Version(1, 3, 1)));
+
+    [Fact]
+    public async Task CleanupSetup_RemovesTheFolder_OnceTheSetupHasExited()
     {
-        // Windows lets a running exe be renamed: the updater relies on this. A copy of ping.exe stands in for the app.
-        using var kit = new UpdateTestKit();
-        var (exe, staged, newBytes) = Setup(kit);
-        File.Copy(Path.Combine(Environment.SystemDirectory, "PING.EXE"), exe, overwrite: true);
-        using var running = Process.Start(new ProcessStartInfo(exe, "-n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
-        try
+        var setupDir = Path.Combine(TestEnvironment.NewTempDir("inst-app"), "Updates");
+        Directory.CreateDirectory(setupDir);
+        var file = Path.Combine(setupDir, UpdateEnvironment.SetupName);
+        File.WriteAllBytes(file, new byte[] { 1 });
+        var running = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read); // the setup is still running
+        _ = Task.Run(async () =>
         {
-            UpdateInstaller.Install(staged, exe);
-            Assert.Equal(newBytes, File.ReadAllBytes(exe));
-        }
-        finally
-        {
-            running.Kill();
-            running.WaitForExit();
-        }
-        await UpdateInstaller.CleanupAsync(exe, TimeSpan.FromSeconds(10));
-        Assert.Empty(Directory.EnumerateFiles(Path.GetDirectoryName(exe)!, "*" + UpdateInstaller.OldSuffix));
+            await Task.Delay(700);
+            running.Dispose();
+        });
+
+        await UpdateInstaller.CleanupSetupAsync(setupDir, TimeSpan.FromSeconds(10));
+
+        Assert.False(Directory.Exists(setupDir));
     }
+
+    [Fact]
+    public async Task CleanupSetup_WithoutAFolder_DoesNothing()
+        => await UpdateInstaller.CleanupSetupAsync(Path.Combine(TestEnvironment.NewTempDir("inst-app"), "Updates"), TimeSpan.FromSeconds(1));
 }

@@ -18,8 +18,8 @@ public static class StartupElevation
     /// <summary>
     /// Added by <see cref="TryRelaunchElevated(IReadOnlyList{string}, Func{ProcessStartInfo, bool})"/> to the arguments of
     /// the restarted copy. If that copy still has no rights (UAC switched off, an odd token, a policy) it sees the marker
-    /// and works without them instead of restarting itself forever. Never passed on: not to the update restart
-    /// (<see cref="UpdateService.RestartArgs"/>), not to the restart buttons (<see cref="Admin.ElevatedStartInfo"/>).
+    /// and works without them instead of restarting itself forever. Never passed on: not to the update setup
+    /// (<see cref="UpdateInstaller.SetupArgs"/>), not to the restart buttons (<see cref="Admin.ElevatedStartInfo"/>).
     /// </summary>
     public const string ElevatedRestartArg = "--elevated-restart";
 

@@ -191,11 +191,6 @@ public class ModesRulesTests
             AppRestart.Args(new[] { "--lang", "en", "--no-scan", "--MODE", "simple" }));
 
     [Fact]
-    public void RestartArgs_DoNotChangeWhatTheUpdaterPassesOn()
-        => Assert.Equal(new[] { "--page", "Cleaner", "--updated-from", "1.0.0" },
-            UpdateService.RestartArgs(new[] { "--page", "Cleaner", "--elevated-restart", "--updated-from", "0.9.0" }, new Version(1, 0, 0)));
-
-    [Fact]
     public void Restart_StartsTheSameExeWithThoseArguments_AndClosesThisCopy()
     {
         var starts = new List<(string Exe, string[] Args)>();

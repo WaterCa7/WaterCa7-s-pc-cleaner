@@ -17,7 +17,7 @@ public enum UpdateState
 }
 
 /// <summary>
-/// Automatic updates: at startup (before the window) install a staged update; in the background check, download and stage
+/// Automatic updates: at startup (before the window) start the setup of a staged update; in the background check, download and stage
 /// a newer version; report the state for the banner and the Settings page. Screenshot mode never runs the flow
 /// (App skips it); a development build never checks or installs.
 /// </summary>
@@ -33,6 +33,7 @@ public sealed class UpdateService : ObservableObject
     private UpdateManifest? _manifest;
     private double _progress;
     private int _checking;
+    private bool _needsElevation;
 
     public UpdateService(UpdateEnvironment env, Func<AppSettings> settings)
     {
@@ -69,27 +70,38 @@ public sealed class UpdateService : ObservableObject
         private set => Set(ref _progress, value);
     }
 
+    /// <summary>A verified update is ready, but this copy runs without the rights: only an elevated copy may start the setup.</summary>
+    public bool NeedsElevation
+    {
+        get => _needsElevation;
+        private set => Set(ref _needsElevation, value);
+    }
+
     public Version CurrentVersion => UpdateManifest.Normalize(_env.CurrentVersion);
 
     public bool CanUpdate => _env.IsInstalledBuild;
 
     /// <summary>
-    /// At startup, before the window: if a verified update is staged and automatic updates are on, put it in place and
-    /// start it. True = the new version is starting and this process must exit now.
+    /// At startup, before the window: if a verified update is staged and automatic updates are on, start the setup of it.
+    /// True = the setup is starting and this process must exit now. <paramref name="args"/> are not passed on: the setup starts
+    /// the new version with <c>--updated-from</c> only.
     /// </summary>
     public bool TryInstallStaged(IReadOnlyList<string> args)
-        => CanUpdate && _settings().AutoUpdate && Install(_store.FindStaged(_env.CurrentVersion, _env.PublicKeyPem), args);
+        => CanUpdate && _settings().AutoUpdate && Install(_store.FindStaged(_env.CurrentVersion, _env.PublicKeyPem));
 
-    /// <summary>«Перезапустить сейчас»: installs the staged update whatever the setting says (the user asked for it).</summary>
+    /// <summary>
+    /// «Перезапустить сейчас»: starts the setup of the staged update whatever the setting says (the user asked for it).
+    /// True = the setup is starting and this process must exit now. <paramref name="args"/> are not passed on.
+    /// </summary>
     public bool InstallNow(IReadOnlyList<string> args)
-        => CanUpdate && Install(_store.FindStaged(_env.CurrentVersion, _env.PublicKeyPem), args);
+        => CanUpdate && Install(_store.FindStaged(_env.CurrentVersion, _env.PublicKeyPem));
 
-    /// <summary>The new version, right after the restart: removes the old exe and the staged files.</summary>
+    /// <summary>The new version, right after the setup started it: removes the setup folder and the staged files.</summary>
     public async Task CompleteUpdateAsync(string fromVersion)
     {
         Manifest = _store.LoadVerified(CurrentVersion, _env.PublicKeyPem);
         _store.Clean();
-        await UpdateInstaller.CleanupAsync(_env.ExePath, TimeSpan.FromSeconds(30));
+        await UpdateInstaller.CleanupSetupAsync(_env.SetupDir, TimeSpan.FromSeconds(30));
         State = UpdateState.Updated;
         StatusText = T.F("Программа обновлена с версии {0} до {1}.", fromVersion, CurrentVersion.ToString(3));
         Log.Action(T.F("Обновление: работает версия {0} (была {1})", CurrentVersion.ToString(3), fromVersion));
@@ -174,14 +186,6 @@ public sealed class UpdateService : ObservableObject
         }
     }
 
-    internal static List<string> RestartArgs(IReadOnlyList<string> args, Version from)
-    {
-        var result = WithoutStartMarkers(args);
-        result.Add(UpdatedFromArg);
-        result.Add(from.ToString(3));
-        return result;
-    }
-
     /// <summary>
     /// The arguments of this start without the ones that belong to this very start: <c>--updated-from &lt;version&gt;</c> and
     /// <c>--elevated-restart</c> (only the restart at startup uses it, and only for the copy it starts) and
@@ -206,7 +210,7 @@ public sealed class UpdateService : ObservableObject
         return result;
     }
 
-    private bool Install(StagedUpdate? staged, IReadOnlyList<string> args)
+    private bool Install(StagedUpdate? staged)
     {
         if (staged is null)
             return false;
@@ -217,13 +221,23 @@ public sealed class UpdateService : ObservableObject
             RequireManual(staged.Manifest, T._("автоматическая установка уже дважды не удалась"));
             return false;
         }
+        if (!_env.IsElevated())
+        {
+            // The setup runs as administrator: a copy without the rights cannot put it into the protected program folder first,
+            // and starting it from the user's folder would let any program swap it. The banner offers the restart with rights.
+            NeedsElevation = true;
+            State = UpdateState.Ready;
+            StatusText = T.F("Версия {0} скачана — для установки нужны права администратора.", version);
+            return false;
+        }
+        string setup;
         try
         {
-            UpdateInstaller.Install(staged, _env.ExePath);
+            setup = UpdateInstaller.PrepareSetup(staged, _env.SetupDir);
         }
         catch (UnauthorizedAccessException ex)
         {
-            Log.Warn(T.F("Обновление до {0}: нет прав на запись в папку {1} — {2}", version, Path.GetDirectoryName(_env.ExePath), ErrorText.For(ex)), ex);
+            Log.Warn(T.F("Обновление до {0}: нет прав на запись в папку {1} — {2}", version, _env.SetupDir, ErrorText.For(ex)), ex);
             RequireManual(staged.Manifest, T._("нет прав на запись в папку программы"));
             return false;
         }
@@ -235,13 +249,14 @@ public sealed class UpdateService : ObservableObject
             StatusText = T.F("Не удалось установить версию {0}: {1}. Попробуем при следующем запуске.", version, ErrorText.For(ex));
             return false;
         }
-        if (!_env.StartProcess(_env.ExePath, RestartArgs(args, CurrentVersion)))
+        if (!_env.StartProcess(setup, UpdateInstaller.SetupArgs(CurrentVersion)))
         {
+            _store.RecordFailure(version);
             State = UpdateState.Failed;
-            StatusText = T.F("Версия {0} установлена — запустите программу заново.", version);
+            StatusText = T.F("Установщик версии {0} не запустился. Попробуем при следующем запуске.", version);
             return false;
         }
-        Log.Action(T.F("Обновление: установлена версия {0}, перезапуск", version));
+        Log.Action(T.F("Обновление: запущена установка версии {0}", version));
         return true;
     }
 

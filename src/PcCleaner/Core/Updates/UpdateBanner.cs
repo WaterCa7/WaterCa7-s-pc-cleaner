@@ -5,8 +5,11 @@ namespace PcCleaner.Core.Updates;
 /// <summary>The strip above the page: what it says and what its button does (pure, unit-tested).</summary>
 public sealed record UpdateBanner(string Text, string Action)
 {
-    public static UpdateBanner? For(UpdateState state, UpdateManifest? manifest, Version current) => state switch
+    public static UpdateBanner? For(UpdateState state, UpdateManifest? manifest, Version current, bool needsElevation = false) => state switch
     {
+        UpdateState.Ready when manifest is not null && needsElevation => new(
+            T.F("Скачана новая версия {0} — для установки нужны права администратора.", manifest.Version),
+            T._("Перезапустить с правами и установить")),
         UpdateState.Ready when manifest is not null => new(
             T.F("Скачана новая версия {0} — она установится при следующем запуске программы.", manifest.Version), T._("Перезапустить сейчас")),
         UpdateState.Updated => new(

@@ -20,6 +20,7 @@ public sealed class UpdateServiceTests : IDisposable
     private readonly byte[] _newExe = UpdateTestKit.FakeExe(2);
     private readonly AppSettings _settings = new();
     private readonly List<(string Exe, IReadOnlyList<string> Args)> _started = new();
+    private bool _elevated = true;
 
     public UpdateServiceTests()
     {
@@ -32,6 +33,8 @@ public sealed class UpdateServiceTests : IDisposable
 
     private string ExePath => Path.Combine(_appDir, UpdateEnvironment.ExeName);
 
+    private string SetupCopy => Path.Combine(_appDir, "Updates", UpdateEnvironment.SetupName);
+
     private UpdateService Service(string current = "1.1.0") => new(new UpdateEnvironment
     {
         ExePath = ExePath,
@@ -40,6 +43,7 @@ public sealed class UpdateServiceTests : IDisposable
         PublicKeyPem = _kit.PublicKeyPem,
         ManifestUrl = ManifestUrl,
         HttpHandler = _http,
+        IsElevated = () => _elevated,
         StartProcess = (exe, args) =>
         {
             _started.Add((exe, args));
@@ -72,16 +76,17 @@ public sealed class UpdateServiceTests : IDisposable
 
         var second = Service();
         Assert.True(second.TryInstallStaged(new[] { "--page", "Cleaner" }));
-        Assert.Equal(_newExe, File.ReadAllBytes(ExePath));
+        Assert.Equal(_oldExe, File.ReadAllBytes(ExePath)); // the setup replaces it, not the program
+        Assert.Equal(_newExe, File.ReadAllBytes(SetupCopy));
         var (startedExe, args) = Assert.Single(_started);
-        Assert.Equal(ExePath, startedExe);
-        Assert.Equal(new[] { "--page", "Cleaner", UpdateService.UpdatedFromArg, "1.1.0" }, args);
+        Assert.Equal(SetupCopy, startedExe);
+        Assert.Equal(UpdateInstaller.SetupArgs(new Version(1, 1, 0)), args);
 
         var updated = Service("1.2.0");
         await updated.CompleteUpdateAsync("1.1.0");
         Assert.Equal(UpdateState.Updated, updated.State);
         Assert.Equal("Новая иконка", updated.Manifest!.Notes);
-        Assert.False(File.Exists(ExePath + UpdateInstaller.OldSuffix));
+        Assert.False(Directory.Exists(Path.Combine(_appDir, "Updates")));
         Assert.Empty(Directory.EnumerateFileSystemEntries(_updatesDir));
     }
 
@@ -150,7 +155,7 @@ public sealed class UpdateServiceTests : IDisposable
         Assert.Equal(UpdateState.Ready, service.State);
         Assert.False(Service().TryInstallStaged(Array.Empty<string>()));
         Assert.True(Service().InstallNow(Array.Empty<string>()));
-        Assert.Equal(_newExe, File.ReadAllBytes(ExePath));
+        Assert.Equal(_newExe, File.ReadAllBytes(SetupCopy));
     }
 
     [Fact]
@@ -170,12 +175,14 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task LockedExe_TwoFailedInstalls_ThenManualDownload()
+    public async Task LockedSetupCopy_TwoFailedInstalls_ThenManualDownload()
     {
         Publish("1.2.0");
         await Service().CheckAsync(manual: false, CancellationToken.None);
+        Directory.CreateDirectory(Path.Combine(_appDir, "Updates"));
+        File.WriteAllBytes(SetupCopy, new byte[] { 1 });
 
-        using (new FileStream(ExePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (new FileStream(SetupCopy, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             Assert.False(Service().TryInstallStaged(Array.Empty<string>()));
             Assert.False(Service().TryInstallStaged(Array.Empty<string>()));
@@ -194,7 +201,7 @@ public sealed class UpdateServiceTests : IDisposable
         Publish("1.2.0");
         await Service().CheckAsync(manual: false, CancellationToken.None);
         var dir = new DirectoryInfo(_appDir);
-        var deny = new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.CreateFiles, AccessControlType.Deny);
+        var deny = new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.CreateFiles | FileSystemRights.CreateDirectories, AccessControlType.Deny);
         var acl = dir.GetAccessControl();
         acl.AddAccessRule(deny);
         dir.SetAccessControl(acl);
@@ -213,14 +220,21 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
-    public void RestartArgs_ReplaceAnEarlierUpdatedFrom()
-        => Assert.Equal(new[] { "--no-scan", UpdateService.UpdatedFromArg, "1.2.0" },
-            UpdateService.RestartArgs(new[] { UpdateService.UpdatedFromArg, "1.1.0", "--no-scan" }, new Version(1, 2, 0)));
+    public async Task WithoutTheRights_TheSetupIsNotStarted_AndTheBannerAsksForThem()
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        _elevated = false;
+        var service = Service();
 
-    [Fact]
-    public void RestartArgs_DropTheElevatedRestartMarker()
-        => Assert.Equal(new[] { "--page", "Cleaner", "--no-scan", UpdateService.UpdatedFromArg, "1.2.0" },
-            UpdateService.RestartArgs(new[] { "--page", "Cleaner", "--Elevated-Restart", "--no-scan" }, new Version(1, 2, 0)));
+        Assert.False(service.TryInstallStaged(Array.Empty<string>()));
+
+        Assert.True(service.NeedsElevation);
+        Assert.Equal(UpdateState.Ready, service.State);
+        Assert.Empty(_started);
+        Assert.False(File.Exists(SetupCopy));
+        Assert.Equal(0, new UpdateStore(_updatesDir).FailuresFor(new Version(1, 2, 0))); // not a failed install
+    }
 
     [Fact]
     public void Settings_AutoUpdateIsOnByDefault_AndSurvivesSaving()

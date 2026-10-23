@@ -5,59 +5,59 @@ using PcCleaner.Core.Localization;
 namespace PcCleaner.Core.Updates;
 
 /// <summary>
-/// Puts a staged exe in place of the running one. The staged file lives in a user-writable folder, so it is opened with
-/// writes denied and the very bytes that are copied are the bytes that are hashed: nothing can swap the file between the
-/// check and the install, even when the program runs as administrator.
+/// Gets a downloaded setup ready to run. The staged file lives in a user-writable folder, so it is opened with writes denied and
+/// the very bytes that are copied into the program's own Updates folder are the bytes that are hashed: nothing can swap the file
+/// between the check and the start, although the setup runs as administrator.
 /// </summary>
 public static class UpdateInstaller
 {
-    public const string NewSuffix = ".new";
-    public const string OldSuffix = ".old";
+    /// <summary>The setup's switches for an update: no windows, no questions, no reboot, and where we came from.</summary>
+    public static List<string> SetupArgs(Version from)
+        => new() { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATEDFROM=" + from.ToString(3) };
 
     /// <summary>
-    /// Replaces <paramref name="exePath"/> with the staged file; the current exe becomes "*.old" (Windows allows renaming a
-    /// running exe). On any failure the original exe stays in place or is put back.
+    /// Copies the staged setup into <paramref name="setupDir"/> and returns the copy's path. Nothing is left behind on failure.
     /// </summary>
     /// <exception cref="UnauthorizedAccessException">The program folder is not writable.</exception>
     /// <exception cref="UpdateException">The staged file does not match update.json.</exception>
     /// <exception cref="IOException">A file is locked.</exception>
-    public static void Install(StagedUpdate staged, string exePath)
+    public static string PrepareSetup(StagedUpdate staged, string setupDir)
     {
-        var newPath = exePath + NewSuffix;
-        var oldPath = exePath + OldSuffix;
-        var movedAway = false;
+        Directory.CreateDirectory(setupDir);
+        var target = Path.Combine(setupDir, staged.Manifest.Download.Name);
+        if (File.Exists(target))
+            File.Delete(target);
         try
         {
-            if (File.Exists(newPath))
-                File.Delete(newPath);
-            CopyVerified(staged, newPath);
-            if (!TryDelete(oldPath))
-                oldPath = $"{exePath}.{Guid.NewGuid():N}{OldSuffix}";
-            File.Move(exePath, oldPath);
-            movedAway = true;
-            File.Move(newPath, exePath);
+            CopyVerified(staged, target);
         }
         catch
         {
-            if (movedAway && !File.Exists(exePath))
-                File.Move(oldPath, exePath);
-            TryDelete(newPath);
+            TryDelete(target);
             throw;
         }
+        return target;
     }
 
-    /// <summary>Run by the new version: deletes the previous exe(s) next to it, retrying while the old process exits.</summary>
-    public static async Task CleanupAsync(string exePath, TimeSpan timeout, CancellationToken ct = default)
+    /// <summary>Run by the new version: removes the setup folder, retrying while the setup that started it exits.</summary>
+    public static async Task CleanupSetupAsync(string setupDir, TimeSpan timeout, CancellationToken ct = default)
     {
-        var dir = Path.GetDirectoryName(exePath)!;
-        var pattern = Path.GetFileName(exePath) + "*" + OldSuffix;
         var deadline = DateTime.UtcNow + timeout;
-        while (true)
+        while (Directory.Exists(setupDir))
         {
-            TryDelete(exePath + NewSuffix);
-            var left = Directory.EnumerateFiles(dir, pattern).Count(file => !TryDelete(file));
-            if (left == 0 || DateTime.UtcNow >= deadline)
+            try
+            {
+                Directory.Delete(setupDir, recursive: true);
                 return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (DateTime.UtcNow >= deadline)
+                {
+                    Log.Warn(T.F("Обновление: не удалось удалить {0}: {1}", setupDir, ErrorText.For(ex)), ex);
+                    return;
+                }
+            }
             await Task.Delay(500, ct);
         }
     }

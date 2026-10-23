@@ -49,6 +49,7 @@ public sealed class SplashViewModelTests : IDisposable
         PublicKeyPem = _kit.PublicKeyPem,
         ManifestUrl = ManifestUrl,
         HttpHandler = _http,
+        IsElevated = () => true,
         StartProcess = (exe, args) =>
         {
             _started.Add((exe, args));
@@ -121,7 +122,7 @@ public sealed class SplashViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task NewVersion_ByDefaultInstallsTheStagedExeAndStartsItWithTheSameArguments()
+    public async Task NewVersion_ByDefaultStartsTheVerifiedSetup()
     {
         Publish("1.2.0");
         var updates = Service();
@@ -133,10 +134,12 @@ public sealed class SplashViewModelTests : IDisposable
         await Started(splash, CancellationToken.None).WaitAsync(Timeout);
 
         Assert.Equal(1, _shutdownCalls);
-        Assert.Equal(_newExe, File.ReadAllBytes(ExePath));
+        Assert.Equal(_oldExe, File.ReadAllBytes(ExePath));
+        var setup = Path.Combine(_appDir, "Updates", UpdateEnvironment.SetupName);
+        Assert.Equal(_newExe, File.ReadAllBytes(setup));
         var (exe, args) = Assert.Single(_started);
-        Assert.Equal(ExePath, exe);
-        Assert.Equal(new[] { "--page", "Cleaner", UpdateService.UpdatedFromArg, "1.1.0" }, args);
+        Assert.Equal(setup, exe);
+        Assert.Equal(UpdateInstaller.SetupArgs(new Version(1, 1, 0)), args);
     }
 
     [Fact]

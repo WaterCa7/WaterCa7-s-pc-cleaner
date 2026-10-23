@@ -17,6 +17,15 @@ public class UpdateBannerTests
     }
 
     [Fact]
+    public void Ready_WithoutTheRights_OffersTheRestartWithThem()
+    {
+        var banner = UpdateBanner.For(UpdateState.Ready, M, new Version(1, 3, 1), needsElevation: true)!;
+
+        Assert.Contains("1.2.0", banner.Text);
+        Assert.Equal("Перезапустить с правами и установить", banner.Action);
+    }
+
+    [Fact]
     public void Updated_OffersTheNotes()
     {
         var b = UpdateBanner.For(UpdateState.Updated, M, new Version(1, 2, 0))!;
