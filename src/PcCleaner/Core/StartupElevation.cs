@@ -25,7 +25,8 @@ public static class StartupElevation
 
     /// <summary>
     /// False when the restart must not happen: already elevated, switched off, a --screenshots verification run, the
-    /// restart has already been made once (<see cref="ElevatedRestartArg"/> and still no rights: logged), the user has
+    /// restart has already been made once (<see cref="ElevatedRestartArg"/> and still no rights: logged) or the copy was started
+    /// by the task (<see cref="ElevatedTask.FromTaskArg"/>: the task did not give the rights either), the user has
     /// already said no (<see cref="DeclinedArg"/>), or the updater has just started this version
     /// (<see cref="UpdateService.UpdatedFromArg"/>: an elevated updater starts it elevated, a limited one was declined).
     /// </summary>
@@ -33,7 +34,8 @@ public static class StartupElevation
     {
         if (isElevated || !runAsAdmin || screenshotMode)
             return false;
-        if (args.Any(a => string.Equals(a, ElevatedRestartArg, StringComparison.OrdinalIgnoreCase)))
+        if (args.Any(a => string.Equals(a, ElevatedRestartArg, StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(a, ElevatedTask.FromTaskArg, StringComparison.OrdinalIgnoreCase)))
         {
             Log.Warn(T._("Перезапуск с правами администратора не дал прав — работаем без них"));
             return false;

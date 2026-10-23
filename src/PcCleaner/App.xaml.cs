@@ -71,6 +71,15 @@ public partial class App : Application
         var version = typeof(App).Assembly.GetName().Version?.ToString(3);
         Log.Info(Admin.IsElevated ? T.F("Запуск WaterCa7s PC Cleaner {0} (администратор)", version) : T.F("Запуск WaterCa7s PC Cleaner {0}", version));
 
+        // The setup's commands (install: register the task; uninstall: remove the tasks) run without a window or the single-copy
+        // place: the program may be open at that moment.
+        if (ScreenshotDir is null && ElevatedTask.CommandIn(e.Args) is { } command)
+        {
+            Shutdown(ElevatedTask.RunCommand(command, AppServices.Settings.RunAsAdmin, Admin.IsElevated,
+                Environment.ProcessPath ?? "", ElevatedTask.ProgramFiles, ElevatedTask.CurrentUserSid()));
+            return;
+        }
+
         // One copy per session, taken before the restart with rights below: a second click while this copy still asks for them,
         // or while the window is open, shows that window instead of opening another one. Verification runs never take part.
         if (ScreenshotDir is null)
@@ -84,18 +93,25 @@ public partial class App : Application
             }
         }
 
-        // Always as administrator (Настройки can switch it off): restart elevated before anything else happens, so the
+        // Always as administrator (Настройки can switch it off): the installed program starts its Task Scheduler task (no UAC
+        // prompt); otherwise, or if the task does not run, it restarts itself through UAC. Before anything else happens, so the
         // update below is installed and started by the elevated copy and no second question is asked. «Нет» in the Windows
         // prompt keeps this process: the program opens with limited rights, as it always did.
         if (StartupElevation.ShouldElevate(Admin.IsElevated, AppServices.Settings.RunAsAdmin, ScreenshotDir is not null, e.Args))
         {
-            if (StartupElevation.TryRelaunchElevated(e.Args, StartupElevation.Start))
+            if (ElevatedTask.TryStart(Environment.ProcessPath ?? "", ElevatedTask.ProgramFiles, ElevatedTask.CurrentUserSid()) ||
+                StartupElevation.TryRelaunchElevated(e.Args, StartupElevation.Start))
             {
                 Shutdown();
                 return;
             }
             Log.Info(T._("Программа открыта без прав администратора: часть проверок и исправлений недоступна"));
         }
+
+        // An elevated installed copy keeps this user's task in line with the setting (a second administrator of the PC gets it here).
+        if (ScreenshotDir is null)
+            ElevatedTask.Sync(AppServices.Settings.RunAsAdmin, Admin.IsElevated, Environment.ProcessPath ?? "",
+                ElevatedTask.ProgramFiles, ElevatedTask.CurrentUserSid());
 
         // Install an already downloaded update before any window appears; the new version starts and this one exits.
         if (ScreenshotDir is null && UpdatedFrom is null && AppServices.Updates.TryInstallAtStart(e.Args))
@@ -274,6 +290,11 @@ public partial class App : Application
                     break; // our own restart: only SingleInstance.WaitsForPrevious looks at it
                 case UpdateService.InstallUpdateArg:
                     break; // the banner's restart with rights: only UpdateService.TryInstallAtStart looks at it
+                case ElevatedTask.FromTaskArg:
+                    break; // started by the task: StartupElevation and SingleInstance look at it
+                case ElevatedTask.RegisterArg:
+                case ElevatedTask.UnregisterArg:
+                    break; // the setup's commands: OnStartup runs them before anything else
                 case "--lang" when i + 1 < args.Length:
                     var language = args[++i].Trim().ToLowerInvariant();
                     LanguageArg = T.IsSupported(language) ? language : null;

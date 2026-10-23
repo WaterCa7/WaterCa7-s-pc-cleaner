@@ -98,7 +98,7 @@ public class SettingsViewModelTests
     public void RunAsAdmin_HintSaysWhatTheSwitchCosts()
     {
         Assert.Equal(
-            "Windows будет спрашивать разрешение при каждом запуске; без прав часть проверок и исправлений недоступна.",
+            "Установленная программа запускается с правами без вопросов Windows; без прав часть проверок и исправлений недоступна.",
             Create().RunAsAdminHint);
     }
 

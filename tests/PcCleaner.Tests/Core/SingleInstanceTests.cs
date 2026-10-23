@@ -158,6 +158,7 @@ public class SingleInstanceTests
     [InlineData("--elevated-restart", true)]             // the restart with rights at startup
     [InlineData("--updated-from 1.2.0", true)]           // the updater started the new version
     [InlineData("--restarted", true)]                    // «Перезапустить сейчас», «Запустить как админ»
+    [InlineData("--from-task", true)]                    // the task's copy: the shortcut's copy is still closing
     [InlineData("--page Cleaner --RESTARTED", true)]     // arguments are case-insensitive
     public void WaitsForPrevious(string args, bool expected)
         => Assert.Equal(expected, SingleInstance.WaitsForPrevious(args.Split(' ', StringSplitOptions.RemoveEmptyEntries)));
@@ -165,5 +166,5 @@ public class SingleInstanceTests
     [Fact]
     public void TheRestartMarker_BelongsToOneStart_AndIsNotPassedOn()
         => Assert.Equal(new[] { "--page", "Cleaner" },
-            UpdateService.WithoutStartMarkers(new[] { "--restarted", "--page", "Cleaner", "--elevated-restart" }));
+            UpdateService.WithoutStartMarkers(new[] { "--restarted", "--page", "Cleaner", "--elevated-restart", "--from-task" }));
 }

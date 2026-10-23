@@ -31,6 +31,8 @@ public class StartupElevationTests
     [InlineData(false, true, false, "--elevated-restart", false)]              // our own restart did not give the rights: no loop
     [InlineData(false, true, false, "--page Cleaner --ELEVATED-RESTART", false)]
     [InlineData(true, true, false, "--elevated-restart", false)]               // the restart worked
+    [InlineData(false, true, false, "--from-task", false)]                     // the task did not give the rights: no loop
+    [InlineData(true, true, false, "--from-task", false)]                      // the task worked
     public void ShouldElevate(bool isElevated, bool runAsAdmin, bool screenshotMode, string args, bool expected)
     {
         var list = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);

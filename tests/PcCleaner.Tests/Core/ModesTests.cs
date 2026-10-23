@@ -183,7 +183,7 @@ public class ModesRulesTests
     [Fact]
     public void RestartArgs_DropTheMarkersOfOneStart()
         => Assert.Equal(new[] { "--page", "Cleaner", "--restarted" },
-            AppRestart.Args(new[] { "--updated-from", "1.2.3", "--page", "Cleaner", "--elevated-restart", "--restarted" }));
+            AppRestart.Args(new[] { "--updated-from", "1.2.3", "--page", "Cleaner", "--elevated-restart", "--from-task", "--restarted" }));
 
     [Fact]
     public void RestartArgs_DropTheLanguageAndTheModeOfThatRun_SoThatTheSavedLanguageWins()

@@ -32,7 +32,10 @@ public sealed partial class SettingsViewModel
         }
     }
 
-    /// <summary>«Запускать с правами администратора»: the program restarts itself elevated at every start (<see cref="StartupElevation"/>).</summary>
+    /// <summary>
+    /// «Запускать с правами администратора»: the installed program starts elevated through its task (<see cref="ElevatedTask"/>),
+    /// other copies restart themselves through UAC (<see cref="StartupElevation"/>).
+    /// </summary>
     public bool RunAsAdmin
     {
         get => _runAsAdmin;
@@ -44,6 +47,8 @@ public sealed partial class SettingsViewModel
             SaveSettings(value
                 ? T._("Настройки: запуск с правами администратора — включён")
                 : T._("Настройки: запуск с правами администратора — выключен"));
+            // An elevated copy creates or removes the task at once; a limited one leaves it — the start reads the setting first.
+            ElevatedTask.Sync(value, Admin.IsElevated, Environment.ProcessPath ?? "", ElevatedTask.ProgramFiles, ElevatedTask.CurrentUserSid());
         }
     }
 
@@ -147,7 +152,7 @@ public sealed partial class SettingsViewModel
     }
 
     public string RunAsAdminHint =>
-        T._("Windows будет спрашивать разрешение при каждом запуске; без прав часть проверок и исправлений недоступна.");
+        T._("Установленная программа запускается с правами без вопросов Windows; без прав часть проверок и исправлений недоступна.");
 
     public List<AgeOption> AgeOptions
     {

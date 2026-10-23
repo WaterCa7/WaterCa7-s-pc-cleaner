@@ -42,12 +42,13 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>
-    /// True for the starts that come from a restart of this program: the restart with rights at startup, the updater and
+    /// True for the starts that come from a restart of this program: the restart with rights at startup, the updater, the task and
     /// <see cref="RestartArg"/>. Their previous copy is still closing.
     /// </summary>
     public static bool WaitsForPrevious(IReadOnlyList<string> args)
         => args.Any(a => string.Equals(a, StartupElevation.ElevatedRestartArg, StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(a, UpdateService.UpdatedFromArg, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(a, ElevatedTask.FromTaskArg, StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(a, RestartArg, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The place of the program for a start with these arguments; null = another copy runs, it was asked to show itself.</summary>

@@ -212,6 +212,7 @@ public sealed class UpdateService : ObservableObject
     /// <summary>
     /// The arguments of this start without the ones that belong to this very start: <c>--updated-from &lt;version&gt;</c> and
     /// <c>--elevated-restart</c> (only the restart at startup uses it, and only for the copy it starts),
+    /// <see cref="ElevatedTask.FromTaskArg"/> (the task's copy: the same),
     /// <see cref="InstallUpdateArg"/> (the same: one start only) and
     /// <see cref="SingleInstance.RestartArg"/> (each restart adds its own). Every restart builds
     /// the arguments of the next copy from this list.
@@ -227,6 +228,7 @@ public sealed class UpdateService : ObservableObject
                 continue;
             }
             if (string.Equals(args[i], StartupElevation.ElevatedRestartArg, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(args[i], ElevatedTask.FromTaskArg, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(args[i], InstallUpdateArg, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(args[i], SingleInstance.RestartArg, StringComparison.OrdinalIgnoreCase))
                 continue;
