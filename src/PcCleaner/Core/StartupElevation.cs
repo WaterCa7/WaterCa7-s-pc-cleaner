@@ -34,8 +34,12 @@ public static class StartupElevation
     {
         if (isElevated || !runAsAdmin || screenshotMode)
             return false;
-        if (args.Any(a => string.Equals(a, ElevatedRestartArg, StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(a, ElevatedTask.FromTaskArg, StringComparison.OrdinalIgnoreCase)))
+        if (args.Any(a => string.Equals(a, ElevatedTask.FromTaskArg, StringComparison.OrdinalIgnoreCase)))
+        {
+            Log.Warn(T._("Копия, запущенная задачей Планировщика, не получила права — работаем без них"));
+            return false;
+        }
+        if (args.Any(a => string.Equals(a, ElevatedRestartArg, StringComparison.OrdinalIgnoreCase)))
         {
             Log.Warn(T._("Перезапуск с правами администратора не дал прав — работаем без них"));
             return false;

@@ -1627,6 +1627,7 @@
   "Копировать путь": "Copy path",
   "Копия сделана перед действием: {0}": "The backup was made before the action: {0}",
   "Копия файла hosts": "Copy of the hosts file",
+  "Копия, запущенная задачей Планировщика, не получила права — работаем без них": "The copy started by the Task Scheduler task did not get the rights — carrying on without them",
   "Корзина": "Recycle Bin",
   "Корзина будет очищена полностью (сейчас в ней {0}) — файлы из неё восстановить будет нельзя. Если к началу её очистки в корзину попадут новые файлы, программа спросит ещё раз.": "The Recycle Bin will be emptied completely (it holds {0} now) — you will not be able to restore files from it. If new files get into it before it is emptied, the program will ask again.",
   "Корзина не очищена — в ней появились новые файлы": "The Recycle Bin was not emptied — new files appeared in it",

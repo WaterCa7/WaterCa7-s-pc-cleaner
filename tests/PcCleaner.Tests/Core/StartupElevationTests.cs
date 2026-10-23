@@ -63,6 +63,33 @@ public class StartupElevationTests
         Assert.Equal(before + 1, LoopGuardWarnings());
     }
 
+    private const string TaskGuardWarning = "Копия, запущенная задачей Планировщика, не получила права — работаем без них";
+
+    private static int TaskGuardWarnings()
+        => Log.Entries.ToList().Count(e => e.Level == LogLevel.Warning && e.Message == TaskGuardWarning);
+
+    [Fact]
+    public void ShouldElevate_TheTasksCopyWithoutRights_SaysSoInTheJournal_NotAsARestart()
+    {
+        var restart = LoopGuardWarnings();
+        var task = TaskGuardWarnings();
+
+        Assert.False(StartupElevation.ShouldElevate(false, true, false, new[] { "--from-task" }));
+
+        Assert.Equal(task + 1, TaskGuardWarnings());
+        Assert.Equal(restart, LoopGuardWarnings());
+    }
+
+    [Fact]
+    public void ShouldElevate_TheRestartStillWithoutRights_IsNotReportedAsTheTask()
+    {
+        var task = TaskGuardWarnings();
+
+        Assert.False(StartupElevation.ShouldElevate(false, true, false, new[] { "--elevated-restart" }));
+
+        Assert.Equal(task, TaskGuardWarnings());
+    }
+
     [Theory]
     [InlineData(true, true, false)]   // the restart worked: nothing to complain about
     [InlineData(false, false, false)] // the user switched it off meanwhile
