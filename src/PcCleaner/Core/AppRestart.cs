@@ -17,7 +17,8 @@ internal static class AppRestart
     /// <summary>
     /// The arguments for the restarted copy: those of this start without what belongs to this start only
     /// (<see cref="UpdateService.WithoutStartMarkers"/>) and without <c>--lang</c> / <c>--mode</c> with their values — they
-    /// replace the settings for one run, so a language chosen in Настройки would never take effect.
+    /// replace the settings for one run, so a language chosen in Настройки would never take effect. Ends with
+    /// <see cref="SingleInstance.RestartArg"/>: the new copy starts while this one is still closing and must wait for it.
     /// </summary>
     internal static List<string> Args(IReadOnlyList<string> args)
     {
@@ -32,6 +33,7 @@ internal static class AppRestart
             }
             result.Add(kept[i]);
         }
+        result.Add(SingleInstance.RestartArg);
         return result;
     }
 

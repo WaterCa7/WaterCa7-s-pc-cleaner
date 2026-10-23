@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Threading;
 using PcCleaner.Core;
@@ -28,6 +30,9 @@ public partial class App : Application
 
     /// <summary>--welcome: the screenshot run also takes a picture of the first-run screen (00-Welcome.png), whatever the mode. A real run ignores it.</summary>
     internal static bool WelcomeArg { get; private set; }
+
+    /// <summary>The place of this copy (one per session); null in verification runs and before it is taken.</summary>
+    private SingleInstance? _instance;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -65,6 +70,19 @@ public partial class App : Application
 
         var version = typeof(App).Assembly.GetName().Version?.ToString(3);
         Log.Info(Admin.IsElevated ? T.F("Запуск WaterCa7s PC Cleaner {0} (администратор)", version) : T.F("Запуск WaterCa7s PC Cleaner {0}", version));
+
+        // One copy per session, taken before the restart with rights below: a second click while this copy still asks for them,
+        // or while the window is open, shows that window instead of opening another one. Verification runs never take part.
+        if (ScreenshotDir is null)
+        {
+            _instance = SingleInstance.Acquire(e.Args);
+            if (_instance is null)
+            {
+                Log.Info(T._("Программа уже открыта — показываем её окно"));
+                Shutdown();
+                return;
+            }
+        }
 
         // Always as administrator (Настройки can switch it off): restart elevated before anything else happens, so the
         // update below is installed and started by the elevated copy and no second question is asked. «Нет» in the Windows
@@ -112,6 +130,7 @@ public partial class App : Application
         }
 
         window.Show();
+        _instance?.ListenForActivation(() => window.Dispatcher.BeginInvoke(() => ShowFromAnotherStart(window)));
 
         // Screenshot mode never starts the splash or the welcome screen (the runner shows the latter only with --welcome): they
         // must not be visible or blur anything there. Right after an update the new version only cleans up, and the first-run
@@ -130,6 +149,33 @@ public partial class App : Application
             }
         }
     }
+
+    /// <summary>The copy's place is freed as soon as it closes: a restarted copy waits for exactly that.</summary>
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _instance?.Dispose();
+        _instance = null;
+        base.OnExit(e);
+    }
+
+    /// <summary>
+    /// A second start asked for the window: bring it back from the taskbar (to its size before, also maximized) and to the front.
+    /// </summary>
+    private static void ShowFromAnotherStart(Window window)
+    {
+        if (window.WindowState == WindowState.Minimized)
+            ShowWindow(new WindowInteropHelper(window).Handle, SwRestore);
+        window.Show();
+        window.Activate();
+        // Activate alone may only flash the taskbar button while another program is in front.
+        window.Topmost = true;
+        window.Topmost = false;
+    }
+
+    private const int SwRestore = 9;
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hwnd, int command);
 
     /// <summary>
     /// The splash, then the first-run screen if no mode is chosen yet. A splash that stays up (a new version is installed and the
@@ -224,6 +270,8 @@ public partial class App : Application
                     break;
                 case StartupElevation.ElevatedRestartArg:
                     break; // our own restart with rights: only StartupElevation.ShouldElevate looks at it
+                case SingleInstance.RestartArg:
+                    break; // our own restart: only SingleInstance.WaitsForPrevious looks at it
                 case "--lang" when i + 1 < args.Length:
                     var language = args[++i].Trim().ToLowerInvariant();
                     LanguageArg = T.IsSupported(language) ? language : null;

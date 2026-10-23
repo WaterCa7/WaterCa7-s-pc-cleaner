@@ -176,18 +176,18 @@ public class ModesRulesTests
     // ----- restart: the same arguments, minus what belongs to one start only -----
 
     [Fact]
-    public void RestartArgs_KeepTheOrdinaryArguments()
-        => Assert.Equal(new[] { "--page", "Cleaner", "--no-scan", "--elevation-declined" },
+    public void RestartArgs_KeepTheOrdinaryArguments_AndMarkTheRestart()
+        => Assert.Equal(new[] { "--page", "Cleaner", "--no-scan", "--elevation-declined", "--restarted" },
             AppRestart.Args(new[] { "--page", "Cleaner", "--no-scan", "--elevation-declined" }));
 
     [Fact]
     public void RestartArgs_DropTheMarkersOfOneStart()
-        => Assert.Equal(new[] { "--page", "Cleaner" },
-            AppRestart.Args(new[] { "--updated-from", "1.2.3", "--page", "Cleaner", "--elevated-restart" }));
+        => Assert.Equal(new[] { "--page", "Cleaner", "--restarted" },
+            AppRestart.Args(new[] { "--updated-from", "1.2.3", "--page", "Cleaner", "--elevated-restart", "--restarted" }));
 
     [Fact]
     public void RestartArgs_DropTheLanguageAndTheModeOfThatRun_SoThatTheSavedLanguageWins()
-        => Assert.Equal(new[] { "--no-scan" },
+        => Assert.Equal(new[] { "--no-scan", "--restarted" },
             AppRestart.Args(new[] { "--lang", "en", "--no-scan", "--MODE", "simple" }));
 
     [Fact]
@@ -212,7 +212,7 @@ public class ModesRulesTests
         Assert.True(started);
         var (exe, args) = Assert.Single(starts);
         Assert.Equal(@"C:\App\WaterCa7sPcCleaner.exe", exe);
-        Assert.Equal(new[] { "--page", "Cleaner" }, args);
+        Assert.Equal(new[] { "--page", "Cleaner", "--restarted" }, args); // the new copy waits until this one has closed
         Assert.Equal(1, shutdowns);
     }
 

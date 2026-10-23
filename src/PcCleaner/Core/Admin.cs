@@ -121,7 +121,7 @@ public static class Admin
             return false;
         try
         {
-            Process.Start(ElevatedStartInfo(exe));
+            Process.Start(ElevatedStartInfo(exe, new[] { SingleInstance.RestartArg })); // it waits until this copy has closed
             // Shutdown() only queues the closing of the windows: code that asked for the restart goes on running for a moment, and
             // must be able to tell "the program is closing" from "the user said no" (RequireElevation returns false for both).
             RestartStarted = true;
