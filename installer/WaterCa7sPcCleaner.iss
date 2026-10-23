@@ -42,10 +42,12 @@ CloseApplications=no
 ShowLanguageDialog=no
 LanguageDetectionMethod=uilanguage
 UsePreviousLanguage=no
+; Silent updates leave a log in %TEMP%.
+SetupLogging=yes
 
 [Languages]
-Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "en"; MessagesFile: "compiler:Default.isl"
+Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [CustomMessages]
 ru.CloseProgram=Программа WaterCa7s PC Cleaner сейчас открыта. Закройте её и нажмите «Повтор».
@@ -77,7 +79,7 @@ Filename: "{app}\{#ExeName}"; Parameters: "--updated-from {param:UPDATEDFROM}"; 
 Filename: "{app}\{#ExeName}"; Parameters: "--unregister-tasks"; Flags: runhidden waituntilterminated; RunOnceId: "UnregisterTasks"
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{app}\Updates"
 
 [Code]
 function IsUpdate: Boolean;
@@ -102,7 +104,7 @@ begin
     Exit;
   end;
   while CheckForMutexes('{#InstanceMutex}') do
-    if MsgBox(CustomMessage('CloseProgram'), mbError, MB_RETRYCANCEL) <> IDRETRY then
+    if SuppressibleMsgBox(CustomMessage('CloseProgram'), mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY then
     begin
       Result := False;
       Exit;
@@ -113,28 +115,24 @@ function InitializeUninstall: Boolean;
 begin
   Result := True;
   while CheckForMutexes('{#InstanceMutex}') do
-    if MsgBox(CustomMessage('CloseProgram'), mbError, MB_RETRYCANCEL) <> IDRETRY then
+    if SuppressibleMsgBox(CustomMessage('CloseProgram'), mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY then
     begin
       Result := False;
       Exit;
     end;
 end;
 
-function CountFiles(const Dir: String): Integer;
+// Quarantined files are <id>.quarantine directly in the folder; index.json and its backup are the program's own bookkeeping.
+function CountQuarantinedFiles(const Dir: String): Integer;
 var
   Rec: TFindRec;
 begin
   Result := 0;
-  if FindFirst(AddBackslash(Dir) + '*', Rec) then
+  if FindFirst(AddBackslash(Dir) + '*.quarantine', Rec) then
   try
     repeat
-      if (Rec.Name <> '.') and (Rec.Name <> '..') then
-      begin
-        if Rec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
-          Result := Result + CountFiles(AddBackslash(Dir) + Rec.Name)
-        else
-          Result := Result + 1;
-      end;
+      if Rec.Attributes and FILE_ATTRIBUTE_DIRECTORY = 0 then
+        Result := Result + 1;
     until not FindNext(Rec);
   finally
     FindClose(Rec);
@@ -174,7 +172,7 @@ begin
   if MsgBox(CustomMessage('RemoveData'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
     DeleteDataExceptQuarantine(DataDir);
   Quarantine := AddBackslash(DataDir) + 'Quarantine';
-  Count := CountFiles(Quarantine);
+  Count := CountQuarantinedFiles(Quarantine);
   if (Count > 0) and
      (MsgBox(FmtMessage(CustomMessage('RemoveQuarantine'), [IntToStr(Count)]), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
     DelTree(Quarantine, True, True, True);
