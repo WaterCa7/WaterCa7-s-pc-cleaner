@@ -4,6 +4,8 @@
 #define AppName "WaterCa7s PC Cleaner"
 #define ExeName "WaterCa7sPcCleaner.exe"
 #define InstanceMutex "WaterCa7sPcCleaner.Instance"
+; Held while the setup runs: a start of the program waits for it (src/PcCleaner/Core/SetupInProgress.cs).
+#define SetupMutexName "WaterCa7sPcCleaner.Setup"
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
@@ -26,6 +28,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=admin
+SetupMutex={#SetupMutexName}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -42,7 +45,7 @@ CloseApplications=no
 ShowLanguageDialog=no
 LanguageDetectionMethod=uilanguage
 UsePreviousLanguage=no
-; Silent updates leave a log in %TEMP%.
+; Updates (/SILENT: only the progress window) leave a log in %TEMP%.
 SetupLogging=yes
 
 [Languages]

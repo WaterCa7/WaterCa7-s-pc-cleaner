@@ -14,9 +14,12 @@ namespace PcCleaner.Core.Updates;
 /// </summary>
 public static class UpdateInstaller
 {
-    /// <summary>The setup's switches for an update: no windows, no questions, no reboot, and where we came from.</summary>
+    /// <summary>
+    /// The setup's switches for an update: only its progress window (the user sees that the program is being updated), no
+    /// questions, no reboot, and where we came from.
+    /// </summary>
     public static List<string> SetupArgs(Version from)
-        => new() { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATEDFROM=" + from.ToString(3) };
+        => new() { "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATEDFROM=" + from.ToString(3) };
 
     /// <summary>
     /// Copies the staged setup into <paramref name="setupDir"/> and returns the copy, held open against writes, renames and deletes.

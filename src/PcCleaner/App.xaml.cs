@@ -80,6 +80,12 @@ public partial class App : Application
             return;
         }
 
+        // While the setup runs (an update, a manual install) this start waits for it to finish: a shortcut click must not open the
+        // program whose files are being replaced, and the setup's own starts of the program come while it still holds its mutex.
+        // The single-copy place below then sorts out a second copy.
+        if (ScreenshotDir is null)
+            SetupInProgress.WaitUntilDone();
+
         // One copy per session, taken before the restart with rights below: a second click while this copy still asks for them,
         // or while the window is open, shows that window instead of opening another one. Verification runs never take part.
         if (ScreenshotDir is null)

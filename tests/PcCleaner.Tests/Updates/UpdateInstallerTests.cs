@@ -93,8 +93,8 @@ public class UpdateInstallerTests
     }
 
     [Fact]
-    public void SetupArgs_AreSilentAndNameTheVersionWeCameFrom()
-        => Assert.Equal(new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATEDFROM=1.3.1" },
+    public void SetupArgs_ShowOnlyTheProgress_AskNothing_AndNameTheVersionWeCameFrom()
+        => Assert.Equal(new[] { "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATEDFROM=1.3.1" },
             UpdateInstaller.SetupArgs(new Version(1, 3, 1)));
 
     [Fact]
