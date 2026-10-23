@@ -308,6 +308,22 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task WhenTheAttemptCannotBeCounted_TheSetupIsNotStarted_AndTheProgramOpens()
+    {
+        // The two-attempt bound rests on that write: without it a failing setup could be started at every start.
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        Directory.CreateDirectory(Path.Combine(_updatesDir, "state.json")); // state.json cannot be written
+        var service = Service();
+
+        Assert.False(service.TryInstallStaged(Array.Empty<string>()));
+
+        Assert.Equal(UpdateState.ManualRequired, service.State);
+        Assert.Empty(_started);
+        File.WriteAllBytes(SetupCopy, new byte[] { 9 }); // the lease is released on this path too
+    }
+
+    [Fact]
     public async Task ASetupThatCompletes_LeavesNoFailureBehind()
     {
         Publish("1.2.0");

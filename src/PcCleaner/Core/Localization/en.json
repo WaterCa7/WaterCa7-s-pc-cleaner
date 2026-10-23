@@ -4422,6 +4422,7 @@
   "не отвечает": "not responding",
   "не отвечает на ping": "does not answer ping",
   "не проверено": "not checked",
+  "не удалось записать счётчик попыток установки": "the count of install attempts could not be saved",
   "не удалось найти адрес сервера": "could not find the address of the server",
   "не удалось открыть {0}": "could not open the registry key {0}",
   "не удалось проверить": "check failed",

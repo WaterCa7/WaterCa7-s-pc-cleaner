@@ -283,7 +283,7 @@ public sealed class UpdateService : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UpdateException)
         {
-            _store.RecordFailure(version);
+            TryRecordFailure(version);
             Log.Warn(T.F("Обновление до {0} не установлено: {1}", version, ErrorText.For(ex)), ex);
             State = UpdateState.Failed;
             StatusText = T.F("Не удалось установить версию {0}: {1}. Попробуем при следующем запуске.", version, ErrorText.For(ex));
@@ -292,7 +292,13 @@ public sealed class UpdateService : ObservableObject
         // Counted before the start: a setup that starts and then fails (files in use, the antivirus, the disk) rolls back and nothing
         // tells this program. Only the new version clears the count (CompleteUpdateAsync removes state.json), so after
         // MaxInstallFailures such starts the program opens and asks for a manual download instead of starting the setup forever.
-        _store.RecordFailure(version);
+        // That bound rests on this write: if it cannot be made, the setup is not started at all and the window opens.
+        if (!TryRecordFailure(version))
+        {
+            prepared.Dispose();
+            RequireManual(staged.Manifest, T._("не удалось записать счётчик попыток установки"));
+            return false;
+        }
         // This start was a click of the user (or the start of the program): the new version, which the setup starts, may come
         // to the front.
         SingleInstance.AllowAnyProcessToComeToTheFront();
@@ -308,6 +314,21 @@ public sealed class UpdateService : ObservableObject
         }
         Log.Action(T.F("Обновление: запущена установка версии {0}", version));
         return true;
+    }
+
+    /// <summary>Counts a failed install in state.json; false (logged) when the file cannot be written (an antivirus lock, a full disk).</summary>
+    private bool TryRecordFailure(Version version)
+    {
+        try
+        {
+            _store.RecordFailure(version);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn(T.F("Обновление до {0} не установлено: {1}", version, ErrorText.For(ex)), ex);
+            return false;
+        }
     }
 
     /// <summary>
