@@ -31,6 +31,7 @@ public static class TestEnvironment
             AppPaths.DataDir = DataDir;
             Dialogs.UseSilentMode();
             SystemRestart.Start = NoRestart;
+            ElevatedTask.Store = new FakeTaskStore();
             AppServices.Settings = new AppSettings();
             AppDomain.CurrentDomain.ProcessExit += (_, _) => RemoveEmptyRegistryParents();
             _initialized = true;
