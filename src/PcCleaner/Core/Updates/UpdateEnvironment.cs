@@ -98,18 +98,25 @@ public sealed class UpdateEnvironment
     /// <summary>The start itself, without a log line: the caller says what it was starting. <paramref name="error"/> is the reason when it threw.</summary>
     internal static bool TryStart(string exe, IReadOnlyList<string> args, out Exception? error)
     {
+        using var process = TryStartProcess(exe, args, out error);
+        return process is not null;
+    }
+
+    /// <summary><see cref="TryStart"/> that hands back the started process (null when it did not start); the caller disposes it.</summary>
+    internal static Process? TryStartProcess(string exe, IReadOnlyList<string> args, out Exception? error)
+    {
         error = null;
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
         try
         {
-            return Process.Start(psi) is not null;
+            return Process.Start(psi);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
             error = ex;
-            return false;
+            return null;
         }
     }
 }

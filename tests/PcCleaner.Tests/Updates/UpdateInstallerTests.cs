@@ -79,6 +79,28 @@ public class UpdateInstallerTests
         Assert.False(File.Exists(prepared.Path));
     }
 
+    [Fact]
+    public void TheVerifiedCopy_CanReallyBeStarted_WhileItIsLocked()
+    {
+        // The real hand-off: Windows must be able to create a process from the copy while PreparedSetup holds it against writes and
+        // deletes. whoami.exe stands in for the setup (signed, part of every Windows, prints the user name and exits 0 without
+        // arguments). It is under the 1 MB that update.json requires of a setup, so zeros are appended: the loader ignores data
+        // past the last section, and the manifest names the padded bytes, so the whole check of PrepareSetup runs on them.
+        var whoami = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "whoami.exe");
+        var original = File.ReadAllBytes(whoami);
+        var setup = new byte[Math.Max(original.Length, (int)UpdateManifest.MinSize) + 4096];
+        original.CopyTo(setup, 0);
+        var setupDir = Path.Combine(TestEnvironment.NewTempDir("inst-start"), "Updates");
+
+        using var prepared = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
+        using var process = UpdateEnvironment.TryStartProcess(prepared.Path, Array.Empty<string>(), out var error);
+
+        Assert.Null(error);
+        Assert.NotNull(process);
+        Assert.True(process!.WaitForExit(10_000), "the started copy did not exit in 10 s");
+        Assert.Equal(0, process.ExitCode);
+    }
+
     private static bool Refuses(Action action)
     {
         try

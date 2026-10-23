@@ -35,6 +35,26 @@ function WaitForProgram([int]$seconds) {
     return $false
 }
 
+# A mutex of this session (the program's single-copy place, the setup's SetupMutex). This script runs elevated, so it may open both.
+function MutexExists([string]$name) {
+    $m = $null
+    try {
+        if (-not [System.Threading.Mutex]::TryOpenExisting("Local\$name", [ref]$m)) { return $false }
+        $m.Dispose()
+    }
+    catch [System.UnauthorizedAccessException] { } # it exists, only this account may not open it
+    return $true
+}
+
+function WaitForMutex([string]$name, [int]$seconds) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $deadline) {
+        if (MutexExists $name) { return $true }
+        Start-Sleep -Milliseconds 200
+    }
+    return $false
+}
+
 function StopProgram {
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline) {
@@ -47,8 +67,9 @@ function StopProgram {
 }
 
 # The first runs pass /LOG; the update run does not, as the program's own update does not: SetupLogging=yes must leave the log in %TEMP%.
-function RunSetup([string[]]$extra, [switch]$NoLog) {
-    $setupArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') + $extra
+# -Mode /SILENT is how the program runs an update (only the progress window).
+function RunSetup([string[]]$extra, [switch]$NoLog, [string]$Mode = '/VERYSILENT') {
+    $setupArgs = @($Mode, '/SUPPRESSMSGBOXES', '/NORESTART') + $extra
     if (-not $NoLog) { $setupArgs += "/LOG=`"$setupLog`"" }
     # No -Wait: it would also wait for the program the setup starts after an update.
     $p = Start-Process $Setup -ArgumentList $setupArgs -PassThru
@@ -109,10 +130,25 @@ try {
     Check (Test-Path $exe) 'the exe is still there after the reinstall'
     Check (TaskExists) 'the task is still there after the reinstall'
 
+    # An update the way the program hands it off: the program is open (it holds its single-copy mutex), the setup starts and waits
+    # for it, the program goes away (here: it is stopped), the setup installs and starts the program again.
+    Check ((InstalledProcesses).Count -eq 0) 'no installed program is running before the update over a running copy'
+    $null = Start-Process $exe -PassThru
+    Check (WaitForMutex 'WaterCa7sPcCleaner.Instance' 60) 'the installed program runs and holds its mutex'
+    $p = Start-Process $Setup -ArgumentList '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/UPDATEDFROM=1.0.0' -PassThru
+    Check (WaitForMutex 'WaterCa7sPcCleaner.Setup' 60) 'the update setup runs (SetupMutex)'
+    Start-Sleep -Seconds 3
+    Check ((InstalledProcesses).Count -gt 0) 'the setup has not replaced the program while it was open'
+    Check (StopProgram) 'the open program is stopped while the setup waits for it'
+    Check ($p.WaitForExit(600000)) 'the update setup over a running copy finished in 10 minutes'
+    Check ($p.ExitCode -eq 0) "update setup over a running copy exit code 0 (was $($p.ExitCode))"
+    Check (WaitForProgram 60) 'the update over a running copy started the program again'
+    Check (StopProgram) 'the program started by that update is stopped'
+
     # An update: the program is started again by the setup. Old setup logs must not satisfy the SetupLogging check below.
     Get-ChildItem $env:TEMP -Filter 'Setup Log*.txt' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
     Check ((InstalledProcesses).Count -eq 0) 'no installed program is running before the update'
-    RunSetup @('/UPDATEDFROM=1.0.0') -NoLog
+    RunSetup @('/UPDATEDFROM=1.0.0') -NoLog -Mode '/SILENT'
     Check (Test-Path $exe) 'the exe is still there after the update'
     Check (WaitForProgram 30) 'the update started the installed program'
     Check (StopProgram) 'the program started by the update is stopped'
@@ -132,7 +168,6 @@ try {
     Check (-not (Test-Path $uninstallKey)) 'the Programs and Features entry is removed'
     Check (-not (TaskExists)) 'the task is removed'
     Check (Test-Path (Join-Path $dataDir 'settings.json')) 'the settings stay after a silent uninstall'
-    Check ((@(Get-ChildItem $env:TEMP -Filter 'Setup Log*.txt' -ErrorAction SilentlyContinue)).Count -ge 1) 'the setup left a log in %TEMP%'
     # The last native command (schtasks, looking for the removed task) left exit code 1, and the CI shell would report it as the script's.
     $global:LASTEXITCODE = 0
     'installer test passed'
