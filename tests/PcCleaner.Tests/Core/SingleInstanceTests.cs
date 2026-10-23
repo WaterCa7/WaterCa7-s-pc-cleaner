@@ -133,7 +133,9 @@ public class SingleInstanceTests
         crashed.Start();
         Assert.True(crashed.Join(Patience));
 
-        var next = OtherCopy(name, TimeSpan.Zero);
+        // Join can return before the OS thread is gone, and only then is the mutex abandoned: the next copy waits for that
+        // (WaitOne ends with AbandonedMutexException, the catch in SingleInstance.Acquire) instead of looking once.
+        var next = OtherCopy(name, Patience);
 
         Assert.True(next.Wait(Patience));
         Assert.True(next.Result);
