@@ -30,7 +30,8 @@ workflow `release.yml` соберёт установщик (`tools/build-install
 ## Установка, запуск и обновления
 
 **Установка.** Установщик (Inno Setup, `PrivilegesRequired=admin`, только x64) кладёт самодостаточную папку в
-`%ProgramFiles%\WaterCa7s PC Cleaner`, рядом с exe — файл-маркер `WaterCa7sPcCleaner.installed` (его пишет только установщик),
+`%ProgramFiles%\WaterCa7s PC Cleaner` (страницы выбора папки нет, `DisableDirPage=yes`: сама обновляется только копия
+в `Program Files`; `/DIR=` в командной строке остаётся для опытных), рядом с exe — файл-маркер `WaterCa7sPcCleaner.installed` (его пишет только установщик),
 добавляет ярлыки и запись в «Программы и компоненты», затем запускает `WaterCa7sPcCleaner.exe --register-task`. Папка
 программы наследует права `Program Files`: менять её могут только администраторы. Одиночный файл (single-file) не
 используется: программа не распаковывает себя при старте, а `StartupHookSupport=false` в `PcCleaner.csproj` отключает
