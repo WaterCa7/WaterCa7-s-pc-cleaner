@@ -43,7 +43,7 @@ internal sealed class ComTaskStore : ITaskStore
             folder.GetTask(name);
             return true;
         }
-        catch (COMException ex) when (ex.HResult is FileNotFound or PathNotFound)
+        catch (Exception ex) when (ex.HResult is FileNotFound or PathNotFound)
         {
             return false;
         }
@@ -52,7 +52,7 @@ internal sealed class ComTaskStore : ITaskStore
     public void Run(string name)
     {
         var folder = Folder(Connect(), create: false) ?? throw new COMException("The task folder does not exist", FileNotFound);
-        folder.GetTask(name).Run(Type.Missing);
+        folder.GetTask(name).Run(null);
     }
 
     public void Register(string name, string xml, string userSid)
@@ -60,7 +60,7 @@ internal sealed class ComTaskStore : ITaskStore
         var folder = Folder(Connect(), create: true)!;
         // Administrators and SYSTEM: everything; the user: read and run (a copy without the rights starts it by the shortcut).
         var sddl = $"D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;{userSid})";
-        folder.RegisterTask(name, xml, CreateOrUpdate, Type.Missing, Type.Missing, InteractiveTokenLogon, sddl);
+        folder.RegisterTask(name, xml, CreateOrUpdate, null, null, InteractiveTokenLogon, sddl);
     }
 
     public void Delete(string name)
@@ -72,7 +72,7 @@ internal sealed class ComTaskStore : ITaskStore
         {
             folder.DeleteTask(name, 0);
         }
-        catch (COMException ex) when (ex.HResult is FileNotFound or PathNotFound)
+        catch (Exception ex) when (ex.HResult is FileNotFound or PathNotFound)
         {
             // already gone
         }
@@ -106,7 +106,7 @@ internal sealed class ComTaskStore : ITaskStore
         {
             return service.GetFolder(ElevatedTask.Folder);
         }
-        catch (COMException ex) when (ex.HResult is FileNotFound or PathNotFound)
+        catch (Exception ex) when (ex.HResult is FileNotFound or PathNotFound)
         {
             if (!create)
                 return null;

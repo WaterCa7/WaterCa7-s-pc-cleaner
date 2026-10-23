@@ -104,20 +104,19 @@ public static class ElevatedTask
     /// </summary>
     public static bool TryStart(string exePath, string programFiles, string userSid)
     {
-        if (!MayRegister(exePath, programFiles))
-            return false;
         var name = NameFor(userSid);
         try
         {
-            if (!Store.Exists(name))
+            if (!MayRegister(exePath, programFiles) || !Store.Exists(name))
                 return false;
-            // This start is the user's click: it may hand the right to come to the front to the copy the task starts.
+            // Before Run, on purpose: this start is the user's click, and the right to come to the front must be handed over
+            // while this process still has it, to the copy the task is about to start.
             AllowSetForegroundWindow(AsfwAny);
             Store.Run(name);
             Log.Info(T._("Запуск с правами администратора через задачу Планировщика"));
             return true;
         }
-        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (IsSchedulerFailure(ex))
         {
             Log.Warn(T.F("Задача Планировщика не запустилась: {0}", ErrorText.For(ex)), ex);
             return false;
@@ -144,7 +143,7 @@ public static class ElevatedTask
             }
             return true;
         }
-        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (IsSchedulerFailure(ex))
         {
             Log.Warn(T.F("Не удалось изменить задачу запуска с правами администратора: {0}", ErrorText.For(ex)), ex);
             return false;
@@ -165,18 +164,32 @@ public static class ElevatedTask
         }
         if (command == RegisterArg)
             return Sync(runAsAdmin, isElevated, exePath, programFiles, userSid) ? 0 : 1;
+        if (command != UnregisterArg)
+        {
+            Log.Warn(T.F("Неизвестная команда: {0}", command));
+            return 1;
+        }
         try
         {
             Store.DeleteFolder();
             Log.Info(T._("Задачи запуска с правами администратора удалены"));
             return 0;
         }
-        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (IsSchedulerFailure(ex))
         {
             Log.Warn(T.F("Не удалось удалить задачи запуска с правами администратора: {0}", ErrorText.For(ex)), ex);
             return 1;
         }
     }
+
+    /// <summary>
+    /// What a Task Scheduler call can throw. The COM layer maps HRESULTs to .NET exceptions (file/path not found to
+    /// FileNotFoundException/DirectoryNotFoundException, access denied to UnauthorizedAccessException), and a late-bound
+    /// (dynamic) call that does not fit raises RuntimeBinderException. None of them may stop the start or the setting.
+    /// </summary>
+    private static bool IsSchedulerFailure(Exception ex)
+        => ex is COMException or UnauthorizedAccessException or InvalidOperationException or IOException or ArgumentException
+            or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException;
 
     private const int AsfwAny = -1;
 

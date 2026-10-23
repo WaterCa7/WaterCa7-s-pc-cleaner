@@ -21,6 +21,8 @@
     <Company>WaterCa7</Company>
     <Copyright>© 2026 WaterCa7</Copyright>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The program starts elevated (Task Scheduler task): DOTNET_STARTUP_HOOKS from the user's environment must not run code in it. -->
+    <StartupHookSupport>false</StartupHookSupport>
   </PropertyGroup>
 
   <ItemGroup>

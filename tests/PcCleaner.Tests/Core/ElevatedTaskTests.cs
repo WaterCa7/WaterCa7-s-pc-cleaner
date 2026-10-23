@@ -6,7 +6,11 @@ using Xunit;
 
 namespace PcCleaner.Tests.Core;
 
-/// <summary>The task that starts the installed program elevated without the UAC prompt. The store is a fake: no real task.</summary>
+/// <summary>
+/// The task that starts the installed program elevated without the UAC prompt. The store is a fake: no real task.
+/// The tests swap the static <see cref="ElevatedTask.Store"/>, so they run alone.
+/// </summary>
+[Collection(CoreSequentialCollection.Name)]
 public class ElevatedTaskTests
 {
     private const string Sid = "S-1-5-21-1-2-3-1001";
@@ -54,6 +58,23 @@ public class ElevatedTaskTests
     public void WithoutTheMarker_NoTask()
     {
         File.Delete(Path.Combine(Path.GetDirectoryName(_exe)!, UpdateEnvironment.InstalledMarkerName));
+
+        Assert.False(ElevatedTask.MayRegister(_exe, _programFiles));
+    }
+
+    [Fact]
+    public void AnExeWithAnotherName_NeverGetsATask()
+    {
+        var other = Path.Combine(Path.GetDirectoryName(_exe)!, "Other.exe");
+        File.WriteAllBytes(other, new byte[] { 1 });
+
+        Assert.False(ElevatedTask.MayRegister(other, _programFiles));
+    }
+
+    [Fact]
+    public void AMissingExeFile_NeverGetsATask()
+    {
+        File.Delete(_exe);
 
         Assert.False(ElevatedTask.MayRegister(_exe, _programFiles));
     }
@@ -115,8 +136,8 @@ public class ElevatedTaskTests
     {
         _store.Register(Name, "<Task/>", Sid);
 
-        ElevatedTask.Sync(runAsAdmin: false, isElevated: false, _exe, _programFiles, Sid);
-        ElevatedTask.Sync(runAsAdmin: true, isElevated: false, _exe, _programFiles, TestSid2);
+        Assert.True(ElevatedTask.Sync(runAsAdmin: false, isElevated: false, _exe, _programFiles, Sid));
+        Assert.True(ElevatedTask.Sync(runAsAdmin: true, isElevated: false, _exe, _programFiles, TestSid2));
 
         Assert.True(_store.Exists(Name));
         Assert.False(_store.Exists(ElevatedTask.NameFor(TestSid2)));
@@ -130,6 +151,25 @@ public class ElevatedTaskTests
         ElevatedTask.Sync(runAsAdmin: true, isElevated: true, dev, _programFiles, Sid);
 
         Assert.Empty(_store.Tasks);
+    }
+
+    [Fact]
+    public void Sync_On_ForACopyThatIsNotInstalled_LeavesTheExistingTaskUntouched()
+    {
+        _store.Register(Name, "<Task/>", Sid);
+        var dev = Path.Combine(TestEnvironment.NewTempDir("dev"), UpdateEnvironment.ExeName);
+
+        Assert.True(ElevatedTask.Sync(runAsAdmin: true, isElevated: true, dev, _programFiles, Sid));
+
+        Assert.Equal("<Task/>", _store.Tasks[Name].Xml);
+    }
+
+    [Fact]
+    public void Sync_WhenTheSchedulerRefuses_IsFalse_AndDoesNotThrow()
+    {
+        _store.Failure = new UnauthorizedAccessException("denied");
+
+        Assert.False(ElevatedTask.Sync(runAsAdmin: true, isElevated: true, _exe, _programFiles, Sid));
     }
 
     // ----- the start by the shortcut -----
@@ -156,6 +196,36 @@ public class ElevatedTaskTests
 
         Assert.False(ElevatedTask.TryStart(_exe, _programFiles, Sid));
     }
+
+    [Fact]
+    public void TryStart_WhenTheSchedulerSaysNotFound_IsFalse_AndDoesNotThrow()
+    {
+        _store.Failure = new FileNotFoundException("no such task");
+
+        Assert.False(ElevatedTask.TryStart(_exe, _programFiles, Sid));
+    }
+
+    [Fact]
+    public void TryStart_WhenRunRefusesItsArgument_IsFalse_AndDoesNotThrow()
+    {
+        _store.Register(Name, "<Task/>", Sid);
+        _store.RunFailure = new ArgumentException("bad argument");
+
+        Assert.False(ElevatedTask.TryStart(_exe, _programFiles, Sid));
+    }
+
+    [Fact]
+    public void TryStart_WhenTheLateBoundCallFails_IsFalse_AndDoesNotThrow()
+    {
+        _store.Register(Name, "<Task/>", Sid);
+        _store.RunFailure = new Microsoft.CSharp.RuntimeBinder.RuntimeBinderException("no such member");
+
+        Assert.False(ElevatedTask.TryStart(_exe, _programFiles, Sid));
+    }
+
+    [Fact]
+    public void TryStart_WithAnUnusablePath_IsFalse_AndDoesNotThrow()
+        => Assert.False(ElevatedTask.TryStart(@"C:\bad\path" + (char)0 + UpdateEnvironment.ExeName, _programFiles, Sid));
 
     [Fact]
     public void TryStart_FromADevelopmentBuild_NeverStartsTheInstalledCopy()
@@ -199,6 +269,33 @@ public class ElevatedTaskTests
         Assert.Equal(1, ElevatedTask.RunCommand(ElevatedTask.RegisterArg, true, isElevated: false, _exe, _programFiles, Sid));
         Assert.Equal(1, ElevatedTask.RunCommand(ElevatedTask.UnregisterArg, true, isElevated: false, _exe, _programFiles, Sid));
         Assert.False(_store.FolderDeleted);
+    }
+
+    [Fact]
+    public void RegisterCommand_WhenTheSchedulerRefuses_Fails_AndDoesNotThrow()
+    {
+        _store.Failure = new UnauthorizedAccessException("denied");
+
+        Assert.Equal(1, ElevatedTask.RunCommand(ElevatedTask.RegisterArg, true, isElevated: true, _exe, _programFiles, Sid));
+    }
+
+    [Fact]
+    public void UnregisterCommand_WhenTheFolderIsGone_Fails_AndDoesNotThrow()
+    {
+        _store.Failure = new DirectoryNotFoundException("no such folder");
+
+        Assert.Equal(1, ElevatedTask.RunCommand(ElevatedTask.UnregisterArg, true, isElevated: true, _exe, _programFiles, Sid));
+    }
+
+    [Fact]
+    public void AnUnknownCommand_Fails_AndNeverDeletesTheTasks()
+    {
+        _store.Register(Name, "<Task/>", Sid);
+
+        Assert.Equal(1, ElevatedTask.RunCommand("--something-else", true, isElevated: true, _exe, _programFiles, Sid));
+
+        Assert.False(_store.FolderDeleted);
+        Assert.True(_store.Exists(Name));
     }
 
     [Fact]
