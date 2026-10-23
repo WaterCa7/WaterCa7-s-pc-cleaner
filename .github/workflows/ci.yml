@@ -22,6 +22,7 @@ jobs:
         run: ./tools/build-installer.ps1
       - name: Install, update and uninstall it
         shell: pwsh
+        timeout-minutes: 20
         run: ./tools/test-installer.ps1 -Setup publish/WaterCa7sPcCleaner-Setup.exe
       - name: Update manifest dry run (throwaway key)
         shell: pwsh

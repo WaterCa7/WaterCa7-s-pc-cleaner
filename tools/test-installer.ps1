@@ -48,7 +48,9 @@ function StopProgram {
 
 function RunSetup([string[]]$extra) {
     $setupArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$setupLog`"") + $extra
-    $p = Start-Process $Setup -ArgumentList $setupArgs -PassThru -Wait
+    # No -Wait: it would also wait for the program the setup starts after an update.
+    $p = Start-Process $Setup -ArgumentList $setupArgs -PassThru
+    Check ($p.WaitForExit(600000)) 'the setup finished in 10 minutes'
     Check ($p.ExitCode -eq 0) "setup exit code 0 (was $($p.ExitCode))"
 }
 
@@ -115,7 +117,8 @@ try {
     Set-Content (Join-Path $dataDir 'settings.json') '{}'
     $uninstaller = Join-Path $app 'unins000.exe'
     Check (Test-Path $uninstaller) 'the uninstaller is installed'
-    Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+    $p = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+    $null = $p.WaitForExit(300000)
     # The uninstaller restarts itself from a temp folder; wait for the program folder to go.
     $deadline = (Get-Date).AddSeconds(120)
     while ((Test-Path $app) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
