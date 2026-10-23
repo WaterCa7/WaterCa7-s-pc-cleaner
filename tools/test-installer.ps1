@@ -136,11 +136,19 @@ try {
     $null = Start-Process $exe -PassThru
     Check (WaitForMutex 'WaterCa7sPcCleaner.Instance' 60) 'the installed program runs and holds its mutex'
     $p = Start-Process $Setup -ArgumentList '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/UPDATEDFROM=1.0.0' -PassThru
-    Check (WaitForMutex 'WaterCa7sPcCleaner.Setup' 60) 'the update setup runs (SetupMutex)'
+    # Inno creates SetupMutex only after InitializeSetup, so it is looked for once the setup goes on to install.
     Start-Sleep -Seconds 3
+    Check (-not $p.HasExited) 'the update setup waits for the open program'
     Check ((InstalledProcesses).Count -gt 0) 'the setup has not replaced the program while it was open'
     Check (StopProgram) 'the open program is stopped while the setup waits for it'
-    Check ($p.WaitForExit(600000)) 'the update setup over a running copy finished in 10 minutes'
+    $setupMutexSeen = $false
+    $deadline = (Get-Date).AddMinutes(10)
+    while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+        if (-not $setupMutexSeen -and (MutexExists 'WaterCa7sPcCleaner.Setup')) { $setupMutexSeen = $true }
+        Start-Sleep -Milliseconds 50
+    }
+    Check ($p.WaitForExit(1000)) 'the update setup over a running copy finished in 10 minutes'
+    Check $setupMutexSeen 'the setup held WaterCa7sPcCleaner.Setup while it installed'
     Check ($p.ExitCode -eq 0) "update setup over a running copy exit code 0 (was $($p.ExitCode))"
     Check (WaitForProgram 60) 'the update over a running copy started the program again'
     Check (StopProgram) 'the program started by that update is stopped'
