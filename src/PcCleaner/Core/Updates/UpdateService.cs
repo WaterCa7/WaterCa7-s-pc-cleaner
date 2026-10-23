@@ -28,6 +28,7 @@ public sealed class UpdateService : ObservableObject
     /// <summary>
     /// Belongs to one start: the restart with rights from the banner («Перезапустить с правами и установить») adds it, and that copy
     /// installs the staged update whatever the AutoUpdate setting says (the user asked for it). See <see cref="TryInstallAtStart"/>.
+    /// On a standard account the elevated copy runs under the administrator's profile, finds nothing staged and does nothing.
     /// </summary>
     public const string InstallUpdateArg = "--install-update";
 
@@ -98,7 +99,8 @@ public sealed class UpdateService : ObservableObject
     /// <summary>
     /// What the start of the program does about a staged update: with <see cref="InstallUpdateArg"/> (the user asked for it in the
     /// banner) <see cref="InstallNow"/>, otherwise <see cref="TryInstallStaged"/> (only when automatic updates are on).
-    /// True = the setup is starting and this process must exit now.
+    /// True = the setup is starting and this process must exit now. (On a standard account the elevated copy runs under the
+    /// administrator's profile, finds nothing staged there and does nothing.)
     /// </summary>
     public bool TryInstallAtStart(IReadOnlyList<string> args)
         => args.Any(a => string.Equals(a, InstallUpdateArg, StringComparison.OrdinalIgnoreCase)) ? InstallNow(args) : TryInstallStaged(args);
@@ -181,20 +183,17 @@ public sealed class UpdateService : ObservableObject
                 AppPaths.EnsureDir(_store.DirFor(manifest.Version));
                 await client.DownloadAsync(manifest.Download, _store.ExePathFor(manifest), new Progress<double>(p => Progress = p), ct);
                 _store.SaveManifest(manifest, json, signature);
-                Log.Info(T.F("Обновления: скачана версия {0}, установится при следующем запуске", manifest.Version));
+                Log.Info(_env.IsElevated()
+                    ? T.F("Обновления: скачана версия {0}, установится при следующем запуске", manifest.Version)
+                    : T.F("Обновления: скачана версия {0}, для установки нужны права администратора", manifest.Version));
             }
+            // NeedsElevation first, so the banner never shows the wrong button for a moment.
+            NeedsElevation = !_env.IsElevated();
             State = UpdateState.Ready;
-            if (_env.IsElevated())
-            {
-                NeedsElevation = false;
-                StatusText = T.F("Версия {0} скачана — установится при следующем запуске.", manifest.Version);
-            }
-            else
-            {
-                // Only an elevated copy may start the setup: let the banner offer the restart with rights right away.
-                NeedsElevation = true;
-                StatusText = T.F("Версия {0} скачана — для установки нужны права администратора.", manifest.Version);
-            }
+            // Only an elevated copy may start the setup: the banner offers the restart with rights right away.
+            StatusText = NeedsElevation
+                ? T.F("Версия {0} скачана — для установки нужны права администратора.", manifest.Version)
+                : T.F("Версия {0} скачана — установится при следующем запуске.", manifest.Version);
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or
                                        UnauthorizedAccessException or UpdateException)
@@ -254,6 +253,12 @@ public sealed class UpdateService : ObservableObject
             NeedsElevation = true;
             State = UpdateState.Ready;
             StatusText = T.F("Версия {0} скачана — для установки нужны права администратора.", version);
+            return false;
+        }
+        if (!_env.IsInProgramFiles)
+        {
+            // The setup runs as administrator: from a folder the user can write to it could be swapped after the check.
+            RequireManual(staged.Manifest, T._("программа установлена не в папку Program Files"));
             return false;
         }
         PreparedSetup prepared;

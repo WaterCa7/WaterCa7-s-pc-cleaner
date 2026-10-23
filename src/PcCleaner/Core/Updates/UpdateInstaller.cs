@@ -7,9 +7,10 @@ namespace PcCleaner.Core.Updates;
 /// <summary>
 /// Gets a downloaded setup ready to run. The staged file lives in a user-writable folder, so it is opened with writes denied and
 /// the very bytes that are copied into the program's own Updates folder are the bytes that are hashed. The copy is then held open
-/// (<see cref="PreparedSetup"/>) with writes and deletes denied until the setup has started, and its bytes are checked again through
-/// that handle: nothing can swap the verified file before the start, although the setup runs as administrator. Under Program Files
-/// the folder is also writable by administrators only; in a folder the user can write to, the open handle is the guarantee.
+/// (<see cref="PreparedSetup"/>) with writes, renames and deletes denied until the process has been created from it, and its bytes
+/// are checked again through that handle. That only stops direct changes of the file for that moment: the real protection is that
+/// <see cref="UpdateService"/> installs automatically only from Program Files, where only administrators can change the folder
+/// (anything else could swap the Updates folder or the file once the handle is closed, while the setup still runs as administrator).
 /// </summary>
 public static class UpdateInstaller
 {
@@ -18,8 +19,8 @@ public static class UpdateInstaller
         => new() { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATEDFROM=" + from.ToString(3) };
 
     /// <summary>
-    /// Copies the staged setup into <paramref name="setupDir"/> and returns the copy, held open against writes and deletes.
-    /// Dispose the result after the setup has been started. Nothing is left behind on failure.
+    /// Copies the staged setup into <paramref name="setupDir"/> and returns the copy, held open against writes, renames and deletes.
+    /// Dispose the result after the process has been created from it. Nothing is left behind on failure.
     /// </summary>
     /// <exception cref="UnauthorizedAccessException">The program folder is not writable.</exception>
     /// <exception cref="UpdateException">The staged file does not match update.json.</exception>
@@ -92,9 +93,23 @@ public static class UpdateInstaller
 
     private static void CopyVerified(StagedUpdate staged, string newPath)
     {
-        var expected = staged.Manifest.Download;
         using var source = new FileStream(staged.ExePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var target = new FileStream(newPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        ReadAndCheck(source, target, staged.Manifest.Download);
+        target.Flush(flushToDisk: true);
+    }
+
+    /// <summary>Hashes the stream from its start and compares size and SHA-256 with update.json.</summary>
+    private static void VerifyStream(FileStream stream, UpdateFile expected)
+    {
+        stream.Position = 0;
+        ReadAndCheck(stream, null, expected);
+        stream.Position = 0;
+    }
+
+    /// <summary>Reads <paramref name="source"/> to its end (copying to <paramref name="copy"/> when given) and checks size and SHA-256.</summary>
+    private static void ReadAndCheck(Stream source, Stream? copy, UpdateFile expected)
+    {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[81920];
         long total = 0;
@@ -105,29 +120,10 @@ public static class UpdateInstaller
             if (total > expected.Size)
                 throw new UpdateException(T._("подготовленный файл больше, чем указано в update.json"));
             hash.AppendData(buffer, 0, read);
-            target.Write(buffer, 0, read);
+            copy?.Write(buffer, 0, read);
         }
         if (total != expected.Size || Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant() != expected.Sha256)
             throw new UpdateException(T._("подготовленный файл не совпадает с update.json"));
-        target.Flush(flushToDisk: true);
-    }
-
-    /// <summary>Hashes the stream from its start and compares size and SHA-256 with update.json.</summary>
-    private static void VerifyStream(FileStream stream, UpdateFile expected)
-    {
-        stream.Position = 0;
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = new byte[81920];
-        long total = 0;
-        int read;
-        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
-        {
-            total += read;
-            hash.AppendData(buffer, 0, read);
-        }
-        if (total != expected.Size || Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant() != expected.Sha256)
-            throw new UpdateException(T._("подготовленный файл не совпадает с update.json"));
-        stream.Position = 0;
     }
 }
 

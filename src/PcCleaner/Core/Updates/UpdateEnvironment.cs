@@ -41,11 +41,30 @@ public sealed class UpdateEnvironment
     public Func<bool> IsElevated { get; init; } = () => Admin.IsElevated;
 
     /// <summary>
-    /// &lt;program folder&gt;\Updates: the verified copy of the setup is started from here. The copy is held open with writes and
-    /// deletes denied from its verification until the setup has started (<see cref="UpdateInstaller.PrepareSetup"/>), so it cannot
-    /// be swapped even in a folder the user can write to; under Program Files only an administrator can write to the folder at all.
+    /// &lt;program folder&gt;\Updates: the verified copy of the setup is started from here. The copy is held open against changes
+    /// until the process has been created from it (<see cref="UpdateInstaller.PrepareSetup"/>); the real protection is that this
+    /// is done only for a program in Program Files (<see cref="IsInProgramFiles"/>), where only administrators can change the folder.
     /// </summary>
     public string SetupDir => Path.Combine(Path.GetDirectoryName(ExePath) ?? "", "Updates");
+
+    /// <summary>The Program Files folder (tests replace it).</summary>
+    public string ProgramFiles { get; init; } = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+
+    /// <summary>
+    /// Whether the program lives under <see cref="ProgramFiles"/>. Only then is the setup started automatically: in a folder
+    /// the user can write to, the Updates folder or the file could be swapped (a junction, a rename) after the lock is gone,
+    /// and the setup runs as administrator.
+    /// </summary>
+    public bool IsInProgramFiles => IsInside(ExePath, ProgramFiles);
+
+    /// <summary>True when <paramref name="path"/> is below <paramref name="folder"/> (full paths, whole folder names, any case).</summary>
+    public static bool IsInside(string path, string folder)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(folder))
+            return false;
+        var root = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return Path.GetFullPath(path).StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Only the copy the setup installed updates itself (<see cref="InstalledMarkerName"/> next to the exe). A development build or

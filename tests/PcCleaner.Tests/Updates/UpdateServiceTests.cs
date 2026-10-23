@@ -22,6 +22,7 @@ public sealed class UpdateServiceTests : IDisposable
     private readonly List<(string Exe, IReadOnlyList<string> Args)> _started = new();
     private bool _elevated = true;
     private bool _setupStarts = true;
+    private string? _programFiles;
     private Action<string>? _whileStarting;
 
     public UpdateServiceTests()
@@ -46,6 +47,7 @@ public sealed class UpdateServiceTests : IDisposable
         ManifestUrl = ManifestUrl,
         HttpHandler = _http,
         IsElevated = () => _elevated,
+        ProgramFiles = _programFiles ?? Path.GetDirectoryName(_appDir)!, // by default the test program counts as installed under Program Files
         StartProcess = (exe, args) =>
         {
             _whileStarting?.Invoke(exe);
@@ -262,6 +264,24 @@ public sealed class UpdateServiceTests : IDisposable
         Assert.True(locked); // nothing can swap the verified bytes between the check and the start
         Assert.Equal(_newExe, File.ReadAllBytes(SetupCopy));
         File.Delete(SetupCopy); // the lease is gone once the setup has started
+    }
+
+    [Fact]
+    public async Task OutsideProgramFiles_TheSetupIsNeverStarted_AndTheUserDownloadsIt()
+    {
+        Publish("1.2.0");
+        await Service().CheckAsync(manual: false, CancellationToken.None);
+        _programFiles = TestEnvironment.NewTempDir("upd-pf"); // the program folder is not inside it: anyone may change it
+        var service = Service();
+
+        Assert.False(service.TryInstallStaged(Array.Empty<string>()));
+        Assert.False(service.InstallNow(Array.Empty<string>()));
+
+        Assert.Equal(UpdateState.ManualRequired, service.State);
+        Assert.Contains("Program Files", service.StatusText);
+        Assert.Empty(_started);
+        Assert.False(Directory.Exists(Path.Combine(_appDir, "Updates")));
+        Assert.Equal(0, new UpdateStore(_updatesDir).FailuresFor(new Version(1, 2, 0))); // not a failed install
     }
 
     [Fact]

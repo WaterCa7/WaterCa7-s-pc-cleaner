@@ -52,6 +52,34 @@ public class UpdateEnvironmentTests
                 CurrentVersion = new Version(1, 0, 0),
             }.SetupDir);
 
+    [Theory]
+    [InlineData(@"C:\Program Files\WaterCa7s PC Cleaner\WaterCa7sPcCleaner.exe", @"C:\Program Files", true)]
+    [InlineData(@"c:\program files\WaterCa7s PC Cleaner\x.exe", @"C:\Program Files\", true)]      // case and a trailing separator
+    [InlineData(@"C:\Program Files\A\..\B\x.exe", @"C:\Program Files", true)]                 // full paths are compared
+    [InlineData(@"C:\Users\me\AppData\Local\WaterCa7s PC Cleaner\x.exe", @"C:\Program Files", false)]
+    [InlineData(@"D:\Tools\x.exe", @"C:\Program Files", false)]
+    [InlineData(@"C:\Program Files (x86)\x.exe", @"C:\Program Files", false)]                   // the prefix trap
+    [InlineData(@"C:\Program Files\..\Users\x.exe", @"C:\Program Files", false)]
+    [InlineData(@"C:\Program Files", @"C:\Program Files", false)]                                // the folder itself is not inside it
+    [InlineData(@"C:\Program Files\x.exe", "", false)]
+    public void IsInside_ComparesWholeFolderNames(string path, string folder, bool expected)
+        => Assert.Equal(expected, UpdateEnvironment.IsInside(path, folder));
+
+    [Fact]
+    public void TheProgramIsInProgramFiles_WhenTheExeLivesThere()
+    {
+        var env = new UpdateEnvironment
+        {
+            ExePath = @"C:\Program Files\WaterCa7s PC Cleaner\WaterCa7sPcCleaner.exe",
+            UpdatesDir = "x",
+            CurrentVersion = new Version(1, 0, 0),
+            ProgramFiles = @"C:\Program Files",
+        };
+
+        Assert.True(env.IsInProgramFiles);
+        Assert.False(new UpdateEnvironment { ExePath = @"D:\Tools\WaterCa7sPcCleaner.exe", UpdatesDir = "x", CurrentVersion = new Version(1, 0, 0), ProgramFiles = @"C:\Program Files" }.IsInProgramFiles);
+    }
+
     [Fact]
     public void TheManifestNamesTheSetup()
         => Assert.Equal("win-x64-setup", UpdateManifest.Platform);

@@ -61,7 +61,7 @@ public class UpdateInstallerTests
         var prepared = UpdateInstaller.PrepareSetup(Staged(setup, setup), setupDir);
         try
         {
-            // the copy cannot be swapped before the setup has started, even in a folder the user can write to
+            // the verified bytes cannot be changed directly until the process has been created from the copy
             Assert.True(Refuses(() => File.WriteAllBytes(prepared.Path, new byte[] { 9 })));
             Assert.True(Refuses(() => File.Delete(prepared.Path)));
             Assert.True(Refuses(() => File.Move(prepared.Path, prepared.Path + ".old")));
