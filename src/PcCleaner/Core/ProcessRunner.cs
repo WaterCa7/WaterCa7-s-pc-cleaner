@@ -203,6 +203,16 @@ public static class ProcessRunner
            (result.StdErr.Contains("PSSecurityException", StringComparison.OrdinalIgnoreCase) ||
             result.StdErr.Contains("about_Execution_Policies", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// What the log (and the error box, which the silent mode logs) says about a target: a web address only as its scheme and host,
+    /// because its path and query may carry a one-time code or token (the browser sign-in, a payment link); a file, a folder or a
+    /// settings page as it is.
+    /// </summary>
+    internal static string LogTarget(string target)
+        => Uri.TryCreate(target, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+            ? $"{uri.Scheme}://{uri.Authority}"
+            : target;
+
     /// <summary>Opens a file/URL/folder with the shell (Explorer, default browser).</summary>
     public static void ShellOpen(string target)
     {
@@ -212,13 +222,13 @@ public static class ProcessRunner
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            Log.Info(T.F("Открытие отменено пользователем: {0}", target));
+            Log.Info(T.F("Открытие отменено пользователем: {0}", LogTarget(target)));
         }
         catch (Exception ex)
         {
             // Environment problems (no default browser, missing file) are not app bugs.
-            Log.Warn(T.F("Не удалось открыть {0}: {1}", target, ErrorText.For(ex)));
-            Dialogs.Error(T._("Не удалось открыть"), $"{target}\n\n{ErrorText.Sentence(ex)}");
+            Log.Warn(T.F("Не удалось открыть {0}: {1}", LogTarget(target), ErrorText.For(ex)));
+            Dialogs.Error(T._("Не удалось открыть"), $"{LogTarget(target)}\n\n{ErrorText.Sentence(ex)}");
         }
     }
 
