@@ -9,6 +9,7 @@ using PcCleaner.Modules.Disk;
 using PcCleaner.Modules.Network;
 using PcCleaner.Modules.Optimizer;
 using PcCleaner.Modules.Processes;
+using PcCleaner.Modules.Profile;
 using PcCleaner.Modules.Programs;
 using PcCleaner.Modules.Security;
 using PcCleaner.Modules.Settings;
@@ -44,6 +45,7 @@ public class ShellEnglishTests
             new DiskViewModel(AppServices.Disk),
             new SecurityViewModel(AppServices.Security),
             new NetworkViewModel(AppServices.Network),
+            new ProfileViewModel(),
             new SettingsViewModel(() => new AppSettings(), _ => { }, new ObservableCollection<LogEntry>()),
         };
     }
@@ -54,7 +56,7 @@ public class ShellEnglishTests
         var sections = ShellMenu.Build(RealPages());
 
         using (TestLanguage.English())
-            Assert.Equal(new[] { "Home", "Cleanup", "Computer", "System", "Protection", "Settings" }, sections.Select(s => s.Title));
+            Assert.Equal(new[] { "Home", "Cleanup", "Computer", "System", "Protection", "Profile", "Settings" }, sections.Select(s => s.Title));
     }
 
     [Fact]
@@ -76,14 +78,14 @@ public class ShellEnglishTests
         using (TestLanguage.English())
         {
             Assert.Equal(
-                new[] { "Home", "Cleanup", "Components", "Speed up", "Processes", "Startup", "Programs", "Disks", "Security", "Network", "Settings" },
+                new[] { "Home", "Cleanup", "Components", "Speed up", "Processes", "Startup", "Programs", "Disks", "Security", "Network", "Profile", "Settings" },
                 pages.Select(p => p.Title));
             Assert.All(pages, p => Assert.False(Cyrillic.IsMatch(p.Subtitle), $"{p.Key}: {p.Subtitle}"));
             Assert.Equal("The overall state of your computer and a one-click check", pages[0].Subtitle);
         }
 
         Assert.Equal("Главная", pages[0].Title); // and Russian is back
-        Assert.Equal("Настройки", pages[10].Title);
+        Assert.Equal("Настройки", pages[11].Title);
     }
 
     [Fact]

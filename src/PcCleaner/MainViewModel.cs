@@ -8,6 +8,7 @@ using PcCleaner.Modules.Disk;
 using PcCleaner.Modules.Network;
 using PcCleaner.Modules.Optimizer;
 using PcCleaner.Modules.Processes;
+using PcCleaner.Modules.Profile;
 using PcCleaner.Modules.Programs;
 using PcCleaner.Modules.Security;
 using PcCleaner.Modules.Settings;
@@ -87,6 +88,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
             new DiskViewModel(AppServices.Disk),
             new SecurityViewModel(AppServices.Security),
             new NetworkViewModel(AppServices.Network),
+            new ProfileViewModel(),
             new SettingsViewModel(),
         };
     }

@@ -12,6 +12,7 @@
              xmlns:optimizer="clr-namespace:PcCleaner.Modules.Optimizer"
              xmlns:security="clr-namespace:PcCleaner.Modules.Security"
              xmlns:network="clr-namespace:PcCleaner.Modules.Network"
+             xmlns:profile="clr-namespace:PcCleaner.Modules.Profile"
              xmlns:settings="clr-namespace:PcCleaner.Modules.Settings"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
@@ -39,6 +40,7 @@
             <DataTemplate DataType="{x:Type optimizer:HardwareViewModel}"><optimizer:HardwareView /></DataTemplate>
             <DataTemplate DataType="{x:Type network:NetworkViewModel}"><network:NetworkView /></DataTemplate>
             <DataTemplate DataType="{x:Type security:SecurityViewModel}"><security:SecurityView /></DataTemplate>
+            <DataTemplate DataType="{x:Type profile:ProfileViewModel}"><profile:ProfileView /></DataTemplate>
             <DataTemplate DataType="{x:Type settings:SettingsViewModel}"><settings:SettingsView /></DataTemplate>
         </ResourceDictionary>
     </Application.Resources>
