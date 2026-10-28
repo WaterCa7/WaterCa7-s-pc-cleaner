@@ -6,6 +6,16 @@ namespace PcCleaner.Tests.Profile;
 
 public class AccountSetupTests
 {
+    [Fact]
+    public void TheTestRun_UsesALocalGuest_NotTheRealAccount()
+    {
+        TestEnvironment.Init();
+
+        // The screenshot account's fixed computer id: the real one would read WMI and account.bin (DPAPI).
+        Assert.Equal(HwHash.Of("screenshot"), PcCleaner.Core.AppServices.Account.Device.HwHash);
+        Assert.Equal(Tier.Guest, PcCleaner.Core.AppServices.Account.Tier);
+    }
+
     [Theory]
     [InlineData(Tier.Guest)]
     [InlineData(Tier.Free)]

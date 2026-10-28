@@ -1,11 +1,14 @@
 using System.IO;
 using Microsoft.Win32;
 using PcCleaner.Core;
+using PcCleaner.Core.Account;
+using PcCleaner.Core.AccountWindows;
 
 namespace PcCleaner.Tests;
 
 /// <summary>
-/// Points app data to a temp folder and makes all dialogs non-interactive (every confirmation = "No").
+/// Points app data to a temp folder, makes all dialogs non-interactive (every confirmation = "No") and puts a local guest account
+/// in place of the real one.
 /// Call TestEnvironment.Init() at the start of tests that touch AppServices/Log/Dialogs.
 /// </summary>
 public static class TestEnvironment
@@ -33,6 +36,8 @@ public static class TestEnvironment
             SystemRestart.Start = NoRestart;
             ElevatedTask.Store = new FakeTaskStore();
             AppServices.Settings = new AppSettings();
+            // Pages made by tests read AppServices.Account: a local guest without the network, DPAPI or WMI, never the real one.
+            AppServices.Account = AccountSetup.ForScreenshots(Tier.Guest);
             AppDomain.CurrentDomain.ProcessExit += (_, _) => RemoveEmptyRegistryParents();
             _initialized = true;
         }

@@ -138,6 +138,10 @@ public partial class App : Application
             return;
         }
 
+        // The computer id (hw_hash, a WMI query that may take seconds) is read off the UI thread before the pages are made, so
+        // that their first Tier is quick. A screenshot run's account has a fixed id (set above, before anything reads Account).
+        var warmUp = ScreenshotDir is null ? Task.Run(() => AppServices.Account.WarmUpAsync()) : Task.CompletedTask;
+
         var vm = new MainViewModel();
         var window = new MainWindow { DataContext = vm };
         MainWindow = window;
@@ -172,13 +176,12 @@ public partial class App : Application
         // first-run screen takes over when it closes.
         if (ScreenshotDir is null)
         {
-            // The ticket refresh of the whole run, off the UI thread: the computer id (hw_hash) is read first (a WMI query that
-            // may take seconds), so that the first Tier on the UI thread is quick.
+            // The ticket refresh of the whole run, off the UI thread, after the warm-up above.
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await AppServices.Account.WarmUpAsync();
+                    await warmUp;
                     await AppServices.Account.RunRefreshLoopAsync(CancellationToken.None);
                 }
                 catch (Exception ex)
