@@ -32,6 +32,15 @@ internal sealed class FakeApi : HttpMessageHandler
     /// <summary>When set, every request fails as if the network were down.</summary>
     public Exception? ThrowOnSend { get; set; }
 
+    private readonly Dictionary<string, Task> _holds = new();
+
+    /// <summary>The next request to the route is recorded, then waits for the task before it is answered (to race it with other calls).</summary>
+    public void Hold(string route, Task until)
+    {
+        lock (_gate)
+            _holds[route] = until;
+    }
+
     public FakeApi On(string route, int status, string body)
     {
         if (!_routes.TryGetValue(route, out var queue))
@@ -47,6 +56,7 @@ internal sealed class FakeApi : HttpMessageHandler
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (ThrowOnSend is not null)
             throw ThrowOnSend;
         var uri = request.RequestUri!;
@@ -56,6 +66,11 @@ internal sealed class FakeApi : HttpMessageHandler
             _requests.Add(new Recorded(request.Method.Method, path, uri.Query, body, request.Headers.Authorization?.Parameter,
                 request.Headers.AcceptLanguage.ToString()));
         var key = $"{request.Method.Method} {path}";
+        Task? hold;
+        lock (_gate)
+            _holds.Remove(key, out hold);
+        if (hold is not null)
+            await hold;
         if (!_routes.TryGetValue(key, out var queue) || queue.Count == 0)
             return Answer(request, 404, "{\"error\":\"NOT_FOUND\",\"message\":\"not found\"}");
         var (status, text) = queue.Count > 1 ? queue.Dequeue() : queue.Peek();

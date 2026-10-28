@@ -272,6 +272,110 @@ public class AccountServiceTests : IDisposable
         Assert.Null(_fake.Requests.Single().Bearer);
     }
 
+    private static async Task WaitForRequests(FakeApi fake, int count)
+        => Assert.True(await Task.Run(() => SpinWait.SpinUntil(() => fake.Requests.Count >= count, TimeSpan.FromSeconds(10))));
+
+    [Fact]
+    public async Task ARevokedAnswer_ForAnOldToken_DoesNotWipeTheNewSignIn()
+    {
+        var gate = new TaskCompletionSource();
+        _fake.OnError("GET /devices", 401, "TOKEN_REVOKED").On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(), token: "t2"));
+        _fake.Hold("GET /devices", gate.Task);
+        var service = SignedIn();
+
+        var pending = service.DevicesAsync(None);
+        await WaitForRequests(_fake, 1);
+        await service.LoginAsync("user@example.com", "password1", None); // the user signs in again meanwhile (token t2)
+        gate.SetResult();
+        var ex = await Assert.ThrowsAsync<ApiException>(() => pending);
+
+        Assert.Equal(ApiError.TokenRevoked, ex.Error.Code);
+        Assert.True(service.IsSignedIn);
+        Assert.Equal("t2", _store.Data.Token);
+        Assert.False(service.SessionEnded);
+    }
+
+    [Fact]
+    public async Task ARevokedAnswer_AfterTheUserSignedOut_DoesNotShowSessionEnded()
+    {
+        var gate = new TaskCompletionSource();
+        _fake.OnError("GET /devices", 401, "TOKEN_REVOKED").On("POST /auth/logout", 200, "{\"ok\":true}");
+        _fake.Hold("GET /devices", gate.Task);
+        var service = SignedIn();
+
+        var pending = service.DevicesAsync(None);
+        await WaitForRequests(_fake, 1);
+        await service.LogoutAsync(None);
+        gate.SetResult();
+        await Assert.ThrowsAsync<ApiException>(() => pending);
+
+        Assert.False(service.IsSignedIn);
+        Assert.False(service.SessionEnded);
+    }
+
+    [Fact]
+    public async Task AnUnbindOfThisComputer_FinishingAfterANewSignIn_KeepsTheNewSignIn()
+    {
+        var gate = new TaskCompletionSource();
+        _fake.On("POST /device/unbind", 200, "{\"ok\":true}").On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(), token: "t2"));
+        _fake.Hold("POST /device/unbind", gate.Task);
+        var service = SignedIn();
+
+        var pending = service.UnbindAsync(null, None);
+        await WaitForRequests(_fake, 1);
+        await service.LoginAsync("user@example.com", "password1", None);
+        gate.SetResult();
+        await pending;
+
+        Assert.True(service.IsSignedIn);
+        Assert.Equal("t2", _store.Data.Token);
+    }
+
+    [Fact]
+    public async Task ASignInWithAnUnverifiedTicket_AdoptsTheAccount_FromTheNextGoodTicket()
+    {
+        using var other = new TestLicense();
+        _fake.On("POST /auth/login", 200, other.LoginJson(TestLicense.Json())); // signed by a key we do not know
+        var service = Service();
+        await service.LoginAsync("user@example.com", "password1", None);
+        Assert.Equal(Tier.Free, service.Tier);
+        Assert.Null(_store.Data.AccountId);
+
+        Assert.False(service.AcceptTicket(_key.Sign(TestLicense.Json(deviceId: 99))));
+        Assert.True(service.AcceptTicket(_key.Sign(TestLicense.Json())));
+
+        Assert.Equal(Tier.Pro, service.Tier);
+        Assert.Equal(TestLicense.Sub, _store.Data.AccountId);
+    }
+
+    [Fact]
+    public async Task Support_WithARevokedToken_SignsOut_AndThrows()
+    {
+        _fake.OnError("POST /ticket", 401, "TOKEN_REVOKED");
+        var service = SignedIn();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.SendSupportAsync(null, "bug", "Окно не открывается", null, None));
+
+        Assert.Equal(ApiError.TokenRevoked, ex.Error.Code);
+        Assert.False(service.IsSignedIn);
+        Assert.True(service.SessionEnded);
+    }
+
+    [Fact]
+    public async Task Logout_Cancelled_StillSignsOutHere_AndRethrows()
+    {
+        _fake.On("POST /auth/logout", 200, "{\"ok\":true}");
+        var service = SignedIn();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.LogoutAsync(cts.Token));
+
+        Assert.False(service.IsSignedIn);
+        Assert.Null(_store.Data.Token);
+        Assert.False(service.SessionEnded);
+    }
+
     [Fact]
     public void TheDeviceName_IsCleanedAndCut()
     {

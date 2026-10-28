@@ -21,6 +21,7 @@ public sealed partial class AccountService
     private readonly object _lock = new();
     private AccountData _data;
     private LicenseTicketData? _ticket;
+    private bool _sessionEnded;
 
     public AccountService(ApiClient api, IAccountStore store, IHwHash hw, string platform, string deviceName, string appVersion,
         IReadOnlyList<string> licenseKeys, Func<DateTimeOffset>? now = null, Func<TimeSpan, CancellationToken, Task>? delay = null)
@@ -74,7 +75,14 @@ public sealed partial class AccountService
     }
 
     /// <summary>TOKEN_REVOKED was seen in this run: Профиль offers to sign in again (once, not as a pop-up).</summary>
-    public bool SessionEnded { get; private set; }
+    public bool SessionEnded
+    {
+        get
+        {
+            lock (_lock)
+                return _sessionEnded;
+        }
+    }
 
     public LicenseStatus Status
     {
@@ -112,7 +120,10 @@ public sealed partial class AccountService
     public async Task ResetConfirmAsync(string email, string code, string password, CancellationToken ct)
         => SignIn(await _api.ResetConfirmAsync(email.Trim(), code.Trim(), password, Device, ct), T._("Аккаунт: пароль сменён, вход выполнен"));
 
-    /// <summary>Unbinds a computer with the permit of the last DEVICE_LIMIT; then the caller signs in again the same way.</summary>
+    /// <summary>
+    /// Unbinds a computer with the permit of the last DEVICE_LIMIT. The code of that sign-in is already spent (verify, reset/confirm), so
+    /// the caller finishes with <see cref="LoginAsync"/> and the password (the new one after a reset), not with the same call again.
+    /// </summary>
     public async Task ReleaseAsync(string unbindToken, long deviceId, CancellationToken ct)
     {
         await _api.ReleaseAsync(unbindToken, deviceId, ct);
@@ -135,6 +146,13 @@ public sealed partial class AccountService
             {
                 Log.Info(T.F("Аккаунт: сервер не подтвердил выход ({0}) — данные входа всё равно удалены", ex.Error.Code));
             }
+            catch (OperationCanceledException)
+            {
+                // Cancelled while waiting for the server: the local data goes anyway, then the cancellation goes on.
+                SignOut(revoked: false);
+                Log.Info(T._("Аккаунт: выход"));
+                throw;
+            }
         }
         SignOut(revoked: false);
         Log.Info(T._("Аккаунт: выход"));
@@ -148,15 +166,18 @@ public sealed partial class AccountService
         long? own;
         lock (_lock)
             own = _data.DeviceId;
+        string? used = null;
         await WithToken(async t =>
         {
+            used = t;
             await _api.UnbindAsync(t, deviceId, ct);
             return true;
         });
         if (deviceId is null || deviceId == own)
         {
-            SignOut(revoked: false);
-            Log.Info(T._("Аккаунт: этот компьютер отвязан — выход"));
+            // Only the sign-in the call was made with: the user may have signed in again while the server was answering.
+            if (SignOutIfCurrent(used!, revoked: false))
+                Log.Info(T._("Аккаунт: этот компьютер отвязан — выход"));
         }
         else
         {
@@ -172,13 +193,23 @@ public sealed partial class AccountService
     }
 
     /// <summary>«Написать нам»: the account's e-mail when signed in, otherwise the typed one (required).</summary>
-    public Task SendSupportAsync(string? email, string topic, string message, string? logBase64, CancellationToken ct)
+    public async Task SendSupportAsync(string? email, string topic, string message, string? logBase64, CancellationToken ct)
     {
         var token = Token();
         var address = token is not null ? Email : email?.Trim();
         if (string.IsNullOrEmpty(address))
             throw new ArgumentException("An e-mail is needed to answer.", nameof(email));
-        return _api.SupportAsync(token, new SupportRequest(address, topic, message, logBase64), _appVersion, ct);
+        var request = new SupportRequest(address, topic, message, logBase64);
+        if (token is null)
+        {
+            await _api.SupportAsync(null, request, _appVersion, ct);
+            return;
+        }
+        await WithToken(token, async t =>
+        {
+            await _api.SupportAsync(t, request, _appVersion, ct);
+            return true;
+        });
     }
 
     /// <summary>Takes a new ticket (purchase, promo, refresh) if it is signed by a known key and belongs to this sign-in; true when taken.</summary>
@@ -187,14 +218,15 @@ public sealed partial class AccountService
         var data = LicenseTicket.Verify(ticket.Ticket, ticket.Signature, _keys);
         lock (_lock)
         {
-            if (data is null || _data.Token is null || data.DeviceId != _data.DeviceId || data.Sub != _data.AccountId ||
+            // A sign-in whose first ticket could not be verified has no account number yet: the first good ticket of this computer gives it.
+            if (data is null || _data.Token is null || data.DeviceId != _data.DeviceId || (_data.AccountId is not null && data.Sub != _data.AccountId) ||
                 !string.Equals(data.HwHash, _hw.Value, StringComparison.OrdinalIgnoreCase))
             {
                 Log.Warn(T._("Аккаунт: полученный билет лицензии не подходит этому компьютеру — оставлен прежний"));
                 return false;
             }
             _ticket = data;
-            _data = _data with { Ticket = ticket.Ticket, Signature = ticket.Signature };
+            _data = _data with { Ticket = ticket.Ticket, Signature = ticket.Signature, AccountId = _data.AccountId ?? data.Sub };
             _store.Save(_data);
         }
         Changed?.Invoke();
@@ -233,17 +265,23 @@ public sealed partial class AccountService
     }
 
     /// <summary>A call with the token; TOKEN_REVOKED signs out (and is rethrown). Not signed in → TOKEN_REVOKED at once.</summary>
-    private async Task<TResult> WithToken<TResult>(Func<string, Task<TResult>> call)
+    private Task<TResult> WithToken<TResult>(Func<string, Task<TResult>> call)
+        => WithToken(Token() ?? throw new ApiException(new ApiError(ApiError.TokenRevoked, "", 401, null)), call);
+
+    /// <summary>
+    /// The same with the token the caller already read. TOKEN_REVOKED ends only the sign-in this token belongs to: when the user signed
+    /// out (or in again) while the call was away, the answer is old news and the current session stays.
+    /// </summary>
+    private async Task<TResult> WithToken<TResult>(string token, Func<string, Task<TResult>> call)
     {
-        var token = Token() ?? throw new ApiException(new ApiError(ApiError.TokenRevoked, "", 401, null));
         try
         {
             return await call(token);
         }
         catch (ApiException ex) when (ex.Error.Code == ApiError.TokenRevoked)
         {
-            SignOut(revoked: true);
-            Log.Info(T._("Аккаунт: вход больше не действует (компьютер отвязан или пароль сменён) — программа в бесплатном режиме"));
+            if (SignOutIfCurrent(token, revoked: true))
+                Log.Info(T._("Аккаунт: вход больше не действует (компьютер отвязан или пароль сменён) — программа в бесплатном режиме"));
             throw;
         }
     }
@@ -257,7 +295,7 @@ public sealed partial class AccountService
                 result.License.Signature, _data.InstallId);
             _ticket = ticket;
             _store.Save(_data);
-            SessionEnded = false;
+            _sessionEnded = false;
         }
         if (ticket is null)
             Log.Warn(T._("Аккаунт: подпись билета лицензии не проверена — до следующей проверки программа в бесплатном режиме"));
@@ -265,16 +303,22 @@ public sealed partial class AccountService
         Changed?.Invoke();
     }
 
-    private void SignOut(bool revoked)
+    private void SignOut(bool revoked) => SignOutIfCurrent(null, revoked);
+
+    /// <summary>Signs out if the current sign-in uses this token (null: whatever is current); false when the session is another one.</summary>
+    private bool SignOutIfCurrent(string? token, bool revoked)
     {
         lock (_lock)
         {
+            if (token is not null && _data.Token != token)
+                return false;
             _data = _data.SignedOut();
             _ticket = null;
             _store.Save(_data);
             if (revoked)
-                SessionEnded = true;
+                _sessionEnded = true;
         }
         Changed?.Invoke();
+        return true;
     }
 }
