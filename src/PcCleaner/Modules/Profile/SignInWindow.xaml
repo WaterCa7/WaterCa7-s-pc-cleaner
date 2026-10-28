@@ -89,7 +89,7 @@
                 <!-- Password -->
                 <StackPanel Visibility="{Binding IsPasswordStep, Converter={StaticResource BoolToVis}}">
                     <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Почта'}" />
-                    <TextBox Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox x:Name="EmailBox" Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
                     <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Пароль'}" />
                     <PasswordBox x:Name="PasswordBox" />
                     <Button Style="{StaticResource AccentButton}" Margin="0,22,0,0" Padding="14,10" Content="{loc:T 'Войти'}"
@@ -125,7 +125,7 @@
                 <!-- Sign-up -->
                 <StackPanel Visibility="{Binding IsRegisterStep, Converter={StaticResource BoolToVis}}">
                     <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Почта'}" />
-                    <TextBox Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox x:Name="RegisterEmailBox" Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
                     <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T 'Пароль'}" />
                     <PasswordBox x:Name="RegisterPasswordBox" />
                     <TextBlock Style="{StaticResource Muted}" Margin="0,5,0,0" Text="{loc:T 'Пароль — от 8 до 128 символов'}" />

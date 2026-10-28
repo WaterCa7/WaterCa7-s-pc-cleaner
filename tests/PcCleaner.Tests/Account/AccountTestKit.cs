@@ -29,6 +29,12 @@ internal sealed class FakeApi : HttpMessageHandler
         }
     }
 
+    /// <summary>
+    /// The answer arrives just before the caller cancels: its body is read before it is handed back, so a token cancelled after the
+    /// request was sent (during a <see cref="Hold"/>) no longer turns it into a cancellation.
+    /// </summary>
+    public bool AnswerDespiteCancel { get; set; }
+
     /// <summary>When set, every request fails as if the network were down.</summary>
     public Exception? ThrowOnSend { get; set; }
 
@@ -74,7 +80,10 @@ internal sealed class FakeApi : HttpMessageHandler
         if (!_routes.TryGetValue(key, out var queue) || queue.Count == 0)
             return Answer(request, 404, "{\"error\":\"NOT_FOUND\",\"message\":\"not found\"}");
         var (status, text) = queue.Count > 1 ? queue.Dequeue() : queue.Peek();
-        return Answer(request, status, text);
+        var response = Answer(request, status, text);
+        if (AnswerDespiteCancel)
+            await response.Content.LoadIntoBufferAsync(); // read already: a cancel that comes now no longer stops the caller from getting it
+        return response;
     }
 
     private static HttpResponseMessage Answer(HttpRequestMessage request, int status, string body) => new((HttpStatusCode)status)

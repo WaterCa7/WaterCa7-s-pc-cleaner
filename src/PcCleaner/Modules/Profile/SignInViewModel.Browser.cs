@@ -45,7 +45,7 @@ public sealed partial class SignInViewModel
         StopBrowser();
         Error = null;
         BrowserEnded = false;
-        BrowserCode = null;
+        (BrowserCode, BrowserUrl) = (null, null); // the reopen button must not open the page of a code that is gone
         var cts = _browserCts = new CancellationTokenSource();
         BrowserTask = RunBrowserAsync(cts.Token);
     }
@@ -75,6 +75,7 @@ public sealed partial class SignInViewModel
         try
         {
             var code = await _account.StartBrowserLoginAsync(ct);
+            ct.ThrowIfCancellationRequested(); // the answer came after the window closed or the tab was left: no code, no browser
             (BrowserCode, BrowserUrl) = (code.Code, code.Url);
             _openUrl(code.Url);
             var ok = await _account.WaitBrowserLoginAsync(code, limit => WaitForReleaseAsync(limit, ct), ct);
@@ -106,6 +107,8 @@ public sealed partial class SignInViewModel
     /// <summary>The poll stands while the list of computers is open; a release (or «Назад») ends the wait.</summary>
     private async Task WaitForReleaseAsync(DeviceLimitInfo limit, CancellationToken ct)
     {
+        // The limit of a poll that was left must not take over the wait and the retry of the flow that runs now.
+        ct.ThrowIfCancellationRequested();
         var done = _limitDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _retry = () =>
         {

@@ -37,6 +37,7 @@ public sealed partial class SignInViewModel : ObservableObject
     private readonly AccountService _account;
     private readonly Action<string> _openUrl;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<string, string, bool> _confirm;
     private SignInStep _step;
     private SignInTab _tab;
     private string _email = "";
@@ -52,11 +53,13 @@ public sealed partial class SignInViewModel : ObservableObject
     private Func<Task>? _retry;
     private int _completedFired;
 
-    public SignInViewModel(AccountService account, Action<string> openUrl, SignInTab tab = SignInTab.Password, Func<DateTimeOffset>? now = null)
+    public SignInViewModel(AccountService account, Action<string> openUrl, SignInTab tab = SignInTab.Password, Func<DateTimeOffset>? now = null,
+        Func<string, string, bool>? confirm = null)
     {
         _account = account;
         _openUrl = openUrl;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _confirm = confirm ?? ((_, _) => true); // the window passes the app's question (Dialogs.Confirm)
         SignInCommand = new AsyncRelayCommand(() => RunAsync(SignInAsync), () => !IsBusy);
         ForgotCommand = new RelayCommand(() => GoTo(SignInStep.ResetEmail));
         SendResetCommand = new AsyncRelayCommand(() => RunAsync(SendResetAsync), () => !IsBusy);
@@ -221,10 +224,16 @@ public sealed partial class SignInViewModel : ObservableObject
 
     // ----- DEVICE_LIMIT -----
 
-    /// <summary>«Отвязать» in the list: releases the computer with the last permit, then repeats the sign-in the right way.</summary>
+    /// <summary>
+    /// «Отвязать» in the list: asks first (it spends the weekly release and the owner of that computer gets an e-mail, as with
+    /// «Отвязать» in Профиль), then releases the computer with the last permit and repeats the sign-in the right way.
+    /// </summary>
     public async Task ReleaseAsync(LimitDevice device)
     {
         if (_limit is null || IsBusy)
+            return;
+        if (!_confirm(T._("Отвязать компьютер"),
+                T.F("Отвязать компьютер «{0}»? На нём программа перейдёт в бесплатный режим. Отвязывать можно раз в 7 дней.", device.Name)))
             return;
         await RunAsync(async () =>
         {
@@ -376,7 +385,6 @@ public sealed partial class SignInViewModel : ObservableObject
             },
             _ => Step,
         });
-        CancelDeviceLimitWait();
     }
 
     private bool CheckEmail()
@@ -405,7 +413,7 @@ public sealed partial class SignInViewModel : ObservableObject
 
     private bool CheckCode()
     {
-        Code = new string(Code.Where(char.IsDigit).ToArray());
+        Code = new string(Code.Where(c => c is >= '0' and <= '9').ToArray()); // char.IsDigit takes the digits of other scripts too
         if (Code.Length == 6)
             return true;
         Error = T._("Введите 6 цифр из письма.");

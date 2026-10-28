@@ -41,6 +41,14 @@ public partial class SignInWindow : Window
                 Close(); // not shown as a dialog
             }
         });
+        // The keyboard starts in the e-mail box of the first step (the browser tab has none).
+        Loaded += (_, _) =>
+        {
+            if (vm.IsPasswordStep)
+                EmailBox.Focus();
+            else if (vm.IsRegisterStep)
+                RegisterEmailBox.Focus();
+        };
         _tick.Tick += (_, _) => vm.Tick();
         _tick.Start();
         Closed += (_, _) =>

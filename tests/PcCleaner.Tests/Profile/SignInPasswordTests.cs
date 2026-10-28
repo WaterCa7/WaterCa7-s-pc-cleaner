@@ -143,6 +143,57 @@ public class SignInPasswordTests : IDisposable
     }
 
     [Fact]
+    public async Task Release_AsksFirst_AndANoSendsNothing()
+    {
+        _a.Fake.OnError("POST /auth/login", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
+            .On("POST /auth/login", 200, _a.Key.LoginJson(TestLicense.Json()))
+            .On("POST /device/release", 200, "{\"ok\":true}");
+        var questions = new List<(string Title, string Text)>();
+        var answer = false;
+        var vm = new SignInViewModel(_a.Service, _a.Open, SignInTab.Password, () => _a.Now, (title, text) =>
+        {
+            questions.Add((title, text));
+            return answer;
+        });
+        vm.Completed += () => _completed++;
+        vm.Email = "user@example.com";
+        vm.Password = "password1";
+        await Run(vm.SignInCommand);
+
+        vm.ReleaseCommand.Execute(vm.Devices[0]);
+        await vm.ReleaseCommand.LastTask;
+
+        Assert.Single(questions);
+        Assert.Contains("Office", questions[0].Text);
+        Assert.Empty(_a.Fake.To("POST /device/release"));
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+        Assert.Equal(0, _completed);
+
+        answer = true;
+        await vm.ReleaseAsync(vm.Devices[0]);
+
+        Assert.Single(_a.Fake.To("POST /device/release"));
+        Assert.Equal(1, _completed);
+    }
+
+    [Fact]
+    public async Task TheCode_TakesOnlyLatinDigits()
+    {
+        _a.Fake.On("POST /auth/reset", 200, "{\"ok\":true}").On("POST /auth/reset/confirm", 200, _a.Key.LoginJson(TestLicense.Json()));
+        var vm = Create();
+        vm.Email = "user@example.com";
+        vm.ForgotCommand.Execute(null);
+        await Run(vm.SendResetCommand);
+        vm.Password = vm.Password2 = "newpassword";
+        vm.Code = "١٢٣٤٥٦"; // Arabic-Indic digits: char.IsDigit says yes, the server says no
+
+        await Run(vm.ConfirmResetCommand);
+
+        Assert.Equal("Введите 6 цифр из письма.", vm.Error);
+        Assert.Empty(_a.Fake.To("POST /auth/reset/confirm"));
+    }
+
+    [Fact]
     public async Task ABurntPermit_AsksAgain_AndShowsTheNewList()
     {
         _a.Fake.OnError("POST /auth/login", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))

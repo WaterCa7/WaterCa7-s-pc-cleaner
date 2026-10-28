@@ -224,6 +224,82 @@ public class SignInBrowserTests : IDisposable
     }
 
     [Fact]
+    public async Task ACodeThatArrivesAfterTheWindowClosed_IsNotShown_AndTheBrowserStaysShut()
+    {
+        var answer = new TaskCompletionSource();
+        _a.Fake.AnswerDespiteCancel = true; // the answer was in before the cancel was seen
+        _a.Fake.On("POST /auth/code", 200, Start).On("GET /auth/code/ABCD-1234", 202, "{\"status\":\"pending\"}");
+        _a.Fake.Hold("POST /auth/code", answer.Task);
+        var vm = Create();
+        var run = vm.BrowserTask;
+        await Wait.Until(() => _a.Fake.To("POST /auth/code").Any(), "the request for a code");
+
+        vm.Stop(); // the window closed while the code was on its way
+        answer.SetResult();
+        await Wait.Within(run, "the cancelled run");
+
+        Assert.Null(vm.BrowserCode);
+        Assert.Null(vm.BrowserUrl);
+        Assert.Empty(_a.Opened);
+        Assert.Empty(_a.Fake.To("GET /auth/code/ABCD-1234"));
+    }
+
+    [Fact]
+    public async Task ALimitThatArrivesAfterTheTabWasLeft_DoesNotTakeOverTheReleaseOfThePasswordSignIn()
+    {
+        var answer = new TaskCompletionSource();
+        _a.Fake.AnswerDespiteCancel = true;
+        _a.Fake.On("POST /auth/code", 200, Start)
+            .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
+            .OnError("POST /auth/login", 409, "DEVICE_LIMIT", _a.LimitJson((6, "Laptop")))
+            .On("POST /auth/login", 200, _a.Key.LoginJson(TestLicense.Json()))
+            .On("POST /device/release", 200, "{\"ok\":true}");
+        _a.Fake.Hold("GET /auth/code/ABCD-1234", answer.Task);
+        var vm = Create();
+        var poll = vm.BrowserTask;
+        await Wait.Until(() => _a.Fake.To("GET /auth/code/ABCD-1234").Any(), "the poll request");
+
+        // The user goes to the password tab and runs into the limit there; the old poll's limit arrives only then.
+        vm.Tab = SignInTab.Password;
+        vm.Email = "user@example.com";
+        vm.Password = "password1";
+        vm.SignInCommand.Execute(null);
+        await vm.SignInCommand.LastTask;
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+        answer.SetResult();
+        await Wait.Within(poll, "the cancelled poll");
+
+        await vm.ReleaseAsync(vm.Devices[0]);
+
+        Assert.Equal(6, Api.Body(_a.Fake.To("POST /device/release").Single()).GetProperty("device_id").GetInt64());
+        Assert.Equal(2, _a.Fake.To("POST /auth/login").Count()); // the password sign-in was repeated after the release
+        Assert.Equal(1, _completed);
+    }
+
+    [Fact]
+    public async Task ANewCode_ForgetsTheOldPage_UntilItArrives()
+    {
+        _a.Fake.On("POST /auth/code", 200, Start).OnError("GET /auth/code/ABCD-1234", 410, "NOT_FOUND");
+        var vm = Create();
+        await Wait.Within(vm.BrowserTask, "the poll");
+        Assert.NotNull(vm.BrowserUrl);
+        _a.Fake.OnError("POST /auth/code", 500, "SERVER_ERROR");
+
+        // The queue of the route holds the 200 and the 500 now: the first restart takes the 200 again, the second the 500.
+        vm.RestartBrowserCommand.Execute(null);
+        await Wait.Within(vm.BrowserTask, "the second poll");
+        vm.RestartBrowserCommand.Execute(null);
+        await Wait.Within(vm.BrowserTask, "the failed request");
+
+        Assert.True(vm.BrowserEnded);
+        Assert.Null(vm.BrowserCode);
+        Assert.Null(vm.BrowserUrl);
+        var opened = _a.Opened.Count;
+        vm.ReopenBrowserCommand.Execute(null);
+        Assert.Equal(opened, _a.Opened.Count);
+    }
+
+    [Fact]
     public void Stop_DropsThePasswords_AndCanBeCalledTwice()
     {
         var vm = Create();
