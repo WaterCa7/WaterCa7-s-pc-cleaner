@@ -50,6 +50,7 @@ public sealed partial class SignInViewModel : ObservableObject
     private string? _limitText;
     private DeviceLimitInfo? _limit;
     private Func<Task>? _retry;
+    private int _completedFired;
 
     public SignInViewModel(AccountService account, Action<string> openUrl, SignInTab tab = SignInTab.Password, Func<DateTimeOffset>? now = null)
     {
@@ -288,9 +289,10 @@ public sealed partial class SignInViewModel : ObservableObject
         }
     }
 
-    private void Done()
+    /// <summary>Ends the window after a sign-in. Once only: the resumed browser poll and the release in the list can both get here.</summary>
+    internal void Done()
     {
-        if (!_account.IsSignedIn)
+        if (!_account.IsSignedIn || Interlocked.Exchange(ref _completedFired, 1) != 0)
             return;
         Password = Password2 = Code = "";
         _retry = null; // the closures hold the password

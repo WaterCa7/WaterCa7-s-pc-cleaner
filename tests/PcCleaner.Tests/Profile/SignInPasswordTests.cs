@@ -233,12 +233,11 @@ public class SignInPasswordTests : IDisposable
             .On("GET /auth/code/ABCD-1234", 200, _a.Key.LoginJson(TestLicense.Json()))
             .On("POST /device/release", 200, "{\"ok\":true}");
         var vm = Create(SignInTab.Browser);
-        while (vm.Step != SignInStep.DeviceLimit && !vm.BrowserTask.IsCompleted)
-            await Task.Delay(10);
+        await Wait.Until(() => vm.Step == SignInStep.DeviceLimit || vm.BrowserTask.IsCompleted, "the list of computers");
         Assert.Equal(SignInStep.DeviceLimit, vm.Step);
 
         await vm.ReleaseAsync(vm.Devices[0]);
-        await vm.BrowserTask;
+        await Wait.Within(vm.BrowserTask, "the browser poll");
 
         Assert.Equal(1, _completed);
         Assert.True(_a.Service.IsSignedIn);
@@ -251,17 +250,16 @@ public class SignInPasswordTests : IDisposable
             .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
             .OnError("POST /device/release", 429, "UNBIND_QUOTA");
         var vm = Create(SignInTab.Browser);
-        while (vm.Step != SignInStep.DeviceLimit && !vm.BrowserTask.IsCompleted)
-            await Task.Delay(10);
+        await Wait.Until(() => vm.Step == SignInStep.DeviceLimit || vm.BrowserTask.IsCompleted, "the list of computers");
 
         await vm.ReleaseAsync(vm.Devices[0]);
-        while (!(_a.Fake.To("GET /auth/code/ABCD-1234").Count() >= 2 && vm.Step == SignInStep.DeviceLimit) && !vm.BrowserTask.IsCompleted)
-            await Task.Delay(10);
+        await Wait.Until(() => (_a.Fake.To("GET /auth/code/ABCD-1234").Count() >= 2 && vm.Step == SignInStep.DeviceLimit) || vm.BrowserTask.IsCompleted,
+            "the list again after the refused release");
 
         Assert.Equal(SignInStep.DeviceLimit, vm.Step);
         Assert.Equal("msg UNBIND_QUOTA", vm.Error);
         vm.Tab = SignInTab.Password; // stops the poll
-        await vm.BrowserTask;
+        await Wait.Within(vm.BrowserTask, "the browser poll");
     }
 
     [Fact]
@@ -301,7 +299,7 @@ public class SignInPasswordTests : IDisposable
         var vm = Create(SignInTab.Browser);
 
         vm.Tab = SignInTab.Browser;
-        await vm.BrowserTask;
+        await Wait.Within(vm.BrowserTask, "the browser poll");
 
         Assert.Single(_a.Fake.To("POST /auth/code"));
     }

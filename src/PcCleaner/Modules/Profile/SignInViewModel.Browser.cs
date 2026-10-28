@@ -11,10 +11,17 @@ public sealed partial class SignInViewModel
     private TaskCompletionSource? _limitDone;
     private string? _browserCode;
     private string? _browserUrl;
+    private bool _browserEnded;
 
     public string? BrowserCode { get => _browserCode; private set => Set(ref _browserCode, value); }
 
     public string? BrowserUrl { get => _browserUrl; private set => Set(ref _browserUrl, value); }
+
+    /// <summary>
+    /// The code ran out or the request failed: the view offers «Новый код» (<see cref="RestartBrowserCommand"/>). The command itself
+    /// is always available, because choosing the browser tab again does not ask for a new code.
+    /// </summary>
+    public bool BrowserEnded { get => _browserEnded; private set => Set(ref _browserEnded, value); }
 
     public RelayCommand ReopenBrowserCommand { get; private set; } = null!;
 
@@ -37,6 +44,7 @@ public sealed partial class SignInViewModel
     {
         StopBrowser();
         Error = null;
+        BrowserEnded = false;
         BrowserCode = null;
         var cts = _browserCts = new CancellationTokenSource();
         BrowserTask = RunBrowserAsync(cts.Token);
@@ -60,17 +68,27 @@ public sealed partial class SignInViewModel
             _openUrl(code.Url);
             var ok = await _account.WaitBrowserLoginAsync(code, limit => WaitForReleaseAsync(limit, ct), ct);
             if (ok)
+            {
                 Done();
-            else
+            }
+            else if (!ct.IsCancellationRequested)
+            {
                 Error = T._("Код устарел. Нажмите «Новый код» и войдите снова.");
+                BrowserEnded = true;
+            }
         }
         catch (OperationCanceledException)
         {
             // another tab, «Назад» or the window closed
         }
-        catch (ApiException ex)
+        catch (ApiException ex) when (!ct.IsCancellationRequested)
         {
             Error = SignInErrors.Text(ex.Error);
+            BrowserEnded = true;
+        }
+        catch (ApiException)
+        {
+            // the sign-in was left while the request was running
         }
     }
 
@@ -83,9 +101,17 @@ public sealed partial class SignInViewModel
             done.TrySetResult();
             return Task.CompletedTask;
         };
-        Ui.Post(() => ShowLimit(limit, ""));
+        Ui.Post(() =>
+        {
+            if (!ct.IsCancellationRequested) // «Назад» or another tab came first: the list must not reappear
+                ShowLimit(limit, "");
+        });
         using (ct.Register(() => done.TrySetCanceled()))
             await done.Task;
-        Ui.Post(() => Step = SignInStep.Browser);
+        Ui.Post(() =>
+        {
+            if (!ct.IsCancellationRequested)
+                Step = SignInStep.Browser;
+        });
     }
 }

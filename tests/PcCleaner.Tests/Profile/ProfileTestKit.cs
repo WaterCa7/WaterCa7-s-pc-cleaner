@@ -41,3 +41,32 @@ internal sealed class TestAccount : IDisposable
 
     public void Dispose() => Key.Dispose();
 }
+
+/// <summary>Waits for the background work of a view model; a regression fails after the deadline instead of hanging the run.</summary>
+internal static class Wait
+{
+    private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(5);
+
+    public static async Task Until(Func<bool> condition, string what)
+    {
+        var end = DateTime.UtcNow + Deadline;
+        while (!condition())
+        {
+            if (DateTime.UtcNow > end)
+                throw new TimeoutException($"Not reached within {Deadline.TotalSeconds:0} s: {what}");
+            await Task.Delay(10);
+        }
+    }
+
+    public static async Task Within(Task task, string what)
+    {
+        try
+        {
+            await task.WaitAsync(Deadline);
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException($"Not finished within {Deadline.TotalSeconds:0} s: {what}");
+        }
+    }
+}
