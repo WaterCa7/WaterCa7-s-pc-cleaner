@@ -103,3 +103,132 @@ public class ShellMenuTests
         Assert.False(system.Contains(sections[0].Tabs[0]));
     }
 }
+
+/// <summary>The shell over the menu: two sidebar lists, the tab strip, navigation by page key.</summary>
+[Collection(ModeSequentialCollection.Name)]
+public class ShellSectionsTests
+{
+    private readonly AppSettings _settings = new() { UiMode = UiMode.Expert };
+    private readonly List<FakePage> _pages = ShellMenuTests.AllKeys.Select(k => new FakePage(k)).ToList();
+    private readonly List<string> _questions = new();
+    private bool _answer;
+
+    public ShellSectionsTests() => TestEnvironment.Init();
+
+    private MainViewModel Shell() => new(_pages, () => _settings, _ => { })
+    {
+        Ask = (title, _) =>
+        {
+            _questions.Add(title);
+            return _answer;
+        },
+    };
+
+    [Fact]
+    public void TheSidebar_HasFiveSectionsOnTop_AndProfileAndSettingsAtTheBottom()
+    {
+        var shell = Shell();
+
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "Computer", "System", "Protection" }, shell.TopSections.Select(s => s.Key));
+        Assert.Equal(new[] { "Profile", "Settings" }, shell.BottomSections.Select(s => s.Key));
+        Assert.Equal(12, shell.Pages.Count); // every page stays in Pages
+        Assert.Equal("Dashboard", shell.SelectedSection!.Key);
+    }
+
+    [Theory]
+    [InlineData("Dashboard", "Dashboard")]
+    [InlineData("Cleaner", "Cleaner")]
+    [InlineData("Hardware", "Computer")]
+    [InlineData("Optimizer", "Computer")]
+    [InlineData("Processes", "System")]
+    [InlineData("Startup", "System")]
+    [InlineData("Programs", "System")]
+    [InlineData("Disk", "System")]
+    [InlineData("Security", "Protection")]
+    [InlineData("Network", "Protection")]
+    [InlineData("Profile", "Profile")]
+    [InlineData("Settings", "Settings")]
+    public void NavigateTo_APageKey_OpensItsSectionAndTab(string pageKey, string sectionKey)
+    {
+        var shell = Shell();
+
+        shell.NavigateTo(pageKey);
+
+        Assert.Equal(pageKey, shell.SelectedPage!.Key);
+        Assert.Equal(sectionKey, shell.SelectedSection!.Key);
+    }
+
+    [Fact]
+    public void ASection_OpensOnItsFirstTab_ThenOnTheLastOpenedOne()
+    {
+        var shell = Shell();
+        var system = shell.TopSections.Single(s => s.Key == "System");
+
+        shell.SelectedTopSection = system;
+        Assert.Equal("Processes", shell.SelectedPage!.Key);
+
+        shell.NavigateTo("Disk");
+        shell.NavigateTo("Dashboard");
+        shell.SelectedTopSection = system;
+        Assert.Equal("Disk", shell.SelectedPage!.Key);
+    }
+
+    [Fact]
+    public void OnlyTheListOfTheOpenSection_HasASelection_AndANullWriteIsIgnored()
+    {
+        var shell = Shell();
+
+        shell.NavigateTo("Settings");
+        Assert.Null(shell.SelectedTopSection);
+        Assert.Equal("Settings", shell.SelectedBottomSection!.Key);
+
+        shell.SelectedTopSection = null; // what a list writes when its selection is cleared
+        Assert.Equal("Settings", shell.SelectedPage!.Key);
+
+        shell.NavigateTo("Network");
+        Assert.Equal("Protection", shell.SelectedTopSection!.Key);
+        Assert.Null(shell.SelectedBottomSection);
+    }
+
+    [Fact]
+    public void TheHeader_ShowsTheSection_WhenThereAreTabs_ElseThePage()
+    {
+        var shell = Shell();
+
+        shell.NavigateTo("Disk");
+        Assert.Equal("Система", shell.HeaderTitle);
+        Assert.True(shell.SelectedSection!.ShowTabs);
+
+        shell.NavigateTo("Cleaner");
+        Assert.Equal("Раздел Cleaner", shell.HeaderTitle);
+        Assert.False(shell.SelectedSection!.ShowTabs);
+    }
+
+    [Fact]
+    public void SimpleMode_HidesTabs_NotTheSectionsThatStillHaveOne()
+    {
+        _settings.UiMode = UiMode.Simple;
+        var shell = Shell();
+
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "System" }, shell.TopSections.Select(s => s.Key));
+        Assert.Equal(new[] { "Profile", "Settings" }, shell.BottomSections.Select(s => s.Key));
+        var system = shell.TopSections.Single(s => s.Key == "System");
+        Assert.Equal(new[] { "Programs" }, system.VisibleTabs.Select(p => p.Key));
+
+        shell.SelectedTopSection = system;
+        Assert.Equal("Programs", shell.SelectedPage!.Key);
+        Assert.Equal("Раздел Programs", shell.HeaderTitle); // one tab: no strip, the page's own title
+    }
+
+    [Fact]
+    public void AHiddenTab_IsStillOfferedWithTheExpertMode()
+    {
+        _settings.UiMode = UiMode.Simple;
+        var shell = Shell();
+
+        _answer = false;
+        shell.NavigateTo("Disk");
+        Assert.Equal(new[] { "Раздел Disk" }, _questions);
+        Assert.Equal("Dashboard", shell.SelectedPage!.Key);
+    }
+}

@@ -5,7 +5,7 @@ using PcCleaner.Core.Localization;
 namespace PcCleaner.Core;
 
 /// <summary>
-/// Простой: only the pages most people need (Главная, Очистка, Программы, Настройки). Опытный: every page, as it always was.
+/// Простой: only the pages most people need (Главная, Очистка, Программы, Профиль, Настройки). Опытный: every page, as it always was.
 /// Saved in settings.json as "simple" / "expert" (<see cref="AppSettings.UiMode"/>, null = not chosen yet).
 /// </summary>
 public enum UiMode
@@ -21,7 +21,7 @@ public enum UiMode
 public static class UiModes
 {
     /// <summary>The pages of the simple mode, in the order of the sidebar (PageViewModel.Key). The other pages are hidden there.</summary>
-    public static IReadOnlyList<string> SimplePageKeys { get; } = new[] { "Dashboard", "Cleaner", "Programs", "Settings" };
+    public static IReadOnlyList<string> SimplePageKeys { get; } = new[] { "Dashboard", "Cleaner", "Programs", "Profile", "Settings" };
 
     /// <summary>
     /// Raised after a mode was chosen with <see cref="Choose"/>, on the caller's thread (the UI thread). Tests that raise it

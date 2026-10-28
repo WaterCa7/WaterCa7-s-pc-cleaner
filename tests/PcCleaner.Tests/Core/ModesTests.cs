@@ -51,15 +51,16 @@ public class ModesRulesTests
 {
     private static readonly string[] AllKeys =
     {
-        "Dashboard", "Cleaner", "Processes", "Startup", "Programs", "Disk", "Optimizer", "Network", "Security", "Settings",
+        "Dashboard", "Cleaner", "Hardware", "Optimizer", "Processes", "Startup", "Programs", "Disk", "Security", "Network",
+        "Profile", "Settings",
     };
 
     [Fact]
-    public void SimpleMode_ShowsDashboardCleanerProgramsAndSettings_InThatOrder()
+    public void SimpleMode_ShowsDashboardCleanerProgramsProfileAndSettings_InThatOrder()
     {
         var shown = AllKeys.Where(k => UiModes.IsVisible(UiMode.Simple, k)).ToList();
 
-        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Settings" }, shown);
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Profile", "Settings" }, shown);
         Assert.Equal(shown, UiModes.SimplePageKeys);
     }
 

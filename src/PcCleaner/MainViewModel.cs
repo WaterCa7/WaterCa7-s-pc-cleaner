@@ -42,6 +42,9 @@ public sealed class MainViewModel : ObservableObject, INavigator
             AppServices.Navigator = this;
 
         Pages = new ObservableCollection<PageViewModel>(pages ?? CreatePages());
+        Sections = ShellMenu.Build(Pages);
+        TopSections = new ObservableCollection<SectionViewModel>();
+        BottomSections = new ObservableCollection<SectionViewModel>();
         VisiblePages = new ObservableCollection<PageViewModel>();
         _shownMode = UiModes.Of(_settings());
         SyncVisiblePages();
@@ -86,12 +89,45 @@ public sealed class MainViewModel : ObservableObject, INavigator
     /// <summary>
     /// Every page of the program. Not what the sidebar shows (<see cref="VisiblePages"/>): screenshots, the busy check of a
     /// restart and the pages that look for each other use the whole list, and the hidden pages go on taking part in the
-    /// Dashboard check (they are IHealthContributors of <see cref="AppServices"/>, not sidebar items).
+    /// Dashboard check (they are IHealthContributors of <see cref="AppServices"/>, not sidebar items). The sidebar shows
+    /// <see cref="Sections"/>; a page is a tab of one of them.
     /// </summary>
     public ObservableCollection<PageViewModel> Pages { get; }
 
     /// <summary>The pages of the sidebar: those of the current mode (<see cref="UiModes"/>), in the order of <see cref="Pages"/>.</summary>
     public ObservableCollection<PageViewModel> VisiblePages { get; }
+
+    /// <summary>Every section of the menu (<see cref="ShellMenu"/>); a section's tabs are pages of <see cref="Pages"/>.</summary>
+    public IReadOnlyList<SectionViewModel> Sections { get; }
+
+    /// <summary>The main list of the sidebar: the sections that have a tab in the current mode.</summary>
+    public ObservableCollection<SectionViewModel> TopSections { get; }
+
+    /// <summary>The list at the bottom of the sidebar (Профиль, Настройки).</summary>
+    public ObservableCollection<SectionViewModel> BottomSections { get; }
+
+    /// <summary>The section of the open page.</summary>
+    public SectionViewModel? SelectedSection => _selectedPage is null ? null : Sections.FirstOrDefault(s => s.Contains(_selectedPage));
+
+    /// <summary>
+    /// The selection of the main list: the open section when it is there, else null. The list writes here: a section opens on
+    /// its <see cref="SectionViewModel.EntryTab"/>; null (the list cleared its selection because a bottom section opened) is ignored.
+    /// </summary>
+    public SectionViewModel? SelectedTopSection
+    {
+        get => SelectedSection is { Place: SectionPlace.Top } s ? s : null;
+        set => Open(value);
+    }
+
+    /// <summary>The selection of the bottom list; see <see cref="SelectedTopSection"/>.</summary>
+    public SectionViewModel? SelectedBottomSection
+    {
+        get => SelectedSection is { Place: SectionPlace.Bottom } s ? s : null;
+        set => Open(value);
+    }
+
+    /// <summary>The title above the page: the section when its tab strip is shown, else the page itself.</summary>
+    public string HeaderTitle => SelectedSection is { ShowTabs: true } s ? s.Title : _selectedPage?.Title ?? "";
 
     /// <summary>The question about a page the simple mode hides (<see cref="Dialogs.Ask"/>; tests replace it).</summary>
     internal Func<string, string, bool> Ask { get; set; } = Dialogs.Ask;
@@ -165,6 +201,12 @@ public sealed class MainViewModel : ObservableObject, INavigator
             SelectedPage = page;
     }
 
+    private void Open(SectionViewModel? section)
+    {
+        if (section?.EntryTab is { } tab && !ReferenceEquals(tab, _selectedPage))
+            _ = NavigateAsync(tab);
+    }
+
     /// <summary>
     /// True when the page is in the sidebar. A page of <see cref="Pages"/> that the mode hides is offered together with the
     /// expert mode: «Да» switches the mode (saved) and the page is then reachable, «Нет» leaves everything as it was. A page
@@ -221,6 +263,24 @@ public sealed class MainViewModel : ObservableObject, INavigator
             if (i >= VisiblePages.Count || !ReferenceEquals(VisiblePages[i], wanted[i]))
                 VisiblePages.Insert(i, wanted[i]);
         }
+        foreach (var section in Sections)
+            section.SyncVisibleTabs(p => VisiblePages.Contains(p));
+        SyncSections(TopSections, SectionPlace.Top);
+        SyncSections(BottomSections, SectionPlace.Bottom);
+        OnPropertyChanged(nameof(HeaderTitle));
+    }
+
+    /// <summary>Makes <paramref name="list"/> the sections of <paramref name="place"/> that have a visible tab (the selection stays).</summary>
+    private void SyncSections(ObservableCollection<SectionViewModel> list, SectionPlace place)
+    {
+        var wanted = Sections.Where(s => s.Place == place && s.HasVisibleTabs).ToList();
+        foreach (var section in list.Where(s => !wanted.Contains(s)).ToList())
+            list.Remove(section);
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            if (i >= list.Count || !ReferenceEquals(list[i], wanted[i]))
+                list.Insert(i, wanted[i]);
+        }
     }
 
     private void OnUpdateBannerChanged()
@@ -267,8 +327,16 @@ public sealed class MainViewModel : ObservableObject, INavigator
         if (!IsReachable(page))
             return;
         var previous = _selectedPage;
-        if (!Set(ref _selectedPage, page, nameof(SelectedPage)))
+        if (ReferenceEquals(previous, page))
             return;
+        _selectedPage = page;
+        SelectedSection?.Remember(page);
+        // The section first: the tab strip gets the tabs of the new section, then its selection (SelectedPage) is one of them.
+        OnPropertyChanged(nameof(SelectedSection));
+        OnPropertyChanged(nameof(SelectedTopSection));
+        OnPropertyChanged(nameof(SelectedBottomSection));
+        OnPropertyChanged(nameof(HeaderTitle));
+        OnPropertyChanged(nameof(SelectedPage));
         try
         {
             previous?.OnNavigatedFrom();
