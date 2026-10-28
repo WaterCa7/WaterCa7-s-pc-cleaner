@@ -81,6 +81,24 @@ public class AccountIntroViewModelTests
     }
 
     [Fact]
+    public void AWindowClosedWhileItsRequestStillSignedIn_ClosesTheScreenToo()
+    {
+        var vm = Create();
+        vm.ShowAtStart(false);
+        var closed = 0;
+        vm.Closed += () => closed++;
+
+        // The window was closed (ShowDialog false) while the password request was on its way; it signed in all the same.
+        _windowResult = false;
+        _signedIn = true;
+        vm.SignInCommand.Execute(null);
+
+        Assert.False(vm.IsVisible);
+        Assert.True(_settings.AccountIntroShown);
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
     public void Skipping_ClosesTheScreen_AndTellsTheStartToGoOn()
     {
         var vm = Create();

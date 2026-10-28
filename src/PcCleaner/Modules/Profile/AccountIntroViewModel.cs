@@ -76,7 +76,8 @@ public sealed class AccountIntroViewModel : ObservableObject
 
     private void SignIn(SignInTab tab)
     {
-        if (_signIn(tab))
+        // The window can be closed while its request is still on its way and then signs in all the same: the account decides.
+        if (_signIn(tab) || _isSignedIn())
             Close();
     }
 
