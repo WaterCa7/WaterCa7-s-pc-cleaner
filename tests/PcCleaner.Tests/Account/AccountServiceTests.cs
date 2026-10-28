@@ -228,10 +228,49 @@ public class AccountServiceTests : IDisposable
         var service = SignedIn(plan: "free");
         Assert.Equal(Tier.Free, service.Tier);
 
-        await service.ApplyPromoAsync("FRIEND-1", None);
+        Assert.True(await service.ApplyPromoAsync("FRIEND-1", None));
 
         Assert.Equal(Tier.Pro, service.Tier);
         Assert.Equal(1, _changes);
+    }
+
+    [Fact]
+    public async Task APromoTicketThatDoesNotFit_IsReportedAsNotTaken()
+    {
+        using var other = new TestLicense();
+        _fake.On("POST /promo/apply", 200, other.TicketJson(TestLicense.Json(plan: "pro", kind: "promo")));
+        var service = SignedIn(plan: "free");
+
+        Assert.False(await service.ApplyPromoAsync("FRIEND-1", None));
+
+        Assert.Equal(Tier.Free, service.Tier);
+        Assert.Equal(0, _changes);
+    }
+
+    [Fact]
+    public async Task AComputerIdThatCannotBeRead_GivesFree_AndNeverThrows()
+    {
+        var t = _key.Sign(TestLicense.Json(plan: "pro"));
+        _store.Data = new AccountData("tok", "user@example.com", TestLicense.DeviceId, TestLicense.Sub, t.Ticket, t.Signature);
+        var service = new AccountService(Api.Client(_fake), _store, new ThrowingHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now,
+            (_, _) => Task.CompletedTask);
+
+        await service.WarmUpAsync();
+
+        Assert.Equal(Tier.Free, service.Tier);
+        Assert.Equal(LicenseReason.WrongDevice, service.Status.Reason);
+        Assert.False(service.IsAvailable(Features.HomeFull));
+        Assert.False(service.AcceptTicket(_key.Sign(TestLicense.Json(plan: "pro"))));
+        Assert.Equal(Tier.Guest, new AccountService(Api.Client(_fake), new MemoryAccountStore(), new ThrowingHwHash(), "windows", "PC", "1.5.0",
+            _key.Keys).Tier);
+    }
+
+    [Fact]
+    public async Task TheNotSignedInError_HasAText()
+    {
+        var ex = await Assert.ThrowsAsync<ApiException>(() => Service().DevicesAsync(None));
+
+        Assert.Equal(PcCleaner.Core.Localization.T._("Нужно войти снова."), ex.Error.UserText);
     }
 
     [Fact]
@@ -374,6 +413,128 @@ public class AccountServiceTests : IDisposable
         Assert.False(service.IsSignedIn);
         Assert.Null(_store.Data.Token);
         Assert.False(service.SessionEnded);
+    }
+
+    // ----- the final review -----
+
+    public static TheoryData<string> StoreFailures => new() { "io", "crypto", "access" };
+
+    private static Exception StoreFailure(string kind) => kind switch
+    {
+        "io" => new System.IO.IOException("disk full"),
+        "crypto" => new System.Security.Cryptography.CryptographicException("profile broken"),
+        _ => new UnauthorizedAccessException("locked"),
+    };
+
+    [Theory]
+    [MemberData(nameof(StoreFailures))]
+    public async Task AStoreThatCannotSave_KeepsTheStateInMemory_AndStillTellsTheScreens(string kind)
+    {
+        var store = new ThrowingAccountStore(() => StoreFailure(kind));
+        _fake.On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(plan: "free", noExpiry: true)))
+            .On("POST /promo/apply", 200, _key.TicketJson(TestLicense.Json(plan: "pro", kind: "promo")))
+            .On("POST /auth/logout", 200, "{\"ok\":true}");
+        var service = new AccountService(Api.Client(_fake), store, new FixedHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now,
+            (_, _) => Task.CompletedTask);
+        service.Changed += () => _changes++;
+
+        await service.LoginAsync("user@example.com", "password1", None);
+        Assert.True(service.IsSignedIn);
+        Assert.Equal(1, _changes);
+
+        await service.ApplyPromoAsync("FRIEND-1", None);
+        Assert.Equal(Tier.Pro, service.Tier);
+        Assert.Equal(2, _changes);
+
+        await service.LogoutAsync(None);
+        Assert.False(service.IsSignedIn);
+        Assert.Equal(3, _changes);
+        Assert.Equal(3, store.Attempts);
+        Assert.Null(store.Data.Token); // nothing reached the disk
+    }
+
+    [Fact]
+    public void AnOlderTicket_IsRefused_ButALaterDowngradeIsTaken()
+    {
+        var service = SignedIn(); // issued a day ago
+        var older = _key.Sign(TestLicense.Json(plan: "pro", issued: TestLicense.Now.AddDays(-2)));
+        var laterFree = _key.Sign(TestLicense.Json(plan: "free", noExpiry: true, issued: TestLicense.Now.AddHours(-1)));
+
+        Assert.False(service.AcceptTicket(older));
+        Assert.Equal(Tier.Pro, service.Tier);
+        Assert.True(service.AcceptTicket(laterFree));
+        Assert.Equal(Tier.Free, service.Tier);
+        Assert.False(service.AcceptTicket(_key.Sign(TestLicense.Json(plan: "pro")))); // the day-old one is older now
+        Assert.Equal(Tier.Free, service.Tier);
+    }
+
+    [Fact]
+    public async Task NotSignedIn_FailsTheTask_NotTheCall()
+    {
+        var service = Service();
+        var request = new QuoteRequest("pro", "year", 1);
+
+        var calls = new List<Func<Task>>
+        {
+            () => service.DevicesAsync(None),
+            () => service.QuoteAsync(request, None),
+            () => service.StartPaymentAsync(request, None),
+            () => service.PaymentLinkAsync(91, None),
+            () => service.PaymentStatusAsync(91, None),
+            () => service.WaitPaymentAsync(91, None),
+            () => service.ApplyPromoAsync("FRIEND-1", None),
+            () => service.UnbindAsync(5, None),
+        };
+        foreach (var call in calls)
+        {
+            var task = call(); // must not throw here
+            var ex = await Assert.ThrowsAsync<ApiException>(() => task);
+            Assert.Equal(ApiError.TokenRevoked, ex.Error.Code);
+        }
+        Assert.Empty(_fake.Requests);
+    }
+
+    [Fact]
+    public async Task ALogoutFinishingAfterANewSignIn_KeepsTheNewSignIn()
+    {
+        var gate = new TaskCompletionSource();
+        _fake.On("POST /auth/logout", 200, "{\"ok\":true}").On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(), token: "t2"));
+        _fake.Hold("POST /auth/logout", gate.Task);
+        var service = SignedIn();
+
+        var pending = service.LogoutAsync(None);
+        await WaitForRequests(_fake, 1);
+        await service.LoginAsync("user@example.com", "password1", None); // the user signs in again meanwhile (token t2)
+        gate.SetResult();
+        await pending;
+
+        Assert.Equal("tok", _fake.To("POST /auth/logout").Single().Bearer);
+        Assert.True(service.IsSignedIn);
+        Assert.Equal("t2", _store.Data.Token);
+    }
+
+    [Fact]
+    public async Task ALogoutAfterAFailedServerAnswer_StillSignsOutHere()
+    {
+        _fake.OnError("POST /auth/logout", 500, "SERVER_ERROR");
+        var service = SignedIn();
+
+        await service.LogoutAsync(None);
+
+        Assert.False(service.IsSignedIn);
+        Assert.Equal(1, _changes);
+    }
+
+    [Fact]
+    public async Task Logout_AsAGuest_TouchesNothing()
+    {
+        var service = Service();
+
+        await service.LogoutAsync(None);
+
+        Assert.Empty(_fake.Requests);
+        Assert.Equal(0, _store.Saves);
+        Assert.Equal(0, _changes);
     }
 
     [Fact]

@@ -405,24 +405,13 @@ public class AccountServicePollingTests : IDisposable
             Assert.Equal(TimeSpan.FromMinutes(5), Assert.Single(delays));
     }
 
-    private sealed class FailingStore : IAccountStore
-    {
-        public AccountData Data { get; set; } = new();
-        public bool Fail { get; set; }
-        public AccountData Load() => Data;
-        public void Save(AccountData data) => Data = Fail ? throw new System.IO.IOException("disk full") : data;
-    }
-
     [Fact]
     public async Task TheRefreshLoop_SurvivesAFailureThatIsNotAnApiError()
     {
-        var store = new FailingStore();
-        var first = _key.Sign(TestLicense.Json(plan: "free", noExpiry: true));
-        store.Data = new AccountData("tok", "user@example.com", TestLicense.DeviceId, TestLicense.Sub, first.Ticket, first.Signature);
-        _fake.On("GET /license/ticket", 200, _key.TicketJson(TestLicense.Json(plan: "pro")));
-        store.Fail = true; // the new ticket cannot be saved
+        SignedIn(TestLicense.Json(plan: "free", noExpiry: true)); // fills the store
+        _fake.ThrowOnSend = new InvalidOperationException("not a network failure"); // escapes the client as it is
         using var cts = new CancellationTokenSource();
-        var service = new AccountService(Api.Client(_fake), store, new FixedHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now,
+        var service = new AccountService(Api.Client(_fake), _store, new FixedHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now,
             (d, ct) =>
             {
                 _waits.Add(d);
@@ -435,6 +424,173 @@ public class AccountServicePollingTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RunRefreshLoopAsync(cts.Token));
 
         Assert.Equal(new[] { AccountService.RetryAfterFailure, AccountService.RetryAfterFailure }, _waits);
+    }
+
+    // ----- the final review -----
+
+    [Fact]
+    public async Task ARefreshForAnOldSignIn_DoesNotOverwriteTheNewSignInsTicket()
+    {
+        var service = SignedIn(TestLicense.Json(plan: "free", noExpiry: true));
+        var release = new TaskCompletionSource();
+        _fake.Hold("GET /license/ticket", release.Task);
+        _fake.On("GET /license/ticket", 200, _key.TicketJson(TestLicense.Json(plan: "pro", issued: TestLicense.Now)));
+        _fake.On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(plan: "free", noExpiry: true), token: "newer"));
+
+        var refresh = service.RefreshTicketAsync(None);
+        await WaitForRequestAsync("GET /license/ticket");
+        await service.LoginAsync("user@example.com", "password1", None); // the user signs in again meanwhile
+        release.SetResult();
+
+        Assert.False(await refresh);
+        Assert.Equal(Tier.Free, service.Tier);
+        Assert.Equal("newer", _store.Data.Token);
+    }
+
+    private AccountService LoopService(ManualDelays delays, List<Tier> tiers)
+    {
+        var service = new AccountService(Api.Client(_fake), _store, new FixedHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now,
+            delays.Delay);
+        service.Changed += () =>
+        {
+            lock (tiers)
+                tiers.Add(service.Tier);
+        };
+        return service;
+    }
+
+    private static List<Tier> Seen(List<Tier> tiers)
+    {
+        lock (tiers)
+            return tiers.ToList();
+    }
+
+    [Fact]
+    public async Task TheRefreshLoop_TellsTheScreens_AfterEveryPass_AndWhenTheTierRunsOut()
+    {
+        var ticket = TestLicense.Json(plan: "pro", expires: TestLicense.Now.AddHours(2));
+        SignedIn(ticket); // fills the store
+        _fake.OnError("GET /license/ticket", 500, "SERVER_ERROR").On("GET /license/ticket", 200, _key.TicketJson(ticket));
+        var delays = new ManualDelays();
+        var tiers = new List<Tier>();
+        using var cts = new CancellationTokenSource();
+        var loop = LoopService(delays, tiers).RunRefreshLoopAsync(cts.Token);
+
+        // pass 1 fails: nothing changed, the screens are told anyway; the retry comes before the subscription ends
+        Assert.Equal(AccountService.RetryAfterFailure, await delays.RequestedAsync(0));
+        Assert.Equal(new[] { Tier.Pro }, Seen(tiers));
+        _now += AccountService.RetryAfterFailure;
+        delays.Complete(0);
+
+        // pass 2 takes the ticket; the loop wakes when it runs out (not only a minute later, at the refresh)
+        Assert.Equal(TimeSpan.FromHours(2) - AccountService.RetryAfterFailure, await delays.RequestedAsync(1));
+        var beforeEnd = Seen(tiers).Count;
+        Assert.All(Seen(tiers), t => Assert.Equal(Tier.Pro, t));
+        _now = TestLicense.Now.AddHours(2);
+        delays.Complete(1);
+
+        Assert.Equal(TimeSpan.FromMinutes(1), await delays.RequestedAsync(2)); // the refresh stays at expires_at + 1 min
+        Assert.Equal(beforeEnd + 1, Seen(tiers).Count);
+        Assert.Equal(Tier.Free, Seen(tiers)[^1]);
+
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loop);
         Assert.Equal(2, _fake.To("GET /license/ticket").Count());
+    }
+
+    [Fact]
+    public async Task ASignInWhileTheLoopSleeps_RecomputesTheSleep()
+    {
+        _fake.On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(plan: "pro", expires: TestLicense.Now.AddHours(3))));
+        var delays = new ManualDelays();
+        var tiers = new List<Tier>();
+        using var cts = new CancellationTokenSource();
+        var service = LoopService(delays, tiers);
+        var loop = service.RunRefreshLoopAsync(cts.Token);
+
+        Assert.Equal(AccountService.DailyRefresh, await delays.RequestedAsync(0)); // a guest: nothing to refresh soon
+        Assert.Equal(new[] { Tier.Guest }, Seen(tiers));
+        await service.LoginAsync("user@example.com", "password1", None);
+
+        Assert.Equal(TimeSpan.FromHours(3), await delays.RequestedAsync(1)); // woken: the sleep now ends with the subscription
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loop);
+        Assert.Empty(_fake.To("GET /license/ticket"));
+    }
+
+    private AccountService RecordingService(List<TimeSpan> delays, Action<TimeSpan, CancellationToken>? onDelay = null)
+        => new(Api.Client(_fake), _store, new FixedHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now, (d, ct) =>
+        {
+            lock (delays)
+                delays.Add(d);
+            onDelay?.Invoke(d, ct);
+            return Task.CompletedTask;
+        });
+
+    [Fact]
+    public async Task APaidStatusWithoutATicket_ChecksAgainInAMinute()
+    {
+        SignedIn(TestLicense.Json(plan: "free", noExpiry: true)); // fills the store
+        _fake.On("GET /pay/91", 200, "{\"status\":\"paid\"}")
+            .On("GET /license/ticket", 200, _key.TicketJson(TestLicense.Json(plan: "pro")));
+        var delays = new List<TimeSpan>();
+        var service = RecordingService(delays);
+        var done = new TaskCompletionSource();
+        service.Changed += () => done.TrySetResult();
+
+        Assert.Equal("paid", (await service.PaymentStatusAsync(91, None)).Status);
+
+        await done.Task.WaitAsync(TimeSpan.FromSeconds(10)); // the background refresh took the ticket; the timeout only guards a hang
+        Assert.Equal(Tier.Pro, service.Tier); // screens go by the tier, not by "paid"
+        lock (delays)
+            Assert.Contains(AccountService.RefreshAfterPaidWithoutTicket, delays);
+    }
+
+    [Fact]
+    public async Task APaidWaitWithARejectedTicket_ReturnsAtOnce_AndChecksAgainInAMinute()
+    {
+        using var other = new TestLicense();
+        SignedIn(TestLicense.Json(plan: "free", noExpiry: true)); // fills the store
+        var foreign = other.Sign(TestLicense.Json(plan: "pro"));
+        _fake.On("GET /pay/91", 200, $"{{\"status\":\"paid\",\"license\":{{\"ticket\":\"{foreign.Ticket}\",\"signature\":\"{foreign.Signature}\"}}}}")
+            .On("GET /license/ticket", 200, _key.TicketJson(TestLicense.Json(plan: "pro")));
+        var delays = new List<TimeSpan>();
+        var service = RecordingService(delays);
+        var done = new TaskCompletionSource();
+        service.Changed += () => done.TrySetResult();
+
+        Assert.Equal("paid", (await service.WaitPaymentAsync(91, None)).Status);
+
+        Assert.Single(_fake.To("GET /pay/91"));
+        await done.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(Tier.Pro, service.Tier);
+        lock (delays)
+            Assert.Contains(AccountService.RefreshAfterPaidWithoutTicket, delays);
+    }
+
+    [Fact]
+    public async Task ACancelledPaymentWait_StillChecksInTheBackground()
+    {
+        SignedIn(TestLicense.Json(plan: "free", noExpiry: true)); // fills the store
+        _fake.On("GET /pay/91", 200, "{\"status\":\"pending\"}")
+            .On("GET /license/ticket", 200, _key.TicketJson(TestLicense.Json(plan: "pro")));
+        using var cts = new CancellationTokenSource();
+        var delays = new List<TimeSpan>();
+        var polls = 0;
+        var service = RecordingService(delays, (d, ct) =>
+        {
+            if (d == AccountService.PaymentPollInterval && ++polls == 2)
+                cts.Cancel(); // the user closes the window during the second pause
+            ct.ThrowIfCancellationRequested();
+        });
+        var done = new TaskCompletionSource();
+        service.Changed += () => done.TrySetResult();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.WaitPaymentAsync(91, cts.Token));
+
+        await done.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(Tier.Pro, service.Tier);
+        lock (delays)
+            Assert.Contains(AccountService.RefreshAfterUnfinishedPayment, delays);
     }
 }

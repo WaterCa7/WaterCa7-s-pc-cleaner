@@ -6,7 +6,8 @@ namespace PcCleaner.Core.AccountWindows;
 
 /// <summary>
 /// Windows: <c>serial of the board | ProcessorId | serial of the disk with the Windows folder</c> (contract «Номер компьютера»),
-/// read once by WMI (it takes up to a second: the first use should be off the UI thread). A part WMI cannot give is «-».
+/// read once by WMI (it takes up to a second: the first use should be off the UI thread). A part WMI cannot give is «-»: any
+/// failure of a part is caught there, so the Lazy never caches an exception.
 /// </summary>
 public sealed class WmiHwHash : IHwHash
 {
@@ -33,7 +34,7 @@ public sealed class WmiHwHash : IHwHash
                 }
             }
         }
-        catch (Exception ex) when (ex is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
+        catch (Exception)
         {
             // the part is «-»
         }
@@ -64,7 +65,7 @@ public sealed class WmiHwHash : IHwHash
                 }
             }
         }
-        catch (Exception ex) when (ex is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
+        catch (Exception)
         {
             // the part is «-»
         }

@@ -1,3 +1,5 @@
+using System.IO;
+using System.Security.Cryptography;
 using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Account;
@@ -5,8 +7,9 @@ namespace PcCleaner.Core.Account;
 /// <summary>
 /// The account on this computer: sign-in (password, sign-up code, password reset, browser code), the ticket and the tier, the
 /// computers of the account, the promo code, «Написать нам», signing out. Thread-safe; <see cref="Changed"/> fires after every
-/// change of the sign-in or the ticket, possibly on a background thread. A failed call throws <see cref="ApiException"/>;
-/// TOKEN_REVOKED signs out first (<see cref="SessionEnded"/>). Tokens, passwords, tickets and hw_hash never go to the log.
+/// change of the sign-in or the ticket, possibly on a background thread. A failed call ends its task with <see cref="ApiException"/>
+/// (never throws before the task is returned); TOKEN_REVOKED signs out first (<see cref="SessionEnded"/>). A store that cannot
+/// write keeps the state in memory for this run. Tokens, passwords, tickets and hw_hash never go to the log.
 /// </summary>
 public sealed partial class AccountService
 {
@@ -22,6 +25,7 @@ public sealed partial class AccountService
     private AccountData _data;
     private LicenseTicketData? _ticket;
     private bool _sessionEnded;
+    private int _hwFailureLogged;
 
     public AccountService(ApiClient api, IAccountStore store, IHwHash hw, string platform, string deviceName, string appVersion,
         IReadOnlyList<string> licenseKeys, Func<DateTimeOffset>? now = null, Func<TimeSpan, CancellationToken, Task>? delay = null)
@@ -84,21 +88,31 @@ public sealed partial class AccountService
         }
     }
 
+    /// <summary>
+    /// The tier now and why. The first read may query the hardware (hw_hash: WMI on Windows, up to seconds): call
+    /// <see cref="WarmUpAsync"/> off the UI thread at startup. A computer id that cannot be read gives Free (WrongDevice), never an exception.
+    /// </summary>
     public LicenseStatus Status
     {
         get
         {
+            var hw = HwValue();
             AccountData data;
             LicenseTicketData? ticket;
             lock (_lock)
                 (data, ticket) = (_data, _ticket);
-            return LicenseState.Evaluate(ticket, data.Token is not null, _hw.Value, data.DeviceId, data.AccountId, _now());
+            return LicenseState.Evaluate(ticket, data.Token is not null, hw ?? "", data.DeviceId, data.AccountId, _now());
         }
     }
 
+    /// <summary>The tier of <see cref="Status"/> (the first read may query the hardware: call <see cref="WarmUpAsync"/> at startup).</summary>
     public Tier Tier => Status.Tier;
 
+    /// <summary>Whether the feature is open at the current tier (the first read may query the hardware: see <see cref="WarmUpAsync"/>).</summary>
     public bool IsAvailable(string featureKey) => Features.IsAvailable(featureKey, Tier);
+
+    /// <summary>Reads the computer id (hw_hash) on a background thread, so that the first <see cref="Status"/> on the UI thread is quick.</summary>
+    public Task WarmUpAsync() => Task.Run(() => HwValue());
 
     // ----- sign-in -----
 
@@ -121,8 +135,11 @@ public sealed partial class AccountService
         => SignIn(await _api.ResetConfirmAsync(email.Trim(), code.Trim(), password, Device, ct), T._("Аккаунт: пароль сменён, вход выполнен"));
 
     /// <summary>
-    /// Unbinds a computer with the permit of the last DEVICE_LIMIT. The code of that sign-in is already spent (verify, reset/confirm), so
-    /// the caller finishes with <see cref="LoginAsync"/> and the password (the new one after a reset), not with the same call again.
+    /// Unbinds a computer with the permit of the last DEVICE_LIMIT, then the caller signs in again:
+    /// after <see cref="LoginAsync"/> — the same call again, the same way;
+    /// after <see cref="VerifyAsync"/> or <see cref="ResetConfirmAsync"/> — their code is already spent, so <see cref="LoginAsync"/> with the
+    /// password (the new one after a reset), not the same call again;
+    /// during <see cref="WaitBrowserLoginAsync"/> — nothing: the browser code is not spent and the poll goes on by itself.
     /// </summary>
     public async Task ReleaseAsync(string unbindToken, long deviceId, CancellationToken ct)
     {
@@ -132,30 +149,27 @@ public sealed partial class AccountService
 
     // ----- signed in -----
 
-    /// <summary>Signs out here: the server revokes this token (if it can be reached), the local data is forgotten either way.</summary>
+    /// <summary>
+    /// Signs out here: the server revokes this token (if it can be reached), the local data of this sign-in is forgotten either way
+    /// (also when cancelled; the cancellation goes on). A sign-in made while the server was answering stays. Not signed in: nothing.
+    /// </summary>
     public async Task LogoutAsync(CancellationToken ct)
     {
-        var token = Token();
-        if (token is not null)
+        if (Token() is not { } token)
+            return;
+        try
         {
-            try
-            {
-                await _api.LogoutAsync(token, ct);
-            }
-            catch (ApiException ex)
-            {
-                Log.Info(T.F("Аккаунт: сервер не подтвердил выход ({0}) — данные входа всё равно удалены", ex.Error.Code));
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancelled while waiting for the server: the local data goes anyway, then the cancellation goes on.
-                SignOut(revoked: false);
-                Log.Info(T._("Аккаунт: выход"));
-                throw;
-            }
+            await _api.LogoutAsync(token, ct);
         }
-        SignOut(revoked: false);
-        Log.Info(T._("Аккаунт: выход"));
+        catch (ApiException ex)
+        {
+            Log.Info(T.F("Аккаунт: сервер не подтвердил выход ({0}) — данные входа всё равно удалены", ex.Error.Code));
+        }
+        finally
+        {
+            if (SignOutIfCurrent(token, revoked: false))
+                Log.Info(T._("Аккаунт: выход"));
+        }
     }
 
     public Task<DeviceList> DevicesAsync(CancellationToken ct) => WithToken(t => _api.DevicesAsync(t, ct));
@@ -185,11 +199,18 @@ public sealed partial class AccountService
         }
     }
 
-    public async Task ApplyPromoAsync(string code, CancellationToken ct)
+    /// <summary>
+    /// Applies a promo code; true when its ticket was taken. False: the server took the code but its ticket does not fit this sign-in
+    /// (screens show <see cref="Tier"/>, which stays as it was).
+    /// </summary>
+    public async Task<bool> ApplyPromoAsync(string code, CancellationToken ct)
     {
-        var ticket = await WithToken(t => _api.PromoApplyAsync(t, code.Trim(), ct));
-        if (AcceptTicket(ticket))
-            Log.Info(T._("Аккаунт: промокод применён"));
+        var token = RequireToken();
+        var ticket = await WithToken(token, t => _api.PromoApplyAsync(t, code.Trim(), ct));
+        if (!AcceptTicket(ticket, token))
+            return false;
+        Log.Info(T._("Аккаунт: промокод применён"));
+        return true;
     }
 
     /// <summary>«Написать нам»: the account's e-mail when signed in, otherwise the typed one (required).</summary>
@@ -212,24 +233,50 @@ public sealed partial class AccountService
         });
     }
 
-    /// <summary>Takes a new ticket (purchase, promo, refresh) if it is signed by a known key and belongs to this sign-in; true when taken.</summary>
-    public bool AcceptTicket(SignedTicket ticket)
+    /// <summary>
+    /// Takes a new ticket (purchase, promo, refresh) for the current sign-in if it is signed by a known key, belongs to this sign-in and
+    /// is not older than the ticket in hand (a later-issued downgrade is taken); true when taken.
+    /// </summary>
+    public bool AcceptTicket(SignedTicket ticket) => AcceptTicket(ticket, null);
+
+    /// <summary>
+    /// The same for a ticket asked for with <paramref name="token"/> (null: whatever sign-in is current): when the user signed out or
+    /// in again while the server was answering, the ticket belongs to the old sign-in and is not taken.
+    /// </summary>
+    internal bool AcceptTicket(SignedTicket ticket, string? token)
     {
         var data = LicenseTicket.Verify(ticket.Ticket, ticket.Signature, _keys);
+        var hw = HwValue(); // before the lock: the first read may query the hardware
+        string? refusal = null;
         lock (_lock)
         {
-            // A sign-in whose first ticket could not be verified has no account number yet: the first good ticket of this computer gives it.
-            if (data is null || _data.Token is null || data.DeviceId != _data.DeviceId || (_data.AccountId is not null && data.Sub != _data.AccountId) ||
-                !string.Equals(data.HwHash, _hw.Value, StringComparison.OrdinalIgnoreCase))
+            if (token is not null && _data.Token != token)
             {
-                Log.Warn(T._("Аккаунт: полученный билет лицензии не подходит этому компьютеру — оставлен прежний"));
-                return false;
+                refusal = T._("Аккаунт: билет лицензии пришёл для прежнего входа — не принят");
             }
-            _ticket = data;
-            _data = _data with { Ticket = ticket.Ticket, Signature = ticket.Signature, AccountId = _data.AccountId ?? data.Sub };
-            _store.Save(_data);
+            // A sign-in whose first ticket could not be verified has no account number yet: the first good ticket of this computer gives it.
+            else if (data is null || _data.Token is null || data.DeviceId != _data.DeviceId || (_data.AccountId is not null && data.Sub != _data.AccountId) ||
+                     hw is null || !string.Equals(data.HwHash, hw, StringComparison.OrdinalIgnoreCase))
+            {
+                refusal = T._("Аккаунт: полученный билет лицензии не подходит этому компьютеру — оставлен прежний");
+            }
+            else if (_ticket is not null && data.IssuedAt < _ticket.IssuedAt)
+            {
+                refusal = T._("Аккаунт: полученный билет лицензии старше действующего — оставлен прежний");
+            }
+            else
+            {
+                _ticket = data;
+                _data = _data with { Ticket = ticket.Ticket, Signature = ticket.Signature, AccountId = _data.AccountId ?? data.Sub };
+                Persist(_data);
+            }
         }
-        Changed?.Invoke();
+        if (refusal is not null)
+        {
+            Log.Warn(refusal);
+            return false;
+        }
+        Notify();
         return true;
     }
 
@@ -241,7 +288,7 @@ public sealed partial class AccountService
             if (_data.InstallId is { Length: > 0 } id)
                 return id;
             _data = _data with { InstallId = Guid.NewGuid().ToString() };
-            _store.Save(_data);
+            Persist(_data);
             return _data.InstallId!;
         }
     }
@@ -252,7 +299,7 @@ public sealed partial class AccountService
         lock (_lock)
         {
             _data = _data with { InstallId = null };
-            _store.Save(_data);
+            Persist(_data);
         }
     }
 
@@ -264,9 +311,11 @@ public sealed partial class AccountService
             return _data.Token;
     }
 
-    /// <summary>A call with the token; TOKEN_REVOKED signs out (and is rethrown). Not signed in → TOKEN_REVOKED at once.</summary>
-    private Task<TResult> WithToken<TResult>(Func<string, Task<TResult>> call)
-        => WithToken(Token() ?? throw new ApiException(new ApiError(ApiError.TokenRevoked, "", 401, null)), call);
+    /// <summary>The current token; not signed in → TOKEN_REVOKED (the one place that makes this answer; inside an async method, so it ends the task).</summary>
+    private string RequireToken() => Token() ?? throw new ApiException(new ApiError(ApiError.TokenRevoked, "", 401, null));
+
+    /// <summary>A call with the current token; TOKEN_REVOKED signs out (and is rethrown). Not signed in → a task failed with TOKEN_REVOKED.</summary>
+    private async Task<TResult> WithToken<TResult>(Func<string, Task<TResult>> call) => await WithToken(RequireToken(), call);
 
     /// <summary>
     /// The same with the token the caller already read. TOKEN_REVOKED ends only the sign-in this token belongs to: when the user signed
@@ -286,6 +335,44 @@ public sealed partial class AccountService
         }
     }
 
+    /// <summary>The computer id, or null when it cannot be read (logged once, only the kind of the failure).</summary>
+    private string? HwValue()
+    {
+        try
+        {
+            return _hw.Value;
+        }
+        catch (Exception ex)
+        {
+            if (Interlocked.Exchange(ref _hwFailureLogged, 1) == 0)
+                Log.Warn(T.F("Аккаунт: номер компьютера не прочитан ({0}) — Pro на этом компьютере не включится", ex.GetType().Name));
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Saves the data (under <c>_lock</c>, so the disk follows the memory in order). A store that cannot write (a full disk, a broken
+    /// DPAPI profile, a locked file) is logged — only the kind of the failure — and the state stays in memory for this run.
+    /// </summary>
+    private void Persist(AccountData data)
+    {
+        try
+        {
+            _store.Save(data);
+        }
+        catch (Exception ex) when (ex is IOException or CryptographicException or UnauthorizedAccessException)
+        {
+            Log.Warn(T.F("Аккаунт: данные входа не сохранены ({0}) — действуют до закрытия программы", ex.GetType().Name));
+        }
+    }
+
+    /// <summary>After a change of the sign-in or the ticket: the refresh loop computes its sleep again, the screens are told.</summary>
+    private void Notify()
+    {
+        Wake();
+        Changed?.Invoke();
+    }
+
     private void SignIn(LoginResult result, string logText)
     {
         var ticket = LicenseTicket.Verify(result.License.Ticket, result.License.Signature, _keys);
@@ -294,31 +381,29 @@ public sealed partial class AccountService
             _data = new AccountData(result.Token, result.Account.Email, result.Device.Id, ticket?.Sub, result.License.Ticket,
                 result.License.Signature, _data.InstallId);
             _ticket = ticket;
-            _store.Save(_data);
+            Persist(_data);
             _sessionEnded = false;
         }
         if (ticket is null)
             Log.Warn(T._("Аккаунт: подпись билета лицензии не проверена — до следующей проверки программа в бесплатном режиме"));
         Log.Info(logText);
-        Changed?.Invoke();
+        Notify();
     }
 
-    private void SignOut(bool revoked) => SignOutIfCurrent(null, revoked);
-
-    /// <summary>Signs out if the current sign-in uses this token (null: whatever is current); false when the session is another one.</summary>
-    private bool SignOutIfCurrent(string? token, bool revoked)
+    /// <summary>Signs out if the current sign-in uses this token; false (nothing changes) when the session is another one or none.</summary>
+    private bool SignOutIfCurrent(string token, bool revoked)
     {
         lock (_lock)
         {
-            if (token is not null && _data.Token != token)
+            if (_data.Token != token)
                 return false;
             _data = _data.SignedOut();
             _ticket = null;
-            _store.Save(_data);
+            Persist(_data);
             if (revoked)
                 _sessionEnded = true;
         }
-        Changed?.Invoke();
+        Notify();
         return true;
     }
 }
