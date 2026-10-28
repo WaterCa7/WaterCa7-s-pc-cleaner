@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using PcCleaner.Core.Localization;
 
 namespace PcCleaner.Core.Account;
 
@@ -32,6 +34,18 @@ public sealed record ApiError(string Code, string Message, int HttpStatus, JsonE
 
     public static ApiError NetworkError() => new(Network, "", 0, null);
 
+    /// <summary>
+    /// The text for the user: the server's <see cref="Message"/> when it has one, otherwise the program's own for the code (no
+    /// connection, the server did not answer, not signed in, anything else).
+    /// </summary>
+    public string UserText => Message is { Length: > 0 } ? Message : Code switch
+    {
+        Network => T._("Нет связи с сервером. Проверьте интернет и попробуйте ещё раз."),
+        ServerError => T._("Сервер не ответил. Попробуйте позже."),
+        TokenRevoked => T._("Нужно войти снова."),
+        _ => T._("Что-то пошло не так. Попробуйте ещё раз."),
+    };
+
     /// <summary>The <c>reason</c> field as text: 1–7 of <see cref="PromoInvalid"/>, "no_change" / "change_more" of <see cref="Blocked"/>.</summary>
     public string? Reason => Text("reason");
 
@@ -51,6 +65,16 @@ public sealed record ApiError(string Code, string Message, int HttpStatus, JsonE
         {
             return null;
         }
+    }
+
+    // The generated ToString must not put the whole JSON into a log (DEVICE_LIMIT carries the unbind permit).
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Code = ").Append(Code);
+        builder.Append(", Message = ").Append(Message);
+        builder.Append(", HttpStatus = ").Append(HttpStatus);
+        builder.Append(", Payload = ").Append(Payload is null ? "<none>" : "<json>");
+        return true;
     }
 
     private string? Text(string name)

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace PcCleaner.Core.Account;
@@ -11,12 +12,36 @@ public sealed record DeviceFields(string HwHash, string Platform, string Name, s
         var clean = new string((name ?? "").Where(c => !char.IsControl(c)).ToArray()).Trim();
         return clean.Length <= 64 ? clean : clean[..64];
     }
+
+    // The generated ToString must not put hw_hash into a log.
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("HwHash = ").Append(Secret.Mark(HwHash));
+        builder.Append(", Platform = ").Append(Platform);
+        builder.Append(", Name = ").Append(Name);
+        builder.Append(", AppVersion = ").Append(AppVersion);
+        return true;
+    }
+}
+
+/// <summary>How the records with secrets print them: only set / unset.</summary>
+internal static class Secret
+{
+    public static string Mark(string? secret) => string.IsNullOrEmpty(secret) ? "<none>" : "<set>";
 }
 
 /// <summary>A license ticket as the server sends it: base64 of the JSON and base64 of its DER signature.</summary>
 public sealed record SignedTicket(
     [property: JsonPropertyName("ticket")] string Ticket,
-    [property: JsonPropertyName("signature")] string Signature);
+    [property: JsonPropertyName("signature")] string Signature)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Ticket = ").Append(Secret.Mark(Ticket));
+        builder.Append(", Signature = ").Append(Secret.Mark(Signature));
+        return true;
+    }
+}
 
 public sealed record AccountInfo(
     [property: JsonPropertyName("email")] string Email,
@@ -31,7 +56,17 @@ public sealed record LoginResult(
     [property: JsonPropertyName("token")] string Token,
     [property: JsonPropertyName("account")] AccountInfo Account,
     [property: JsonPropertyName("device")] DeviceRef Device,
-    [property: JsonPropertyName("license")] SignedTicket License);
+    [property: JsonPropertyName("license")] SignedTicket License)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Token = ").Append(Secret.Mark(Token));
+        builder.Append(", Account = ").Append(Account);
+        builder.Append(", Device = ").Append(Device);
+        builder.Append(", License = ").Append(License);
+        return true;
+    }
+}
 
 /// <summary>The code of a sign-in through the browser: open <see cref="Url"/>, show <see cref="Code"/> large, poll until <see cref="ExpiresIn"/>.</summary>
 public sealed record BrowserCode(
@@ -57,7 +92,16 @@ public sealed record DeviceList(
 public sealed record DeviceLimitInfo(
     [property: JsonPropertyName("devices")] IReadOnlyList<DeviceEntry> Devices,
     [property: JsonPropertyName("bind_limit")] int BindLimit,
-    [property: JsonPropertyName("unbind_token")] string UnbindToken);
+    [property: JsonPropertyName("unbind_token")] string UnbindToken)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Devices = ").Append(Devices?.Count).Append(" computers");
+        builder.Append(", BindLimit = ").Append(BindLimit);
+        builder.Append(", UnbindToken = ").Append(Secret.Mark(UnbindToken));
+        return true;
+    }
+}
 
 public sealed record ResendResult(
     [property: JsonPropertyName("ok")] bool Ok,

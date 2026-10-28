@@ -15,17 +15,15 @@ public sealed record AccountData(string? Token = null, string? Email = null, lon
     // The generated ToString must never put the token, ticket or signature into a log: they are shown only as set/unset.
     private bool PrintMembers(StringBuilder builder)
     {
-        builder.Append("Token = ").Append(Mark(Token));
+        builder.Append("Token = ").Append(Secret.Mark(Token));
         builder.Append(", Email = ").Append(Email);
         builder.Append(", DeviceId = ").Append(DeviceId);
         builder.Append(", AccountId = ").Append(AccountId);
-        builder.Append(", Ticket = ").Append(Mark(Ticket));
-        builder.Append(", Signature = ").Append(Mark(Signature));
+        builder.Append(", Ticket = ").Append(Secret.Mark(Ticket));
+        builder.Append(", Signature = ").Append(Secret.Mark(Signature));
         builder.Append(", InstallId = ").Append(InstallId);
         return true;
     }
-
-    private static string Mark(string? secret) => string.IsNullOrEmpty(secret) ? "<none>" : "<set>";
 }
 
 /// <summary>Where <see cref="AccountData"/> is kept: Windows — a DPAPI file of this user; Mac — the Keychain.</summary>
