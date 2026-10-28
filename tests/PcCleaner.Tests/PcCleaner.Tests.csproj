@@ -30,6 +30,8 @@
     <EmbeddedResource Include="..\..\tools\update-signing-public.pem" LogicalName="update-signing-public.pem" />
     <!-- The server's TEST license key (public half): LicenseKeys must never contain it. -->
     <EmbeddedResource Include="Account\Fixtures\license_test_pub.pem" LogicalName="license_test_pub.pem" />
+    <!-- A copy of the site's app/data/features.php: Features must list the same keys (update both when the site's table changes). -->
+    <EmbeddedResource Include="Account\Fixtures\features.php" LogicalName="features.php" />
   </ItemGroup>
 
 </Project>
