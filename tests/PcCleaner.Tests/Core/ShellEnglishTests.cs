@@ -62,20 +62,20 @@ public class ShellEnglishTests
     }
 
     [Fact]
-    public void TheShell_ShowsItsStatusAndAdminLine_InEnglish()
+    public void TheShell_ShowsItsFooterAndAdminLine_InEnglish()
     {
         using (TestLanguage.English())
         {
             var main = new MainViewModel(new[] { new FakePage("Dashboard") }, () => new AppSettings { UiMode = UiMode.Expert }, _ => { });
 
-            Assert.Equal("Ready", main.StatusText);
+            Assert.Equal("v1.5.0 · latest version", UpdateFooter.Text(UpdateState.UpToDate, null, new Version(1, 5, 0)));
+            Assert.Equal("v1.5.0 · checking…", UpdateFooter.Text(UpdateState.Checking, null, new Version(1, 5, 0)));
             Assert.Equal(Admin.IsElevated ? "Administrator rights" : "Limited mode", main.AdminText);
-            // The same Russian word is the title of a finished action (dialogs of Disks, Speed up and Processes): "Done", not "Ready".
+            // «Готово» is the title of a finished action (dialogs of Disks, Speed up and Processes).
             Assert.Equal("Done", T._("Готово"));
-            Assert.Equal("Ready", T.Ctx("status", "Готово"));
         }
 
-        Assert.Equal("Готово", new MainViewModel(new[] { new FakePage("Dashboard") }, () => new AppSettings(), _ => { }).StatusText);
+        Assert.Equal("v1.5.0 · последняя версия", UpdateFooter.Text(UpdateState.UpToDate, null, new Version(1, 5, 0)));
     }
 
     [Fact]

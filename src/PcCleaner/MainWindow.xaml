@@ -216,11 +216,8 @@
                 <ContentControl Grid.Row="2" Margin="32,4,32,16" Content="{Binding SelectedPage}" Focusable="False" />
 
                 <Border Grid.Row="3" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="32,7">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11.5"><Run Text="{Binding VersionText, Mode=OneWay}" /><Run Text="{loc:T ' · Сделано для WaterCa7'}" /></TextBlock>
-                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" FontSize="11.5" TextTrimming="CharacterEllipsis"
-                                   TextWrapping="NoWrap" />
-                    </DockPanel>
+                    <!-- The version and the state of the updater (Core/Updates/UpdateFooter). -->
+                    <TextBlock HorizontalAlignment="Right" Style="{StaticResource Muted}" FontSize="11.5" Text="{Binding FooterText}" />
                 </Border>
             </Grid>
         </Grid>

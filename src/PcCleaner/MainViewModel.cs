@@ -21,7 +21,6 @@ public sealed class MainViewModel : ObservableObject, INavigator
     private readonly Action<AppSettings> _save;
     private PageViewModel? _selectedPage;
     private UiMode _shownMode;
-    private string _statusText = T.Ctx("status", "Готово"); // "Ready"; the plain «Готово» is "Done" (titles of finished actions)
     private bool _updateBannerDismissed;
 
     public MainViewModel()
@@ -63,7 +62,6 @@ public sealed class MainViewModel : ObservableObject, INavigator
             _updateBannerDismissed = true;
             OnUpdateBannerChanged();
         });
-        Log.EntryAdded += entry => StatusText = entry.Message;
 
         if (OtherAccountWarning is { } warning)
             Log.Warn(warning);
@@ -127,13 +125,8 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
     public string AdminText => IsAdmin ? T._("Права администратора") : T._("Ограниченный режим");
 
-    public string VersionText => "v" + (typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0");
-
-    public string StatusText
-    {
-        get => _statusText;
-        private set => Set(ref _statusText, value);
-    }
+    /// <summary>The corner of the bottom line: «v1.5.0 · последняя версия» (<see cref="UpdateFooter"/>).</summary>
+    public string FooterText => UpdateFooter.Text(Updates.State, Updates.Manifest, Updates.CurrentVersion);
 
     public RelayCommand RestartAsAdminCommand { get; }
 
@@ -235,6 +228,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         OnPropertyChanged(nameof(ShowUpdateBanner));
         OnPropertyChanged(nameof(UpdateBannerText));
         OnPropertyChanged(nameof(UpdateBannerAction));
+        OnPropertyChanged(nameof(FooterText));
     }
 
     private void RunUpdateBannerAction()
