@@ -28,6 +28,8 @@
   <ItemGroup>
     <!-- The public update-signing key; EmbeddedKey_IsTheOneInTools compares it with UpdateKeys. -->
     <EmbeddedResource Include="..\..\tools\update-signing-public.pem" LogicalName="update-signing-public.pem" />
+    <!-- The server's TEST license key (public half): LicenseKeys must never contain it. -->
+    <EmbeddedResource Include="Account\Fixtures\license_test_pub.pem" LogicalName="license_test_pub.pem" />
   </ItemGroup>
 
 </Project>

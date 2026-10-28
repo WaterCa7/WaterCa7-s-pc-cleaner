@@ -43,6 +43,9 @@
     <!-- English UI texts ("Russian text": "English text"), read by Core/Localization/T.cs. -->
     <None Remove="Core\Localization\en.json" />
     <EmbeddedResource Include="Core\Localization\en.json" LogicalName="PcCleaner.Localization.en.json" />
+    <!-- The live public license key (Core/Account/LicenseKeys.cs); provided by the owner. -->
+    <None Remove="Core\Account\license_pub.pem" />
+    <EmbeddedResource Include="Core\Account\license_pub.pem" LogicalName="PcCleaner.Account.license_pub.pem" Condition="Exists('Core\Account\license_pub.pem')" />
   </ItemGroup>
 
 </Project>
