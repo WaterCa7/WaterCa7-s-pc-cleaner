@@ -158,7 +158,7 @@ public partial class App : Application
             }
             window.Loaded += async (_, _) =>
             {
-                var exitCode = await ScreenshotRunner.RunAsync(window, vm, ScreenshotDir, ScreenshotPages, ScreenshotScan, WelcomeArg);
+                var exitCode = await ScreenshotRunner.RunAsync(window, vm, ScreenshotDir, ScreenshotPages, ScreenshotScan, WelcomeArg, SignInArg);
                 Shutdown(exitCode);
             };
         }

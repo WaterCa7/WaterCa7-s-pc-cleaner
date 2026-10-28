@@ -182,4 +182,60 @@ public class SignInBrowserTests : IDisposable
 
         Assert.Equal(1, _completed);
     }
+
+    // What the window does when it is closed (SignInWindow.Closed -> Stop).
+
+    [Fact]
+    public async Task Stop_EndsARunningPoll_WithoutAnotherRequest_OrAnError()
+    {
+        var answer = new TaskCompletionSource();
+        _a.Fake.On("POST /auth/code", 200, Start)
+            .On("GET /auth/code/ABCD-1234", 202, "{\"status\":\"pending\"}");
+        _a.Fake.Hold("GET /auth/code/ABCD-1234", answer.Task);
+        var vm = Create();
+        var poll = vm.BrowserTask;
+        await Wait.Until(() => _a.Fake.To("GET /auth/code/ABCD-1234").Any(), "the poll request");
+
+        vm.Stop(); // the window was closed while the answer is on its way
+        answer.SetResult();
+        await Wait.Within(poll, "the cancelled poll");
+
+        Assert.Single(_a.Fake.To("GET /auth/code/ABCD-1234"));
+        Assert.Null(vm.Error);
+        Assert.False(vm.BrowserEnded);
+        Assert.Equal(0, _completed);
+    }
+
+    [Fact]
+    public async Task Stop_EndsTheWaitBehindTheListOfComputers()
+    {
+        _a.Fake.On("POST /auth/code", 200, Start)
+            .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")));
+        var vm = Create();
+        await AtTheLimit(vm);
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+        Assert.False(vm.BrowserTask.IsCompleted); // the poll stands behind the list
+
+        vm.Stop();
+        await Wait.Within(vm.BrowserTask, "the wait for a release");
+
+        Assert.Equal(0, _completed);
+        Assert.Single(_a.Fake.To("GET /auth/code/ABCD-1234"));
+    }
+
+    [Fact]
+    public void Stop_DropsThePasswords_AndCanBeCalledTwice()
+    {
+        var vm = Create();
+        vm.Password = "secret-pass";
+        vm.Password2 = "secret-pass";
+        vm.Code = "123456";
+
+        vm.Stop();
+        vm.Stop();
+
+        Assert.Equal("", vm.Password);
+        Assert.Equal("", vm.Password2);
+        Assert.Equal("", vm.Code);
+    }
 }

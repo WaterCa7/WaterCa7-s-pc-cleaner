@@ -62,6 +62,8 @@ public sealed partial class SignInViewModel : ObservableObject
         SendResetCommand = new AsyncRelayCommand(() => RunAsync(SendResetAsync), () => !IsBusy);
         ConfirmResetCommand = new AsyncRelayCommand(() => RunAsync(ConfirmResetAsync), () => !IsBusy);
         BackCommand = new RelayCommand(Back);
+        SelectTabCommand = new RelayCommand(p => Tab = (SignInTab)p!);
+        ReleaseCommand = new AsyncRelayCommand(p => ReleaseAsync((LimitDevice)p!), _ => !IsBusy);
         InitRegister();
         InitBrowser();
         Tab = tab;
@@ -91,7 +93,7 @@ public sealed partial class SignInViewModel : ObservableObject
             // The tab is chosen again (a binding sets the same value): its step is already running, nothing starts anew.
             if (value == _tab && Step == StepOf(value))
                 return;
-            Set(ref _tab, value);
+            SetTab(value);
             Error = null;
             Info = null;
             switch (value)
@@ -109,12 +111,26 @@ public sealed partial class SignInViewModel : ObservableObject
         }
     }
 
+    private void SetTab(SignInTab value)
+    {
+        if (!Set(ref _tab, value, nameof(Tab)))
+            return;
+        OnPropertyChanged(nameof(IsPasswordTab));
+        OnPropertyChanged(nameof(IsRegisterTab));
+        OnPropertyChanged(nameof(IsBrowserTab));
+    }
+
     private static SignInStep StepOf(SignInTab tab) => tab switch
     {
         SignInTab.Register => SignInStep.Register,
         SignInTab.Browser => SignInStep.Browser,
         _ => SignInStep.Password,
     };
+
+    // The tab strip: which tab is drawn as chosen.
+    public bool IsPasswordTab => Tab == SignInTab.Password;
+    public bool IsRegisterTab => Tab == SignInTab.Register;
+    public bool IsBrowserTab => Tab == SignInTab.Browser;
 
     public bool IsPasswordStep => Step == SignInStep.Password;
     public bool IsResetEmailStep => Step == SignInStep.ResetEmail;
@@ -161,6 +177,12 @@ public sealed partial class SignInViewModel : ObservableObject
     public AsyncRelayCommand SendResetCommand { get; }
     public AsyncRelayCommand ConfirmResetCommand { get; }
     public RelayCommand BackCommand { get; }
+
+    /// <summary>A tab of the strip; the parameter is the <see cref="SignInTab"/>.</summary>
+    public RelayCommand SelectTabCommand { get; }
+
+    /// <summary>«Отвязать» in the list of computers; the parameter is the <see cref="LimitDevice"/>.</summary>
+    public AsyncRelayCommand ReleaseCommand { get; }
 
     // ----- password -----
 
@@ -249,6 +271,35 @@ public sealed partial class SignInViewModel : ObservableObject
         Step = SignInStep.DeviceLimit;
     }
 
+    // ----- screenshots (--signin): the steps without a network -----
+
+    internal void ShowStepForScreenshot(SignInStep step)
+    {
+        Email = "user@example.com";
+        Step = step;
+        Info = T._("Мы отправили код на почту, если адрес верен. Не пришло — проверьте «Спам».");
+        StartResendCountdown(60);
+    }
+
+    internal void ShowBrowserCodeForScreenshot(string code)
+    {
+        StopBrowser();
+        SetTab(SignInTab.Browser);
+        Step = SignInStep.Browser;
+        BrowserCode = code;
+    }
+
+    internal void ShowLimitForScreenshot()
+    {
+        var now = _now();
+        var devices = new DeviceEntry[]
+        {
+            new(1, "DESKTOP-OFFICE", "windows", now.AddDays(-40), now.AddHours(-3), false),
+            new(2, "LAPTOP", "windows", now.AddDays(-12), now.AddDays(-2), false),
+        };
+        ShowLimit(new DeviceLimitInfo(devices, 2, "screenshot"), "");
+    }
+
     // ----- common -----
 
     /// <summary>Runs one action of the window: busy while it runs, errors become <see cref="Error"/>, DEVICE_LIMIT and an unverified e-mail open their steps.</summary>
@@ -275,7 +326,7 @@ public sealed partial class SignInViewModel : ObservableObject
             Error = SignInErrors.Text(ex.Error);
             if (ex.Error.Code == ApiError.EmailTaken)
             {
-                Set(ref _tab, SignInTab.Password, nameof(Tab)); // the header follows the step
+                SetTab(SignInTab.Password); // the header follows the step
                 GoTo(SignInStep.Password);
             }
         }

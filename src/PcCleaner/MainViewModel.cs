@@ -57,8 +57,9 @@ public sealed class MainViewModel : ObservableObject, INavigator
         // A shell made for tests (own pages) has nothing to restart with: its language switch only saves.
         Welcome = new WelcomeViewModel(_settings, _save, pages is null ? WelcomeViewModel.RestartProgram : () => false);
         Welcome.Chosen += _ => NavigateTo("Dashboard");
-        // The sign-in window comes with SignInDialog (task 6 of the B2 plan); until then the buttons «Войти» / «Зарегистрироваться» do nothing.
-        AccountIntro = new AccountIntroViewModel(_settings, _save, () => AppServices.Account.IsSignedIn, _ => false);
+        // «Войти» / «Зарегистрироваться» open the sign-in window; a shell made for tests has no window to open.
+        AccountIntro = new AccountIntroViewModel(_settings, _save, () => AppServices.Account.IsSignedIn,
+            pages is null ? SignInDialog.Show : _ => false);
         Splash = new SplashViewModel(Updates, Environment.GetCommandLineArgs().Skip(1).ToList(),
             () => System.Windows.Application.Current.Shutdown());
         Updates.PropertyChanged += (_, _) => OnUpdateBannerChanged();

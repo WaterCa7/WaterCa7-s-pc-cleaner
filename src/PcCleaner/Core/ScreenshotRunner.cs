@@ -5,16 +5,19 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using PcCleaner.Core.Localization;
+using PcCleaner.Modules.Profile;
 
 namespace PcCleaner.Core;
 
 /// <summary>
 /// Non-interactive verification mode:
-///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Dashboard,System,Computer/Hardware] [--no-scan] [--mode simple|expert] [--lang ru|en] [--welcome]
+///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Dashboard,System,Computer/Hardware] [--no-scan] [--mode simple|expert] [--lang ru|en] [--welcome] [--signin]
 /// With --welcome it first takes a picture of the start screen of accounts (00-AccountIntro.png), then of the first-run screen
 /// (00-Welcome.png), each over the blurred window, and closes it without choosing anything, so the pictures of the pages are the same as without the switch.
 /// Opens each tab of the mode (NN is the number of the tab in the full list, so a tab keeps its file name in both modes),
 /// runs its read-only PreviewScanAsync, saves NN-Key.png (a section of one page) or NN-Section-Tab.png and log.txt, then exits.
+/// With --signin it also takes five pictures of the sign-in window (90-SignIn-Password.png … 94-SignIn-DeviceLimit.png), each step set
+/// up by hand on the fake account of a screenshot run, so nothing goes to the network.
 /// All confirmations are auto-declined (Dialogs.UseSilentMode), so nothing on the system is changed.
 /// Exit code: 0 = no errors logged, 1 = errors were logged (see log.txt).
 /// </summary>
@@ -26,7 +29,8 @@ public static class ScreenshotRunner
     /// <summary>The picture of the start screen of accounts (<c>--welcome</c>), taken before <see cref="WelcomeFile"/>.</summary>
     internal const string AccountIntroFile = "00-AccountIntro.png";
 
-    public static async Task<int> RunAsync(Window window, MainViewModel vm, string outDir, string[]? requests, bool scan, bool welcome = false)
+    public static async Task<int> RunAsync(Window window, MainViewModel vm, string outDir, string[]? requests, bool scan, bool welcome = false,
+        bool signIn = false)
     {
         Directory.CreateDirectory(outDir);
         var errors = 0;
@@ -78,6 +82,9 @@ public static class ScreenshotRunner
             Log.Info(T.F("[screenshot] {0}: готово за {1:0.0} с -> {2}", name, sw.Elapsed.TotalSeconds, file));
         }
 
+        if (signIn)
+            await ShootSignInAsync(outDir);
+
         await WaitIdleAsync();
         File.WriteAllLines(Path.Combine(outDir, "log.txt"),
             Log.Entries.Select(e => $"{e.TimeText} [{e.Level}] {e.Message}"));
@@ -101,6 +108,38 @@ public static class ScreenshotRunner
         await Task.Delay(700); // the fade-out is 250 ms; then the blur is dropped
         await WaitIdleAsync();
         Log.Info(T.F("[screenshot] AccountIntro: готово за {0:0.0} с -> {1}", sw.Elapsed.TotalSeconds, file));
+    }
+
+    /// <summary>--signin: the sign-in window on each of its steps, shown without a network (the screenshot account).</summary>
+    private static async Task ShootSignInAsync(string outDir)
+    {
+        var shots = new (string File, Action<SignInViewModel> Setup)[]
+        {
+            ("90-SignIn-Password.png", vm => vm.Email = "user@example.com"),
+            ("91-SignIn-Register.png", vm => vm.Tab = SignInTab.Register),
+            ("92-SignIn-Verify.png", vm => vm.ShowStepForScreenshot(SignInStep.VerifyCode)),
+            ("93-SignIn-Browser.png", vm => vm.ShowBrowserCodeForScreenshot("ABCD-1234")),
+            ("94-SignIn-DeviceLimit.png", vm => vm.ShowLimitForScreenshot()),
+        };
+        foreach (var (file, setup) in shots)
+        {
+            var sw = Stopwatch.StartNew();
+            var vm = new SignInViewModel(AppServices.Account, _ => { });
+            setup(vm);
+            var window = SignInDialog.Create(vm);
+            window.ShowActivated = false;
+            window.ShowInTaskbar = false;
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Left = -20000;
+            window.Top = -20000;
+            window.Show();
+            await Task.Delay(400);
+            await WaitIdleAsync();
+            var path = Path.Combine(outDir, file);
+            Save(window, path);
+            window.Close();
+            Log.Info(T.F("[screenshot] SignIn: {0} за {1:0.0} с", file, sw.Elapsed.TotalSeconds));
+        }
     }
 
     /// <summary>

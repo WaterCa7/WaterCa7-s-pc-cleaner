@@ -50,6 +50,17 @@ public sealed partial class SignInViewModel
         BrowserTask = RunBrowserAsync(cts.Token);
     }
 
+    /// <summary>
+    /// The window is closing: stops the running browser poll and the wait for a release behind the list of computers, and drops
+    /// what the window still holds (the passwords). Safe to call more than once.
+    /// </summary>
+    public void Stop()
+    {
+        StopBrowser();
+        Password = Password2 = Code = "";
+        _retry = null;
+    }
+
     private void StopBrowser()
     {
         _browserCts?.Cancel();
