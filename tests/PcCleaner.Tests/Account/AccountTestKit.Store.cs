@@ -55,6 +55,16 @@ internal sealed class ThrowingHwHash : IHwHash
     public string Value => throw new InvalidOperationException("WMI is broken");
 }
 
+/// <summary>What the real <c>Task.Delay</c> does with a negative duration: throws at once (it would fault the refresh loop).</summary>
+internal static class DelayGuard
+{
+    public static void NotNegative(TimeSpan duration)
+    {
+        if (duration < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(duration), duration, "A delay is never negative.");
+    }
+}
+
 /// <summary>
 /// The delay of a service under test, completed by the test: every call is recorded and waits until <see cref="Complete"/> (or its
 /// token is cancelled). Nothing waits for real time; <see cref="RequestedAsync"/> only guards a hang.
@@ -66,6 +76,8 @@ internal sealed class ManualDelays
 
     public Func<TimeSpan, CancellationToken, Task> Delay => (d, ct) =>
     {
+        // Like Task.Delay: a negative duration throws at once (the real delay would fault the refresh loop).
+        DelayGuard.NotNegative(d);
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         ct.Register(() => done.TrySetCanceled(ct));
         lock (_gate)

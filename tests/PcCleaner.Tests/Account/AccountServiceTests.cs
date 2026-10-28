@@ -266,6 +266,22 @@ public class AccountServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AComputerIdThatCannotBeRead_NeverMakesTheSignInCallsThrowBeforeTheTask()
+    {
+        var service = new AccountService(Api.Client(_fake), _store, new ThrowingHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now,
+            (_, _) => Task.CompletedTask);
+        _fake.On("POST /auth/register", 200, "{\"pending\":true}")
+            .On("POST /auth/code", 200, "{\"code\":\"ABCD-1234\",\"url\":\"https://waterca7.ru/auth/device?code=ABCD-1234\",\"expires_in\":600}");
+
+        var register = service.RegisterAsync("user@example.com", "password1", "ru", None); // not awaited: must not throw here
+        var browser = service.StartBrowserLoginAsync(None);
+
+        Assert.Equal("", service.Device.HwHash); // the unreadable id is sent empty; the server decides
+        await register;
+        Assert.Equal("ABCD-1234", (await browser).Code);
+    }
+
+    [Fact]
     public async Task TheNotSignedInError_HasAText()
     {
         var ex = await Assert.ThrowsAsync<ApiException>(() => Service().DevicesAsync(None));

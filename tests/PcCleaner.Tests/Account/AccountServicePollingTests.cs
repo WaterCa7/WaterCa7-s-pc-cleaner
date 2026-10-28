@@ -499,6 +499,31 @@ public class AccountServicePollingTests : IDisposable
     }
 
     [Fact]
+    public async Task ALateWakeAtTheTierBoundary_GoesStraightToTheRefresh_AndTheLoopLives()
+    {
+        var ticket = TestLicense.Json(plan: "pro", expires: TestLicense.Now.AddHours(2));
+        SignedIn(ticket); // fills the store
+        _fake.On("GET /license/ticket", 200, _key.TicketJson(ticket)).On("GET /license/ticket", 200, _key.TicketJson(ticket));
+        var delays = new ManualDelays();
+        var tiers = new List<Tier>();
+        using var cts = new CancellationTokenSource();
+        var loop = LoopService(delays, tiers).RunRefreshLoopAsync(cts.Token);
+
+        Assert.Equal(TimeSpan.FromHours(2), await delays.RequestedAsync(0)); // pass 1 done; asleep until the subscription ends
+        _now = TestLicense.Now.AddHours(2) + TimeSpan.FromMinutes(5); // the computer slept: awake well past expires_at + 1 min
+        delays.Complete(0);
+
+        // the refresh time is already behind: no sleep with a negative duration, the next ticket is asked for at once
+        Assert.Equal(AccountService.DailyRefresh, await delays.RequestedAsync(1)); // pass 2 is over, the loop sleeps again
+        Assert.False(loop.IsFaulted);
+        Assert.Equal(2, _fake.To("GET /license/ticket").Count());
+        Assert.Equal(Tier.Free, Seen(tiers)[^1]); // the expired ticket gives Free
+
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loop);
+    }
+
+    [Fact]
     public async Task ASignInWhileTheLoopSleeps_RecomputesTheSleep()
     {
         _fake.On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(plan: "pro", expires: TestLicense.Now.AddHours(3))));
@@ -521,6 +546,7 @@ public class AccountServicePollingTests : IDisposable
     private AccountService RecordingService(List<TimeSpan> delays, Action<TimeSpan, CancellationToken>? onDelay = null)
         => new(Api.Client(_fake), _store, new FixedHwHash(), "windows", "PC", "1.5.0", _key.Keys, () => _now, (d, ct) =>
         {
+            DelayGuard.NotNegative(d);
             lock (delays)
                 delays.Add(d);
             onDelay?.Invoke(d, ct);

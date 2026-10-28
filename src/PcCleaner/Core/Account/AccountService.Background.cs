@@ -25,7 +25,7 @@ public sealed partial class AccountService
 
     // ----- sign-in through the browser -----
 
-    public Task<BrowserCode> StartBrowserLoginAsync(CancellationToken ct) => _api.StartBrowserCodeAsync(Device, ct);
+    public async Task<BrowserCode> StartBrowserLoginAsync(CancellationToken ct) => await _api.StartBrowserCodeAsync(Device, ct);
 
     /// <summary>
     /// Polls the code until the site confirms it (true, signed in) or it expires (false). While <paramref name="onDeviceLimit"/>
@@ -157,8 +157,15 @@ public sealed partial class AccountService
         var refreshAt = now + NextRefreshDelay(lastSucceeded);
         while (true)
         {
+            // A late wake (the computer slept across the end, the clock jumped) can leave the refresh time behind: refresh at once.
+            if (now >= refreshAt)
+                return;
             var target = NextTierBoundary(now) is { } boundary && boundary < refreshAt ? boundary : refreshAt;
-            if (!await SleepAsync(target - now, wake, ct))
+            // Never negative (Task.Delay throws for that); the checks above keep it positive, so a zero cannot spin.
+            var sleep = target - now;
+            if (sleep < TimeSpan.Zero)
+                sleep = TimeSpan.Zero;
+            if (!await SleepAsync(sleep, wake, ct))
             {
                 // A sign-in, a sign-out or a new ticket: the state is fresh, so the sleep is computed from it.
                 wake = WakeSignal();

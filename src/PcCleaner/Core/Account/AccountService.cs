@@ -47,8 +47,12 @@ public sealed partial class AccountService
 
     public string DeviceName { get; }
 
-    /// <summary>The fields every sign-in sends; the first read computes hw_hash (WMI on Windows: do it off the UI thread).</summary>
-    public DeviceFields Device => new(_hw.Value, _platform, DeviceName, _appVersion);
+    /// <summary>
+    /// The fields every sign-in sends. The first read may query the hardware (hw_hash: WMI on Windows, up to seconds): call
+    /// <see cref="WarmUpAsync"/> off the UI thread at startup. A computer id that cannot be read is sent empty (the server refuses it
+    /// as an ordinary API error), never an exception.
+    /// </summary>
+    public DeviceFields Device => new(HwValue() ?? "", _platform, DeviceName, _appVersion);
 
     public bool IsSignedIn
     {
@@ -119,8 +123,8 @@ public sealed partial class AccountService
     public async Task LoginAsync(string email, string password, CancellationToken ct)
         => SignIn(await _api.LoginAsync(email.Trim(), password, Device, ct), T._("Аккаунт: вход по паролю"));
 
-    public Task RegisterAsync(string email, string password, string lang, CancellationToken ct)
-        => _api.RegisterAsync(email.Trim(), password, lang, Device, ct);
+    public async Task RegisterAsync(string email, string password, string lang, CancellationToken ct)
+        => await _api.RegisterAsync(email.Trim(), password, lang, Device, ct);
 
     public async Task VerifyAsync(string email, string code, CancellationToken ct)
         => SignIn(await _api.VerifyAsync(email.Trim(), code.Trim(), Device, ct), T._("Аккаунт: почта подтверждена, вход выполнен"));
