@@ -87,14 +87,14 @@ public sealed class MainViewModel : ObservableObject, INavigator
     };
 
     /// <summary>
-    /// Every page of the program. Not what the sidebar shows (<see cref="VisiblePages"/>): screenshots, the busy check of a
+    /// Every page of the program, not only those of the current mode (<see cref="VisiblePages"/>): screenshots, the busy check of a
     /// restart and the pages that look for each other use the whole list, and the hidden pages go on taking part in the
     /// Dashboard check (they are IHealthContributors of <see cref="AppServices"/>, not sidebar items). The sidebar shows
     /// <see cref="Sections"/>; a page is a tab of one of them.
     /// </summary>
     public ObservableCollection<PageViewModel> Pages { get; }
 
-    /// <summary>The pages of the sidebar: those of the current mode (<see cref="UiModes"/>), in the order of <see cref="Pages"/>.</summary>
+    /// <summary>The pages of the current mode (<see cref="UiModes"/>), in the order of <see cref="Pages"/>; the sections show them as tabs.</summary>
     public ObservableCollection<PageViewModel> VisiblePages { get; }
 
     /// <summary>Every section of the menu (<see cref="ShellMenu"/>); a section's tabs are pages of <see cref="Pages"/>.</summary>
@@ -140,7 +140,8 @@ public sealed class MainViewModel : ObservableObject, INavigator
     public bool HasOtherAccountWarning => OtherAccountWarning is not null;
 
     /// <summary>
-    /// The open page. The sidebar's binding writes here, and it can only write what <see cref="VisiblePages"/> offers: a page the
+    /// The open page. The tab strip's binding writes here (the sidebar writes <see cref="SelectedTopSection"/> and
+    /// <see cref="SelectedBottomSection"/>), and only what <see cref="VisiblePages"/> offers is taken: a page the
     /// mode hides is ignored (no question — a binding write is not the user asking for it). A hidden page is reached through
     /// <see cref="NavigateTo"/> or <see cref="NavigateAsync"/>, which ask first.
     /// </summary>
@@ -331,12 +332,16 @@ public sealed class MainViewModel : ObservableObject, INavigator
             return;
         _selectedPage = page;
         SelectedSection?.Remember(page);
-        // The section first: the tab strip gets the tabs of the new section, then its selection (SelectedPage) is one of them.
+        // The page first, then the section. The tab strip (MainWindow) binds SelectedItem to SelectedPage and ItemsSource to
+        // SelectedSection.VisibleTabs. Given the page first, the strip keeps it and selects it when the new tabs arrive. Given
+        // the section first, the strip drops its old selection, writes null back (ignored), and the binding re-reads the new
+        // page while that change is still running, so the strip keeps SelectedItem without selecting it and the later
+        // SelectedPage event changes nothing: the open tab would not be highlighted (checked with --screenshots).
+        OnPropertyChanged(nameof(SelectedPage));
         OnPropertyChanged(nameof(SelectedSection));
         OnPropertyChanged(nameof(SelectedTopSection));
         OnPropertyChanged(nameof(SelectedBottomSection));
         OnPropertyChanged(nameof(HeaderTitle));
-        OnPropertyChanged(nameof(SelectedPage));
         try
         {
             previous?.OnNavigatedFrom();

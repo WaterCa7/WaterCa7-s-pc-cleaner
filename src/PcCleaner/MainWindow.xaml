@@ -74,6 +74,16 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- A sidebar item: the icon and the title of a section (Core/SectionViewModel). -->
+        <DataTemplate x:Key="SectionNavTemplate">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource Icon}" Text="{Binding IconGlyph}"
+                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                <TextBlock Text="{Binding Title}" Margin="13,0,0,0" FontSize="13.5" VerticalAlignment="Center"
+                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+            </StackPanel>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid x:Name="Shell">
@@ -128,20 +138,15 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- The pages of the current mode (simple: four; expert: all). -->
-                    <ListBox ItemsSource="{Binding VisiblePages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
-                             ItemContainerStyle="{StaticResource NavItem}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource Icon}" Text="{Binding IconGlyph}"
-                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
-                                    <TextBlock Text="{Binding Title}" Margin="13,0,0,0" FontSize="13.5" VerticalAlignment="Center"
-                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <!-- Профиль and Настройки: above the admin card (docked to the bottom after it, so it sits above). -->
+                    <ListBox DockPanel.Dock="Bottom" ItemsSource="{Binding BottomSections}"
+                             SelectedItem="{Binding SelectedBottomSection, Mode=TwoWay}"
+                             ItemContainerStyle="{StaticResource NavItem}" ItemTemplate="{StaticResource SectionNavTemplate}" />
+                    <Border DockPanel.Dock="Bottom" Height="1" Margin="20,6" Background="{StaticResource LineBrush}" />
+
+                    <!-- The sections of the current mode (a section is shown while it has a visible tab). -->
+                    <ListBox ItemsSource="{Binding TopSections}" SelectedItem="{Binding SelectedTopSection, Mode=TwoWay}"
+                             ItemContainerStyle="{StaticResource NavItem}" ItemTemplate="{StaticResource SectionNavTemplate}" />
                 </DockPanel>
             </Border>
 
@@ -155,7 +160,23 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Margin="32,24,32,10">
-                    <TextBlock Style="{StaticResource H1}" Text="{Binding SelectedPage.Title}" />
+                    <TextBlock Style="{StaticResource H1}" Text="{Binding HeaderTitle}" />
+                    <!-- The tabs of the section; a section with one visible tab has no strip. -->
+                    <ListBox Margin="0,10,0,2" ItemsSource="{Binding SelectedSection.VisibleTabs}"
+                             SelectedItem="{Binding SelectedPage, Mode=TwoWay}" ItemContainerStyle="{StaticResource TabStripItem}"
+                             Visibility="{Binding SelectedSection.ShowTabs, Converter={StaticResource BoolToVis}}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Title}" FontSize="13"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                     <!-- Simple mode: one line, the whole text in the tooltip. -->
                     <TextBlock FontSize="13" Margin="0,4,0,0" Text="{Binding SelectedPage.Subtitle}">
                         <TextBlock.Style>
