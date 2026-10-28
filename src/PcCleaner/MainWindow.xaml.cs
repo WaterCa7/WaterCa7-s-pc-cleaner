@@ -6,6 +6,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using PcCleaner.Core;
 using PcCleaner.Core.Updates;
+using PcCleaner.Modules.Profile;
 
 namespace PcCleaner;
 
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
 
     private SplashViewModel? _splash;
     private WelcomeViewModel? _welcome;
+    private AccountIntroViewModel? _intro;
 
     public MainWindow()
     {
@@ -45,14 +47,20 @@ public partial class MainWindow : Window
             _splash.PropertyChanged -= OnSplashChanged;
         if (_welcome is not null)
             _welcome.PropertyChanged -= OnWelcomeChanged;
+        if (_intro is not null)
+            _intro.PropertyChanged -= OnIntroChanged;
         var main = e.NewValue as MainViewModel;
         _splash = main?.Splash;
         _welcome = main?.Welcome;
+        _intro = main?.AccountIntro;
         if (_splash is not null)
             _splash.PropertyChanged += OnSplashChanged;
         if (_welcome is not null)
             _welcome.PropertyChanged += OnWelcomeChanged;
+        if (_intro is not null)
+            _intro.PropertyChanged += OnIntroChanged;
         ShowOverlay(SplashOverlay, _splash?.IsVisible == true, animate: false, () => _splash?.IsVisible == true);
+        ShowOverlay(AccountIntroOverlay, _intro?.IsVisible == true, animate: false, () => _intro?.IsVisible == true, fadeIn: true);
         ShowOverlay(WelcomeOverlay, _welcome?.IsVisible == true, animate: false, () => _welcome?.IsVisible == true, fadeIn: true);
     }
 
@@ -60,6 +68,12 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(SplashViewModel.IsVisible))
             OnUi(() => ShowOverlay(SplashOverlay, _splash?.IsVisible == true, animate: true, () => _splash?.IsVisible == true));
+    }
+
+    private void OnIntroChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AccountIntroViewModel.IsVisible))
+            OnUi(() => ShowOverlay(AccountIntroOverlay, _intro?.IsVisible == true, animate: true, () => _intro?.IsVisible == true, fadeIn: true));
     }
 
     private void OnWelcomeChanged(object? sender, PropertyChangedEventArgs e)
@@ -149,6 +163,7 @@ public partial class MainWindow : Window
 
     private bool AnotherOverlayIsUp(FrameworkElement overlay)
         => (!ReferenceEquals(overlay, SplashOverlay) && SplashOverlay.Visibility == Visibility.Visible) ||
+           (!ReferenceEquals(overlay, AccountIntroOverlay) && AccountIntroOverlay.Visibility == Visibility.Visible) ||
            (!ReferenceEquals(overlay, WelcomeOverlay) && WelcomeOverlay.Visibility == Visibility.Visible);
 
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;

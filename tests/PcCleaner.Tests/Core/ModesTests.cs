@@ -154,11 +154,12 @@ public class ModesRulesTests
     [Fact]
     public void ResetSettings_KeepsTheModeAndTheLanguage()
     {
-        var settings = new AppSettings { UiMode = UiMode.Simple, Language = "en", CleanerMinFileAgeHours = 72 };
+        var settings = new AppSettings { UiMode = UiMode.Simple, Language = "en", CleanerMinFileAgeHours = 72, AccountIntroShown = true };
 
         SettingsLogic.ResetToDefaults(settings);
 
         Assert.Equal(UiMode.Simple, settings.UiMode);
+        Assert.True(settings.AccountIntroShown);
         Assert.Equal("en", settings.Language);
         Assert.Equal(24, settings.CleanerMinFileAgeHours);
     }

@@ -267,6 +267,39 @@
             </StackPanel>
         </Grid>
 
+        <!-- ===== Start screen: accounts (Modules/Profile/AccountIntroViewModel) =====
+             After the splash, once per install: sign in, sign up or go on without an account. Then Welcome, if no mode is chosen. -->
+        <Grid x:Name="AccountIntroOverlay" Visibility="Collapsed" Focusable="True" FocusVisualStyle="{x:Null}"
+              KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle"
+              KeyboardNavigation.DirectionalNavigation="Cycle">
+            <Grid.Background>
+                <SolidColorBrush Color="{StaticResource BackgroundColor}" Opacity="0.45" />
+            </Grid.Background>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="560">
+                <Image Source="{StaticResource AppLogo}" Width="96" Height="96" />
+                <TextBlock FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,22,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="{loc:T 'Аккаунт WaterCa7'}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding AccountIntro.IsUpdate}" Value="True">
+                                    <Setter Property="Text" Value="{loc:T 'Появились аккаунты и Pro'}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Style="{StaticResource Muted}" FontSize="14" TextAlignment="Center" TextWrapping="Wrap" Margin="0,12,0,0"
+                           Text="{loc:T 'Войдите, чтобы включить Pro на этом компьютере, применить промокод и видеть свои компьютеры. Без входа программа работает бесплатно, как раньше.'}" />
+                <Button Style="{StaticResource AccentButton}" Margin="0,28,0,0" Padding="18,10" HorizontalAlignment="Stretch"
+                        Content="{loc:T 'Войти'}" Command="{Binding AccountIntro.SignInCommand}" />
+                <Button Margin="0,10,0,0" Padding="18,10" HorizontalAlignment="Stretch"
+                        Content="{loc:T 'Зарегистрироваться'}" Command="{Binding AccountIntro.RegisterCommand}" />
+                <Button Style="{StaticResource LinkButton}" Margin="0,16,0,0" HorizontalAlignment="Center"
+                        Content="{loc:T 'Продолжить без входа'}" Command="{Binding AccountIntro.SkipCommand}" />
+            </StackPanel>
+        </Grid>
+
         <!-- ===== First-run welcome (Core/WelcomeViewModel) =====
              After the splash, while no mode is chosen: the same blurred window, the logo, two cards and the RU / EN switch.
              Collapsed by default; MainWindow.xaml.cs shows it, blurs Root and fades both out. Esc does nothing: a choice is required.

@@ -189,7 +189,7 @@ public partial class App : Application
 
             if (UpdatedFrom is not null)
             {
-                vm.Welcome.ShowAtStart(screenshotRun: false);
+                ShowIntroThenWelcome(vm);
                 _ = AppServices.Updates.CompleteUpdateAsync(UpdatedFrom);
             }
             else
@@ -234,7 +234,23 @@ public partial class App : Application
     {
         await vm.Splash.RunAsync(CancellationToken.None);
         if (!vm.Splash.IsVisible)
+            ShowIntroThenWelcome(vm);
+    }
+
+    /// <summary>The start screen of accounts if due, then the first-run screen if no mode is chosen yet.</summary>
+    private static void ShowIntroThenWelcome(MainViewModel vm)
+    {
+        if (!vm.AccountIntro.ShowAtStart(screenshotRun: false))
+        {
             vm.Welcome.ShowAtStart(screenshotRun: false);
+            return;
+        }
+        void OnClosed()
+        {
+            vm.AccountIntro.Closed -= OnClosed;
+            vm.Welcome.ShowAtStart(screenshotRun: false);
+        }
+        vm.AccountIntro.Closed += OnClosed;
     }
 
     /// <summary>The UI language of this run: --lang, else Настройки, else the system (ru-* → Russian, otherwise English).</summary>

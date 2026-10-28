@@ -11,8 +11,8 @@ namespace PcCleaner.Core;
 /// <summary>
 /// Non-interactive verification mode:
 ///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Dashboard,System,Computer/Hardware] [--no-scan] [--mode simple|expert] [--lang ru|en] [--welcome]
-/// With --welcome it first takes a picture of the first-run screen (00-Welcome.png) over the blurred window and closes it
-/// without choosing anything, so the pictures of the pages are the same as without the switch.
+/// With --welcome it first takes a picture of the start screen of accounts (00-AccountIntro.png), then of the first-run screen
+/// (00-Welcome.png), each over the blurred window, and closes it without choosing anything, so the pictures of the pages are the same as without the switch.
 /// Opens each tab of the mode (NN is the number of the tab in the full list, so a tab keeps its file name in both modes),
 /// runs its read-only PreviewScanAsync, saves NN-Key.png (a section of one page) or NN-Section-Tab.png and log.txt, then exits.
 /// All confirmations are auto-declined (Dialogs.UseSilentMode), so nothing on the system is changed.
@@ -22,6 +22,9 @@ public static class ScreenshotRunner
 {
     /// <summary>The picture of the first-run screen (<c>--welcome</c>); 00 puts it before the pages, which start at 01.</summary>
     internal const string WelcomeFile = "00-Welcome.png";
+
+    /// <summary>The picture of the start screen of accounts (<c>--welcome</c>), taken before <see cref="WelcomeFile"/>.</summary>
+    internal const string AccountIntroFile = "00-AccountIntro.png";
 
     public static async Task<int> RunAsync(Window window, MainViewModel vm, string outDir, string[]? requests, bool scan, bool welcome = false)
     {
@@ -34,7 +37,10 @@ public static class ScreenshotRunner
         };
 
         if (welcome)
+        {
+            await ShootAccountIntroAsync(window, vm, outDir);
             await ShootWelcomeAsync(window, vm, outDir);
+        }
 
         var allPages = vm.Pages.ToList();
         foreach (var key in HiddenRequested(allPages, vm.VisiblePages, vm.Sections, requests))
@@ -76,6 +82,25 @@ public static class ScreenshotRunner
         File.WriteAllLines(Path.Combine(outDir, "log.txt"),
             Log.Entries.Select(e => $"{e.TimeText} [{e.Level}] {e.Message}"));
         return errors > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// The start screen of accounts, once, the way <see cref="ShootWelcomeAsync"/> does the first-run screen. It touches no account:
+    /// the buttons are not pressed, and a screenshot run has the fake account of <c>--tier</c> anyway.
+    /// </summary>
+    private static async Task ShootAccountIntroAsync(Window window, MainViewModel vm, string outDir)
+    {
+        var sw = Stopwatch.StartNew();
+        Log.Info(T._("[screenshot] AccountIntro: открытие"));
+        vm.AccountIntro.ShowAtStart(screenshotRun: true, forced: true);
+        await Task.Delay(700); // the fade-in is 250 ms
+        await WaitIdleAsync();
+        var file = Path.Combine(outDir, AccountIntroFile);
+        Save(window, file);
+        vm.AccountIntro.Hide();
+        await Task.Delay(700); // the fade-out is 250 ms; then the blur is dropped
+        await WaitIdleAsync();
+        Log.Info(T.F("[screenshot] AccountIntro: готово за {0:0.0} с -> {1}", sw.Elapsed.TotalSeconds, file));
     }
 
     /// <summary>

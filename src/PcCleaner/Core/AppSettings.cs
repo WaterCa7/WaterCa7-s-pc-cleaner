@@ -59,6 +59,9 @@ public sealed class AppSettings
     [JsonConverter(typeof(UiModeJsonConverter))]
     public UiMode? UiMode { get; set; }
 
+    /// <summary>The start screen «Войти / Зарегистрироваться / Продолжить без входа» was shown (once per install; spec 3.1).</summary>
+    public bool AccountIntroShown { get; set; }
+
     /// <summary>When update.json was last read successfully (UTC).</summary>
     public DateTime? LastUpdateCheckUtc { get; set; }
 
