@@ -509,6 +509,7 @@
   "Адреса сайтов определяют известные DNS-серверы или ваш роутер — признаков подмены нет.": "Website addresses are resolved by well-known DNS servers or your router — there are no signs of replacement.",
   "Аккаунт WaterCa7 включит Pro на этом компьютере, покажет ваши компьютеры и примет промокод. Без входа программа работает как раньше.": "A WaterCa7 account will turn on Pro on this computer, show your computers and take a promo code. Without signing in the program works as before.",
   "Аккаунт WaterCa7, Pro и ваши компьютеры": "Your WaterCa7 account, Pro and your computers",
+  "Аккаунт: сохранённый вход не прочитан ({0}) — нужно войти снова": "Account: the saved sign-in could not be read ({0}) — you need to sign in again",
   "Активатор Windows — частый переносчик вирусов": "A Windows activator — a common carrier of viruses",
   "Активно используется файл подкачки": "The page file is in heavy use",
   "Активных записей нет — сайты открываются по настоящим адресам.": "There are no active entries — websites open at their real addresses.",
