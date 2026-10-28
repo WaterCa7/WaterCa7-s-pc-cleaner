@@ -42,11 +42,11 @@ public class AccountSetupTests
     }
 
     [Fact]
-    public void ARefresh_OfAScreenshotAccount_KeepsTheTier()
+    public async Task ARefresh_OfAScreenshotAccount_KeepsTheTier()
     {
         var account = AccountSetup.ForScreenshots(Tier.Pro);
 
-        Assert.False(account.RefreshTicketAsync(CancellationToken.None).GetAwaiter().GetResult());
+        Assert.False(await account.RefreshTicketAsync(CancellationToken.None));
         Assert.Equal(Tier.Pro, account.Tier);
     }
 }

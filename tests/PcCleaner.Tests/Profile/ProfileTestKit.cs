@@ -42,7 +42,11 @@ internal sealed class TestAccount : IDisposable
     public void Dispose() => Key.Dispose();
 }
 
-/// <summary>Waits for the background work of a view model; a regression fails after the deadline instead of hanging the run.</summary>
+/// <summary>
+/// Waits for the background work of a view model; a regression fails after the deadline instead of hanging the run. A flow that is
+/// parked (a held request, the wait behind the list of computers) and resumed under a deadline must not run on xUnit's
+/// synchronization context: the test body goes through <see cref="UiThread.RunAsync"/>.
+/// </summary>
 internal static class Wait
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(5);

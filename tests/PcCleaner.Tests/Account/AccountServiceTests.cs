@@ -327,6 +327,8 @@ public class AccountServiceTests : IDisposable
         Assert.Null(_fake.Requests.Single().Bearer);
     }
 
+    // A call that waits on a held answer is started with Task.Run: started on the test's thread, every step after the answer would be
+    // queued on xUnit's synchronization context (one thread per core, shared by all test classes) and wait for other classes' tests.
     private static async Task WaitForRequests(FakeApi fake, int count)
         => Assert.True(await Task.Run(() => SpinWait.SpinUntil(() => fake.Requests.Count >= count, TimeSpan.FromSeconds(10))));
 
@@ -338,7 +340,7 @@ public class AccountServiceTests : IDisposable
         _fake.Hold("GET /devices", gate.Task);
         var service = SignedIn();
 
-        var pending = service.DevicesAsync(None);
+        var pending = Task.Run(() => service.DevicesAsync(None));
         await WaitForRequests(_fake, 1);
         await service.LoginAsync("user@example.com", "password1", None); // the user signs in again meanwhile (token t2)
         gate.SetResult();
@@ -358,7 +360,7 @@ public class AccountServiceTests : IDisposable
         _fake.Hold("GET /devices", gate.Task);
         var service = SignedIn();
 
-        var pending = service.DevicesAsync(None);
+        var pending = Task.Run(() => service.DevicesAsync(None));
         await WaitForRequests(_fake, 1);
         await service.LogoutAsync(None);
         gate.SetResult();
@@ -376,7 +378,7 @@ public class AccountServiceTests : IDisposable
         _fake.Hold("POST /device/unbind", gate.Task);
         var service = SignedIn();
 
-        var pending = service.UnbindAsync(null, None);
+        var pending = Task.Run(() => service.UnbindAsync(null, None));
         await WaitForRequests(_fake, 1);
         await service.LoginAsync("user@example.com", "password1", None);
         gate.SetResult();
@@ -518,7 +520,7 @@ public class AccountServiceTests : IDisposable
         _fake.Hold("POST /auth/logout", gate.Task);
         var service = SignedIn();
 
-        var pending = service.LogoutAsync(None);
+        var pending = Task.Run(() => service.LogoutAsync(None));
         await WaitForRequests(_fake, 1);
         await service.LoginAsync("user@example.com", "password1", None); // the user signs in again meanwhile (token t2)
         gate.SetResult();

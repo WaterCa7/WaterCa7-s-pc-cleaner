@@ -317,6 +317,8 @@ public class AccountServicePollingTests : IDisposable
         Assert.Equal(ApiError.EmailNotVerified, ex.Error.Code);
     }
 
+    // A call that waits on a held answer or on ManualDelays is started with Task.Run: started on the test's thread, every step after the
+    // release would be queued on xUnit's synchronization context (one thread per core, shared by all test classes) and could miss a deadline.
     private async Task WaitForRequestAsync(string route)
     {
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -336,7 +338,7 @@ public class AccountServicePollingTests : IDisposable
         _fake.OnError("GET /license/ticket", 401, "TOKEN_REVOKED");
         _fake.On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(), token: "newer"));
 
-        var refresh = service.RefreshTicketAsync(None);
+        var refresh = Task.Run(() => service.RefreshTicketAsync(None));
         await WaitForRequestAsync("GET /license/ticket");
         await service.LoginAsync("user@example.com", "password1", None); // the user signs in again meanwhile
         release.SetResult();
@@ -437,7 +439,7 @@ public class AccountServicePollingTests : IDisposable
         _fake.On("GET /license/ticket", 200, _key.TicketJson(TestLicense.Json(plan: "pro", issued: TestLicense.Now)));
         _fake.On("POST /auth/login", 200, _key.LoginJson(TestLicense.Json(plan: "free", noExpiry: true), token: "newer"));
 
-        var refresh = service.RefreshTicketAsync(None);
+        var refresh = Task.Run(() => service.RefreshTicketAsync(None));
         await WaitForRequestAsync("GET /license/ticket");
         await service.LoginAsync("user@example.com", "password1", None); // the user signs in again meanwhile
         release.SetResult();
@@ -474,7 +476,7 @@ public class AccountServicePollingTests : IDisposable
         var delays = new ManualDelays();
         var tiers = new List<Tier>();
         using var cts = new CancellationTokenSource();
-        var loop = LoopService(delays, tiers).RunRefreshLoopAsync(cts.Token);
+        var loop = Task.Run(() => LoopService(delays, tiers).RunRefreshLoopAsync(cts.Token));
 
         // pass 1 fails: nothing changed, the screens are told anyway; the retry comes before the subscription ends
         Assert.Equal(AccountService.RetryAfterFailure, await delays.RequestedAsync(0));
@@ -507,7 +509,7 @@ public class AccountServicePollingTests : IDisposable
         var delays = new ManualDelays();
         var tiers = new List<Tier>();
         using var cts = new CancellationTokenSource();
-        var loop = LoopService(delays, tiers).RunRefreshLoopAsync(cts.Token);
+        var loop = Task.Run(() => LoopService(delays, tiers).RunRefreshLoopAsync(cts.Token));
 
         Assert.Equal(TimeSpan.FromHours(2), await delays.RequestedAsync(0)); // pass 1 done; asleep until the subscription ends
         _now = TestLicense.Now.AddHours(2) + TimeSpan.FromMinutes(5); // the computer slept: awake well past expires_at + 1 min
@@ -531,7 +533,7 @@ public class AccountServicePollingTests : IDisposable
         var tiers = new List<Tier>();
         using var cts = new CancellationTokenSource();
         var service = LoopService(delays, tiers);
-        var loop = service.RunRefreshLoopAsync(cts.Token);
+        var loop = Task.Run(() => service.RunRefreshLoopAsync(cts.Token));
 
         Assert.Equal(AccountService.DailyRefresh, await delays.RequestedAsync(0)); // a guest: nothing to refresh soon
         Assert.Equal(new[] { Tier.Guest }, Seen(tiers));

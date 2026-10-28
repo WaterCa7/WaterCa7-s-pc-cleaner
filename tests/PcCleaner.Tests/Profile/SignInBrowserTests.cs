@@ -100,7 +100,7 @@ public class SignInBrowserTests : IDisposable
     }
 
     [Fact]
-    public async Task ADeviceLimit_PausesThePoll_UntilAComputerIsReleased()
+    public Task ADeviceLimit_PausesThePoll_UntilAComputerIsReleased() => UiThread.RunAsync(async () =>
     {
         _a.Fake.On("POST /auth/code", 200, Start)
             .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
@@ -117,10 +117,10 @@ public class SignInBrowserTests : IDisposable
 
         Assert.Equal(1, polls);
         Assert.Equal(1, _completed);
-    }
+    });
 
     [Fact]
-    public async Task Back_FromTheLimit_StopsThePoll()
+    public Task Back_FromTheLimit_StopsThePoll() => UiThread.RunAsync(async () =>
     {
         _a.Fake.On("POST /auth/code", 200, Start)
             .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")));
@@ -133,7 +133,7 @@ public class SignInBrowserTests : IDisposable
 
         Assert.Equal(SignInStep.Password, vm.Step);
         Assert.Equal(0, _completed);
-    }
+    });
 
     [Fact]
     public async Task ReopenBrowser_OpensTheSamePageAgain()
@@ -151,7 +151,7 @@ public class SignInBrowserTests : IDisposable
     }
 
     [Fact]
-    public async Task ALimitThatArrivesAfterTheTabWasLeft_DoesNotBringTheListBack()
+    public Task ALimitThatArrivesAfterTheTabWasLeft_DoesNotBringTheListBack() => UiThread.RunAsync(async () =>
     {
         var answer = new TaskCompletionSource();
         _a.Fake.On("POST /auth/code", 200, Start)
@@ -167,7 +167,7 @@ public class SignInBrowserTests : IDisposable
 
         Assert.Equal(SignInStep.Password, vm.Step);
         Assert.Empty(vm.Devices);
-    }
+    });
 
     [Fact]
     public async Task Completed_FiresOnce_EvenIfTheReleaseAlsoReportsTheSignIn()
@@ -186,7 +186,7 @@ public class SignInBrowserTests : IDisposable
     // What the window does when it is closed (SignInWindow.Closed -> Stop).
 
     [Fact]
-    public async Task Stop_EndsARunningPoll_WithoutAnotherRequest_OrAnError()
+    public Task Stop_EndsARunningPoll_WithoutAnotherRequest_OrAnError() => UiThread.RunAsync(async () =>
     {
         var answer = new TaskCompletionSource();
         _a.Fake.On("POST /auth/code", 200, Start)
@@ -204,10 +204,10 @@ public class SignInBrowserTests : IDisposable
         Assert.Null(vm.Error);
         Assert.False(vm.BrowserEnded);
         Assert.Equal(0, _completed);
-    }
+    });
 
     [Fact]
-    public async Task Stop_EndsTheWaitBehindTheListOfComputers()
+    public Task Stop_EndsTheWaitBehindTheListOfComputers() => UiThread.RunAsync(async () =>
     {
         _a.Fake.On("POST /auth/code", 200, Start)
             .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")));
@@ -221,10 +221,10 @@ public class SignInBrowserTests : IDisposable
 
         Assert.Equal(0, _completed);
         Assert.Single(_a.Fake.To("GET /auth/code/ABCD-1234"));
-    }
+    });
 
     [Fact]
-    public async Task ACodeThatArrivesAfterTheWindowClosed_IsNotShown_AndTheBrowserStaysShut()
+    public Task ACodeThatArrivesAfterTheWindowClosed_IsNotShown_AndTheBrowserStaysShut() => UiThread.RunAsync(async () =>
     {
         var answer = new TaskCompletionSource();
         _a.Fake.AnswerDespiteCancel = true; // the answer was in before the cancel was seen
@@ -242,10 +242,10 @@ public class SignInBrowserTests : IDisposable
         Assert.Null(vm.BrowserUrl);
         Assert.Empty(_a.Opened);
         Assert.Empty(_a.Fake.To("GET /auth/code/ABCD-1234"));
-    }
+    });
 
     [Fact]
-    public async Task ALimitThatArrivesAfterTheTabWasLeft_DoesNotTakeOverTheReleaseOfThePasswordSignIn()
+    public Task ALimitThatArrivesAfterTheTabWasLeft_DoesNotTakeOverTheReleaseOfThePasswordSignIn() => UiThread.RunAsync(async () =>
     {
         var answer = new TaskCompletionSource();
         _a.Fake.AnswerDespiteCancel = true;
@@ -274,7 +274,7 @@ public class SignInBrowserTests : IDisposable
         Assert.Equal(6, Api.Body(_a.Fake.To("POST /device/release").Single()).GetProperty("device_id").GetInt64());
         Assert.Equal(2, _a.Fake.To("POST /auth/login").Count()); // the password sign-in was repeated after the release
         Assert.Equal(1, _completed);
-    }
+    });
 
     [Fact]
     public async Task ANewCode_ForgetsTheOldPage_UntilItArrives()

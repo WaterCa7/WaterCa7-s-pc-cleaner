@@ -160,7 +160,7 @@ public class ProfileDevicesTests
         "],\"bind_limit\":2}";
 
     [Fact]
-    public async Task ALateList_OfAnAccountThatSignedOut_DoesNotOverwriteTheNextAccount()
+    public Task ALateList_OfAnAccountThatSignedOut_DoesNotOverwriteTheNextAccount() => UiThread.RunAsync(async () =>
     {
         using var a = new TestAccount(TestLicense.Json());
         // The held request of the first account is answered last, so the second account's answer comes first in the queue.
@@ -181,10 +181,10 @@ public class ProfileDevicesTests
 
         Assert.Equal(new[] { "BOX" }, vm.Devices.Select(d => d.Name));
         Assert.Equal("Компьютеров: 1 из 2", vm.DevicesText);
-    }
+    });
 
     [Fact]
-    public async Task ALateError_OfAnAccountThatSignedOut_ShowsNothingOnTheGuest()
+    public Task ALateError_OfAnAccountThatSignedOut_ShowsNothingOnTheGuest() => UiThread.RunAsync(async () =>
     {
         using var a = new TestAccount(TestLicense.Json());
         a.Fake.OnError("GET /devices", 500, "SERVER_ERROR").On("POST /auth/logout", 200, "{\"ok\":true}");
@@ -201,10 +201,10 @@ public class ProfileDevicesTests
         Assert.True(vm.IsGuest);
         Assert.Null(vm.DevicesText);
         Assert.Empty(vm.Devices);
-    }
+    });
 
     [Fact]
-    public async Task ALateError_OfAnAccountThatSignedOut_DoesNotOverwriteTheNextAccount()
+    public Task ALateError_OfAnAccountThatSignedOut_DoesNotOverwriteTheNextAccount() => UiThread.RunAsync(async () =>
     {
         using var a = new TestAccount(TestLicense.Json());
         a.Fake.On("GET /devices", 200, OtherDevices).OnError("GET /devices", 500, "SERVER_ERROR").On("POST /auth/logout", 200, "{\"ok\":true}")
@@ -223,7 +223,7 @@ public class ProfileDevicesTests
 
         Assert.Equal("Компьютеров: 1 из 2", vm.DevicesText);
         Assert.Single(vm.Devices);
-    }
+    });
 
     [Fact]
     public async Task ABackgroundLoad_ThatFailsUnexpectedly_SaysSoInsteadOfVanishing()

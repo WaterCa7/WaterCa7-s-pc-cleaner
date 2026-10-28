@@ -277,7 +277,7 @@ public class SignInPasswordTests : IDisposable
     }
 
     [Fact]
-    public async Task TheBrowserPoll_StaysAliveWhileTheListIsOpen_AndSignsInAfterTheRelease()
+    public Task TheBrowserPoll_StaysAliveWhileTheListIsOpen_AndSignsInAfterTheRelease() => UiThread.RunAsync(async () =>
     {
         _a.Fake.On("POST /auth/code", 200, BrowserStart)
             .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
@@ -292,10 +292,10 @@ public class SignInPasswordTests : IDisposable
 
         Assert.Equal(1, _completed);
         Assert.True(_a.Service.IsSignedIn);
-    }
+    });
 
     [Fact]
-    public async Task TheBrowserPoll_ARefusedRelease_ShowsWhyOnTheReappearingList()
+    public Task TheBrowserPoll_ARefusedRelease_ShowsWhyOnTheReappearingList() => UiThread.RunAsync(async () =>
     {
         _a.Fake.On("POST /auth/code", 200, BrowserStart)
             .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
@@ -311,7 +311,7 @@ public class SignInPasswordTests : IDisposable
         Assert.Equal("msg UNBIND_QUOTA", vm.Error);
         vm.Tab = SignInTab.Password; // stops the poll
         await Wait.Within(vm.BrowserTask, "the browser poll");
-    }
+    });
 
     [Fact]
     public async Task AnEmailThatIsTaken_MovesTheTabToThePassword_Too()
