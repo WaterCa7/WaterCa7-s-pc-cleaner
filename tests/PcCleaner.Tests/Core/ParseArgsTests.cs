@@ -1,4 +1,5 @@
 using PcCleaner.Core;
+using PcCleaner.Core.Account;
 using Xunit;
 
 namespace PcCleaner.Tests.Core;
@@ -104,6 +105,28 @@ public class ParseArgsTests
         AssertDefaults();
     }
 
+    [Theory]
+    [InlineData("guest", Tier.Guest)]
+    [InlineData("FREE", Tier.Free)]
+    [InlineData("pro", Tier.Pro)]
+    [InlineData("vip", null)]
+    public void Tier_IsReadForTheScreenshotRun(string value, Tier? expected)
+    {
+        App.ParseArgs(new[] { "--screenshots", "x", "--tier", value });
+        Assert.Equal(expected, App.TierArg);
+        App.ParseArgs(Array.Empty<string>());
+        Assert.Null(App.TierArg);
+    }
+
+    [Fact]
+    public void SignIn_AsksForPicturesOfTheSignInWindow()
+    {
+        App.ParseArgs(new[] { "--screenshots", "x", "--signin" });
+        Assert.True(App.SignInArg);
+        App.ParseArgs(Array.Empty<string>());
+        Assert.False(App.SignInArg);
+    }
+
     private static void AssertDefaults()
     {
         Assert.Null(App.ScreenshotDir);
@@ -113,5 +136,7 @@ public class ParseArgsTests
         Assert.Null(App.LanguageArg);
         Assert.Null(App.ModeArg);
         Assert.False(App.WelcomeArg);
+        Assert.Null(App.TierArg);
+        Assert.False(App.SignInArg);
     }
 }

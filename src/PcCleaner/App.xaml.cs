@@ -6,6 +6,8 @@ using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Threading;
 using PcCleaner.Core;
+using PcCleaner.Core.Account;
+using PcCleaner.Core.AccountWindows;
 using PcCleaner.Core.Localization;
 using PcCleaner.Core.Updates;
 
@@ -13,7 +15,7 @@ namespace PcCleaner;
 
 public partial class App : Application
 {
-    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key,Section,Section/Tab] [--no-scan] [--lang ru|en] [--mode simple|expert] [--welcome].</summary>
+    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key,Section,Section/Tab] [--no-scan] [--lang ru|en] [--mode simple|expert] [--welcome] [--tier guest|free|pro] [--signin].</summary>
     internal static string? ScreenshotDir { get; private set; }
     internal static string[]? ScreenshotPages { get; private set; }
     internal static bool ScreenshotScan { get; private set; } = true;
@@ -31,6 +33,12 @@ public partial class App : Application
     /// <summary>--welcome: the screenshot run also takes a picture of the first-run screen (00-Welcome.png), whatever the mode. A real run ignores it.</summary>
     internal static bool WelcomeArg { get; private set; }
 
+    /// <summary>--tier guest|free|pro: the account tier of a screenshot run (no network, a local account); null — guest.</summary>
+    internal static Tier? TierArg { get; private set; }
+
+    /// <summary>--signin: the screenshot run also takes pictures of the sign-in window, one per step.</summary>
+    internal static bool SignInArg { get; private set; }
+
     /// <summary>The place of this copy (one per session); null in verification runs and before it is taken.</summary>
     private SingleInstance? _instance;
 
@@ -39,9 +47,13 @@ public partial class App : Application
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         ParseArgs(e.Args);
 
-        // Verification runs must never touch the user's real settings, logs, backups or quarantine.
+        // Verification runs must never touch the user's real settings, logs, backups or quarantine, nor the real account
+        // (a local one with the asked tier; no WMI, no network).
         if (ScreenshotDir is not null)
+        {
             AppPaths.DataDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "WaterCa7sPcCleaner-verify");
+            AppServices.Account = AccountSetup.ForScreenshots(TierArg ?? Tier.Guest);
+        }
 
         // The settings are loaded here for the first time, from the redirected folder in screenshot mode.
         AppServices.Settings.UiMode = StartupMode(ModeArg, AppServices.Settings.UiMode, ScreenshotDir is not null);
@@ -160,6 +172,21 @@ public partial class App : Application
         // first-run screen takes over when it closes.
         if (ScreenshotDir is null)
         {
+            // The ticket refresh of the whole run, off the UI thread: the computer id (hw_hash) is read first (a WMI query that
+            // may take seconds), so that the first Tier on the UI thread is quick.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await AppServices.Account.WarmUpAsync();
+                    await AppServices.Account.RunRefreshLoopAsync(CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(T._("Аккаунт: фоновая проверка лицензии остановилась"), ex);
+                }
+            });
+
             if (UpdatedFrom is not null)
             {
                 vm.Welcome.ShowAtStart(screenshotRun: false);
@@ -273,6 +300,8 @@ public partial class App : Application
         LanguageArg = null;
         ModeArg = null;
         WelcomeArg = false;
+        TierArg = null;
+        SignInArg = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -310,6 +339,18 @@ public partial class App : Application
                     break;
                 case "--welcome":
                     WelcomeArg = true;
+                    break;
+                case "--tier" when i + 1 < args.Length:
+                    TierArg = args[++i].Trim().ToLowerInvariant() switch
+                    {
+                        "guest" => Tier.Guest,
+                        "free" => Tier.Free,
+                        "pro" => Tier.Pro,
+                        _ => null,
+                    };
+                    break;
+                case "--signin":
+                    SignInArg = true;
                     break;
                 case "--size" when i + 1 < args.Length:
                     var parts = args[++i].ToLowerInvariant().Split('x');

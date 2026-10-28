@@ -1,3 +1,5 @@
+using PcCleaner.Core.Account;
+using PcCleaner.Core.AccountWindows;
 using PcCleaner.Core.Updates;
 using PcCleaner.Modules.Cleaner;
 using PcCleaner.Modules.Disk;
@@ -52,6 +54,27 @@ public static class AppServices
 
     /// <summary>Created on first use, after App has set AppPaths.DataDir.</summary>
     public static UpdateService Updates => LazyUpdates.Value;
+
+    private static readonly object AccountLock = new();
+    private static AccountService? _account;
+
+    /// <summary>
+    /// The account of this run: the real one (created on first use, from any thread — the first caller creates it), or the
+    /// screenshot one App sets for --tier.
+    /// </summary>
+    public static AccountService Account
+    {
+        get
+        {
+            lock (AccountLock)
+                return _account ??= AccountSetup.CreateReal();
+        }
+        set
+        {
+            lock (AccountLock)
+                _account = value;
+        }
+    }
 
     /// <summary>All module analyses, used by the dashboard smart-scan.</summary>
     public static IReadOnlyList<IHealthContributor> HealthContributors => new IHealthContributor[]

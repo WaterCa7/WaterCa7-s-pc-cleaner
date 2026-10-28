@@ -528,6 +528,7 @@
   "Аккаунт: промокод применён": "Account: promo code applied",
   "Аккаунт: сервер не подтвердил выход ({0}) — данные входа всё равно удалены": "Account: the server did not confirm signing out ({0}) — the sign-in data was removed anyway",
   "Аккаунт: сохранённый вход не прочитан ({0}) — нужно войти снова": "Account: the saved sign-in could not be read ({0}) — you need to sign in again",
+  "Аккаунт: фоновая проверка лицензии остановилась": "Account: the background license check stopped",
   "Аккаунт: этот компьютер отвязан — выход": "Account: this computer was unbound — signed out",
   "Активатор Windows — частый переносчик вирусов": "A Windows activator — a common carrier of viruses",
   "Активно используется файл подкачки": "The page file is in heavy use",
