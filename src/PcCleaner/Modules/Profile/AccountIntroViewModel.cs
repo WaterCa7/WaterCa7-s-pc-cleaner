@@ -70,20 +70,17 @@ public sealed class AccountIntroViewModel : ObservableObject
         }
         if (settings.AccountIntroShown)
             return false;
-        IsUpdate = settings.UiMode is not null;
-        IsVisible = true;
-        // Only a real start follows the account; the forced screen of a screenshot run never closes by itself.
-        // Subscribe first, then check: a sign-in between the two cannot be missed.
-        _unfollow ??= _follow?.Invoke(OnAccountChanged);
         if (_isSignedIn())
         {
-            Unfollow();
-            IsVisible = false;
-            IsUpdate = false;
             settings.AccountIntroShown = true;
             _save(settings);
             return false;
         }
+        IsUpdate = settings.UiMode is not null;
+        IsVisible = true;
+        // Only a real start follows the account; the forced screen of a screenshot run never closes by itself.
+        // The account's changes reach the screen on the UI thread (Ui.Post), as this method runs, so none falls between.
+        _unfollow ??= _follow?.Invoke(OnAccountChanged);
         return true;
     }
 
