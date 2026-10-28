@@ -44,6 +44,17 @@ public class ShellEnglishTests
     };
 
     [Fact]
+    public void TheMenuSectionTitles_AreEnglish()
+    {
+        var sections = ShellMenu.Build(ShellMenuTests.AllKeys.Select(k => new FakePage(k)).ToList());
+
+        using (TestLanguage.English())
+            Assert.Equal(new[] { "Computer", "System", "Protection" }, sections.Skip(2).Take(3).Select(s => s.Title));
+
+        Assert.Equal("Защита", sections[4].Title); // and Russian is back
+    }
+
+    [Fact]
     public void TheSidebarTitles_AreEnglish_AndEverySubtitleHasNoRussianLeft()
     {
         var pages = RealPages();
