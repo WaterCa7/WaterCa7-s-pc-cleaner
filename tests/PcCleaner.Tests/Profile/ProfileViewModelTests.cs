@@ -83,6 +83,39 @@ public class ProfileViewModelTests
         Assert.Contains("действует прежняя", vm.RefreshText);
     }
 
+    [Theory]
+    [InlineData("expired")]
+    [InlineData("other computer")]
+    public void ProThatDoesNotApplyHere_IsShownAsFree_NextToBuy(string why)
+    {
+        var json = why == "expired"
+            ? TestLicense.Json(plan: "pro", expires: TestLicense.Now.AddDays(-2))
+            : TestLicense.Json(plan: "pro", hw: new string('f', 64));
+        using var a = new TestAccount(json);
+        var vm = Create(a);
+
+        Assert.Equal("Free", vm.PlanText);
+        Assert.Equal("Купить Pro", vm.BuyText);
+        Assert.NotNull(vm.NoteText); // the note says why
+    }
+
+    [Fact]
+    public async Task AFailedRefresh_IsForgotten_OnceANewTicketArrives()
+    {
+        using var a = new TestAccount(TestLicense.Json(plan: "pro"));
+        a.Fake.ThrowOnSend = new System.Net.Http.HttpRequestException("down");
+        var vm = Create(a);
+        await vm.RefreshForTestAsync();
+        Assert.NotNull(vm.RefreshText);
+
+        // The background check gets through later: the page must not keep saying the refresh failed.
+        a.Fake.ThrowOnSend = null;
+        a.Fake.On("GET /license/ticket", 200, a.Key.TicketJson(TestLicense.Json(plan: "pro", issued: TestLicense.Now)));
+        await a.Service.RefreshTicketAsync(CancellationToken.None);
+
+        Assert.Null(vm.RefreshText);
+    }
+
     [Fact]
     public async Task Logout_AsksFirst()
     {
