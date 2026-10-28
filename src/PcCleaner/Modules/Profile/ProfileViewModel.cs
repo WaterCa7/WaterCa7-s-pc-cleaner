@@ -122,9 +122,10 @@ public sealed partial class ProfileViewModel : PageViewModel
         if (!IsSignedIn)
             RefreshText = null;
         foreach (var name in new[] { nameof(IsSignedIn), nameof(IsGuest), nameof(Email), nameof(PlanText), nameof(TermText), nameof(CheckedText),
-                     nameof(NoteText), nameof(SessionEndedText), nameof(BuyText), nameof(ShowProLines), nameof(CanApplyPromo) })
+                     nameof(NoteText), nameof(SessionEndedText), nameof(BuyText), nameof(ShowProLines), nameof(CanApplyPromo), nameof(NeedsSupportEmail) })
             OnPropertyChanged(name);
         RelayCommand.Refresh();
         SyncDevicesWithAccount();
+        SyncPromoWithAccount();
     }
 }
