@@ -171,6 +171,8 @@ workflow `release.yml` соберёт установщик (`tools/build-install
 ## Аккаунт
 
 > **Аккаунт (`Core/Account/`, `Core/AccountWindows/`).** `ApiClient` — HTTP к `https://waterca7.ru/api/v1` (ошибки — `ApiException` с кодом `error`). `LicenseTicket.Verify` проверяет подпись билета (ECDSA P-256, DER) ключами `LicenseKeys.Live` (встроенный `license_pub.pem`), `LicenseState.Evaluate` даёт уровень Гость / Free / Pro, `Features` — таблица Pro-функций (копия `features.php` сайта; тест сверяет). `AccountService` — вход, выход, билет, устройства, промокод, оплата, обращение; хранит данные в `IAccountStore` (Windows — `DpapiAccountStore`, файл `account.bin` под DPAPI текущего пользователя), номер компьютера — `IHwHash` (Windows — `WmiHwHash`). Файлы `Core/Account/` копируются в Mac-версию без изменений; платформенные реализации — нет. Без `license_pub.pem` в сборке `LicenseKeys.Live` пуст и любой билет неподписан — это ловит тест `TheBuild_HasALiveP256Key`.
+>
+> Экраны: `Modules/Profile/AccountIntroViewModel` (экран «Войти / Зарегистрироваться / Продолжить без входа» после заставки, один раз — `AppSettings.AccountIntroShown`), `SignInViewModel` + `SignInWindow` (пароль, регистрация с кодом, сброс, через браузер, отвязка при `DEVICE_LIMIT`; открывается `SignInDialog.Show`), `ProfileViewModel` (тариф, компьютеры, промокод, «Написать нам», выход). Скриншоты: `--tier guest|free|pro` подставляет локальную учётку без сети (`AccountSetup.ForScreenshots`), `--signin` снимает окно входа.
 
 ## Тема (ключи ресурсов)
 
