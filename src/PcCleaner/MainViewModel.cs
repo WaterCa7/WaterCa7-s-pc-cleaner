@@ -72,19 +72,24 @@ public sealed class MainViewModel : ObservableObject, INavigator
         SelectedPage = VisiblePages.FirstOrDefault();
     }
 
-    private static IEnumerable<PageViewModel> CreatePages() => new PageViewModel[]
+    private static IEnumerable<PageViewModel> CreatePages()
     {
-        new DashboardViewModel(),
-        new CleanerViewModel(AppServices.Cleaner),
-        new ProcessesViewModel(AppServices.Processes),
-        new StartupViewModel(AppServices.Startup),
-        new ProgramsViewModel(AppServices.Programs),
-        new DiskViewModel(AppServices.Disk),
-        new OptimizerViewModel(AppServices.Optimizer),
-        new NetworkViewModel(AppServices.Network),
-        new SecurityViewModel(AppServices.Security),
-        new SettingsViewModel(),
-    };
+        var optimizer = new OptimizerViewModel(AppServices.Optimizer);
+        return new PageViewModel[]
+        {
+            new DashboardViewModel(),
+            new CleanerViewModel(AppServices.Cleaner),
+            new HardwareViewModel(optimizer),
+            optimizer,
+            new ProcessesViewModel(AppServices.Processes),
+            new StartupViewModel(AppServices.Startup),
+            new ProgramsViewModel(AppServices.Programs),
+            new DiskViewModel(AppServices.Disk),
+            new SecurityViewModel(AppServices.Security),
+            new NetworkViewModel(AppServices.Network),
+            new SettingsViewModel(),
+        };
+    }
 
     /// <summary>
     /// Every page of the program, not only those of the current mode (<see cref="VisiblePages"/>): screenshots, the busy check of a

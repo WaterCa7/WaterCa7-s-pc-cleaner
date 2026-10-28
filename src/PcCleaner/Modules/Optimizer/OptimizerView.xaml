@@ -12,7 +12,6 @@
         <local:ToneToBrushConverter x:Key="ToneBrush" />
         <local:ToneToSoftBrushConverter x:Key="ToneSoft" />
         <local:ColumnsForWidthConverter x:Key="Columns" />
-        <local:BalancedColumnsConverter x:Key="BalancedColumns" />
 
         <!-- Small coloured pill bound to a Tone -->
         <Style x:Key="ToneBadgeText" TargetType="TextBlock">
@@ -20,79 +19,6 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
-
-        <!-- Hardware card: focusable, so keyboard users get the same details as mouse users
-             (Tab shows the tooltip, Shift+F10 or the Menu key opens the context menu). -->
-        <Style x:Key="HardwareCardStyle" TargetType="Border" BasedOn="{StaticResource Card}">
-            <Setter Property="Focusable" Value="True" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-            <Style.Triggers>
-                <Trigger Property="IsKeyboardFocused" Value="True">
-                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!-- ===== Hardware card ===== -->
-        <DataTemplate x:Key="HardwareCardTemplate" DataType="{x:Type local:HardwareCard}">
-            <Border Style="{StaticResource HardwareCardStyle}" Margin="0,0,12,12" Padding="14,13" Background="{StaticResource SurfaceBrush}"
-                    ToolTipService.IsEnabled="{Binding HasToolTip}" ToolTipService.ShowDuration="20000">
-                <Border.ToolTip>
-                    <ToolTip>
-                        <TextBlock Text="{Binding ToolTipText}" />
-                    </ToolTip>
-                </Border.ToolTip>
-                <Border.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="{loc:T 'Скопировать'}" Command="{Binding CopyCommand}" />
-                        <MenuItem Header="{loc:T 'Найти в интернете'}" Command="{Binding SearchCommand}"
-                                  Visibility="{Binding HasSearch, Converter={StaticResource BoolToVis}}" />
-                    </ContextMenu>
-                </Border.ContextMenu>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="28" Height="28" CornerRadius="7" Background="{StaticResource AccentSoftBrush}">
-                            <TextBlock Style="{StaticResource Icon}" Text="{Binding Icon}" FontSize="15"
-                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
-                        </Border>
-                        <TextBlock Text="{Binding Caption}" Style="{StaticResource Muted}" FontSize="12" Margin="9,0,0,0"
-                                   VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                    </DockPanel>
-                    <TextBlock Grid.Row="1" Text="{Binding Title}" Style="{StaticResource H3}" Margin="0,10,0,0"
-                               TextWrapping="Wrap" MaxHeight="40" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Row="2" Text="{Binding Primary}" FontSize="13" Margin="0,3,0,0" FontWeight="SemiBold"
-                               Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap"
-                               Visibility="{Binding HasPrimary, Converter={StaticResource BoolToVis}}" />
-                    <ItemsControl Grid.Row="3" ItemsSource="{Binding Details}" Margin="0,5,0,0" Focusable="False">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" Style="{StaticResource Muted}" FontSize="12" Margin="0,1,0,0"
-                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Button Grid.Row="4" Style="{StaticResource LinkButton}" Margin="0,8,0,0" FontSize="12.5"
-                            HorizontalAlignment="Left" Content="{Binding ActionText}" ToolTip="{Binding ActionToolTip}"
-                            Command="{Binding DataContext.CardActionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            CommandParameter="{Binding}"
-                            Visibility="{Binding HasAction, Converter={StaticResource BoolToVis}}" />
-                    <Border Grid.Row="5" Style="{StaticResource Badge}" Margin="0,9,0,0"
-                            Background="{Binding BadgeTone, Converter={StaticResource ToneSoft}}"
-                            Visibility="{Binding HasBadge, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="{Binding Badge}" Style="{StaticResource ToneBadgeText}"
-                                   Foreground="{Binding BadgeTone, Converter={StaticResource ToneBrush}}" />
-                    </Border>
-                </Grid>
-            </Border>
-        </DataTemplate>
 
         <!-- ===== Recommendation card ===== -->
         <DataTemplate x:Key="RecommendationTemplate" DataType="{x:Type local:Recommendation}">
@@ -423,29 +349,6 @@
                             ToolTip="{loc:T 'Программа перезапустится — Windows покажет окно контроля учётных записей'}" />
                 </Grid>
             </Border>
-
-            <!-- ===== Hardware ===== -->
-            <DockPanel Margin="0,22,0,10" Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
-                <TextBlock Style="{StaticResource H2}" Text="{loc:T 'Ваш компьютер'}" Margin="0" VerticalAlignment="Center" />
-                <TextBlock Style="{StaticResource Muted}" Margin="12,3,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
-                           Text="{loc:T 'Наведите на карточку, чтобы увидеть подробности; правый клик — скопировать или найти в интернете.'}" />
-            </DockPanel>
-            <ItemsControl x:Name="HardwareGrid" ItemsSource="{Binding HardwareCards}" Margin="0,0,-12,0" Focusable="False"
-                          ItemTemplate="{StaticResource HardwareCardTemplate}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <!-- Balanced: 8 cards = 4 × 2, 9 cards (laptop with battery) = 3 × 3, never a lonely last card -->
-                        <UniformGrid>
-                            <UniformGrid.Columns>
-                                <MultiBinding Converter="{StaticResource BalancedColumns}" ConverterParameter="225">
-                                    <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
-                                    <Binding Path="HardwareCards.Count" />
-                                </MultiBinding>
-                            </UniformGrid.Columns>
-                        </UniformGrid>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
 
             <!-- ===== Recommendations ===== -->
             <StackPanel Visibility="{Binding HasRecommendations, Converter={StaticResource BoolToVis}}">

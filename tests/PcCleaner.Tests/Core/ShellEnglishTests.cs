@@ -29,19 +29,33 @@ public class ShellEnglishTests
 
     public ShellEnglishTests() => TestEnvironment.Init();
 
-    private static PageViewModel[] RealPages() => new PageViewModel[]
+    private static PageViewModel[] RealPages()
     {
-        new DashboardViewModel(),
-        new CleanerViewModel(AppServices.Cleaner),
-        new ProcessesViewModel(AppServices.Processes),
-        new StartupViewModel(AppServices.Startup),
-        new ProgramsViewModel(AppServices.Programs),
-        new DiskViewModel(AppServices.Disk),
-        new OptimizerViewModel(AppServices.Optimizer),
-        new NetworkViewModel(AppServices.Network),
-        new SecurityViewModel(AppServices.Security),
-        new SettingsViewModel(() => new AppSettings(), _ => { }, new ObservableCollection<LogEntry>()),
-    };
+        var optimizer = new OptimizerViewModel(AppServices.Optimizer);
+        return new PageViewModel[]
+        {
+            new DashboardViewModel(),
+            new CleanerViewModel(AppServices.Cleaner),
+            new HardwareViewModel(optimizer),
+            optimizer,
+            new ProcessesViewModel(AppServices.Processes),
+            new StartupViewModel(AppServices.Startup),
+            new ProgramsViewModel(AppServices.Programs),
+            new DiskViewModel(AppServices.Disk),
+            new SecurityViewModel(AppServices.Security),
+            new NetworkViewModel(AppServices.Network),
+            new SettingsViewModel(() => new AppSettings(), _ => { }, new ObservableCollection<LogEntry>()),
+        };
+    }
+
+    [Fact]
+    public void TheMenuSections_AreEnglish()
+    {
+        var sections = ShellMenu.Build(RealPages());
+
+        using (TestLanguage.English())
+            Assert.Equal(new[] { "Home", "Cleanup", "Computer", "System", "Protection", "Settings" }, sections.Select(s => s.Title));
+    }
 
     [Fact]
     public void TheMenuSectionTitles_AreEnglish()
@@ -62,14 +76,14 @@ public class ShellEnglishTests
         using (TestLanguage.English())
         {
             Assert.Equal(
-                new[] { "Home", "Cleanup", "Processes", "Startup", "Programs", "Disks", "Speed up", "Network", "Security", "Settings" },
+                new[] { "Home", "Cleanup", "Components", "Speed up", "Processes", "Startup", "Programs", "Disks", "Security", "Network", "Settings" },
                 pages.Select(p => p.Title));
             Assert.All(pages, p => Assert.False(Cyrillic.IsMatch(p.Subtitle), $"{p.Key}: {p.Subtitle}"));
             Assert.Equal("The overall state of your computer and a one-click check", pages[0].Subtitle);
         }
 
         Assert.Equal("Главная", pages[0].Title); // and Russian is back
-        Assert.Equal("Настройки", pages[9].Title);
+        Assert.Equal("Настройки", pages[10].Title);
     }
 
     [Fact]

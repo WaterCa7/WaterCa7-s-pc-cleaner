@@ -36,6 +36,7 @@
             <DataTemplate DataType="{x:Type programs:ProgramsViewModel}"><programs:ProgramsView /></DataTemplate>
             <DataTemplate DataType="{x:Type disk:DiskViewModel}"><disk:DiskView /></DataTemplate>
             <DataTemplate DataType="{x:Type optimizer:OptimizerViewModel}"><optimizer:OptimizerView /></DataTemplate>
+            <DataTemplate DataType="{x:Type optimizer:HardwareViewModel}"><optimizer:HardwareView /></DataTemplate>
             <DataTemplate DataType="{x:Type network:NetworkViewModel}"><network:NetworkView /></DataTemplate>
             <DataTemplate DataType="{x:Type security:SecurityViewModel}"><security:SecurityView /></DataTemplate>
             <DataTemplate DataType="{x:Type settings:SettingsViewModel}"><settings:SettingsView /></DataTemplate>

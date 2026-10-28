@@ -120,4 +120,12 @@ public abstract class PageViewModel : ObservableObject
                 BusyText = text;
         });
     }
+
+    /// <summary>Tests: puts the page into a busy state without running work (the setters are protected).</summary>
+    internal void SetBusyForTest(bool busy, string text, double progress)
+    {
+        BusyText = text;
+        Progress = progress;
+        IsBusy = busy;
+    }
 }

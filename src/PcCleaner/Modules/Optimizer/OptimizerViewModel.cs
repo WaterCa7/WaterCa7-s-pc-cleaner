@@ -63,7 +63,7 @@ public sealed class OptimizerViewModel : PageViewModel
 
     public override string Title => T._("Ускорение");
 
-    public override string Subtitle => T._("Ваше железо и честные советы, как сделать компьютер быстрее");
+    public override string Subtitle => T._("Честные советы, как сделать компьютер быстрее");
 
     public override string IconGlyph => "\uE945";
 
