@@ -125,7 +125,6 @@ public sealed partial class ProfileViewModel : PageViewModel
                      nameof(NoteText), nameof(SessionEndedText), nameof(BuyText), nameof(ShowProLines), nameof(CanApplyPromo) })
             OnPropertyChanged(name);
         RelayCommand.Refresh();
-        if (!IsSignedIn)
-            Devices.Clear();
+        SyncDevicesWithAccount();
     }
 }
