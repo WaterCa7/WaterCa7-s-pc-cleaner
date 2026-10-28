@@ -34,6 +34,8 @@ public class ProfileDevicesTests
         Assert.Equal(new[] { "HOME", "Mac" }, vm.Devices.Select(d => d.Name));
         Assert.True(vm.Devices[0].IsCurrent);
         Assert.Equal("son@x.y", vm.Devices[1].Whose);
+        Assert.Equal("чей: son@x.y", vm.Devices[1].WhoseText);
+        Assert.Null(vm.Devices[0].WhoseText);
         Assert.Contains("2", vm.DevicesText);
         Assert.Contains("3", vm.DevicesText);
     }

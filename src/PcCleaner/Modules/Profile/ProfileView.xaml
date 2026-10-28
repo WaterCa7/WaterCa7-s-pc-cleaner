@@ -2,93 +2,205 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:PcCleaner.Core.Localization">
-    <StackPanel Margin="0,0,10,8">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="0,0,10,8">
 
-        <!-- The session ended (TOKEN_REVOKED): said once, on the page, not as a pop-up. -->
-        <Border Style="{StaticResource Card}" Padding="22,16" Margin="0,0,0,12" Background="{StaticResource WarningSoftBrush}"
-                Visibility="{Binding SessionEndedText, Converter={StaticResource HasValueToVis}}">
-            <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Text="{Binding SessionEndedText}" />
-        </Border>
+            <!-- The session ended (TOKEN_REVOKED): said once, on the page, not as a pop-up. -->
+            <Border Style="{StaticResource Card}" Padding="22,14" Margin="0,0,0,12" Background="{StaticResource WarningSoftBrush}"
+                    Visibility="{Binding SessionEndedText, Converter={StaticResource HasValueToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"
+                               Text="{Binding SessionEndedText}" />
+                    <Button Grid.Column="1" Margin="16,0,0,0" Padding="18,8" VerticalAlignment="Center" Content="{loc:T 'Войти'}"
+                            Command="{Binding SignInCommand}" />
+                </Grid>
+            </Border>
 
-        <!-- A guest -->
-        <Border Style="{StaticResource Card}" Padding="22,20" Visibility="{Binding IsGuest, Converter={StaticResource BoolToVis}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Width="44" Height="44" CornerRadius="12" VerticalAlignment="Top" Background="{StaticResource AccentSoftBrush}">
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE77B;" FontSize="22" Foreground="{StaticResource AccentBrush}"
-                               HorizontalAlignment="Center" />
-                </Border>
-                <StackPanel Grid.Column="1" Margin="16,0,0,0">
-                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Вы не вошли в аккаунт'}" />
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0"
-                               Text="{loc:T 'Аккаунт WaterCa7 включит Pro на этом компьютере, покажет ваши компьютеры и примет промокод. Без входа программа работает бесплатно, как раньше.'}" />
-                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                        <Button Style="{StaticResource AccentButton}" Padding="18,8" Content="{loc:T 'Войти'}" Command="{Binding SignInCommand}" />
-                        <Button Margin="10,0,0,0" Padding="18,8" Content="{loc:T 'Зарегистрироваться'}" Command="{Binding RegisterCommand}" />
+            <!-- A guest -->
+            <Border Style="{StaticResource Card}" Padding="22,20" Margin="0,0,0,12" Visibility="{Binding IsGuest, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="44" Height="44" CornerRadius="12" VerticalAlignment="Top" Background="{StaticResource AccentSoftBrush}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE77B;" FontSize="22" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                        <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Вы не вошли'}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0"
+                                   Text="{loc:T 'Войдите, чтобы включить Pro на этом компьютере, применить промокод и видеть свои компьютеры.'}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                            <Button Style="{StaticResource AccentButton}" Padding="18,8" Content="{loc:T 'Войти'}" Command="{Binding SignInCommand}" />
+                            <Button Margin="10,0,0,0" Padding="18,8" Content="{loc:T 'Зарегистрироваться'}" Command="{Binding RegisterCommand}" />
+                        </StackPanel>
                     </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Signed in: the e-mail, the plan, the term, the last check -->
+            <Border Style="{StaticResource Card}" Padding="22,20" Margin="0,0,0,12" Visibility="{Binding IsSignedIn, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="44" Height="44" CornerRadius="12" VerticalAlignment="Top" Background="{StaticResource AccentSoftBrush}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE77B;" FontSize="22" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                        <TextBlock Style="{StaticResource H3}" Text="{Binding Email}" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Style="{StaticResource Muted}" VerticalAlignment="Center" Text="{loc:T 'Тариф:'}" />
+                            <Border Style="{StaticResource Badge}" Margin="8,0,0,0" Background="{StaticResource AccentSoftBrush}">
+                                <TextBlock FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding PlanText}" />
+                            </Border>
+                            <TextBlock Style="{StaticResource Muted}" Margin="10,0,0,0" VerticalAlignment="Center" Text="{Binding TermText}"
+                                       Visibility="{Binding TermText, Converter={StaticResource HasValueToVis}}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="{Binding CheckedText}"
+                                   Visibility="{Binding CheckedText, Converter={StaticResource HasValueToVis}}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0" Foreground="{StaticResource WarningBrush}" Text="{Binding NoteText}"
+                                   Visibility="{Binding NoteText, Converter={StaticResource HasValueToVis}}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0" Foreground="{StaticResource WarningBrush}" Text="{Binding RefreshText}"
+                                   Visibility="{Binding RefreshText, Converter={StaticResource HasValueToVis}}" />
+                        <Grid Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource AccentButton}" Padding="18,8" Content="{Binding BuyText}" Command="{Binding BuyCommand}" />
+                                <Button Margin="10,0,0,0" Padding="18,8" Content="{loc:T 'Обновить'}" Command="{Binding RefreshCommand}" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Style="{StaticResource LinkButton}" VerticalAlignment="Center" Content="{loc:T 'Выйти'}"
+                                    Command="{Binding LogoutCommand}" />
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- What Pro gives: for everyone who has no Pro yet (a guest and a free account) -->
+            <Border Style="{StaticResource Card}" Padding="22,18" Margin="0,0,0,12"
+                    Visibility="{Binding ShowProLines, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Что даёт Pro'}" />
+                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ProLines}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="22" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE73E;" Foreground="{StaticResource SuccessBrush}"
+                                               VerticalAlignment="Top" Margin="0,2,0,0" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Text="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <!-- A signed-in account has «Купить Pro» in its own card above. -->
+                    <Button Style="{StaticResource AccentButton}" Padding="18,8" Margin="0,14,0,0" HorizontalAlignment="Left"
+                            Content="{loc:T 'Купить Pro'}" Command="{Binding BuyCommand}"
+                            Visibility="{Binding IsGuest, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
-            </Grid>
-        </Border>
+            </Border>
 
-        <!-- Signed in: the e-mail, the plan, the term, the last check -->
-        <Border Style="{StaticResource Card}" Padding="22,20" Visibility="{Binding IsSignedIn, Converter={StaticResource BoolToVis}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Width="44" Height="44" CornerRadius="12" VerticalAlignment="Top" Background="{StaticResource AccentSoftBrush}">
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE77B;" FontSize="22" Foreground="{StaticResource AccentBrush}"
-                               HorizontalAlignment="Center" />
-                </Border>
-                <StackPanel Grid.Column="1" Margin="16,0,0,0">
-                    <TextBlock Style="{StaticResource H3}" Text="{Binding Email}" TextTrimming="CharacterEllipsis" />
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                        <Border Style="{StaticResource Badge}" Background="{StaticResource AccentSoftBrush}">
-                            <TextBlock FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding PlanText}" />
-                        </Border>
-                        <TextBlock Style="{StaticResource Muted}" Margin="10,0,0,0" VerticalAlignment="Center" Text="{Binding TermText}"
-                                   Visibility="{Binding TermText, Converter={StaticResource HasValueToVis}}" />
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="{Binding CheckedText}"
-                               Visibility="{Binding CheckedText, Converter={StaticResource HasValueToVis}}" />
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0" Foreground="{StaticResource WarningBrush}" Text="{Binding NoteText}"
-                               Visibility="{Binding NoteText, Converter={StaticResource HasValueToVis}}" />
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0" Foreground="{StaticResource WarningBrush}" Text="{Binding RefreshText}"
-                               Visibility="{Binding RefreshText, Converter={StaticResource HasValueToVis}}" />
-                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                        <Button Style="{StaticResource AccentButton}" Padding="18,8" Content="{Binding BuyText}" Command="{Binding BuyCommand}" />
-                        <Button Margin="10,0,0,0" Padding="18,8" Content="{loc:T 'Обновить'}" Command="{Binding RefreshCommand}" />
-                        <Button Margin="10,0,0,0" Padding="18,8" Content="{loc:T 'Выйти'}" Command="{Binding LogoutCommand}" />
-                    </StackPanel>
+            <!-- My computers -->
+            <Border Style="{StaticResource Card}" Padding="22,18" Margin="0,0,0,12" Visibility="{Binding IsSignedIn, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Мои компьютеры'}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,3,0,0" Text="{Binding DevicesText}"
+                               Visibility="{Binding DevicesText, Converter={StaticResource HasValueToVis}}" />
+                    <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding Devices}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="{Binding Name}"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Border Style="{StaticResource Badge}" Margin="8,0,0,0" Background="{StaticResource AccentSoftBrush}"
+                                                    Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{loc:T 'этот компьютер'}" />
+                                            </Border>
+                                            <TextBlock Style="{StaticResource Muted}" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                       Text="{Binding WhoseText}"
+                                                       Visibility="{Binding WhoseText, Converter={StaticResource HasValueToVis}}" />
+                                        </StackPanel>
+                                        <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,0" Text="{Binding Details}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Margin="12,0,0,0" Padding="14,6" VerticalAlignment="Center" Content="{loc:T 'Отвязать'}"
+                                            Command="{Binding DataContext.UnbindCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
-            </Grid>
-        </Border>
+            </Border>
 
-        <!-- What Pro gives: for everyone who has no Pro yet -->
-        <Border Style="{StaticResource Card}" Padding="22,18" Margin="0,12,0,0"
-                Visibility="{Binding ShowProLines, Converter={StaticResource BoolToVis}}">
-            <StackPanel>
-                <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Что даёт Pro'}" />
-                <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ProLines}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,3,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="22" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE73E;" Foreground="{StaticResource SuccessBrush}"
-                                           VerticalAlignment="Top" Margin="0,2,0,0" />
-                                <TextBlock Grid.Column="1" Style="{StaticResource Muted}" Foreground="{StaticResource TextBrush}" Text="{Binding}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Border>
-    </StackPanel>
+            <!-- Promo code -->
+            <Border Style="{StaticResource Card}" Padding="22,18" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Промокод'}" />
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding PromoCode, UpdateSourceTrigger=PropertyChanged}" MaxLength="64"
+                                 IsEnabled="{Binding CanApplyPromo}" />
+                        <Button Grid.Column="1" Margin="10,0,0,0" Padding="18,6" Content="{loc:T 'Применить'}" Command="{Binding ApplyPromoCommand}" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Text="{loc:T 'Войдите, чтобы применить промокод'}"
+                               Visibility="{Binding IsGuest, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Foreground="{StaticResource TextBrush}" Text="{Binding PromoText}"
+                               Visibility="{Binding PromoText, Converter={StaticResource HasValueToVis}}" />
+                    <Button Margin="0,10,0,0" Padding="18,6" HorizontalAlignment="Left" Content="{loc:T 'Открыть покупку'}"
+                            Command="{Binding OpenBuyWithPromoCommand}" Visibility="{Binding PromoIsDiscount, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Write to us -->
+            <Border Style="{StaticResource Card}" Padding="22,18">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource H3}" Text="{loc:T 'Написать нам'}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <RadioButton GroupName="ProfileTopic" Content="{loc:T 'Вопрос'}" IsChecked="{Binding IsTopicQuestion}" />
+                        <RadioButton GroupName="ProfileTopic" Margin="20,0,0,0" Content="{loc:T 'Ошибка'}" IsChecked="{Binding IsTopicBug}" />
+                        <RadioButton GroupName="ProfileTopic" Margin="20,0,0,0" Content="{loc:T 'Другое'}" IsChecked="{Binding IsTopicOther}" />
+                    </StackPanel>
+                    <StackPanel Visibility="{Binding NeedsSupportEmail, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,10,0,4" Text="{loc:T 'Ваша почта — ответ придёт на неё'}" />
+                        <TextBox Width="360" HorizontalAlignment="Left" MaxLength="200"
+                                 Text="{Binding SupportEmail, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <TextBox Margin="0,10,0,0" Height="120" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="5000"
+                             VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                             Text="{Binding SupportText, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Margin="0,10,0,0" Content="{loc:T 'Приложить сведения о системе и журнал'}" IsChecked="{Binding SupportAttach}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="26,2,0,0"
+                               Text="{loc:T 'Версия программы и Windows, язык и конец журнала программы.'}" />
+                    <Button Margin="0,12,0,0" Padding="18,8" HorizontalAlignment="Left" Style="{StaticResource AccentButton}"
+                            Content="{loc:T 'Отправить'}" Command="{Binding SendSupportCommand}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0" Foreground="{StaticResource TextBrush}" Text="{Binding SupportResult}"
+                               Visibility="{Binding SupportResult, Converter={StaticResource HasValueToVis}}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

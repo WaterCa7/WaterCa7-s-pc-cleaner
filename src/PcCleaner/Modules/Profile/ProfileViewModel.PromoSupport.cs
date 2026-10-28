@@ -27,7 +27,24 @@ public sealed partial class ProfileViewModel
     public bool CanApplyPromo => IsSignedIn;
 
     /// <summary>question | bug | other.</summary>
-    public string SupportTopic { get => _supportTopic; set => Set(ref _supportTopic, value); }
+    public string SupportTopic
+    {
+        get => _supportTopic;
+        set
+        {
+            if (!Set(ref _supportTopic, value))
+                return;
+            OnPropertyChanged(nameof(IsTopicQuestion));
+            OnPropertyChanged(nameof(IsTopicBug));
+            OnPropertyChanged(nameof(IsTopicOther));
+        }
+    }
+
+    // The three topic radios bind to these (the view has no "equals" converter). A radio that loses the choice reports false: ignored.
+    public bool IsTopicQuestion { get => SupportTopic == "question"; set { if (value) SupportTopic = "question"; } }
+    public bool IsTopicBug { get => SupportTopic == "bug"; set { if (value) SupportTopic = "bug"; } }
+    public bool IsTopicOther { get => SupportTopic == "other"; set { if (value) SupportTopic = "other"; } }
+
     public string SupportText { get => _supportText; set => Set(ref _supportText, value); }
     public string SupportEmail { get => _supportEmail; set => Set(ref _supportEmail, value); }
     public bool SupportAttach { get => _supportAttach; set => Set(ref _supportAttach, value); }

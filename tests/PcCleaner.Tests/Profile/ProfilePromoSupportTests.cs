@@ -270,4 +270,29 @@ public class ProfilePromoSupportTests
         Assert.StartsWith("WaterCa7s PC Cleaner ", text);
         Assert.True(Encoding.UTF8.GetByteCount(text) <= 200);
     }
+
+    [Fact]
+    public void TheTopicRadios_FollowTheTopic_AndWriteItBack()
+    {
+        using var a = new TestAccount(TestLicense.Json(plan: "free", noExpiry: true));
+        var vm = Create(a);
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        Assert.True(vm.IsTopicQuestion);
+        Assert.False(vm.IsTopicBug);
+
+        vm.IsTopicBug = true;
+        Assert.Equal("bug", vm.SupportTopic);
+        Assert.False(vm.IsTopicQuestion);
+        Assert.Contains(nameof(ProfileViewModel.IsTopicQuestion), changed);
+        Assert.Contains(nameof(ProfileViewModel.IsTopicBug), changed);
+
+        vm.IsTopicBug = false; // the radio that lost the choice reports false: it must not change the topic
+        Assert.Equal("bug", vm.SupportTopic);
+
+        vm.IsTopicOther = true;
+        Assert.Equal("other", vm.SupportTopic);
+        Assert.True(vm.IsTopicOther);
+    }
 }
