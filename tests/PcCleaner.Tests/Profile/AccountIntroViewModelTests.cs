@@ -203,6 +203,31 @@ public class AccountIntroViewModelTests
     }
 
     [Fact]
+    public void ASignInThatSignsInInsideTheWindow_ClosesTheScreenOnce()
+    {
+        // AccountService raises Changed inside ShowDialog(): the follow path closes the screen, then ShowDialog returns true.
+        var vm = new AccountIntroViewModel(() => _settings, _ => _saves++, () => _signedIn, _ =>
+        {
+            _signedIn = true;
+            AccountChanged();
+            return true;
+        }, handler =>
+        {
+            _subscribers.Add(handler);
+            return () => _subscribers.Remove(handler);
+        });
+        vm.ShowAtStart(false);
+        var closed = 0;
+        vm.Closed += () => closed++;
+
+        vm.SignInCommand.Execute(null);
+
+        Assert.False(vm.IsVisible);
+        Assert.Equal(1, _saves);
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
     public void AForcedScreenshotScreen_IgnoresTheAccount()
     {
         var vm = Create();
