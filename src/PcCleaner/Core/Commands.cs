@@ -77,7 +77,10 @@ public sealed class AsyncRelayCommand : ObservableObject, ICommand
 
     public bool CanExecute(object? parameter) => !IsRunning && (_canExecute?.Invoke(parameter) ?? true);
 
-    public async void Execute(object? parameter) => await ExecuteAsync(parameter);
+    /// <summary>The run started by the last <see cref="Execute"/> (never faults: <see cref="ExecuteAsync"/> reports errors itself).</summary>
+    public Task LastTask { get; private set; } = Task.CompletedTask;
+
+    public void Execute(object? parameter) => LastTask = ExecuteAsync(parameter);
 
     public async Task ExecuteAsync(object? parameter = null)
     {
