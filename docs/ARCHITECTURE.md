@@ -168,6 +168,10 @@ workflow `release.yml` соберёт установщик (`tools/build-install
 - `SystemStats.CpuUsagePercent()`, `SystemStats.Memory()`, `SystemStats.Uptime` — живые метрики без WMI.
 - `AppServices.Settings.AddTrusted/RemoveTrusted/IsTrusted` — список доверенных (потокобезопасно, не менять `TrustedItems` напрямую).
 
+## Аккаунт
+
+> **Аккаунт (`Core/Account/`, `Core/AccountWindows/`).** `ApiClient` — HTTP к `https://waterca7.ru/api/v1` (ошибки — `ApiException` с кодом `error`). `LicenseTicket.Verify` проверяет подпись билета (ECDSA P-256, DER) ключами `LicenseKeys.Live` (встроенный `license_pub.pem`), `LicenseState.Evaluate` даёт уровень Гость / Free / Pro, `Features` — таблица Pro-функций (копия `features.php` сайта; тест сверяет). `AccountService` — вход, выход, билет, устройства, промокод, оплата, обращение; хранит данные в `IAccountStore` (Windows — `DpapiAccountStore`, файл `account.bin` под DPAPI текущего пользователя), номер компьютера — `IHwHash` (Windows — `WmiHwHash`). Файлы `Core/Account/` копируются в Mac-версию без изменений; платформенные реализации — нет. Пока `license_pub.pem` нет в сборке, `LicenseKeys.Live` пуст и любой билет считается неподписанным (программа бесплатна).
+
 ## Тема (ключи ресурсов)
 
 Кисти: `BackgroundBrush SidebarBrush SurfaceBrush Surface2Brush Surface3Brush LineBrush TextBrush MutedBrush
