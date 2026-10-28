@@ -12,7 +12,9 @@ public static class SignInErrors
         ApiError.EmailTaken => T._("Аккаунт с этой почтой уже есть — войдите в него."),
         ApiError.CodeInvalid => T._("Неверный или устаревший код. Проверьте письмо или отправьте код ещё раз."),
         ApiError.WeakPassword => T._("Пароль должен быть от 8 до 128 символов."),
-        ApiError.EmailInvalid or ApiError.InvalidInput => T._("Проверьте адрес почты."),
+        ApiError.EmailInvalid => T._("Проверьте адрес почты."),
+        // The window checks the e-mail first: an INVALID_INPUT that still comes back is about another field (the device's).
+        ApiError.InvalidInput => error.UserText,
         ApiError.ConsentRequired => T._("Нужно согласие с офертой и политикой конфиденциальности."),
         ApiError.RateLimited => T._("Слишком много попыток. Подождите несколько минут и попробуйте снова."),
         ApiError.UnbindQuota => error.Message.Length > 0 ? error.Message : T._("Отвязать компьютер можно раз в 7 дней."),
