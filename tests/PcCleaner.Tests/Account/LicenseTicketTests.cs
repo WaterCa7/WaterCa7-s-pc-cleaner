@@ -107,6 +107,13 @@ public class LicenseTicketTests
     }
 
     [Fact]
+    public void TheBuild_HasALiveP256Key()
+    {
+        Assert.NotEmpty(LicenseKeys.Live);
+        Assert.All(LicenseKeys.Live, k => Assert.Matches("^[0-9a-f]{64}$", LicenseKeys.Fingerprint(k)));
+    }
+
+    [Fact]
     public void TheLiveKeys_NeverContainTheServersTestKey()
     {
         var test = LicenseKeys.Fingerprint(ServerTestKey());
