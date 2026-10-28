@@ -47,6 +47,7 @@ public class SignInPasswordTests : IDisposable
     [Theory]
     [InlineData("not-an-email", "password1")]
     [InlineData("a@b", "password1")]
+    [InlineData("user@", "password1")]
     [InlineData("user@example.com", "short")]
     public async Task BadInput_IsCaughtBeforeTheServer(string email, string password)
     {
@@ -156,6 +157,153 @@ public class SignInPasswordTests : IDisposable
         Assert.Equal(SignInStep.DeviceLimit, vm.Step);
         Assert.Equal("msg UNBIND_QUOTA", vm.Error);
         Assert.Equal(2, _a.Fake.To("POST /auth/login").Count()); // a fresh DEVICE_LIMIT with a new permit
+    }
+
+    private const string BrowserStart = "{\"code\":\"ABCD-1234\",\"url\":\"https://waterca7.ru/auth/device?code=ABCD-1234\",\"expires_in\":600}";
+
+    private static string Token(char c) => new(c, 64);
+
+    private static string UnbindTokenOf(FakeApi.Recorded request) => Api.Body(request).GetProperty("unbind_token").GetString()!;
+
+    [Theory]
+    [InlineData("AUTH_FAILED", 401)]
+    [InlineData("NOT_FOUND", 404)]
+    public async Task ASpentPermit_SaysThePermitIsOld_NotThatThePasswordIsWrong(string code, int status)
+    {
+        _a.Fake.OnError("POST /auth/login", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
+            .OnError("POST /device/release", status, code);
+        var vm = Create();
+        vm.Email = "user@example.com";
+        vm.Password = "password1";
+        await Run(vm.SignInCommand);
+
+        await vm.ReleaseAsync(vm.Devices[0]);
+
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+        Assert.Contains("Разрешение на отвязку устарело", vm.Error);
+        Assert.DoesNotContain("пароль", vm.Error);
+    }
+
+    [Fact]
+    public async Task TheResetThenADeviceLimit_SignsInWithTheNewPassword_AfterTheRelease()
+    {
+        _a.Fake.OnError("POST /auth/reset/confirm", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
+            .On("POST /device/release", 200, "{\"ok\":true}")
+            .On("POST /auth/login", 200, _a.Key.LoginJson(TestLicense.Json()));
+        var vm = Create();
+        vm.Email = "user@example.com";
+        vm.ForgotCommand.Execute(null);
+        vm.Code = "111111";
+        vm.Password = vm.Password2 = "new-password";
+
+        await Run(vm.ConfirmResetCommand);
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+        await vm.ReleaseAsync(vm.Devices[0]);
+
+        Assert.Equal("new-password", Api.Body(_a.Fake.To("POST /auth/login").Single()).GetProperty("password").GetString());
+        Assert.Equal(1, _completed);
+    }
+
+    [Fact]
+    public async Task ASecondDeviceLimit_ReplacesThePermit_TheNextReleaseCarriesTheLatest()
+    {
+        _a.Fake.OnError("POST /auth/login", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
+            .OnError("POST /auth/login", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")).Replace(Token('a'), Token('b')))
+            .On("POST /auth/login", 200, _a.Key.LoginJson(TestLicense.Json()))
+            .OnError("POST /device/release", 401, "AUTH_FAILED")
+            .On("POST /device/release", 200, "{\"ok\":true}");
+        var vm = Create();
+        vm.Email = "user@example.com";
+        vm.Password = "password1";
+        await Run(vm.SignInCommand);
+
+        await vm.ReleaseAsync(vm.Devices[0]); // the permit is refused, the second DEVICE_LIMIT brings a new one
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+        await vm.ReleaseAsync(vm.Devices[0]);
+
+        Assert.Equal(new[] { Token('a'), Token('b') }, _a.Fake.To("POST /device/release").Select(UnbindTokenOf));
+        Assert.Equal(1, _completed);
+    }
+
+    [Fact]
+    public async Task TheBrowserPoll_StaysAliveWhileTheListIsOpen_AndSignsInAfterTheRelease()
+    {
+        _a.Fake.On("POST /auth/code", 200, BrowserStart)
+            .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
+            .On("GET /auth/code/ABCD-1234", 200, _a.Key.LoginJson(TestLicense.Json()))
+            .On("POST /device/release", 200, "{\"ok\":true}");
+        var vm = Create(SignInTab.Browser);
+        while (vm.Step != SignInStep.DeviceLimit && !vm.BrowserTask.IsCompleted)
+            await Task.Delay(10);
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+
+        await vm.ReleaseAsync(vm.Devices[0]);
+        await vm.BrowserTask;
+
+        Assert.Equal(1, _completed);
+        Assert.True(_a.Service.IsSignedIn);
+    }
+
+    [Fact]
+    public async Task TheBrowserPoll_ARefusedRelease_ShowsWhyOnTheReappearingList()
+    {
+        _a.Fake.On("POST /auth/code", 200, BrowserStart)
+            .OnError("GET /auth/code/ABCD-1234", 409, "DEVICE_LIMIT", _a.LimitJson((5, "Office")))
+            .OnError("POST /device/release", 429, "UNBIND_QUOTA");
+        var vm = Create(SignInTab.Browser);
+        while (vm.Step != SignInStep.DeviceLimit && !vm.BrowserTask.IsCompleted)
+            await Task.Delay(10);
+
+        await vm.ReleaseAsync(vm.Devices[0]);
+        while (!(_a.Fake.To("GET /auth/code/ABCD-1234").Count() >= 2 && vm.Step == SignInStep.DeviceLimit) && !vm.BrowserTask.IsCompleted)
+            await Task.Delay(10);
+
+        Assert.Equal(SignInStep.DeviceLimit, vm.Step);
+        Assert.Equal("msg UNBIND_QUOTA", vm.Error);
+        vm.Tab = SignInTab.Password; // stops the poll
+        await vm.BrowserTask;
+    }
+
+    [Fact]
+    public async Task AnEmailThatIsTaken_MovesTheTabToThePassword_Too()
+    {
+        _a.Fake.OnError("POST /auth/register", 409, "EMAIL_TAKEN");
+        var vm = Create(SignInTab.Register);
+        vm.Email = "user@example.com";
+        vm.Password = vm.Password2 = "password1";
+        vm.Consent = true;
+
+        await Run(vm.RegisterCommand);
+
+        Assert.Equal(SignInStep.Password, vm.Step);
+        Assert.Equal(SignInTab.Password, vm.Tab);
+        Assert.NotNull(vm.Error);
+    }
+
+    [Fact]
+    public async Task AnUnverifiedEmail_TheTextHintsAtSpam()
+    {
+        _a.Fake.OnError("POST /auth/login", 403, "EMAIL_NOT_VERIFIED")
+            .On("POST /auth/resend", 200, "{\"ok\":true,\"retry_after\":60}");
+        var vm = Create();
+        vm.Email = "user@example.com";
+        vm.Password = "password1";
+
+        await Run(vm.SignInCommand);
+
+        Assert.Contains("Спам", vm.Info);
+    }
+
+    [Fact]
+    public async Task ChoosingTheBrowserTabAgain_DoesNotAskForANewCode()
+    {
+        _a.Fake.On("POST /auth/code", 200, BrowserStart).On("GET /auth/code/ABCD-1234", 202, "{\"status\":\"pending\"}");
+        var vm = Create(SignInTab.Browser);
+
+        vm.Tab = SignInTab.Browser;
+        await vm.BrowserTask;
+
+        Assert.Single(_a.Fake.To("POST /auth/code"));
     }
 
     [Fact]

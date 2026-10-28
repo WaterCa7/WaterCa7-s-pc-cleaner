@@ -83,7 +83,7 @@ public sealed partial class SignInViewModel
         var (email, password) = (Email.Trim(), Password);
         _retry = () => _account.LoginAsync(email, password, CancellationToken.None);
         GoTo(SignInStep.VerifyCode);
-        Info = T._("Почта ещё не подтверждена. Мы отправили код, если адрес верен.");
+        Info = T._("Почта ещё не подтверждена. Мы отправили код, если адрес верен. Не пришло — проверьте «Спам».");
         try
         {
             StartResendCountdown(await _account.ResendAsync(email, "verify", CancellationToken.None));

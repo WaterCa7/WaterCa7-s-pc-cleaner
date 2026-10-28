@@ -87,6 +87,9 @@ public sealed partial class SignInViewModel : ObservableObject
         get => _tab;
         set
         {
+            // The tab is chosen again (a binding sets the same value): its step is already running, nothing starts anew.
+            if (value == _tab && Step == StepOf(value))
+                return;
             Set(ref _tab, value);
             Error = null;
             Info = null;
@@ -104,6 +107,13 @@ public sealed partial class SignInViewModel : ObservableObject
             }
         }
     }
+
+    private static SignInStep StepOf(SignInTab tab) => tab switch
+    {
+        SignInTab.Register => SignInStep.Register,
+        SignInTab.Browser => SignInStep.Browser,
+        _ => SignInStep.Password,
+    };
 
     public bool IsPasswordStep => Step == SignInStep.Password;
     public bool IsResetEmailStep => Step == SignInStep.ResetEmail;
@@ -202,21 +212,23 @@ public sealed partial class SignInViewModel : ObservableObject
             catch (ApiException ex) when (ex.Error.Code is ApiError.NotFound or ApiError.UnbindQuota or ApiError.AuthFailed)
             {
                 // The permit is spent: show why, and ask again for a fresh DEVICE_LIMIT (a new list and permit).
-                var reason = SignInErrors.Text(ex.Error);
+                var reason = SignInErrors.ReleaseText(ex.Error);
                 if (_retry is not null)
                 {
                     try
                     {
+                        // The password flow signs in again here; the browser flow only resumes the poll (it signs in, or shows
+                        // the next list, on its own).
                         await _retry();
                         Done();
-                        return;
                     }
                     catch (ApiException again) when (again.Error.Code == ApiError.DeviceLimit && again.Error.AsDeviceLimit() is { } limit)
                     {
                         ShowLimit(limit, again.Error.Message);
                     }
                 }
-                Error = reason;
+                if (!_account.IsSignedIn)
+                    Error = reason;
                 return;
             }
             if (_retry is not null)
@@ -232,7 +244,8 @@ public sealed partial class SignInViewModel : ObservableObject
         Devices.Clear();
         foreach (var d in limit.Devices)
             Devices.Add(new LimitDevice(d.Id, d.Name, ProfileTexts.DeviceDetails(d, _now())));
-        GoTo(SignInStep.DeviceLimit);
+        // Not GoTo: the browser poll waits for the release behind this list and must not be stopped by showing it.
+        Step = SignInStep.DeviceLimit;
     }
 
     // ----- common -----
@@ -260,7 +273,10 @@ public sealed partial class SignInViewModel : ObservableObject
         {
             Error = SignInErrors.Text(ex.Error);
             if (ex.Error.Code == ApiError.EmailTaken)
+            {
+                Set(ref _tab, SignInTab.Password, nameof(Tab)); // the header follows the step
                 GoTo(SignInStep.Password);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -277,6 +293,8 @@ public sealed partial class SignInViewModel : ObservableObject
         if (!_account.IsSignedIn)
             return;
         Password = Password2 = Code = "";
+        _retry = null; // the closures hold the password
+        _limit = null;
         Completed?.Invoke();
     }
 

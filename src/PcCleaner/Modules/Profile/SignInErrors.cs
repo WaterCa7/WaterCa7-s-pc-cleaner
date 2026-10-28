@@ -22,12 +22,23 @@ public static class SignInErrors
         _ => error.Message.Length > 0 ? error.Message : T.F("Не получилось ({0}). Попробуйте ещё раз.", error.Code),
     };
 
+    /// <summary>
+    /// What the list of computers says when «Отвязать» was refused. A fresh list is on the screen already, so a spent permit
+    /// (AUTH_FAILED / NOT_FOUND of /device/release) is not «wrong password» or «code out of date»; the server's own words
+    /// for the quota stay.
+    /// </summary>
+    public static string ReleaseText(ApiError error) => error.Code is ApiError.AuthFailed or ApiError.NotFound
+        ? T._("Разрешение на отвязку устарело — список обновлён, выберите компьютер ещё раз.")
+        : Text(error);
+
     /// <summary>The form's check: up to 254 characters, an «@» and a dot after it with something on both sides.</summary>
     public static bool IsValidEmail(string? email)
     {
         var e = (email ?? "").Trim();
         var at = e.IndexOf('@');
-        var dot = at < 0 ? -1 : e.IndexOf('.', at + 2);
+        if (at < 0 || at + 2 > e.Length)
+            return false; // no «@», or nothing after it
+        var dot = e.IndexOf('.', at + 2);
         return e.Length is > 0 and <= 254 && at > 0 && dot > at + 1 && dot < e.Length - 1 && !e.Contains(' ');
     }
 
