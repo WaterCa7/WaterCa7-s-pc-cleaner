@@ -13,7 +13,7 @@ namespace PcCleaner;
 
 public partial class App : Application
 {
-    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key1,Key2] [--no-scan] [--lang ru|en] [--mode simple|expert] [--welcome].</summary>
+    /// <summary>Parsed command line: --screenshots &lt;dir&gt; [--page Key,Section,Section/Tab] [--no-scan] [--lang ru|en] [--mode simple|expert] [--welcome].</summary>
     internal static string? ScreenshotDir { get; private set; }
     internal static string[]? ScreenshotPages { get; private set; }
     internal static bool ScreenshotScan { get; private set; } = true;

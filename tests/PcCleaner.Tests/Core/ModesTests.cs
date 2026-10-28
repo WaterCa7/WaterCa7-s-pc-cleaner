@@ -244,44 +244,72 @@ public class ModesRulesTests
 
     private static List<FakePage> Pages(params string[] keys) => keys.Select(k => new FakePage(k)).ToList();
 
-    private static readonly string[] Ten =
-        { "Dashboard", "Cleaner", "Processes", "Startup", "Programs", "Disk", "Optimizer", "Network", "Security", "Settings" };
+    private static readonly string[] Twelve = ShellMenuTests.AllKeys;
 
     [Fact]
-    public void Screenshots_OfExpertMode_ShootEveryPage_NumberedByPlace()
+    public void Screenshots_OfExpertMode_ShootEveryTab_NumberedByPlace()
     {
-        var all = Pages(Ten);
+        var all = Pages(Twelve);
+        var sections = ShellMenu.Build(all);
 
-        var shots = ScreenshotRunner.PagesToShoot(all, all, null);
+        var shots = ScreenshotRunner.PagesToShoot(all, all, sections, null);
 
-        Assert.Equal(Enumerable.Range(1, 10), shots.Select(s => s.Number));
-        Assert.Equal(Ten, shots.Select(s => s.Page.Key));
+        Assert.Equal(Enumerable.Range(1, 12), shots.Select(s => s.Number));
+        Assert.Equal(Twelve, shots.Select(s => s.Page.Key));
     }
 
     [Fact]
-    public void Screenshots_OfSimpleMode_SkipHiddenPages_ButKeepTheNumbersOfTheFullList()
+    public void Screenshots_AreNamedBySectionAndTab_AndASingleTabSectionByItsKey()
     {
-        var all = Pages(Ten);
-        var visible = all.Where(p => UiModes.IsVisible(UiMode.Simple, p.Key)).ToList();
+        var all = Pages(Twelve);
+        var sections = ShellMenu.Build(all);
 
-        var shots = ScreenshotRunner.PagesToShoot(all, visible, null);
-
-        Assert.Equal(new[] { 1, 2, 5, 10 }, shots.Select(s => s.Number));
-        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Settings" }, shots.Select(s => s.Page.Key));
+        Assert.Equal("01-Dashboard.png", ScreenshotRunner.FileName(1, all[0], sections));
+        Assert.Equal("03-Computer-Hardware.png", ScreenshotRunner.FileName(3, all[2], sections));
+        Assert.Equal("08-System-Disk.png", ScreenshotRunner.FileName(8, all[7], sections));
+        Assert.Equal("12-Settings.png", ScreenshotRunner.FileName(12, all[11], sections));
     }
 
     [Fact]
-    public void Screenshots_WithAPageList_ShootOnlyTheVisiblePagesAmongThem_AndNameTheSkippedOnes()
+    public void Screenshots_OfSimpleMode_SkipHiddenTabs_ButKeepTheNumbersOfTheFullList()
     {
-        var all = Pages(Ten);
+        var all = Pages(Twelve);
         var visible = all.Where(p => UiModes.IsVisible(UiMode.Simple, p.Key)).ToList();
-        var requested = new[] { "settings", "Network", "Dashboard", "Nowhere" };
 
-        var shots = ScreenshotRunner.PagesToShoot(all, visible, requested);
-        var skipped = ScreenshotRunner.HiddenRequested(all, visible, requested);
+        var shots = ScreenshotRunner.PagesToShoot(all, visible, ShellMenu.Build(all), null);
 
-        Assert.Equal(new[] { (1, "Dashboard"), (10, "Settings") }, shots.Select(s => (s.Number, s.Page.Key)));
-        Assert.Equal(new[] { "Network" }, skipped); // an unknown key is not "hidden"
+        Assert.Equal(new[] { 1, 2, 7, 11, 12 }, shots.Select(s => s.Number));
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Profile", "Settings" }, shots.Select(s => s.Page.Key));
+    }
+
+    [Theory]
+    [InlineData("System", new[] { "Processes", "Startup", "Programs", "Disk" })]
+    [InlineData("system/disk", new[] { "Disk" })]
+    [InlineData("Disk", new[] { "Disk" })]
+    [InlineData("Computer/Optimizer,Settings", new[] { "Optimizer", "Settings" })]
+    [InlineData("System/Network", new string[0])] // Сеть is a tab of Защита, not of Система
+    public void Screenshots_ARequest_NamesAPage_ASection_OrASectionTab(string request, string[] expected)
+    {
+        var all = Pages(Twelve);
+
+        var shots = ScreenshotRunner.PagesToShoot(all, all, ShellMenu.Build(all), request.Split(','));
+
+        Assert.Equal(expected, shots.Select(s => s.Page.Key));
+    }
+
+    [Fact]
+    public void Screenshots_WithARequest_ShootOnlyTheVisibleTabsAmongThem_AndNameTheHiddenOnes()
+    {
+        var all = Pages(Twelve);
+        var visible = all.Where(p => UiModes.IsVisible(UiMode.Simple, p.Key)).ToList();
+        var sections = ShellMenu.Build(all);
+        var requested = new[] { "settings", "Protection/Network", "Computer", "Dashboard", "Nowhere" };
+
+        var shots = ScreenshotRunner.PagesToShoot(all, visible, sections, requested);
+        var hidden = ScreenshotRunner.HiddenRequested(all, visible, sections, requested);
+
+        Assert.Equal(new[] { (1, "Dashboard"), (12, "Settings") }, shots.Select(s => (s.Number, s.Page.Key)));
+        Assert.Equal(new[] { "Protection/Network", "Computer" }, hidden); // an unknown key is not "hidden"
     }
 }
 

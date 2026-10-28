@@ -10,11 +10,11 @@ namespace PcCleaner.Core;
 
 /// <summary>
 /// Non-interactive verification mode:
-///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Cleaner,Startup] [--no-scan] [--mode simple|expert] [--lang ru|en] [--welcome]
+///   WaterCa7sPcCleaner.exe --screenshots &lt;dir&gt; [--page Dashboard,System,Computer/Hardware] [--no-scan] [--mode simple|expert] [--lang ru|en] [--welcome]
 /// With --welcome it first takes a picture of the first-run screen (00-Welcome.png) over the blurred window and closes it
 /// without choosing anything, so the pictures of the pages are the same as without the switch.
-/// Opens each page of the mode (the simple mode has four; NN is the number of the page in the full list, so a page keeps its
-/// file name in both modes), runs its read-only PreviewScanAsync, saves NN-Key.png and log.txt, then exits.
+/// Opens each tab of the mode (NN is the number of the tab in the full list, so a tab keeps its file name in both modes),
+/// runs its read-only PreviewScanAsync, saves NN-Key.png (a section of one page) or NN-Section-Tab.png and log.txt, then exits.
 /// All confirmations are auto-declined (Dialogs.UseSilentMode), so nothing on the system is changed.
 /// Exit code: 0 = no errors logged, 1 = errors were logged (see log.txt).
 /// </summary>
@@ -23,7 +23,7 @@ public static class ScreenshotRunner
     /// <summary>The picture of the first-run screen (<c>--welcome</c>); 00 puts it before the pages, which start at 01.</summary>
     internal const string WelcomeFile = "00-Welcome.png";
 
-    public static async Task<int> RunAsync(Window window, MainViewModel vm, string outDir, string[]? pageKeys, bool scan, bool welcome = false)
+    public static async Task<int> RunAsync(Window window, MainViewModel vm, string outDir, string[]? requests, bool scan, bool welcome = false)
     {
         Directory.CreateDirectory(outDir);
         var errors = 0;
@@ -37,10 +37,10 @@ public static class ScreenshotRunner
             await ShootWelcomeAsync(window, vm, outDir);
 
         var allPages = vm.Pages.ToList();
-        foreach (var key in HiddenRequested(allPages, vm.VisiblePages, pageKeys))
+        foreach (var key in HiddenRequested(allPages, vm.VisiblePages, vm.Sections, requests))
             Log.Info(T.F("[screenshot] {0}: пропущено — в этом режиме раздела нет", key));
 
-        foreach (var (index, page) in PagesToShoot(allPages, vm.VisiblePages, pageKeys))
+        foreach (var (index, page) in PagesToShoot(allPages, vm.VisiblePages, vm.Sections, requests))
         {
             var sw = Stopwatch.StartNew();
             Log.Info(T.F("[screenshot] {0}: открытие", page.Key));
@@ -66,7 +66,7 @@ public static class ScreenshotRunner
 
             await Task.Delay(500);
             await WaitIdleAsync();
-            var file = Path.Combine(outDir, $"{index:00}-{page.Key}.png");
+            var file = Path.Combine(outDir, FileName(index, page, vm.Sections));
             Save(window, file);
             Log.Info(T.F("[screenshot] {0}: готово за {1:0.0} с -> {2}", page.Key, sw.Elapsed.TotalSeconds, file));
         }
@@ -97,31 +97,50 @@ public static class ScreenshotRunner
     }
 
     /// <summary>
-    /// The pages to photograph: the visible ones of the current mode (the simple mode hides most pages), only those named in
-    /// <paramref name="pageKeys"/> when it is given. <c>Number</c> is the place in <paramref name="all"/> (1-based), so a page keeps
-    /// its file name (NN-Key.png) in every mode and the pictures of the two modes can be compared by name.
+    /// The tabs to photograph: the visible ones of the current mode (the simple mode hides most), only those named in
+    /// <paramref name="requests"/> when it is given (a page key, a section key or «Section/Tab»). <c>Number</c> is the place
+    /// in <paramref name="all"/> (1-based), so a tab keeps its file name in every mode and the two modes compare by name.
     /// </summary>
-    internal static List<(int Number, PageViewModel Page)> PagesToShoot(IReadOnlyList<PageViewModel> all, IEnumerable<PageViewModel> visible, string[]? pageKeys)
+    internal static List<(int Number, PageViewModel Page)> PagesToShoot(IReadOnlyList<PageViewModel> all, IEnumerable<PageViewModel> visible,
+        IReadOnlyList<SectionViewModel> sections, string[]? requests)
     {
         var shown = visible.ToList();
         return all
             .Select((page, index) => (Number: index + 1, Page: page))
-            .Where(p => shown.Contains(p.Page) && (pageKeys is not { Length: > 0 } || IsNamed(pageKeys, p.Page.Key)))
+            .Where(p => shown.Contains(p.Page) &&
+                        (requests is not { Length: > 0 } || requests.Any(r => Matches(r, SectionOf(sections, p.Page), p.Page))))
             .ToList();
     }
 
-    /// <summary>The keys that were asked for (<c>--page</c>) and name a page that exists but is hidden in this mode.</summary>
-    internal static List<string> HiddenRequested(IReadOnlyList<PageViewModel> all, IEnumerable<PageViewModel> visible, string[]? pageKeys)
+    /// <summary>The requests (<c>--page</c>) that name an existing tab or section of which nothing is visible in this mode.</summary>
+    internal static List<string> HiddenRequested(IReadOnlyList<PageViewModel> all, IEnumerable<PageViewModel> visible,
+        IReadOnlyList<SectionViewModel> sections, string[]? requests)
     {
         var shown = visible.ToList();
-        return (pageKeys ?? Array.Empty<string>())
-            .Where(key => all.Any(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)) &&
-                          !shown.Any(p => string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)))
+        return (requests ?? Array.Empty<string>())
+            .Where(r => all.Any(p => Matches(r, SectionOf(sections, p), p)) &&
+                        !shown.Any(p => Matches(r, SectionOf(sections, p), p)))
             .ToList();
     }
 
-    private static bool IsNamed(string[] keys, string key)
-        => keys.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+    /// <summary>NN-Key.png for a section of one page with the same key (01-Dashboard.png), else NN-Section-Tab.png (08-System-Disk.png).</summary>
+    internal static string FileName(int number, PageViewModel page, IReadOnlyList<SectionViewModel> sections)
+        => SectionOf(sections, page) is { } section && !string.Equals(section.Key, page.Key, StringComparison.OrdinalIgnoreCase)
+            ? $"{number:00}-{section.Key}-{page.Key}.png"
+            : $"{number:00}-{page.Key}.png";
+
+    private static SectionViewModel? SectionOf(IReadOnlyList<SectionViewModel> sections, PageViewModel page)
+        => sections.FirstOrDefault(s => s.Contains(page));
+
+    private static bool Matches(string request, SectionViewModel? section, PageViewModel page)
+    {
+        var parts = request.Split('/', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length == 2)
+            return section is not null && Same(parts[0], section.Key) && Same(parts[1], page.Key);
+        return Same(request.Trim(), page.Key) || (section is not null && Same(request.Trim(), section.Key));
+    }
+
+    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     private static async Task WaitIdleAsync()
     {
