@@ -58,8 +58,10 @@ public sealed class MainViewModel : ObservableObject, INavigator
         Welcome = new WelcomeViewModel(_settings, _save, pages is null ? WelcomeViewModel.RestartProgram : () => false);
         Welcome.Chosen += _ => NavigateTo("Dashboard");
         // «Войти» / «Зарегистрироваться» open the sign-in window; a shell made for tests has no window to open.
+        // The screen also follows the account (a sign-in that finishes after the window was closed); tests do not touch it.
         AccountIntro = new AccountIntroViewModel(_settings, _save, () => AppServices.Account.IsSignedIn,
-            pages is null ? SignInDialog.Show : _ => false);
+            pages is null ? SignInDialog.Show : _ => false,
+            pages is null ? FollowAccount : null);
         Splash = new SplashViewModel(Updates, Environment.GetCommandLineArgs().Skip(1).ToList(),
             () => System.Windows.Application.Current.Shutdown());
         Updates.PropertyChanged += (_, _) => OnUpdateBannerChanged();
@@ -74,6 +76,15 @@ public sealed class MainViewModel : ObservableObject, INavigator
             Log.Warn(warning);
 
         SelectedPage = VisiblePages.FirstOrDefault();
+    }
+
+    /// <summary>Subscribes a handler to the account's changes (they can come from any thread) and returns the unsubscribe.</summary>
+    private static Action FollowAccount(Action handler)
+    {
+        var account = AppServices.Account;
+        Action onChanged = () => Ui.Post(handler);
+        account.Changed += onChanged;
+        return () => account.Changed -= onChanged;
     }
 
     private static IEnumerable<PageViewModel> CreatePages()

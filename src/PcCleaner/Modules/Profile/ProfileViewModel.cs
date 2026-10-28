@@ -20,8 +20,8 @@ public sealed partial class ProfileViewModel : PageViewModel
     private readonly Func<DateTimeOffset> _now;
     private string? _refreshText;
 
-    // The ticket time when «Обновить» failed: a newer ticket (the background check got through) makes that text stale.
-    private DateTimeOffset? _refreshFailedAt;
+    // The ticket time that was current when «Обновить» failed (set only then): a newer ticket makes that text stale.
+    private DateTimeOffset? _refreshTextIssuedAt;
 
     /// <summary>The real page: the app's account, the sign-in window, the browser, the app's questions.</summary>
     public ProfileViewModel()
@@ -111,8 +111,13 @@ public sealed partial class ProfileViewModel : PageViewModel
     {
         var ok = await _account.RefreshTicketAsync(ct);
         // A revoked session is explained by SessionEndedText; a failure with a session still alive says so here.
-        _refreshFailedAt = _account.Status.IssuedAt;
-        RefreshText = ok || !IsSignedIn ? null : T._("Не получилось обновить лицензию — действует прежняя. Проверьте интернет и попробуйте ещё раз.");
+        if (ok || !IsSignedIn)
+            RefreshText = null;
+        else
+        {
+            _refreshTextIssuedAt = _account.Status.IssuedAt;
+            RefreshText = T._("Не получилось обновить лицензию — действует прежняя. Проверьте интернет и попробуйте ещё раз.");
+        }
         Refresh();
     }
 
@@ -127,7 +132,7 @@ public sealed partial class ProfileViewModel : PageViewModel
     /// <summary>Re-reads everything from the account (after a sign-in, a refresh, a purchase, a sign-out). Safe to repeat.</summary>
     private void Refresh()
     {
-        if (!IsSignedIn || (RefreshText is not null && _account.Status.IssuedAt != _refreshFailedAt))
+        if (!IsSignedIn || (RefreshText is not null && _account.Status.IssuedAt != _refreshTextIssuedAt))
             RefreshText = null;
         foreach (var name in new[] { nameof(IsSignedIn), nameof(IsGuest), nameof(Email), nameof(PlanText), nameof(TermText), nameof(CheckedText),
                      nameof(NoteText), nameof(SessionEndedText), nameof(BuyText), nameof(ShowProLines), nameof(CanApplyPromo), nameof(NeedsSupportEmail) })

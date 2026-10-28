@@ -13,7 +13,8 @@ public static class SignInDialog
         var window = Create(vm);
         if (Application.Current?.MainWindow is { IsVisible: true } owner)
             window.Owner = owner;
-        // A request still on its way when the window was closed may sign in after all: the account decides, not only the window.
+        // A request that finished while the window was closing may have signed in: the account decides, not only the window.
+        // One that finishes later is not seen here; the start screen follows the account's changes by itself.
         return window.ShowDialog() == true || account.IsSignedIn;
     }
 

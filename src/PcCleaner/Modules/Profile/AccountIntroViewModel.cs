@@ -6,6 +6,8 @@ namespace PcCleaner.Modules.Profile;
 /// The start screen over the blurred window, after the splash and before the mode/language screen: «Войти»,
 /// «Зарегистрироваться», «Продолжить без входа» (spec 3.1). Once per install: a choice, a sign-in or a signed-in user
 /// sets <see cref="AppSettings.AccountIntroShown"/>. For an updated install it adds «Появились аккаунты и Pro».
+/// While it is shown it follows the account: when the account signs in by any path (also after the sign-in window was
+/// closed with a request still on its way) the screen closes by itself.
 /// </summary>
 public sealed class AccountIntroViewModel : ObservableObject
 {
@@ -13,15 +15,23 @@ public sealed class AccountIntroViewModel : ObservableObject
     private readonly Action<AppSettings> _save;
     private readonly Func<bool> _isSignedIn;
     private readonly Func<SignInTab, bool> _signIn;
+    private readonly Func<Action, Action>? _follow;
+    private Action? _unfollow;
     private bool _isVisible;
     private bool _isUpdate;
 
-    public AccountIntroViewModel(Func<AppSettings> settings, Action<AppSettings> save, Func<bool> isSignedIn, Func<SignInTab, bool> signIn)
+    /// <param name="follow">
+    /// Subscribes the given handler to "the account changed" (the caller marshals it to the UI thread) and returns the
+    /// function that unsubscribes it; null — the screen does not follow the account.
+    /// </param>
+    public AccountIntroViewModel(Func<AppSettings> settings, Action<AppSettings> save, Func<bool> isSignedIn, Func<SignInTab, bool> signIn,
+        Func<Action, Action>? follow = null)
     {
         _settings = settings;
         _save = save;
         _isSignedIn = isSignedIn;
         _signIn = signIn;
+        _follow = follow;
         SignInCommand = new RelayCommand(() => SignIn(SignInTab.Password));
         RegisterCommand = new RelayCommand(() => SignIn(SignInTab.Register));
         SkipCommand = new RelayCommand(Close);
@@ -68,21 +78,42 @@ public sealed class AccountIntroViewModel : ObservableObject
         }
         IsUpdate = settings.UiMode is not null;
         IsVisible = true;
+        // Only a real start follows the account; the forced screen of a screenshot run never closes by itself.
+        _unfollow ??= _follow?.Invoke(OnAccountChanged);
         return true;
     }
 
     /// <summary>Closes the screen without a choice (the screenshot run, after its picture).</summary>
-    public void Hide() => IsVisible = false;
+    public void Hide()
+    {
+        Unfollow();
+        IsVisible = false;
+    }
 
     private void SignIn(SignInTab tab)
     {
-        // The window can be closed while its request is still on its way and then signs in all the same: the account decides.
+        // The window's own answer, or an account that is already signed in when it returns. A request that is still on its
+        // way when the window is closed signs in later: that is caught by OnAccountChanged, not here.
         if (_signIn(tab) || _isSignedIn())
             Close();
     }
 
+    private void OnAccountChanged()
+    {
+        if (IsVisible && _isSignedIn())
+            Close();
+    }
+
+    private void Unfollow()
+    {
+        var unfollow = _unfollow;
+        _unfollow = null;
+        unfollow?.Invoke();
+    }
+
     private void Close()
     {
+        Unfollow();
         var settings = _settings();
         settings.AccountIntroShown = true;
         _save(settings);

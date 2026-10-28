@@ -12,11 +12,24 @@ public class AccountIntroViewModelTests
     private readonly List<SignInTab> _windows = new();
     private bool _windowResult;
 
+    private readonly List<Action> _subscribers = new();
+
     private AccountIntroViewModel Create() => new(() => _settings, _ => _saves++, () => _signedIn, tab =>
     {
         _windows.Add(tab);
         return _windowResult;
+    }, handler =>
+    {
+        _subscribers.Add(handler);
+        return () => _subscribers.Remove(handler);
     });
+
+    /// <summary>The account says it changed (to whoever is subscribed right now).</summary>
+    private void AccountChanged()
+    {
+        foreach (var handler in _subscribers.ToArray())
+            handler();
+    }
 
     [Fact]
     public void AFirstRun_ShowsTheScreen_NotAsAnUpdate()
@@ -81,14 +94,14 @@ public class AccountIntroViewModelTests
     }
 
     [Fact]
-    public void AWindowClosedWhileItsRequestStillSignedIn_ClosesTheScreenToo()
+    public void AWindowClosedAfterTheAccountSignedIn_ClosesTheScreenToo()
     {
         var vm = Create();
         vm.ShowAtStart(false);
         var closed = 0;
         vm.Closed += () => closed++;
 
-        // The window was closed (ShowDialog false) while the password request was on its way; it signed in all the same.
+        // The account was already signed in when the window returned false.
         _windowResult = false;
         _signedIn = true;
         vm.SignInCommand.Execute(null);
@@ -111,5 +124,100 @@ public class AccountIntroViewModelTests
         Assert.False(vm.IsVisible);
         Assert.Equal(1, closed);
         Assert.Empty(_windows);
+    }
+
+    [Fact]
+    public void AWindowClosedWhileItsRequestIsStillOnItsWay_KeepsTheScreen_UntilTheAccountSignsIn()
+    {
+        var vm = Create();
+        vm.ShowAtStart(false);
+        var closed = 0;
+        vm.Closed += () => closed++;
+
+        // The window returns false at once (the request is not cancelled) and the account is not signed in yet.
+        vm.SignInCommand.Execute(null);
+        Assert.True(vm.IsVisible);
+        AccountChanged(); // an unrelated change: still not signed in
+        Assert.True(vm.IsVisible);
+
+        _signedIn = true; // the request finishes and signs in
+        AccountChanged();
+
+        Assert.False(vm.IsVisible);
+        Assert.True(_settings.AccountIntroShown);
+        Assert.Equal(1, _saves);
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
+    public void AfterTheScreenClosed_FurtherNotificationsDoNothing()
+    {
+        var vm = Create();
+        vm.ShowAtStart(false);
+        var closed = 0;
+        vm.Closed += () => closed++;
+        _signedIn = true;
+        AccountChanged();
+        Assert.Empty(_subscribers); // unsubscribed when it closed
+
+        AccountChanged();
+        AccountChanged();
+
+        Assert.Equal(1, _saves);
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
+    public void AScreenClosedByAChoice_StopsFollowingTheAccount()
+    {
+        var vm = Create();
+        vm.ShowAtStart(false);
+        Assert.Single(_subscribers);
+        var closed = 0;
+        vm.Closed += () => closed++;
+
+        vm.SkipCommand.Execute(null);
+        _signedIn = true;
+        AccountChanged();
+
+        Assert.Empty(_subscribers);
+        Assert.Equal(1, _saves);
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
+    public void AStaleHandlerCalledAfterTheScreenClosed_IsIgnored()
+    {
+        var vm = Create();
+        vm.ShowAtStart(false);
+        var stale = _subscribers.Single(); // what a posted-but-not-yet-run call would still hold
+        var closed = 0;
+        vm.Closed += () => closed++;
+        vm.SkipCommand.Execute(null);
+
+        _signedIn = true;
+        stale();
+
+        Assert.Equal(1, _saves);
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
+    public void AForcedScreenshotScreen_IgnoresTheAccount()
+    {
+        var vm = Create();
+        Assert.True(vm.ShowAtStart(screenshotRun: true, forced: true));
+        var closed = 0;
+        vm.Closed += () => closed++;
+
+        _signedIn = true;
+        AccountChanged();
+
+        Assert.Empty(_subscribers);
+        Assert.True(vm.IsVisible);
+        Assert.Equal(0, _saves);
+        Assert.Equal(0, closed);
+        vm.Hide();
+        Assert.False(vm.IsVisible);
     }
 }
