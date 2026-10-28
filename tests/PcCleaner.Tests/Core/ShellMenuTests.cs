@@ -221,6 +221,64 @@ public class ShellSectionsTests
     }
 
     [Fact]
+    public void SwitchingToSimple_WhileAHiddenTabIsOpen_OpensTheDashboard_AndBackToExpertRestoresTheMenu()
+    {
+        // The mode is this test's own settings object (saving is a no-op): nothing leaks to other tests or to settings.json.
+        var shell = Shell();
+        shell.NavigateTo("Disk");
+        Assert.Equal("System", shell.SelectedSection!.Key);
+
+        UiModes.Choose(_settings, UiMode.Simple, _ => { });
+
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "System" }, shell.TopSections.Select(s => s.Key));
+        var system = shell.TopSections.Single(s => s.Key == "System");
+        Assert.Equal(new[] { "Programs" }, system.VisibleTabs.Select(p => p.Key));
+        Assert.False(system.ShowTabs);
+        Assert.Equal("Dashboard", shell.SelectedSection!.Key); // the open tab disappeared: Главная
+        Assert.Equal("Dashboard", shell.SelectedPage!.Key);
+
+        UiModes.Choose(_settings, UiMode.Expert, _ => { });
+
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "Computer", "System", "Protection" }, shell.TopSections.Select(s => s.Key));
+        Assert.Equal(new[] { "Processes", "Startup", "Programs", "Disk" }, system.VisibleTabs.Select(p => p.Key));
+        Assert.True(system.ShowTabs);
+    }
+
+    [Fact]
+    public void SwitchingToSimple_WhileAVisibleTabIsOpen_KeepsIt_AndTheHeaderBecomesThePage()
+    {
+        var shell = Shell();
+        shell.NavigateTo("Programs");
+        Assert.Equal("Система", shell.HeaderTitle);
+        var changed = new List<string?>();
+        shell.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        UiModes.Choose(_settings, UiMode.Simple, _ => { });
+
+        Assert.Equal("Programs", shell.SelectedPage!.Key);
+        Assert.Equal("System", shell.SelectedSection!.Key);
+        Assert.Equal("Раздел Programs", shell.HeaderTitle); // one tab left: no strip, the page's own title
+        Assert.Contains(nameof(MainViewModel.HeaderTitle), changed);
+    }
+
+    [Fact]
+    public void ACrossSectionNavigation_RaisesThePageBeforeTheSection()
+    {
+        // MainViewModel.NavigateAsync: the tab strip highlights the open tab only when SelectedPage comes first.
+        var shell = Shell();
+        var changed = new List<string?>();
+        shell.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        shell.NavigateTo("Disk");
+
+        var page = changed.IndexOf(nameof(MainViewModel.SelectedPage));
+        var section = changed.IndexOf(nameof(MainViewModel.SelectedSection));
+        Assert.True(page >= 0 && section >= 0, string.Join(", ", changed));
+        Assert.True(page < section, string.Join(", ", changed));
+        Assert.True(section < changed.IndexOf(nameof(MainViewModel.SelectedTopSection)), string.Join(", ", changed));
+    }
+
+    [Fact]
     public void AHiddenTab_IsStillOfferedWithTheExpertMode()
     {
         _settings.UiMode = UiMode.Simple;

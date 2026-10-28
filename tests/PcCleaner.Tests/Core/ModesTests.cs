@@ -268,6 +268,12 @@ public class ModesRulesTests
         Assert.Equal("03-Computer-Hardware.png", ScreenshotRunner.FileName(3, all[2], sections));
         Assert.Equal("08-System-Disk.png", ScreenshotRunner.FileName(8, all[7], sections));
         Assert.Equal("12-Settings.png", ScreenshotRunner.FileName(12, all[11], sections));
+
+        // The log names a shot like its file: «Section/Tab», or the key of a section of one page.
+        Assert.Equal("Dashboard", ScreenshotRunner.ShotName(all[0], sections));
+        Assert.Equal("Computer/Hardware", ScreenshotRunner.ShotName(all[2], sections));
+        Assert.Equal("System/Disk", ScreenshotRunner.ShotName(all[7], sections));
+        Assert.Equal("Settings", ScreenshotRunner.ShotName(all[11], sections));
     }
 
     [Fact]
@@ -317,11 +323,11 @@ public class ModesRulesTests
 [Collection(ModeSequentialCollection.Name)]
 public class ModesShellTests
 {
-    private static readonly string[] Ten =
-        { "Dashboard", "Cleaner", "Processes", "Startup", "Programs", "Disk", "Optimizer", "Network", "Security", "Settings" };
+    // Every page of the menu, in its order (ShellMenu).
+    private static readonly string[] All = ShellMenuTests.AllKeys;
 
     private readonly AppSettings _settings = new();
-    private readonly List<FakePage> _pages = Ten.Select(k => new FakePage(k)).ToList();
+    private readonly List<FakePage> _pages = All.Select(k => new FakePage(k)).ToList();
     private readonly List<(string Title, string Message)> _questions = new();
     private bool _answer;
     private int _saves;
@@ -349,24 +355,24 @@ public class ModesShellTests
     {
         var main = Create(UiMode.Expert);
 
-        Assert.Equal(Ten, Keys(main.VisiblePages));
-        Assert.Equal(Ten, Keys(main.Pages));
+        Assert.Equal(All, Keys(main.VisiblePages));
+        Assert.Equal(All, Keys(main.Pages));
     }
 
     [Fact]
     public void NoModeChosen_ShowsAllPages()
-        => Assert.Equal(Ten, Keys(Create(null).VisiblePages));
+        => Assert.Equal(All, Keys(Create(null).VisiblePages));
 
     [Fact]
-    public void SimpleMode_ShowsFourPages_ButKeepsAllPagesInTheFullList()
+    public void SimpleMode_ShowsFivePages_ButKeepsAllPagesInTheFullList()
     {
         var main = Create(UiMode.Simple);
 
-        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Settings" }, Keys(main.VisiblePages));
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Profile", "Settings" }, Keys(main.VisiblePages));
         // Pages stays whole: screenshots, the busy check of a restart and the Network page use it, and the hidden pages
         // go on taking part in the Dashboard check (they are IHealthContributors of AppServices, not sidebar items).
-        Assert.Equal(Ten, Keys(main.Pages));
-        Assert.Equal(Ten, Keys(((INavigator)main).Pages));
+        Assert.Equal(All, Keys(main.Pages));
+        Assert.Equal(All, Keys(((INavigator)main).Pages));
         Assert.Same(main.Pages[0], main.SelectedPage);
     }
 
@@ -406,7 +412,7 @@ public class ModesShellTests
         Assert.Equal("Dashboard", main.SelectedPage!.Key);
         Assert.Equal(UiMode.Simple, _settings.UiMode);
         Assert.Equal(0, _saves);
-        Assert.Equal(4, main.VisiblePages.Count);
+        Assert.Equal(5, main.VisiblePages.Count);
     }
 
     [Fact]
@@ -419,7 +425,7 @@ public class ModesShellTests
         Assert.Single(_questions);
         Assert.Equal(UiMode.Expert, _settings.UiMode);
         Assert.Equal(1, _saves);
-        Assert.Equal(Ten, Keys(main.VisiblePages));
+        Assert.Equal(All, Keys(main.VisiblePages));
         Assert.Equal("Network", main.SelectedPage!.Key);
     }
 
@@ -456,13 +462,13 @@ public class ModesShellTests
 
         UiModes.Choose(_settings, UiMode.Expert, _ => { });
 
-        Assert.Equal(Ten, Keys(main.VisiblePages));
+        Assert.Equal(All, Keys(main.VisiblePages));
         Assert.NotEmpty(changes);
         Assert.All(_pages, p => Assert.Equal(1, p.ModeChanges));
 
         UiModes.Choose(_settings, UiMode.Simple, _ => { });
 
-        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Settings" }, Keys(main.VisiblePages));
+        Assert.Equal(new[] { "Dashboard", "Cleaner", "Programs", "Profile", "Settings" }, Keys(main.VisiblePages));
         Assert.All(_pages, p => Assert.Equal(2, p.ModeChanges));
     }
 
@@ -497,7 +503,7 @@ public class ModesShellTests
 
         UiModes.Choose(other, UiMode.Expert, _ => { });
 
-        Assert.Equal(4, main.VisiblePages.Count);
+        Assert.Equal(5, main.VisiblePages.Count);
         Assert.All(_pages, p => Assert.Equal(0, p.ModeChanges));
     }
 
@@ -557,7 +563,7 @@ public class ModesShellTests
         Assert.Equal("Этот раздел есть в опытном режиме. Переключиться на опытный режим?", message);
         Assert.Equal("Dashboard", main.SelectedPage!.Key);
         Assert.Equal(UiMode.Simple, _settings.UiMode);
-        Assert.Equal(4, main.VisiblePages.Count);
+        Assert.Equal(5, main.VisiblePages.Count);
     }
 
     [Fact]
@@ -569,7 +575,7 @@ public class ModesShellTests
 
         Assert.Single(_questions);
         Assert.Equal(UiMode.Expert, _settings.UiMode);
-        Assert.Equal(Ten, Keys(main.VisiblePages));
+        Assert.Equal(All, Keys(main.VisiblePages));
         Assert.Equal("Security", main.SelectedPage!.Key);
     }
 

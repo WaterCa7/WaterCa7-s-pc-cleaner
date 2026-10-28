@@ -310,7 +310,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
                     Admin.RestartElevated(new[] { UpdateService.InstallUpdateArg });
                     break;
                 }
-                var busy = Pages.Where(p => p.IsBusy).Select(p => p.Title).ToList();
+                var busy = PageViewModel.BusyPages(Pages).Select(p => p.Title).ToList();
                 if (busy.Count > 0 && !Dialogs.Confirm(T._("Установка обновления"), UpdateBanner.BusyWarning(busy)))
                     return;
                 if (Updates.InstallNow(Environment.GetCommandLineArgs().Skip(1).ToList()))

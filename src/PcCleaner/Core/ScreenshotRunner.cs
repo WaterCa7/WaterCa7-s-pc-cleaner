@@ -43,7 +43,8 @@ public static class ScreenshotRunner
         foreach (var (index, page) in PagesToShoot(allPages, vm.VisiblePages, vm.Sections, requests))
         {
             var sw = Stopwatch.StartNew();
-            Log.Info(T.F("[screenshot] {0}: открытие", page.Key));
+            var name = ShotName(page, vm.Sections);
+            Log.Info(T.F("[screenshot] {0}: открытие", name));
             await vm.NavigateAsync(page);
             await WaitIdleAsync();
 
@@ -56,7 +57,7 @@ public static class ScreenshotRunner
                 }
                 catch (Exception ex)
                 {
-                    Log.Error($"[screenshot] {page.Key}: PreviewScanAsync", ex);
+                    Log.Error($"[screenshot] {name}: PreviewScanAsync", ex);
                 }
             }
 
@@ -68,7 +69,7 @@ public static class ScreenshotRunner
             await WaitIdleAsync();
             var file = Path.Combine(outDir, FileName(index, page, vm.Sections));
             Save(window, file);
-            Log.Info(T.F("[screenshot] {0}: готово за {1:0.0} с -> {2}", page.Key, sw.Elapsed.TotalSeconds, file));
+            Log.Info(T.F("[screenshot] {0}: готово за {1:0.0} с -> {2}", name, sw.Elapsed.TotalSeconds, file));
         }
 
         await WaitIdleAsync();
@@ -125,9 +126,14 @@ public static class ScreenshotRunner
 
     /// <summary>NN-Key.png for a section of one page with the same key (01-Dashboard.png), else NN-Section-Tab.png (08-System-Disk.png).</summary>
     internal static string FileName(int number, PageViewModel page, IReadOnlyList<SectionViewModel> sections)
-        => SectionOf(sections, page) is { } section && !string.Equals(section.Key, page.Key, StringComparison.OrdinalIgnoreCase)
-            ? $"{number:00}-{section.Key}-{page.Key}.png"
-            : $"{number:00}-{page.Key}.png";
+        => $"{number:00}-{ShotName(page, sections).Replace('/', '-')}.png";
+
+    /// <summary>
+    /// The name of a shot in the log, the same that names its file: «Section/Tab» (System/Disk, as <c>--page</c> takes it), or the
+    /// key alone for a section of one page with the same key (Dashboard).
+    /// </summary>
+    internal static string ShotName(PageViewModel page, IReadOnlyList<SectionViewModel> sections)
+        => SectionOf(sections, page) is { } section && !Same(section.Key, page.Key) ? $"{section.Key}/{page.Key}" : page.Key;
 
     private static SectionViewModel? SectionOf(IReadOnlyList<SectionViewModel> sections, PageViewModel page)
         => sections.FirstOrDefault(s => s.Contains(page));

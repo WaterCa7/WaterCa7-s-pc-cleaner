@@ -97,6 +97,12 @@ public class ShellEnglishTests
 
             Assert.Equal("v1.5.0 · latest version", UpdateFooter.Text(UpdateState.UpToDate, null, new Version(1, 5, 0)));
             Assert.Equal("v1.5.0 · checking…", UpdateFooter.Text(UpdateState.Checking, null, new Version(1, 5, 0)));
+            // The shell's corner is the shared updater's state (never checked in tests, so usually just the version): whatever
+            // that state is, the corner is the footer text of it, in English.
+            var updates = main.Updates;
+            Assert.Equal(UpdateFooter.Text(updates.State, updates.Manifest, updates.CurrentVersion), main.FooterText);
+            Assert.StartsWith("v" + updates.CurrentVersion.ToString(3), main.FooterText);
+            Assert.False(Cyrillic.IsMatch(main.FooterText), main.FooterText);
             Assert.Equal(Admin.IsElevated ? "Administrator rights" : "Limited mode", main.AdminText);
             // «Готово» is the title of a finished action (dialogs of Disks, Speed up and Processes).
             Assert.Equal("Done", T._("Готово"));

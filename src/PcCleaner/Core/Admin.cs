@@ -143,7 +143,7 @@ public static class Admin
     /// </summary>
     internal static bool ConfirmRestart(IEnumerable<PageViewModel> pages, bool askAboutOtherAccount)
     {
-        var busy = pages.Where(p => p.IsBusy).Select(p => (p.Title, p.BusyText)).ToList();
+        var busy = PageViewModel.BusyPages(pages).Select(p => (p.Title, p.BusyText)).ToList();
         // Settings/ElevatedRestart asks this very question right before calling RestartElevated: never ask twice.
         var justConfirmed = Dialogs.TakeRecentYes(RestartTitle, TimeSpan.FromSeconds(2));
         if (busy.Count > 0 && !justConfirmed && !Dialogs.Confirm(RestartTitle, BusyWarning(busy)))

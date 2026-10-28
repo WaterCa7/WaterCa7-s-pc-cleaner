@@ -141,6 +141,27 @@
                 </Grid>
             </Border>
 
+            <!-- ===== Result banner (card actions, e.g. the battery report, report here; same as on OptimizerView) ===== -->
+            <Border Style="{StaticResource InnerCard}" Margin="0,0,0,10" Padding="14,10" BorderThickness="1"
+                    BorderBrush="{Binding BannerTone, Converter={StaticResource ToneBrush}}"
+                    Background="{Binding BannerTone, Converter={StaticResource ToneSoft}}"
+                    Visibility="{Binding Banner, Converter={StaticResource HasValueToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE946;" VerticalAlignment="Top" Margin="0,1,0,0"
+                               Foreground="{Binding BannerTone, Converter={StaticResource ToneBrush}}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Banner}" TextWrapping="Wrap" Margin="10,0,10,0" FontSize="13" LineHeight="19" />
+                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" Padding="6,3" VerticalAlignment="Top"
+                            Command="{Binding DismissBannerCommand}" ToolTip="{loc:T 'Скрыть'}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="11" />
+                    </Button>
+                </Grid>
+            </Border>
+
             <DockPanel Margin="0,4,0,10" Visibility="{Binding HasData, Converter={StaticResource BoolToVis}}">
                 <Button DockPanel.Dock="Right" Padding="12,5" VerticalAlignment="Center" Command="{Binding RefreshCommand}"
                         Content="{loc:T 'Обновить'}" />

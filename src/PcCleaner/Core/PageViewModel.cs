@@ -58,6 +58,16 @@ public abstract class PageViewModel : ObservableObject
 
     public bool IsProgressIndeterminate => Progress < 0;
 
+    /// <summary>
+    /// True for a page whose busy strip only mirrors the work of another page (<c>HardwareViewModel</c> shows the optimizer's):
+    /// <see cref="BusyPages"/> skips it, so the warnings before a restart or an update name one job once.
+    /// </summary>
+    public virtual bool MirrorsBusyState => false;
+
+    /// <summary>The pages whose own work is running (a page that only mirrors another one's busy state is left out).</summary>
+    public static IEnumerable<PageViewModel> BusyPages(IEnumerable<PageViewModel> pages)
+        => pages.Where(p => p.IsBusy && !p.MirrorsBusyState);
+
     public RelayCommand CancelCommand { get; }
 
     /// <summary>Called every time the page becomes visible. The first call should load data.</summary>

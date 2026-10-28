@@ -217,6 +217,24 @@ public sealed class OptimizerParityServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task BatteryCardAction_FromTheHardwareTab_ShowsTheResultInTheOptimizersBanner()
+    {
+        // «Комплектующие» draws the optimizer's banner: a failing card action there must set it.
+        var report = new BatteryReportGenerator(
+            (_, _) => Task.FromResult(new ProcessResult(1, "", "Батарея не обнаружена.", false)), () => TestEnvironment.NewTempDir("battery"));
+        var hardware = new HardwareViewModel(new OptimizerViewModel(Create(TroubledLaptop(), TroubledSettings(), report)));
+        await hardware.PreviewScanAsync(CancellationToken.None);
+
+        var card = hardware.Optimizer.HardwareCards.Single(c => c.Caption == "Батарея");
+        Assert.True(hardware.CardActionCommand.CanExecute(card));
+        await hardware.CardActionCommand.ExecuteAsync(card);
+
+        Assert.Contains("Батарея не обнаружена", hardware.Optimizer.Banner);
+        Assert.Equal(Tone.Warning, hardware.Optimizer.BannerTone);
+        Assert.False(hardware.IsBusy);
+    }
+
+    [Fact]
     public async Task Page_ShowsPlatformCard_AndNineBalancedCardsOnALaptop()
     {
         var vm = new OptimizerViewModel(Create(TroubledLaptop(), TroubledSettings()));

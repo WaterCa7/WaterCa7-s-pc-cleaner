@@ -104,7 +104,7 @@ public sealed class DashboardViewModel : PageViewModel
         new("Startup", T._("Автозагрузка"), T._("Что запускается вместе с Windows"), ""),
         new("Processes", T._("Процессы"), T._("Что работает в фоне прямо сейчас"), ""),
         new("Programs", T._("Программы"), T._("Установленные и нежелательные"), ""),
-        new("Optimizer", T._("Ускорение"), T._("Настройки Windows и железо"), ""),
+        new("Optimizer", T._("Ускорение"), T._("Настройки Windows и питание"), ""),
         // U+2011 (non-breaking hyphen): a narrow tile must not wrap "Wi-" / "Fi".
         new("Network", T._("Сеть"), T._("Скорость, задержки, Wi\u2011Fi и порты"), ""),
         new("Security", T._("Безопасность"), T._("Антивирус, брандмауэр, hosts"), ""),

@@ -14,6 +14,10 @@ public sealed class HardwareViewModel : PageViewModel
     public HardwareViewModel(OptimizerViewModel optimizer)
     {
         Optimizer = optimizer;
+        // The optimizer may already be loading (the «Ускорение» tab was opened first): start from its state.
+        BusyText = optimizer.BusyText;
+        Progress = optimizer.Progress;
+        IsBusy = optimizer.IsBusy;
         optimizer.PropertyChanged += OnOptimizerChanged;
     }
 
@@ -24,6 +28,9 @@ public sealed class HardwareViewModel : PageViewModel
     public override string Subtitle => T._("Процессор, память, видеокарта, диски и мониторы вашего компьютера");
 
     public override string IconGlyph => "";
+
+    /// <summary>The busy strip here is the optimizer's work: a list of running work names «Ускорение», not this tab too.</summary>
+    public override bool MirrorsBusyState => true;
 
     /// <summary>The «Подробнее» link of a card (the card template binds to the page's DataContext).</summary>
     public AsyncRelayCommand CardActionCommand => Optimizer.CardActionCommand;

@@ -137,7 +137,7 @@ public sealed partial class SettingsViewModel
     /// <summary>«Перезапустить сейчас»: asks first if a page is still working, then starts the program again with the same arguments.</summary>
     private void RestartNow()
     {
-        var busy = OpenPages().Where(p => p.IsBusy).ToList();
+        var busy = PageViewModel.BusyPages(OpenPages()).ToList();
         if (busy.Count > 0)
         {
             var list = string.Join("\n", busy.Select(p => $"• {T.Quote(p.Title)}"));
