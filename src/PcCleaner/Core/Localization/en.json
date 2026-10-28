@@ -3287,6 +3287,7 @@
   "Простой — главное в одном месте. Опытный — все разделы и подробности.": "Simple keeps the essentials in one place. Expert shows all sections and details.",
   "Протокол SMBv1": "SMBv1 protocol",
   "Профиль": "Profile",
+  "Профиль: не удалось загрузить список компьютеров": "Profile: could not load the list of computers",
   "Процесс {0}": "Process {0}",
   "Процесс {0} завершён.": "The process {0} was ended.",
   "Процесс защищён": "Process is protected",

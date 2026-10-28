@@ -14,6 +14,10 @@ public sealed partial class ProfileViewModel
     // so a sign-in made from the guest card while the page is open fills it, and repeated Changed events do not reload it.
     private string? _devicesOwner;
 
+    // Bumped when the account signs out and at the start of every load (a new owner always starts one): an answer (or an error) of an older request is dropped,
+    // so a slow load of one account never lands on the guest card or on another account's list.
+    private int _devicesGeneration;
+
     public ObservableCollection<DeviceItem> Devices { get; } = new();
 
     /// <summary>«Компьютеров: N из M», or why the list could not be loaded / a computer could not be unbound.</summary>
@@ -33,6 +37,7 @@ public sealed partial class ProfileViewModel
         if (!IsSignedIn)
         {
             _devicesOwner = null;
+            _devicesGeneration++;
             DevicesText = null;
             Devices.Clear();
             return;
@@ -41,19 +46,38 @@ public sealed partial class ProfileViewModel
         if (_devicesOwner == owner)
             return;
         _devicesOwner = owner;
+        DevicesText = null;
         Devices.Clear();
-        _ = LoadDevicesAsync();
+        _ = LoadDevicesInBackgroundAsync();
     }
 
-    public async Task LoadDevicesAsync()
+    // Fire-and-forget load: the core reports an ApiException in DevicesText; anything else must not become an unobserved fault.
+    private async Task LoadDevicesInBackgroundAsync()
     {
         if (!IsSignedIn)
             return;
+        var generation = ++_devicesGeneration;
+        try
+        {
+            await LoadDevicesAsync(generation);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(T._("Профиль: не удалось загрузить список компьютеров"), ex);
+            if (generation == _devicesGeneration && IsSignedIn)
+                DevicesText = T._("Что-то пошло не так. Попробуйте ещё раз.");
+        }
+    }
+
+    public Task LoadDevicesAsync() => IsSignedIn ? LoadDevicesAsync(++_devicesGeneration) : Task.CompletedTask;
+
+    private async Task LoadDevicesAsync(int generation)
+    {
         try
         {
             var list = await _account.DevicesAsync(CancellationToken.None);
-            if (!IsSignedIn)
-                return; // signed out while the server was answering
+            if (generation != _devicesGeneration || !IsSignedIn)
+                return; // signed out, or another account / a newer load took over while the server was answering
             Devices.Clear();
             foreach (var d in list.Devices)
                 Devices.Add(new DeviceItem(d.Id, d.Name, ProfileTexts.DeviceDetails(d, _now()), d.Current, d.Whose));
@@ -61,6 +85,8 @@ public sealed partial class ProfileViewModel
         }
         catch (ApiException ex)
         {
+            if (generation != _devicesGeneration)
+                return; // the answer belongs to an account / a load that is gone
             DevicesText = SignInErrors.Text(ex.Error);
             Refresh(); // TOKEN_REVOKED signed out
         }
